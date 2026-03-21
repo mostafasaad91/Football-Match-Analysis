@@ -1,0 +1,10 @@
+cloudscraper
+undetected-chromedriver
+selenium
+selenium-stealth
+scipy
+beautifulsoup4
+numpy
+pandas
+matplotlib
+rich
