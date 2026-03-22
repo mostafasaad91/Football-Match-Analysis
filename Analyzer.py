@@ -45,7 +45,7 @@ console = Console()
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
 MATCH_URL = (
-    "https://www.whoscored.com/matches/1903437/live/england-premier-league-2025-2026-arsenal-everton"
+    "https://www.whoscored.com/matches/1968803/live/england-league-cup-2025-2026-arsenal-manchester-city"
 )
 SAVE_DIR          = "output"
 CHROMEDRIVER_PATH = r"D:\Football\chromedriver.exe"   # مطلوب فقط للـ fallback
