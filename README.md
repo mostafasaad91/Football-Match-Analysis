@@ -1,6 +1,6 @@
 # ⚽ WhoScored Post-Match Analyzer
 
-> **Automated football match analysis** — scrapes WhoScored data and generates 39 professional tactical visualizations + a full PDF report.
+> **Automated football match analysis** — scrapes WhoScored data, calibrates an Opta-style xG model with the official totals, and renders 37 dark-mode tactical figures plus a fully-formatted multi-page PDF tactical report.
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python)
 ![Matplotlib](https://img.shields.io/badge/Matplotlib-darkmode-black)
@@ -12,11 +12,14 @@
 
 - [Overview](#-overview)
 - [Features](#-features)
-- [Output Visualizations](#-output-visualizations-39-figures)
+- [Output Visualizations](#-output-visualizations-37-figures)
+- [Category Summary Boards](#-category-summary-boards)
+- [Tactical PDF Report](#-tactical-pdf-report)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
 - [Usage](#-usage)
 - [Anti-Blocking Strategy](#-anti-blocking-strategy)
+- [Official Stats & xG Calibration](#-official-stats--xg-calibration)
 - [xG Model](#-xg-model)
 - [Project Structure](#-project-structure)
 - [Credits](#-credits)
@@ -25,7 +28,7 @@
 
 ## 🔍 Overview
 
-**WhoScored Post-Match Analyzer** is a Python script that automatically fetches match event data from [WhoScored.com](https://www.whoscored.com) and produces a comprehensive suite of tactical charts — all in a dark-mode aesthetic — plus a compiled PDF tactical report.
+**WhoScored Post-Match Analyzer** is a single-file Python toolkit (`Analyzer.py`) that automatically fetches match event data from [WhoScored.com](https://www.whoscored.com), recovers the official Opta totals embedded in the page, calibrates a built-in xG model against them, and produces a comprehensive suite of tactical charts — all in a dark-mode aesthetic — together with a compiled multi-page PDF tactical report.
 
 Designed for **football analysts, data journalists, and tactical content creators** who want professional-grade visuals without manual data entry.
 
@@ -35,37 +38,44 @@ Designed for **football analysts, data journalists, and tactical content creator
 
 | Feature | Details |
 |---|---|
-| 🤖 Smart Scraping | 3-tier anti-blocking system (cloudscraper → requests → Chrome stealth) |
-| 📊 39 Visualizations | Shot maps, heatmaps, pass maps, xT, defensive actions, and more |
-| 📄 PDF Report | Full tactical PDF compiled automatically after all figures are generated |
-| 🎨 Dark Mode | Professional dark-mode styling across all 39 figures |
-| ⚡ xG Model | Built-in Opta-style xG calculator (distance + angle + situational modifiers) |
-| 🔄 Own Goals | Automatically colored to the benefiting team |
+| 🤖 Smart Scraping | 3-tier anti-blocking system (cloudscraper → requests → undetected Chrome stealth) |
+| 📊 37 Visualizations | Shot maps, heatmaps, pass networks, xT, defensive actions, dominating zones, box entries, high turnovers, pass target zones, and more |
+| 🧩 4 Summary Boards | Grouped collages: Match Overview · Attacking · Build-up · Defensive/Territory |
+| 📄 PDF Report | Multi-page tactical PDF (cover + executive summary + per-visual commentary) generated automatically |
+| 🎨 Dynamic Team Colours | Auto-selects each team's official kit colour for every chart, with contrast-aware fallbacks for clashing palettes |
+| ⚡ xG Model | Built-in StatsBomb/Soccermatics-style open-event xG (distance, angle, body part, situation) |
+| 🎯 Official Calibration | Pulls real Opta totals (xG, shots, on target, possession, etc.) from `matchCentreData` and rescales the local model to match |
+| 🥅 Own Goals | Automatically attributed and coloured for the benefiting team |
 | ⏱️ Period Awareness | Handles Regular Time, Extra Time, and Penalty Shootouts |
+| 🌍 Top-5 League Palettes | Built-in 2025/26 kit palettes for Premier League, LaLiga, Serie A, Bundesliga, and Ligue 1 |
+| 💾 CSV Exports | Events, players, and per-team xG totals saved alongside every run |
 
 ---
 
-## 📊 Output Visualizations (39 Figures)
+## 📊 Output Visualizations (37 Figures)
+
+Filenames are timestamped and prefixed with the figure number — figure numbers 9 and 10 are intentionally skipped (legacy slots), so the run produces 37 figures across the 1–39 range.
 
 ### Individual Analytics (Figs 1–8)
+
 | # | Figure |
 |---|---|
-| 1 | Shot Map — Both Teams |
-| 2 | xG Timeline |
-| 3 | Pass Network — Home |
-| 4 | Pass Network — Away |
-| 5 | Player Heatmap — Home |
-| 6 | Player Heatmap — Away |
-| 7 | xT Map (Expected Threat) |
-| 8 | Full Match Report |
+| 1 | xG Flow (cumulative xG timeline + match events) |
+| 2 | Shot Map — Home |
+| 3 | Shot Map — Away |
+| 4 | Breakdown & Goals (shot bars + goals/assists table) |
+| 5 | Pass Network — Home |
+| 6 | Pass Network — Away |
+| 7 | xT Map — Home |
+| 8 | xT Map — Away |
 
-### Standalone Visuals (Figs 9–32)
+### Standalone Visuals (Figs 11–32)
+
 | # | Figure | # | Figure |
 |---|---|---|---|
-| 9 | Shot Map — Home | 10 | Shot Map — Away |
-| 11 | Pass Network — Home | 12 | Pass Network — Away |
-| 13 | Danger Zone — Home | 14 | Danger Zone — Away (GK Saves) |
-| 15 | xG / xGoT / On Target | 16 | Zone 14 & Half-Spaces — Home |
+| 11 | Shot Comparison (both teams) | 12 | Danger Creation — Home |
+| 13 | Danger Creation — Away | 14 | Goalkeeper Saves |
+| 15 | xG / xGoT / On Target tiles | 16 | Zone 14 & Half-Spaces — Home |
 | 17 | Zone 14 & Half-Spaces — Away | 18 | Match Statistics |
 | 19 | Territorial Control | 20 | Ball Touches / Possession |
 | 21 | Pass Map by Third — Home | 22 | Pass Map by Third — Away |
@@ -76,9 +86,10 @@ Designed for **football analysts, data journalists, and tactical content creator
 | 31 | Average Positions — Home | 32 | Average Positions — Away |
 
 ### Advanced Analytics (Figs 33–39)
+
 | # | Figure |
 |---|---|
-| 33 | Dominating Zone |
+| 33 | Dominating Zone (touch-share map) |
 | 34 | Box Entries — Home |
 | 35 | Box Entries — Away |
 | 36 | High Turnovers — Home |
@@ -86,14 +97,44 @@ Designed for **football analysts, data journalists, and tactical content creator
 | 38 | Pass Target Zones — Home |
 | 39 | Pass Target Zones — Away |
 
+> ℹ️ The legacy *Shot Summary Tiles* visual was removed because it could rebuild buckets that diverged from the official Opta totals. Shot summaries are now driven directly from the calibrated official numbers.
+
+---
+
+## 🧩 Category Summary Boards
+
+After the 37 figures are saved, the analyzer composes **4 grouped collage boards** for quick social-media or presentation use:
+
+1. **Match Overview** — score story, xG flow, key tiles
+2. **Attacking** — shots, danger zones, crosses, progressive passes
+3. **Build-up** — pass networks, pass thirds, pass target zones, xT
+4. **Defensive / Territory** — defensive heatmaps, dominating zone, territorial control, high turnovers
+
+---
+
+## 📄 Tactical PDF Report
+
+The script automatically compiles a polished, print-ready PDF containing:
+
+- A **cover page** with score, venue, competition, and credits
+- An **executive summary** with the calibrated xG, shots, possession, and key differentials
+- One **commentary page per visual**, pairing the rendered figure with an automatically generated tactical note (uses thresholds on xT, box entries, progressive carries, dominant lanes, etc.)
+- **Page header / footer** with the matchup and "Analysis by Mostafa Saad"
+
+Output filename:
+
+```
+output/match_analysis_report_<Home>_vs_<Away>_<timestamp>.pdf
+```
+
 ---
 
 ## 🛠 Installation
 
 ### Prerequisites
 - Python 3.9+
-- Google Chrome (for the fallback scraping method)
-- ChromeDriver matching your Chrome version
+- Google Chrome (only required if cloudscraper + requests both fail and the Chrome fallback is enabled)
+- Optional: a ChromeDriver matching your Chrome version (otherwise `undetected-chromedriver` downloads one automatically)
 
 ### Install Dependencies
 
@@ -102,7 +143,8 @@ pip install cloudscraper undetected-chromedriver selenium scipy \
             beautifulsoup4 numpy pandas matplotlib rich
 ```
 
-Optional (for better stealth scraping):
+Optional (extra stealth for the Chrome fallback):
+
 ```bash
 pip install selenium-stealth
 ```
@@ -111,7 +153,7 @@ pip install selenium-stealth
 
 ## ⚙️ Configuration
 
-Open `Analyzer.py` and edit the **SETTINGS** block at the top:
+Open `Analyzer.py` and edit the **SETTINGS** block near the top of the file:
 
 ```python
 # ── Match URL ────────────────────────────────────────────────────
@@ -120,110 +162,7 @@ MATCH_URL = "https://www.whoscored.com/matches/XXXXXXX/live/..."
 # ── Output directory ─────────────────────────────────────────────
 SAVE_DIR = "output"
 
-# ── ChromeDriver path (only needed for fallback) ─────────────────
-CHROMEDRIVER_PATH = r"C:\path\to\chromedriver.exe"
+# ── ChromeDriver path (only needed for the Chrome fallback) ──────
+CHROMEDRIVER_PATH = ""    # leave empty to let undetected-chromedriver auto-resolve
 
-# ── Your real Chrome profile (keeps cookies / login) ────────────
-CHROME_PROFILE_DIR  = r"C:\Users\YourName\AppData\Local\Google\Chrome\User Data"
-CHROME_PROFILE_NAME = "Default"   # or "Profile 1", etc.
-```
-
-> **Tip — Find your Chrome profile path:**
-> ```powershell
-> (Get-Item "$env:LOCALAPPDATA\Google\Chrome\User Data").FullName
-> ```
-
----
-
-## 🚀 Usage
-
-```bash
-python Analyzer.py
-```
-
-The script will:
-1. Try to fetch the match page (3 automatic attempts)
-2. Parse all event data from the embedded JSON
-3. Generate 39 dark-mode figures saved to `output/`
-4. Compile a PDF tactical report
-
-All output files are timestamped:
-```
-output/
-├── 09_shot_map_home_20260309_153045.png
-├── 10_shot_map_away_20260309_153045.png
-├── ...
-└── tactical_report_20260309_153045.pdf
-```
-
----
-
-## 🛡️ Anti-Blocking Strategy
-
-WhoScored actively blocks automated access. The script uses a **3-tier fallback** system:
-
-```
-Attempt 1 — cloudscraper
-  └── Bypasses Cloudflare automatically, no browser needed (fastest)
-
-Attempt 2 — requests + rotating headers
-  └── Session-based with human-like delays and realistic User-Agent pool
-
-Attempt 3 — undetected_chromedriver + Chrome stealth
-  └── Opens your real Chrome profile (with your cookies/login)
-      + CDP webdriver fingerprint removal
-      + selenium-stealth applied if installed
-      + Human-like scroll simulation
-```
-
-If all three methods fail, the script prints actionable troubleshooting steps.
-
----
-
-## 📐 xG Model
-
-The built-in xG calculator uses an **Opta-style logistic regression** approach:
-
-- **Primary features:** Euclidean distance to goal centre + goal-mouth angle (radians)
-- **Situational modifiers:**
-  | Situation | Effect |
-  |---|---|
-  | Penalty | Fixed 0.76 |
-  | Header | −35% base |
-  | Big Chance | +0.12–0.20 |
-  | Counter Attack | +8% |
-  | Direct Free Kick | −15% |
-
-**EPL calibration targets:**
-- Penalty kick → ~0.76
-- 6-yard tap-in → ~0.60
-- Box edge centre → ~0.10
-- Header from 6 yards → ~0.35
-
----
-
-## 📁 Project Structure
-
-```
-whoscored-analyzer/
-│
-├── Analyzer.py          # Main script (scraper + visualizations + PDF)
-├── README.md            # This file
-├── requirements.txt     # Python dependencies
-│
-└── output/              # Generated figures and reports (gitignored)
-    ├── *.png
-    └── *.pdf
-```
-
----
-
-## 📝 Credits
-
-**Developed by Mostafa Saad**
-
-- Data source: [WhoScored.com](https://www.whoscored.com)
-- xG model calibrated against Opta EPL published benchmarks
-- Visualization palette inspired by professional football analytics studios
-
-> ⚠️ **Disclaimer:** This tool is for personal and educational use only. Automated scraping of WhoScored may violate their Terms of Service. Use responsibly.
+# ── Your real Chrome profile (optional, used only as a la
