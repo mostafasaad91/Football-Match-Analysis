@@ -140,8 +140,8 @@ TEAM_COLORS = {
     "Manchester United":"#DA291C",
     "Liverpool":        "#C8102E",
     "Chelsea":          "#034694",
-    "Tottenham":        "#132257",
-    "Newcastle":        "#9CA3AF",  # clear slate grey for Newcastle visuals on dark charts
+    "Tottenham":        "#FFFFFF",
+    "Newcastle":        "#2D2D2D",  # Black/White stripes (visible dark charcoal for dark charts)
     "Aston Villa":      "#95BFE5",
     "West Ham":         "#7A263A",
     "Brighton":         "#0057B8",
@@ -211,166 +211,166 @@ TEAM_ALIASES = {
 # when two teams have very similar visual colours on the same chart.
 TOP5_2025_26_TEAM_PALETTES = {
     # Premier League 2025/26
-    "Arsenal": ["#EF0107", "#FFFFFF", "#063672"],
-    "Aston Villa": ["#7A003C", "#95BFE5", "#FEE505"],
-    "Bournemouth": ["#DA291C", "#000000", "#F7C600"],
-    "Brentford": ["#E30613", "#FFFFFF", "#111111"],
-    "Brighton": ["#0057B8", "#FFFFFF", "#FFCD00"],
-    "Burnley": ["#6C1D45", "#99D6EA", "#FADADD"],
-    "Chelsea": ["#034694", "#FFFFFF", "#D1D3D4"],
-    "Crystal Palace": ["#1B458F", "#C4122E", "#A7D8FF"],
-    "Everton": ["#003399", "#FFFFFF", "#FFD100"],
-    "Fulham": ["#F4F4F4", "#111111", "#CC0000"],
-    "Leeds United": ["#FFFFFF", "#1D428A", "#FFCD00"],
-    "Liverpool": ["#C8102E", "#00B2A9", "#F6EB61"],
-    "Manchester City": ["#6CABDD", "#FFFFFF", "#1C2C5B"],
-    "Manchester United": ["#DA291C", "#FBE122", "#000000"],
-    "Newcastle": ["#9CA3AF", "#111111", "#FFFFFF"],
-    "Newcastle United": ["#9CA3AF", "#111111", "#FFFFFF"],
-    "Nottm Forest": ["#DD0000", "#FFFFFF", "#FDB913"],
-    "Nottingham Forest": ["#DD0000", "#FFFFFF", "#FDB913"],
-    "Sunderland": ["#EB172B", "#FFFFFF", "#000000"],
-    "Tottenham": ["#FFFFFF", "#132257", "#C0C0C0"],
-    "Tottenham Hotspur": ["#FFFFFF", "#132257", "#C0C0C0"],
-    "West Ham": ["#7A263A", "#1BB1E7", "#F3D459"],
-    "West Ham United": ["#7A263A", "#1BB1E7", "#F3D459"],
-    "Wolves": ["#FDB913", "#231F20", "#FFFFFF"],
+    "Arsenal": ["#EF0107", "#FFFFFF", "#063672"],            # Home: Red | Away: Navy Blue
+    "Aston Villa": ["#7A003C", "#95BFE5", "#FEE505"],        # Home: Claret | Away: Light Blue
+    "Bournemouth": ["#DA291C", "#000000", "#F7C600"],        # Home: Red | Away: Black
+    "Brentford": ["#E30613", "#FFFFFF", "#111111"],           # Home: Red | Away: Black
+    "Brighton": ["#0057B8", "#FFFFFF", "#FFCD00"],            # Home: Blue | Away: Yellow
+    "Burnley": ["#6C1D45", "#99D6EA", "#FADADD"],            # Home: Claret | Away: Sky Blue
+    "Chelsea": ["#034694", "#FFFFFF", "#D1D3D4"],             # Home: Blue | Away: Silver/Grey
+    "Crystal Palace": ["#1B458F", "#C4122E", "#A7D8FF"],      # Home: Blue/Red | Away: Light Blue
+    "Everton": ["#003399", "#FFFFFF", "#FFD100"],             # Home: Blue | Away: Yellow
+    "Fulham": ["#F4F4F4", "#111111", "#CC0000"],             # Home: White | Away: Black/Red
+    "Leeds United": ["#FFFFFF", "#1D428A", "#FFCD00"],        # Home: White | Away: Blue
+    "Liverpool": ["#C8102E", "#00B2A9", "#F6EB61"],           # Home: Red | Away: Teal/Yellow
+    "Manchester City": ["#6CABDD", "#FFFFFF", "#1C2C5B"],      # Home: Sky Blue | Away: Navy
+    "Manchester United": ["#DA291C", "#FBE122", "#000000"],    # Home: Red | Away: Black
+    "Newcastle": ["#2D2D2D", "#FFFFFF", "#5B8DBE"],           # Home: Black/White | Away: Blue
+    "Newcastle United": ["#2D2D2D", "#FFFFFF", "#5B8DBE"],     # Home: Black/White | Away: Blue
+    "Nottm Forest": ["#DD0000", "#FFFFFF", "#FDB913"],        # Home: Red | Away: Yellow
+    "Nottingham Forest": ["#DD0000", "#FFFFFF", "#FDB913"],    # Home: Red | Away: Yellow
+    "Sunderland": ["#EB172B", "#FFFFFF", "#000000"],          # Home: Red/White | Away: Black
+    "Tottenham": ["#FFFFFF", "#132257", "#C0C0C0"],           # Home: White | Away: Navy
+    "Tottenham Hotspur": ["#FFFFFF", "#132257", "#C0C0C0"],    # Home: White | Away: Navy
+    "West Ham": ["#7A263A", "#1BB1E7", "#F3D459"],            # Home: Claret/Blue | Away: Yellow
+    "West Ham United": ["#7A263A", "#1BB1E7", "#F3D459"],      # Home: Claret/Blue | Away: Yellow
+    "Wolves": ["#FDB913", "#231F20", "#FFFFFF"],              # Home: Gold/Black | Away: White
     "Wolverhampton Wanderers": ["#FDB913", "#231F20", "#FFFFFF"],
 
     # LaLiga EA Sports 2025/26
-    "Athletic Club": ["#EE2523", "#FFFFFF", "#111111"],
-    "Athletic Bilbao": ["#EE2523", "#FFFFFF", "#111111"],
-    "Atletico Madrid": ["#CB3524", "#FFFFFF", "#262B59"],
-    "Atlético de Madrid": ["#CB3524", "#FFFFFF", "#262B59"],
-    "Atlético Madrid": ["#CB3524", "#FFFFFF", "#262B59"],
-    "CA Osasuna": ["#0A346F", "#D91E2E", "#FFFFFF"],
-    "Osasuna": ["#0A346F", "#D91E2E", "#FFFFFF"],
-    "Celta": ["#8AC3EE", "#FFFFFF", "#C8102E"],
-    "Celta Vigo": ["#8AC3EE", "#FFFFFF", "#C8102E"],
-    "Deportivo Alaves": ["#005BAC", "#FFFFFF", "#111111"],
-    "Deportivo Alavés": ["#005BAC", "#FFFFFF", "#111111"],
-    "Alaves": ["#005BAC", "#FFFFFF", "#111111"],
-    "Alavés": ["#005BAC", "#FFFFFF", "#111111"],
-    "Elche": ["#FFFFFF", "#007A3D", "#111111"],
-    "Elche CF": ["#FFFFFF", "#007A3D", "#111111"],
-    "Barcelona": ["#A50044", "#004D98", "#EDBB00"],
-    "FC Barcelona": ["#A50044", "#004D98", "#EDBB00"],
-    "Getafe": ["#005999", "#FFFFFF", "#E30613"],
-    "Getafe CF": ["#005999", "#FFFFFF", "#E30613"],
-    "Girona": ["#E21D2F", "#FFFFFF", "#111111"],
-    "Girona FC": ["#E21D2F", "#FFFFFF", "#111111"],
-    "Levante": ["#B0043C", "#005BBB", "#FFFFFF"],
-    "Levante UD": ["#B0043C", "#005BBB", "#FFFFFF"],
-    "Rayo Vallecano": ["#FFFFFF", "#D71920", "#111111"],
-    "Espanyol": ["#0072CE", "#FFFFFF", "#111111"],
-    "RCD Espanyol": ["#0072CE", "#FFFFFF", "#111111"],
-    "Mallorca": ["#E30613", "#111111", "#F7C600"],
-    "RCD Mallorca": ["#E30613", "#111111", "#F7C600"],
-    "Real Betis": ["#00843D", "#FFFFFF", "#111111"],
-    "Betis": ["#00843D", "#FFFFFF", "#111111"],
-    "Real Madrid": ["#FFFFFF", "#FEBE10", "#00529F"],
-    "Real Oviedo": ["#00529F", "#FFFFFF", "#F7C600"],
-    "Real Sociedad": ["#0067B1", "#FFFFFF", "#111111"],
-    "Sevilla": ["#FFFFFF", "#D71920", "#111111"],
-    "Sevilla FC": ["#FFFFFF", "#D71920", "#111111"],
-    "Valencia": ["#FFFFFF", "#F58220", "#111111"],
-    "Valencia CF": ["#FFFFFF", "#F58220", "#111111"],
-    "Villarreal": ["#F5DD02", "#005BAC", "#111111"],
-    "Villarreal CF": ["#F5DD02", "#005BAC", "#111111"],
+    "Athletic Club": ["#EE2523", "#FFFFFF", "#111111"],          # Home: Red/White | Away: Black
+    "Athletic Bilbao": ["#EE2523", "#FFFFFF", "#111111"],         # Home: Red/White | Away: Black
+    "Atletico Madrid": ["#CB3524", "#FFFFFF", "#262B59"],         # Home: Red/Blue | Away: Navy
+    "Atlético de Madrid": ["#CB3524", "#FFFFFF", "#262B59"],      # Home: Red/Blue | Away: Navy
+    "Atlético Madrid": ["#CB3524", "#FFFFFF", "#262B59"],        # Home: Red/Blue | Away: Navy
+    "CA Osasuna": ["#0A346F", "#D91E2E", "#FFFFFF"],             # Home: Navy/Red | Away: White
+    "Osasuna": ["#0A346F", "#D91E2E", "#FFFFFF"],                # Home: Navy/Red | Away: White
+    "Celta": ["#8AC3EE", "#FFFFFF", "#C8102E"],                  # Home: Light Blue | Away: Red
+    "Celta Vigo": ["#8AC3EE", "#FFFFFF", "#C8102E"],             # Home: Light Blue | Away: Red
+    "Deportivo Alaves": ["#005BAC", "#FFFFFF", "#111111"],        # Home: Blue | Away: Black
+    "Deportivo Alavés": ["#005BAC", "#FFFFFF", "#111111"],       # Home: Blue | Away: Black
+    "Alaves": ["#005BAC", "#FFFFFF", "#111111"],                  # Home: Blue | Away: Black
+    "Alavés": ["#005BAC", "#FFFFFF", "#111111"],                  # Home: Blue | Away: Black
+    "Elche": ["#FFFFFF", "#007A3D", "#111111"],                   # Home: White/Green | Away: Black
+    "Elche CF": ["#FFFFFF", "#007A3D", "#111111"],                # Home: White/Green | Away: Black
+    "Barcelona": ["#A50044", "#004D98", "#EDBB00"],               # Home: Blaugrana | Away: Yellow
+    "FC Barcelona": ["#A50044", "#004D98", "#EDBB00"],            # Home: Blaugrana | Away: Yellow
+    "Getafe": ["#005999", "#FFFFFF", "#E30613"],                  # Home: Blue | Away: Red
+    "Getafe CF": ["#005999", "#FFFFFF", "#E30613"],               # Home: Blue | Away: Red
+    "Girona": ["#E21D2F", "#FFFFFF", "#111111"],                  # Home: Red/White | Away: Black
+    "Girona FC": ["#E21D2F", "#FFFFFF", "#111111"],               # Home: Red/White | Away: Black
+    "Levante": ["#B0043C", "#005BBB", "#FFFFFF"],                 # Home: Granota | Away: Blue
+    "Levante UD": ["#B0043C", "#005BBB", "#FFFFFF"],              # Home: Granota | Away: Blue
+    "Rayo Vallecano": ["#FFFFFF", "#D71920", "#111111"],          # Home: White/Red | Away: Black
+    "Espanyol": ["#0072CE", "#FFFFFF", "#111111"],                # Home: Blue/White | Away: Black
+    "RCD Espanyol": ["#0072CE", "#FFFFFF", "#111111"],            # Home: Blue/White | Away: Black
+    "Mallorca": ["#E30613", "#111111", "#F7C600"],                # Home: Red/Black | Away: Yellow
+    "RCD Mallorca": ["#E30613", "#111111", "#F7C600"],            # Home: Red/Black | Away: Yellow
+    "Real Betis": ["#00843D", "#FFFFFF", "#111111"],              # Home: Green | Away: Black
+    "Betis": ["#00843D", "#FFFFFF", "#111111"],                    # Home: Green | Away: Black
+    "Real Madrid": ["#FFFFFF", "#FEBE10", "#00529F"],             # Home: White | Away: Blue
+    "Real Oviedo": ["#00529F", "#FFFFFF", "#F7C600"],             # Home: Blue | Away: Yellow
+    "Real Sociedad": ["#0067B1", "#FFFFFF", "#111111"],           # Home: Blue/White | Away: Black
+    "Sevilla": ["#FFFFFF", "#D71920", "#111111"],                 # Home: White/Red | Away: Black
+    "Sevilla FC": ["#FFFFFF", "#D71920", "#111111"],              # Home: White/Red | Away: Black
+    "Valencia": ["#FFFFFF", "#F58220", "#111111"],                # Home: White/Orange | Away: Black
+    "Valencia CF": ["#FFFFFF", "#F58220", "#111111"],             # Home: White/Orange | Away: Black
+    "Villarreal": ["#F5DD02", "#005BAC", "#111111"],              # Home: Yellow | Away: Blue
+    "Villarreal CF": ["#F5DD02", "#005BAC", "#111111"],           # Home: Yellow | Away: Blue
 
     # Serie A 2025/26
-    "Atalanta": ["#1D3C6A", "#111111", "#FFFFFF"],
-    "Bologna": ["#1B365D", "#DA291C", "#FFFFFF"],
-    "Cagliari": ["#0B2B5C", "#B5121B", "#F6D4A1"],
-    "Como": ["#005CA8", "#FFFFFF", "#111111"],
-    "Cremonese": ["#8A1538", "#A7A8AA", "#FFFFFF"],
-    "Fiorentina": ["#5A1A8B", "#FFFFFF", "#D4AF37"],
-    "Genoa": ["#0E2240", "#B5121B", "#FFFFFF"],
-    "Hellas Verona": ["#002F6C", "#F7C600", "#FFFFFF"],
-    "Inter": ["#010E80", "#0068B5", "#111111"],
-    "Inter Milan": ["#010E80", "#0068B5", "#111111"],
-    "Juventus": ["#FFFFFF", "#111111", "#FBCB05"],
-    "Lazio": ["#87CEEB", "#FFFFFF", "#0B2240"],
-    "Lecce": ["#D71920", "#F7C600", "#0057B8"],
-    "AC Milan": ["#FB090B", "#111111", "#FFFFFF"],
-    "Milan": ["#FB090B", "#111111", "#FFFFFF"],
-    "Napoli": ["#12A8E0", "#FFFFFF", "#111111"],
-    "Parma": ["#FFFFFF", "#003DA5", "#FECB00"],
-    "Pisa": ["#00205B", "#111111", "#D4AF37"],
-    "Roma": ["#8E1F2F", "#F9B233", "#111111"],
-    "Sassuolo": ["#009A44", "#111111", "#FFFFFF"],
-    "Torino": ["#7C2D2D", "#FFFFFF", "#D4AF37"],
-    "Udinese": ["#FFFFFF", "#111111", "#A6A6A6"],
+    "Atalanta": ["#1D3C6A", "#111111", "#FFFFFF"],             # Home: Navy/Black | Away: White
+    "Bologna": ["#1B365D", "#DA291C", "#FFFFFF"],              # Home: Navy/Red | Away: White
+    "Cagliari": ["#0B2B5C", "#B5121B", "#F6D4A1"],             # Home: Navy/Red | Away: Cream
+    "Como": ["#005CA8", "#FFFFFF", "#111111"],                  # Home: Blue | Away: Black
+    "Cremonese": ["#8A1538", "#A7A8AA", "#FFFFFF"],             # Home: Grey/Red | Away: White
+    "Fiorentina": ["#5A1A8B", "#FFFFFF", "#D4AF37"],            # Home: Purple | Away: Gold
+    "Genoa": ["#0E2240", "#B5121B", "#FFFFFF"],                 # Home: Navy/Red | Away: White
+    "Hellas Verona": ["#002F6C", "#F7C600", "#FFFFFF"],         # Home: Blue/Yellow | Away: White
+    "Inter": ["#010E80", "#0068B5", "#111111"],                 # Home: Blue/Black | Away: Black
+    "Inter Milan": ["#010E80", "#0068B5", "#111111"],           # Home: Blue/Black | Away: Black
+    "Juventus": ["#FFFFFF", "#111111", "#FBCB05"],              # Home: White/Black | Away: Gold
+    "Lazio": ["#87CEEB", "#FFFFFF", "#0B2240"],                 # Home: Sky Blue | Away: Navy
+    "Lecce": ["#D71920", "#F7C600", "#0057B8"],                 # Home: Red/Yellow | Away: Blue
+    "AC Milan": ["#FB090B", "#111111", "#FFFFFF"],              # Home: Red/Black | Away: White
+    "Milan": ["#FB090B", "#111111", "#FFFFFF"],                  # Home: Red/Black | Away: White
+    "Napoli": ["#12A8E0", "#FFFFFF", "#111111"],                 # Home: Light Blue | Away: Black
+    "Parma": ["#FFFFFF", "#003DA5", "#FECB00"],                 # Home: White/Blue | Away: Yellow
+    "Pisa": ["#00205B", "#111111", "#D4AF37"],                  # Home: Navy | Away: Gold
+    "Roma": ["#8E1F2F", "#F9B233", "#111111"],                  # Home: Giallorosso | Away: Black
+    "Sassuolo": ["#009A44", "#111111", "#FFFFFF"],               # Home: Green/Black | Away: White
+    "Torino": ["#7C2D2D", "#FFFFFF", "#D4AF37"],                 # Home: Maroon | Away: Gold
+    "Udinese": ["#FFFFFF", "#111111", "#A6A6A6"],                # Home: White/Black | Away: Grey
 
     # Bundesliga 2025/26
-    "Bayern Munich": ["#DC052D", "#FFFFFF", "#0066B2"],
-    "FC Bayern Munich": ["#DC052D", "#FFFFFF", "#0066B2"],
-    "Borussia Dortmund": ["#FDE100", "#111111", "#FFFFFF"],
-    "Dortmund": ["#FDE100", "#111111", "#FFFFFF"],
-    "RB Leipzig": ["#FFFFFF", "#DD0741", "#0C2340"],
-    "Leipzig": ["#FFFFFF", "#DD0741", "#0C2340"],
-    "VfB Stuttgart": ["#FFFFFF", "#E32219", "#111111"],
-    "Stuttgart": ["#FFFFFF", "#E32219", "#111111"],
-    "Hoffenheim": ["#0057B8", "#FFFFFF", "#111111"],
-    "TSG Hoffenheim": ["#0057B8", "#FFFFFF", "#111111"],
-    "Bayer Leverkusen": ["#E32221", "#111111", "#FFFFFF"],
-    "Leverkusen": ["#E32221", "#111111", "#FFFFFF"],
-    "Eintracht Frankfurt": ["#E1000F", "#111111", "#FFFFFF"],
-    "Frankfurt": ["#E1000F", "#111111", "#FFFFFF"],
-    "Freiburg": ["#D50032", "#111111", "#FFFFFF"],
-    "SC Freiburg": ["#D50032", "#111111", "#FFFFFF"],
-    "Augsburg": ["#BA0C2F", "#007A33", "#FFFFFF"],
-    "Mainz": ["#C31432", "#FFFFFF", "#111111"],
-    "Mainz 05": ["#C31432", "#FFFFFF", "#111111"],
-    "Borussia Mönchengladbach": ["#FFFFFF", "#00843D", "#111111"],
-    "M'gladbach": ["#FFFFFF", "#00843D", "#111111"],
-    "Borussia Monchengladbach": ["#FFFFFF", "#00843D", "#111111"],
-    "Werder Bremen": ["#00843D", "#FFFFFF", "#F7C600"],
-    "Union Berlin": ["#D00000", "#F7C600", "#FFFFFF"],
-    "Cologne": ["#FFFFFF", "#ED1C24", "#111111"],
-    "FC Koln": ["#FFFFFF", "#ED1C24", "#111111"],
-    "FC Köln": ["#FFFFFF", "#ED1C24", "#111111"],
-    "Hamburg": ["#005CA9", "#FFFFFF", "#111111"],
-    "Hamburger SV": ["#005CA9", "#FFFFFF", "#111111"],
-    "St. Pauli": ["#5B3A29", "#FFFFFF", "#D71920"],
-    "Wolfsburg": ["#65B32E", "#FFFFFF", "#111111"],
-    "Heidenheim": ["#E30613", "#005BAC", "#FFFFFF"],
+    "Bayern Munich": ["#DC052D", "#FFFFFF", "#0066B2"],         # Home: Red | Away: Blue
+    "FC Bayern Munich": ["#DC052D", "#FFFFFF", "#0066B2"],      # Home: Red | Away: Blue
+    "Borussia Dortmund": ["#FDE100", "#111111", "#FFFFFF"],      # Home: Yellow/Black | Away: White
+    "Dortmund": ["#FDE100", "#111111", "#FFFFFF"],               # Home: Yellow/Black | Away: White
+    "RB Leipzig": ["#FFFFFF", "#DD0741", "#0C2340"],             # Home: White/Red | Away: Navy
+    "Leipzig": ["#FFFFFF", "#DD0741", "#0C2340"],                # Home: White/Red | Away: Navy
+    "VfB Stuttgart": ["#FFFFFF", "#E32219", "#111111"],          # Home: White/Red | Away: Black
+    "Stuttgart": ["#FFFFFF", "#E32219", "#111111"],              # Home: White/Red | Away: Black
+    "Hoffenheim": ["#0057B8", "#FFFFFF", "#111111"],             # Home: Blue | Away: Black
+    "TSG Hoffenheim": ["#0057B8", "#FFFFFF", "#111111"],         # Home: Blue | Away: Black
+    "Bayer Leverkusen": ["#E32221", "#111111", "#FFFFFF"],       # Home: Red/Black | Away: White
+    "Leverkusen": ["#E32221", "#111111", "#FFFFFF"],            # Home: Red/Black | Away: White
+    "Eintracht Frankfurt": ["#E1000F", "#111111", "#FFFFFF"],    # Home: Red/Black | Away: White
+    "Frankfurt": ["#E1000F", "#111111", "#FFFFFF"],             # Home: Red/Black | Away: White
+    "Freiburg": ["#D50032", "#111111", "#FFFFFF"],               # Home: Red/Black | Away: White
+    "SC Freiburg": ["#D50032", "#111111", "#FFFFFF"],           # Home: Red/Black | Away: White
+    "Augsburg": ["#BA0C2F", "#007A33", "#FFFFFF"],              # Home: Red/Green | Away: White
+    "Mainz": ["#C31432", "#FFFFFF", "#111111"],                  # Home: Red | Away: Black
+    "Mainz 05": ["#C31432", "#FFFFFF", "#111111"],               # Home: Red | Away: Black
+    "Borussia Mönchengladbach": ["#FFFFFF", "#00843D", "#111111"],# Home: White/Green | Away: Black
+    "M'gladbach": ["#FFFFFF", "#00843D", "#111111"],             # Home: White/Green | Away: Black
+    "Borussia Monchengladbach": ["#FFFFFF", "#00843D", "#111111"],# Home: White/Green | Away: Black
+    "Werder Bremen": ["#00843D", "#FFFFFF", "#F7C600"],          # Home: Green | Away: Yellow
+    "Union Berlin": ["#D00000", "#F7C600", "#FFFFFF"],           # Home: Red/Yellow | Away: White
+    "Cologne": ["#FFFFFF", "#ED1C24", "#111111"],                # Home: White/Red | Away: Black
+    "FC Koln": ["#FFFFFF", "#ED1C24", "#111111"],                # Home: White/Red | Away: Black
+    "FC Köln": ["#FFFFFF", "#ED1C24", "#111111"],                # Home: White/Red | Away: Black
+    "Hamburg": ["#005CA9", "#FFFFFF", "#111111"],                # Home: Blue | Away: Black
+    "Hamburger SV": ["#005CA9", "#FFFFFF", "#111111"],           # Home: Blue | Away: Black
+    "St. Pauli": ["#5B3A29", "#FFFFFF", "#D71920"],              # Home: Brown | Away: Red
+    "Wolfsburg": ["#65B32E", "#FFFFFF", "#111111"],              # Home: Green | Away: Black
+    "Heidenheim": ["#E30613", "#005BAC", "#FFFFFF"],             # Home: Red/Blue | Away: White
 
     # Ligue 1 2025/26
-    "Angers": ["#FFFFFF", "#111111", "#D4AF37"],
-    "SCO Angers": ["#FFFFFF", "#111111", "#D4AF37"],
-    "Auxerre": ["#0057B8", "#FFFFFF", "#111111"],
-    "AJ Auxerre": ["#0057B8", "#FFFFFF", "#111111"],
-    "Brest": ["#E30613", "#FFFFFF", "#111111"],
-    "Stade Brestois": ["#E30613", "#FFFFFF", "#111111"],
-    "Le Havre": ["#6CB4EE", "#0B2B5C", "#FFFFFF"],
-    "Havre AC": ["#6CB4EE", "#0B2B5C", "#FFFFFF"],
-    "Lens": ["#FFD100", "#E30613", "#111111"],
-    "RC Lens": ["#FFD100", "#E30613", "#111111"],
-    "Lille": ["#E01E37", "#0B1F3A", "#FFFFFF"],
-    "LOSC": ["#E01E37", "#0B1F3A", "#FFFFFF"],
-    "Lorient": ["#F58220", "#111111", "#FFFFFF"],
-    "Metz": ["#8A1538", "#FFFFFF", "#111111"],
-    "FC Metz": ["#8A1538", "#FFFFFF", "#111111"],
-    "Lyon": ["#FFFFFF", "#003DA5", "#D71920"],
-    "Olympique Lyonnais": ["#FFFFFF", "#003DA5", "#D71920"],
-    "Marseille": ["#FFFFFF", "#00A3E0", "#111111"],
-    "Olympique de Marseille": ["#FFFFFF", "#00A3E0", "#111111"],
-    "Monaco": ["#FFFFFF", "#E30613", "#C0C0C0"],
-    "AS Monaco": ["#FFFFFF", "#E30613", "#C0C0C0"],
-    "Nantes": ["#FFE500", "#00843D", "#111111"],
-    "FC Nantes": ["#FFE500", "#00843D", "#111111"],
-    "Nice": ["#D71920", "#111111", "#FFFFFF"],
-    "OGC Nice": ["#D71920", "#111111", "#FFFFFF"],
-    "Paris FC": ["#132257", "#8AC3EE", "#FFFFFF"],
-    "PSG": ["#004170", "#DA291C", "#FFFFFF"],
-    "Paris Saint-Germain": ["#004170", "#DA291C", "#FFFFFF"],
-    "Rennes": ["#E30613", "#111111", "#FFFFFF"],
-    "Stade Rennais": ["#E30613", "#111111", "#FFFFFF"],
-    "Strasbourg": ["#00A3E0", "#FFFFFF", "#111111"],
-    "RC Strasbourg": ["#00A3E0", "#FFFFFF", "#111111"],
-    "Toulouse": ["#5B2C83", "#FFFFFF", "#D71920"],
-    "Toulouse FC": ["#5B2C83", "#FFFFFF", "#D71920"],
+    "Angers": ["#FFFFFF", "#111111", "#D4AF37"],               # Home: White/Black | Away: Gold
+    "SCO Angers": ["#FFFFFF", "#111111", "#D4AF37"],            # Home: White/Black | Away: Gold
+    "Auxerre": ["#0057B8", "#FFFFFF", "#111111"],               # Home: Blue | Away: Black
+    "AJ Auxerre": ["#0057B8", "#FFFFFF", "#111111"],            # Home: Blue | Away: Black
+    "Brest": ["#E30613", "#FFFFFF", "#111111"],                  # Home: Red | Away: Black
+    "Stade Brestois": ["#E30613", "#FFFFFF", "#111111"],        # Home: Red | Away: Black
+    "Le Havre": ["#6CB4EE", "#0B2B5C", "#FFFFFF"],              # Home: Sky Blue/Navy | Away: White
+    "Havre AC": ["#6CB4EE", "#0B2B5C", "#FFFFFF"],              # Home: Sky Blue/Navy | Away: White
+    "Lens": ["#FFD100", "#E30613", "#111111"],                   # Home: Yellow/Red | Away: Black
+    "RC Lens": ["#FFD100", "#E30613", "#111111"],               # Home: Yellow/Red | Away: Black
+    "Lille": ["#E01E37", "#0B1F3A", "#FFFFFF"],                  # Home: Red/Navy | Away: White
+    "LOSC": ["#E01E37", "#0B1F3A", "#FFFFFF"],                   # Home: Red/Navy | Away: White
+    "Lorient": ["#F58220", "#111111", "#FFFFFF"],                # Home: Orange/Black | Away: White
+    "Metz": ["#8A1538", "#FFFFFF", "#111111"],                   # Home: Maroon | Away: Black
+    "FC Metz": ["#8A1538", "#FFFFFF", "#111111"],                # Home: Maroon | Away: Black
+    "Lyon": ["#FFFFFF", "#003DA5", "#D71920"],                   # Home: White/Blue | Away: Red
+    "Olympique Lyonnais": ["#FFFFFF", "#003DA5", "#D71920"],      # Home: White/Blue | Away: Red
+    "Marseille": ["#FFFFFF", "#00A3E0", "#111111"],              # Home: White/Blue | Away: Black
+    "Olympique de Marseille": ["#FFFFFF", "#00A3E0", "#111111"], # Home: White/Blue | Away: Black
+    "Monaco": ["#FFFFFF", "#E30613", "#C0C0C0"],                 # Home: White/Red | Away: Silver
+    "AS Monaco": ["#FFFFFF", "#E30613", "#C0C0C0"],              # Home: White/Red | Away: Silver
+    "Nantes": ["#FFE500", "#00843D", "#111111"],                  # Home: Yellow/Green | Away: Black
+    "FC Nantes": ["#FFE500", "#00843D", "#111111"],              # Home: Yellow/Green | Away: Black
+    "Nice": ["#D71920", "#111111", "#FFFFFF"],                    # Home: Red/Black | Away: White
+    "OGC Nice": ["#D71920", "#111111", "#FFFFFF"],               # Home: Red/Black | Away: White
+    "Paris FC": ["#132257", "#8AC3EE", "#FFFFFF"],               # Home: Navy | Away: White
+    "PSG": ["#004170", "#DA291C", "#FFFFFF"],                    # Home: Navy/Red | Away: White
+    "Paris Saint-Germain": ["#004170", "#DA291C", "#FFFFFF"],    # Home: Navy/Red | Away: White
+    "Rennes": ["#E30613", "#111111", "#FFFFFF"],                  # Home: Red/Black | Away: White
+    "Stade Rennais": ["#E30613", "#111111", "#FFFFFF"],          # Home: Red/Black | Away: White
+    "Strasbourg": ["#00A3E0", "#FFFFFF", "#111111"],              # Home: Blue | Away: Black
+    "RC Strasbourg": ["#00A3E0", "#FFFFFF", "#111111"],          # Home: Blue | Away: Black
+    "Toulouse": ["#5B2C83", "#FFFFFF", "#D71920"],                # Home: Purple | Away: Red
+    "Toulouse FC": ["#5B2C83", "#FFFFFF", "#D71920"],             # Home: Purple | Away: Red
 }
 
 # Make the primary colour table cover all new teams while preserving earlier explicit values.
@@ -618,12 +618,11 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
     """
     Pick kit-based colours for a match while keeping the home team's identity stable.
 
-    v3 fix:
-      - The previous "max distance" logic could switch Atletico Madrid to the
-        white alternate colour when facing another red team, which then caused
-        white/light header bands and unreadable labels in some visuals.
-      - We now keep the home team's primary shirt colour whenever possible and
-        change the away colour first.
+    v4 fix:
+      - Home team uses their HOME kit colour (primary shirt colour).
+      - Away team prefers their ALTERNATE/AWAY kit colour (3rd palette entry)
+        to represent the away change strip, as in real football.
+      - Falls back to the primary if the alternate provides poor contrast.
       - Very light alternates are avoided when a readable non-light alternate is
         available with enough contrast.
     """
@@ -632,20 +631,39 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
 
     home_primary = home_palette[0]
     away_primary = away_palette[0]
+    # Away/alternate kit colour = 3rd palette entry (the clash/away colour)
+    away_alternate = away_palette[-1] if len(away_palette) >= 3 else (
+        away_palette[1] if len(away_palette) >= 2 else away_primary
+    )
 
-    # Keep the home primary if the matchup is already readable.
+    def _light_penalty(col: str) -> float:
+        return 0.18 if _relative_luminance(col) >= 0.76 else 0.0
+
+    # ── Step 1: Home primary + Away alternate (away kit) ───────────
+    # Prefer the away team's alternate/away kit colour when it gives contrast.
+    if away_alternate != away_primary:
+        alt_score = _color_distance(home_primary, away_alternate) - _light_penalty(away_alternate)
+        pri_score = _color_distance(home_primary, away_primary) - _light_penalty(away_primary)
+        # Use alternate if it provides comparable or better contrast
+        if _color_distance(home_primary, away_alternate) >= 0.28 and alt_score >= pri_score * 0.85:
+            return home_primary, away_alternate
+
+    # ── Step 2: Home primary + Away primary if contrast is OK ──────
     if _color_distance(home_primary, away_primary) >= 0.34:
         return home_primary, away_primary
 
-    def _light_penalty(col: str) -> float:
-        # White/near-white bands are readable with dark text, but they are visually
-        # harsh in dark-mode reports and caused the Atletico white-label issue.
-        return 0.18 if _relative_luminance(col) >= 0.76 else 0.0
-
-    # First change the away side only.
+    # ── Step 3: Try away palette colours for better contrast ───────
     best_away = away_primary
     best_score = _color_distance(home_primary, away_primary) - _light_penalty(away_primary)
-    for ac in away_palette[1:] + ["#9CA3AF", "#00A3E0", "#FDE100", "#FFFFFF"]:
+    # Prefer alternate/away colours first, then the rest
+    away_candidates = []
+    if len(away_palette) >= 3:
+        away_candidates.append(away_palette[2])  # alternate/away kit
+    if len(away_palette) >= 2:
+        away_candidates.append(away_palette[1])  # accent/stripe
+    away_candidates += ["#9CA3AF", "#00A3E0", "#FDE100", "#FFFFFF"]
+
+    for ac in away_candidates:
         ac = _usable_on_dark(ac, "#9CA3AF")
         score = _color_distance(home_primary, ac) - _light_penalty(ac)
         if score > best_score:
@@ -654,11 +672,10 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
     if _color_distance(home_primary, best_away) >= 0.28:
         return home_primary, best_away
 
-    # Last resort: try the full palette search, but preserve readability.
+    # ── Step 4: Last resort — full palette search ──────────────────
     best = (home_primary, best_away, _color_distance(home_primary, best_away) - _light_penalty(best_away))
     for hc in home_palette:
         hc = _usable_on_dark(hc, "#B91C1C")
-        # Penalise switching the home team to a white/light alternate.
         home_switch_penalty = 0.22 if hc != home_primary else 0.0
         for ac in away_palette + ["#9CA3AF", "#00A3E0", "#FDE100", "#FFFFFF"]:
             ac = _usable_on_dark(ac, "#9CA3AF")
@@ -10857,8 +10874,10 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
         return None
 
     hn, an   = info.get("home_name", "Home"), info.get("away_name", "Away")
-    hc       = TEAM_COLORS.get(hn, C_BLUE)
-    ac       = TEAM_COLORS.get(an, C_RED)
+    # Use the global C_RED / C_BLUE which are already set by choose_matchup_colors()
+    # in main() — guarantees the board header always matches the visualization colors.
+    hc       = C_RED
+    ac       = C_BLUE
     hg       = stats["home"].get("goals", 0)
     ag       = stats["away"].get("goals", 0)
     score_txt= f"{hg} : {ag}"
@@ -10996,15 +11015,32 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
         lbl_w, lbl_h = 0.195, 0.36
         lbl_y        = 0.60
 
-        left_box = mpatches.FancyBboxPatch(
-            (0.010, lbl_y), lbl_w, lbl_h,
-            boxstyle="round,pad=0.01,rounding_size=0.04",
-            facecolor=_text_on_color(hc) if _text_on_color(hc) == "#ffffff" else "#ffffff",
-            edgecolor="none", transform=hdr.transAxes, zorder=3,
-        )
-        # أبسط: left pill = لون الفريق أو أبيض
-        left_fc  = hc if hc not in ("#ffffff", "#FFFFFF", "#f0f0f0") else "#dddddd"
-        right_fc = ac if ac not in ("#ffffff", "#FFFFFF", "#f0f0f0") else "#cc0000"
+        # ── اختيار لون الـ pill من باليت الفريق ────────────────────
+        # إذا كان اللون الأساسي أبيض/فاتح جداً أو أسود/غامق جداً، نستخدم اللون البديل
+        # عشان يكون واضح على الخلفية السوداء.
+        def _pill_color(team_name: str, primary: str) -> str:
+            """Pick a visible pill colour for the board header.
+            If the primary is too light (white) or too dark (black/near-black)
+            on a dark header, fall back to a better colour from the team palette."""
+            lum = _relative_luminance(primary)
+            # Too dark: invisible on black background
+            if lum < 0.10:
+                pal = _team_palette(team_name, primary)
+                for c in pal[1:]:
+                    if c and _relative_luminance(c) >= 0.10:
+                        return c
+                return "#9CA3AF"  # last-resort visible grey
+            # Too light: harsh white pill on dark header
+            if primary.lower() in ("#ffffff", "#fff", "#f0f0f0", "#f4f4f4", "#f4f4f4"):
+                pal = _team_palette(team_name, primary)
+                for c in pal[1:]:
+                    if c and c.lower() not in ("#ffffff", "#fff", "#f0f0f0", "#f4f4f4"):
+                        return c
+                return "#333333"  # last-resort dark grey
+            return primary
+
+        left_fc  = _pill_color(hn, hc)
+        right_fc = _pill_color(an, ac)
 
         left_pill = mpatches.FancyBboxPatch(
             (0.010, lbl_y), lbl_w, lbl_h,
