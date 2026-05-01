@@ -1,0 +1,80 @@
+# ══════════════════════════════════════════════════════
+#  WhoScored Post-Match Analyzer — .gitignore
+# ══════════════════════════════════════════════════════
+
+# ── Output files ─────────────────────────────────────
+output/
+*.png
+*.pdf
+*.csv
+
+# ── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ─────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── IDE / Editor ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ── OS generated files ───────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ── Jupyter Notebook ────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Browser / Selenium ──────────────────────────────
+chromedriver
+chromedriver.exe
+*.crx
+selenium_stealth/
+
+# ── Logs ─────────────────────────────────────────────
+*.log
+logs/
+
+# ── Secrets / Environment ────────────────────────────
+.env
+.env.local
+*.key
+*.pem
+
+# ── Temporary files ──────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+
+# ── Coverage reports ─────────────────────────────────
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
