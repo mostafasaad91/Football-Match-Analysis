@@ -1,10 +1,25 @@
-cloudscraper
-undetected-chromedriver
-selenium
-selenium-stealth
-scipy
-beautifulsoup4
-numpy
-pandas
-matplotlib
-rich
+# WhoScored Post-Match Analyzer — Dependencies
+# ══════════════════════════════════════════════════════
+
+# Core data processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.8.0
+
+# Web scraping
+cloudscraper>=1.2.71
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Browser automation (Selenium fallback)
+undetected-chromedriver>=3.5.4
+selenium>=4.15.0
+selenium-stealth>=1.0.6
+
+# Console output
+rich>=13.0.0
+
+# Scientific / Statistical
+scipy>=1.11.0
