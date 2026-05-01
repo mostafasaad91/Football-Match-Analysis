@@ -66,8 +66,8 @@ A comprehensive post-match football analytics tool that scrapes match data from 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/whoscored-post-match-analyzer.git
-cd whoscored-post-match-analyzer
+git clone https://github.com/mostafasaad91/Football-Match-Analysis.git
+cd Football-Match-Analysis
 
 # Install dependencies
 pip install -r requirements.txt
@@ -77,7 +77,7 @@ pip install -r requirements.txt
 
 ```bash
 # Run with default match URL (edit MATCH_URL in SETTINGS section)
-python Analyzer_OPTA_XG_V9_4.py
+python Match_Analysis.py
 ```
 
 Or customize the match URL directly in the `SETTINGS` section at the top of the file:
@@ -118,7 +118,7 @@ All settings are at the top of the script in the `SETTINGS` section:
 ## 🏗️ Architecture
 
 ```
-Analyzer_OPTA_XG_V9_4.py
+Match_Analysis.py
 ├── SETTINGS & CONSTANTS
 │   ├── Match URL & Browser config
 │   ├── xG model parameters
@@ -250,6 +250,6 @@ This tool is for **educational and analytical purposes only**. It accesses publi
 
 ## 📧 Contact
 
-**Mostafa Saad** — [GitHub](https://github.com/yourusername)
+**Mostafa Saad** — [GitHub](https://github.com/mostafasaad91)
 
 If you find this tool useful, please consider giving it a ⭐!
