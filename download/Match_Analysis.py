@@ -606,10 +606,42 @@ def _relative_luminance(hex_color: str) -> float:
 
 def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
     """
-    Avoid invisible black/navy on the dark visual background.
-    Shirt identity is preserved through the palette, but black-heavy kits are lifted to a visible slate.
+    Avoid invisible black/near-black on the dark visual background.
+    v2: Navy/blue tones with low luminance but bright channels are kept,
+    because they are clearly distinguishable from a near-black background.
+    Only truly dark colours (near-black in ALL channels) are replaced.
     """
-    if _relative_luminance(hex_color) < 0.10:
+    r, g, b = _hex_to_rgb01(hex_color)
+    # A colour is invisible on dark bg only if luminance is very low AND
+    # no channel is bright enough to create visual contrast.
+    # Navy #132257 has low luminance (0.020) but blue=0.34 → visible.
+    # Pure black #000000 has luminance 0 and max channel 0 → invisible.
+    if _relative_luminance(hex_color) < 0.03 and max(r, g, b) < 0.15:
+        return fallback
+    return hex_color
+
+
+def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") -> str:
+    """
+    Return a colour that is clearly visible on a dark dashboard background.
+    - Too-dark colours (luminance < 0.10) are replaced with the fallback.
+    - Too-light colours (luminance >= 0.80, e.g. white/off-white kits)
+      are replaced with the team's accent or alternate palette colour
+      so the team still has a visible identity on dark visuals.
+    """
+    lum = _relative_luminance(hex_color)
+    # Too dark: use fallback
+    if lum < 0.10:
+        return fallback
+    # Too light (white/off-white kit): use a darker palette entry instead
+    if lum >= 0.80:
+        pal = _team_palette(team_name, fallback)
+        # Skip the primary (which is the light colour); try accent then alternate
+        for c in pal[1:]:
+            c = _usable_on_dark(c, fallback)
+            if c and _relative_luminance(c) < 0.80:
+                return c
+        # All palette entries are light — use the fallback
         return fallback
     return hex_color
 
@@ -618,19 +650,26 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
     """
     Pick kit-based colours for a match while keeping the home team's identity stable.
 
-    v4 fix:
-      - Home team uses their HOME kit colour (primary shirt colour).
+    v5 fix:
+      - White/off-white primary kits are replaced with the team's accent or
+        alternate colour so visuals remain readable on the dark background.
+      - Home team uses a visible version of their HOME kit colour.
       - Away team prefers their ALTERNATE/AWAY kit colour (3rd palette entry)
         to represent the away change strip, as in real football.
       - Falls back to the primary if the alternate provides poor contrast.
       - Very light alternates are avoided when a readable non-light alternate is
         available with enough contrast.
     """
-    home_palette = [_usable_on_dark(c, "#B91C1C") for c in _team_palette(home_name, DEFAULT_HOME)]
-    away_palette = [_usable_on_dark(c, "#9CA3AF") for c in _team_palette(away_name, DEFAULT_AWAY)]
+    home_palette_raw = _team_palette(home_name, DEFAULT_HOME)
+    away_palette_raw = _team_palette(away_name, DEFAULT_AWAY)
 
-    home_primary = home_palette[0]
-    away_primary = away_palette[0]
+    home_palette = [_usable_on_dark(c, "#B91C1C") for c in home_palette_raw]
+    away_palette = [_usable_on_dark(c, "#9CA3AF") for c in away_palette_raw]
+
+    # For the primary display colour, also avoid white/off-white on dark backgrounds
+    home_primary = _visible_on_dark(home_name, home_palette_raw[0], "#B91C1C")
+    away_primary = _visible_on_dark(away_name, away_palette_raw[0], "#9CA3AF")
+
     # Away/alternate kit colour = 3rd palette entry (the clash/away colour)
     away_alternate = away_palette[-1] if len(away_palette) >= 3 else (
         away_palette[1] if len(away_palette) >= 2 else away_primary
@@ -661,7 +700,7 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
         away_candidates.append(away_palette[2])  # alternate/away kit
     if len(away_palette) >= 2:
         away_candidates.append(away_palette[1])  # accent/stripe
-    away_candidates += ["#9CA3AF", "#00A3E0", "#FDE100", "#FFFFFF"]
+    away_candidates += ["#9CA3AF", "#00A3E0", "#FDE100"]
 
     for ac in away_candidates:
         ac = _usable_on_dark(ac, "#9CA3AF")
@@ -677,7 +716,7 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
     for hc in home_palette:
         hc = _usable_on_dark(hc, "#B91C1C")
         home_switch_penalty = 0.22 if hc != home_primary else 0.0
-        for ac in away_palette + ["#9CA3AF", "#00A3E0", "#FDE100", "#FFFFFF"]:
+        for ac in away_palette + ["#9CA3AF", "#00A3E0", "#FDE100"]:
             ac = _usable_on_dark(ac, "#9CA3AF")
             score = _color_distance(hc, ac) - _light_penalty(ac) - home_switch_penalty
             if score > best[2]:
@@ -11023,12 +11062,15 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
             If the primary is too light (white) or too dark (black/near-black)
             on a dark header, fall back to a better colour from the team palette."""
             lum = _relative_luminance(primary)
-            # Too dark: invisible on black background
-            if lum < 0.10:
+            r, g, b = _hex_to_rgb01(primary)
+            # Too dark: invisible on black background (only pure near-blacks)
+            if lum < 0.03 and max(r, g, b) < 0.15:
                 pal = _team_palette(team_name, primary)
                 for c in pal[1:]:
-                    if c and _relative_luminance(c) >= 0.10:
-                        return c
+                    if c:
+                        cr, cg, cb = _hex_to_rgb01(c)
+                        if _relative_luminance(c) >= 0.03 or max(cr, cg, cb) >= 0.15:
+                            return c
                 return "#9CA3AF"  # last-resort visible grey
             # Too light: harsh white pill on dark header
             if _relative_luminance(primary) >= 0.80:
