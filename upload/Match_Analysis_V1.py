@@ -49,7 +49,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1903405/live/england-premier-league-2025-2026-arsenal-fulham"
+MATCH_URL = "https://www.whoscored.com/matches/1972194/live/europe-champions-league-2025-2026-real-madrid-manchester-city"
 SAVE_DIR = "output"
 CHROMEDRIVER_PATH = ""  # فارغ = اترك undetected_chromedriver ينزّل نسخة متوافقة تلقائيًا
                          # (عدّله فقط لو عندك chromedriver مطابق لنسخة Chrome الحالية)
@@ -765,10 +765,56 @@ def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
       3. Otherwise use the provided fallback.
     """
     lum = _relative_luminance(hex_color)
-    if lum >= 0.10:
+    if 0.10 <= lum:
         return hex_color
     # Very dark: return off-white — more distinctive and kit-accurate for black-kit teams
     return "#E0E0E0"
+
+
+def _visible_on_dark(team_color: str, team_name: str = "") -> str:
+    """
+    Return a version of the team colour that is clearly visible on a dark background.
+
+    Problems solved:
+      - White/near-white team colours (#FFFFFF, #F4F4F4, etc.) are invisible when
+        used as stat values on faint team-coloured strips or as fill in hex badges.
+      - Very light yellows (#FDE100, #FDB913) also wash out against the dark theme.
+      - Very dark colours (black/navy kits) disappear into the dark background.
+
+    Strategy:
+      1. If the colour is very light (lum >= 0.65), try the team's alternate palette
+         colour which is typically darker and more distinctive.
+      2. If the colour is very dark (lum < 0.10), lift it to a visible shade.
+      3. Otherwise keep it as-is.
+    """
+    lum = _relative_luminance(team_color)
+
+    # Very dark → lift
+    if lum < 0.10:
+        # Try alternate from palette first
+        if team_name:
+            pal = _team_palette(team_name, team_color)
+            for c in pal[1:]:
+                if c and _relative_luminance(c) >= 0.10:
+                    return c
+        return "#E0E0E0"
+
+    # Very light (white, near-white, light yellow) → use alternate/away kit colour
+    if lum >= 0.65:
+        if team_name:
+            pal = _team_palette(team_name, team_color)
+            # Prefer the last palette entry (alternate/away colour) — it's usually darker
+            for c in reversed(pal[1:]):
+                if c and _relative_luminance(c) < 0.65:
+                    return c
+        # Fallback: darken the colour itself by mixing with black
+        r, g, b = _hex_to_rgb01(team_color)
+        return "#{:02x}{:02x}{:02x}".format(
+            int(r * 180), int(g * 180), int(b * 180)
+        )
+
+    # Mid-range → keep as-is
+    return team_color
 
 
 def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
@@ -5459,7 +5505,18 @@ def _lbl(ax, txt, col=TEXT_BRIGHT, size=8.5):
     """
     Title above any axes — uses transAxes so it works for ALL panel types.
     Enhanced with glow path-effect and sharper badge.
+    If the team colour is very light (white/yellow), the badge edge is changed
+    to a darker shade so it remains visible on the dark background.
     """
+    # Ensure the badge edge colour is visible on dark backgrounds
+    edge_col = col
+    lum = _relative_luminance(col)
+    if lum >= 0.65:
+        # Very light — darken the edge so the badge outline is visible
+        r, g, b = _hex_to_rgb01(col)
+        edge_col = "#{:02x}{:02x}{:02x}".format(
+            int(r * 140), int(g * 140), int(b * 140)
+        )
     ax.text(
         0.50,
         1.028,
@@ -5476,7 +5533,7 @@ def _lbl(ax, txt, col=TEXT_BRIGHT, size=8.5):
         bbox=dict(
             boxstyle="round,pad=0.40",
             facecolor="#07090f",
-            edgecolor=col,
+            edgecolor=edge_col,
             linewidth=1.4,
             alpha=0.97,
         ),
@@ -6052,10 +6109,11 @@ def _rpt_stats_table(ax, events, info, xg_data):
         hn[:12],
         ha="left",
         va="top",
-        color=C_RED,
+        color=_visible_on_dark(C_RED, hn),
         fontsize=8,
         fontweight="bold",
         transform=ax.transAxes,
+        path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
     )
     ax.text(
         0.90,
@@ -6063,10 +6121,11 @@ def _rpt_stats_table(ax, events, info, xg_data):
         an[:12],
         ha="right",
         va="top",
-        color=C_BLUE,
+        color=_visible_on_dark(C_BLUE, an),
         fontsize=8,
         fontweight="bold",
         transform=ax.transAxes,
+        path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
     )
     ax.plot([0.02, 0.98], [0.90, 0.90], color=GRID_COL, lw=0.8, transform=ax.transAxes)
     y = 0.85
@@ -6100,10 +6159,11 @@ def _rpt_stats_table(ax, events, info, xg_data):
             str(hv),
             ha="left",
             va="center",
-            color=C_RED,
+            color=_visible_on_dark(C_RED, hn),
             fontsize=9,
             fontweight="bold",
             transform=ax.transAxes,
+            path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
         )
         ax.text(
             0.50,
@@ -6129,10 +6189,11 @@ def _rpt_stats_table(ax, events, info, xg_data):
             str(av),
             ha="right",
             va="center",
-            color=C_BLUE,
+            color=_visible_on_dark(C_BLUE, an),
             fontsize=9,
             fontweight="bold",
             transform=ax.transAxes,
+            path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
         )
         y -= step
 
@@ -7536,10 +7597,11 @@ def _panel_match_stats(ax, events, info, xg_data):
         hn[:13],
         ha="left",
         va="top",
-        color=C_RED,
+        color=_visible_on_dark(C_RED, hn),
         fontsize=8,
         fontweight="bold",
         transform=ax.transAxes,
+        path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
     )
     ax.text(
         0.90,
@@ -7547,10 +7609,11 @@ def _panel_match_stats(ax, events, info, xg_data):
         an[:13],
         ha="right",
         va="top",
-        color=C_BLUE,
+        color=_visible_on_dark(C_BLUE, an),
         fontsize=8,
         fontweight="bold",
         transform=ax.transAxes,
+        path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
     )
     ax.plot([0.02, 0.98], [0.90, 0.90], color=GRID_COL, lw=0.8, transform=ax.transAxes)
     y = 0.85
@@ -7615,11 +7678,12 @@ def _panel_match_stats(ax, events, info, xg_data):
             str(hv),
             ha="left",
             va="center",
-            color="#ffd6d6",
+            color=_visible_on_dark(C_RED, hn),
             fontsize=9,
             fontweight="bold",
             transform=ax.transAxes,
             zorder=5,
+            path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
         )
         # Away value — right edge inside strip
         ax.text(
@@ -7628,11 +7692,12 @@ def _panel_match_stats(ax, events, info, xg_data):
             str(av),
             ha="right",
             va="center",
-            color="#d6e8ff",
+            color=_visible_on_dark(C_BLUE, an),
             fontsize=9,
             fontweight="bold",
             transform=ax.transAxes,
             zorder=5,
+            path_effects=[pe.withStroke(linewidth=2, foreground="#000000")],
         )
         y -= step
 
@@ -9562,7 +9627,7 @@ def _panel_high_turnovers(ax, events, tid, tc, name):
             hy,
             facecolor=col,
             alpha=0.92,
-            edgecolor="white",
+            edgecolor=_text_on_color(col),
             lw=1.0,
             zorder=8,
             transform=ax.transAxes,
@@ -9573,7 +9638,7 @@ def _panel_high_turnovers(ax, events, tid, tc, name):
             str(val),
             ha="center",
             va="center",
-            color="white",
+            color=_text_on_color(col),
             fontsize=11,
             fontweight="bold",
             transform=ax.transAxes,
@@ -9585,7 +9650,7 @@ def _panel_high_turnovers(ax, events, tid, tc, name):
             txt,
             ha="center",
             va="center",
-            color="white",
+            color=_text_on_color(col),
             fontsize=6.5,
             fontweight="bold",
             transform=ax.transAxes,
@@ -11182,8 +11247,9 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
         # عشان يكون واضح على الخلفية السوداء.
         def _pill_color(team_name: str, primary: str) -> str:
             """Pick a visible pill colour for the board header.
-            If the primary is too light (white) or too dark (black/near-black)
-            on a dark header, fall back to a better colour from the team palette."""
+            If the primary is too light (white/near-white) or too dark (black/near-black)
+            on a dark header, fall back to a better colour from the team palette.
+            Uses luminance thresholds for robustness across all team colours."""
             lum = _relative_luminance(primary)
             # Too dark: invisible on black background
             if lum < 0.10:
@@ -11192,13 +11258,18 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
                     if c and _relative_luminance(c) >= 0.10:
                         return c
                 return "#9CA3AF"  # last-resort visible grey
-            # Too light: harsh white pill on dark header
-            if primary.lower() in ("#ffffff", "#fff", "#f0f0f0", "#f4f4f4", "#f4f4f4"):
+            # Too light: white/near-white/yellow — harsh or invisible on dark header
+            if lum >= 0.55:
                 pal = _team_palette(team_name, primary)
-                for c in pal[1:]:
-                    if c and c.lower() not in ("#ffffff", "#fff", "#f0f0f0", "#f4f4f4"):
+                # Try alternate/away colours first (usually darker)
+                for c in reversed(pal[1:]):
+                    if c and _relative_luminance(c) < 0.55:
                         return c
-                return "#333333"  # last-resort dark grey
+                # No suitable alternate found — darken the primary itself
+                r, g, b = _hex_to_rgb01(primary)
+                return "#{:02x}{:02x}{:02x}".format(
+                    int(r * 160), int(g * 160), int(b * 160)
+                )
             return primary
 
         left_fc  = _pill_color(hn, hc)
@@ -11224,7 +11295,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
             f"● {hn}",
             color=_text_on_color(left_fc), fontsize=13.5, fontweight="bold",
             va="center", ha="center", transform=hdr.transAxes, zorder=4,
-            path_effects=[pe.withStroke(linewidth=1.8,
+            path_effects=[pe.withStroke(linewidth=2.2,
                           foreground=_stroke_on_color(left_fc))],
         )
         hdr.text(
@@ -11232,7 +11303,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
             f"{an} ●",
             color=_text_on_color(right_fc), fontsize=13.5, fontweight="bold",
             va="center", ha="center", transform=hdr.transAxes, zorder=4,
-            path_effects=[pe.withStroke(linewidth=1.8,
+            path_effects=[pe.withStroke(linewidth=2.2,
                           foreground=_stroke_on_color(right_fc))],
         )
 
@@ -12705,12 +12776,17 @@ def main():
 
     HOME_COLOR = home_col
     AWAY_COLOR = away_col
-    C_RED      = home_col   # المضيف يُستخدم عبر الكود باسم C_RED
-    C_BLUE     = away_col   # الضيف  يُستخدم عبر الكود باسم C_BLUE
+
+    # ── تأكد إن ألوان الفريقين ظاهرة على الخلفية الداكنة ───────────
+    # لو لون الفريق أبيض/فاتح جداً (زى توتنهام، ريال مدريد، يوفنتوس)
+    # أو أصفر فاتح (زى دورتموند، وولفرهامبتون)، هنستخدم اللون البديل
+    # من الباليت عشان الأرقام والإحصائيات تبقى مقروءة.
+    C_RED      = _visible_on_dark(home_col, info.get('home_name', ''))
+    C_BLUE     = _visible_on_dark(away_col, info.get('away_name', ''))
 
     console.print(
-        f"[dim]  Team colors: {info.get('home_name', '?')} = {home_col}  |  "
-        f"{info.get('away_name', '?')} = {away_col}[/dim]"
+        f"[dim]  Team colors: {info.get('home_name', '?')} = {home_col} (display: {C_RED})  |  "
+        f"{info.get('away_name', '?')} = {away_col} (display: {C_BLUE})[/dim]"
     )
 
     # First try the official team stats already embedded in matchCentreData.
