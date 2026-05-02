@@ -11950,21 +11950,21 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
 # ══════════════════════════════════════════════════════════════════════
 PDF_PAGE_SIZE = (8.27, 11.69)  # A4 portrait in inches
 # ══════════════════════════════════════════════════════════════════════
-#  PDF DARK MODE — ألوان موحَّدة لكل صفحات التقرير
+#  PDF LIGHT MODE — ألوان موحَّدة لكل صفحات التقرير (خلفية بيضاء)
 # ══════════════════════════════════════════════════════════════════════
-PDF_BG       = "#050508"   # خلفية الصفحة الرئيسية (شبه أسود)
-PDF_SURFACE  = "#0D1117"   # خلفية البطاقات والـ panels
-PDF_BORDER   = "#1E2836"   # خطوط الحدود والفواصل
-PDF_TEXT     = "#F0F4FF"   # النص الرئيسي
-PDF_TEXT_DIM = "#94A3B8"   # النص الثانوي (التواريخ، الأرقام الصغيرة)
-PDF_ACCENT   = "#F59E0B"   # تمييز ذهبي للعناوين
+PDF_BG       = "#FFFFFF"   # خلفية الصفحة الرئيسية (أبيض ناصع)
+PDF_SURFACE  = "#F8F9FA"   # خلفية البطاقات والـ panels (رمادي فاتح جداً)
+PDF_BORDER   = "#D1D5DB"   # خطوط الحدود والفواصل
+PDF_TEXT     = "#111827"   # النص الرئيسي (أسود)
+PDF_TEXT_DIM = "#6B7280"   # النص الثانوي (رمادي)
+PDF_ACCENT   = "#D97706"   # تمييز ذهبي للعناوين
 
 # ── Aliases للتوافق مع الكود الموجود (40 استخدامًا) ──
-PDF_WHITE     = PDF_BG       # كانت "#ffffff" — الآن خلفية داكنة
-PDF_INK       = PDF_TEXT     # كانت "#111827" — الآن نص فاتح
-PDF_MUTED     = PDF_TEXT_DIM # كانت "#64748b" — الآن نص ثانوي فاتح
-PDF_RULE      = PDF_BORDER   # كانت "#d9dee7" — الآن خط داكن
-PDF_GOLD_LINE = PDF_ACCENT   # كانت "#d9a441" — الآن ذهبي أكثر إشراقًا
+PDF_WHITE     = PDF_BG       # أبيض ناصع
+PDF_INK       = PDF_TEXT     # نص أسود واضح
+PDF_MUTED     = PDF_TEXT_DIM # نص ثانوي رمادي
+PDF_RULE      = PDF_BORDER   # حدود رمادية فاتحة
+PDF_GOLD_LINE = PDF_ACCENT   # ذهبي
 
 
 def _pdf_score_title(info, stats=None, events=None):
@@ -11979,7 +11979,7 @@ def _pdf_header_line(info, events=None):
 
 
 def _pdf_draw_header_footer(fig, info, page_num, total_pages, events=None):
-    """Header & footer for every PDF page in Dark Mode style."""
+    """Header & footer for every PDF page in white background style."""
     fig.patch.set_facecolor(PDF_BG)
 
     # ── شريط Header علوي بخلفية surface ──
@@ -11991,16 +11991,16 @@ def _pdf_draw_header_footer(fig, info, page_num, total_pages, events=None):
     # يسار: اسم المضيف بلون قميصه
     hn = info.get("home_name", "Home")
     header_ax.text(0.025, 0.5, hn, ha="left", va="center",
-                   color=_pdf_team_text_color(HOME_COLOR), fontsize=10, fontweight="bold")
+                   color=_pdf_team_text_color(HOME_COLOR), fontsize=11, fontweight="bold")
 
     # وسط: عنوان (header line)
     header_ax.text(0.5, 0.5, _pdf_header_line(info, events=events),
-                   ha="center", va="center", color=PDF_TEXT, fontsize=9.5)
+                   ha="center", va="center", color=PDF_TEXT, fontsize=10)
 
     # يمين: اسم الضيف بلون قميصه
     an = info.get("away_name", "Away")
     header_ax.text(0.975, 0.5, an, ha="right", va="center",
-                   color=_pdf_team_text_color(AWAY_COLOR), fontsize=10, fontweight="bold")
+                   color=_pdf_team_text_color(AWAY_COLOR), fontsize=11, fontweight="bold")
 
     # ── خط سفلي ثنائي اللون: نصف HOME، نصف AWAY ──
     fig.add_artist(plt.Line2D([0.0, 0.5], [0.954, 0.954],
@@ -12019,30 +12019,31 @@ def _pdf_draw_header_footer(fig, info, page_num, total_pages, events=None):
 
 def _pdf_team_text_color(team_color):
     """
-    اختيار لون النص لاسم الفريق على خلفية Dark Mode.
-    - لو لون الفريق فاتح بشكل كافٍ (مثل أصفر دورتموند، سماوي ستي)، نستخدمه مباشرة
-    - لو داكن جدًا (مثل أزرق تشيلسي، أسود فولام)، نستخدم PDF_TEXT الفاتح للقراءة
+    اختيار لون النص لاسم الفريق على خلفية بيضاء.
+    - لو لون الفريق غامق بدرجة كافية، نستخدمه مباشرة
+    - لو فاتح جداً (أبيض/أصفر فاتح)، نستخدم النص الداكن للقراءة
     """
-    return team_color if _is_light_color(team_color) else PDF_TEXT
+    if _is_light_color(team_color):
+        return PDF_TEXT  # dark text for light team colors on white bg
+    return team_color
 
 
 def _blend_hex_with_white(color: str, amount: float = 0.82) -> str:
     """
     Return a soft tint of a team colour for PDF tables.
-    في Dark Mode: الخلط مع PDF_SURFACE الداكن (وليس الأبيض)، فيظهر لون الفريق
-    خفيفًا فوق خلفية البطاقة الداكنة بدلاً من تخفيفه باتجاه الأبيض.
+    يخلط لون الفريق مع الأبيض لإنشاء تدرج خفيف لخلايا الجدول.
     """
     r, g, b = _hex_to_rgb01(color)
-    sr, sg, sb = _hex_to_rgb01(PDF_SURFACE)
+    sr, sg, sb = _hex_to_rgb01("#FFFFFF")  # blend toward white
     amount = _clamp(amount, 0.0, 1.0)
-    # amount=0 → اللون الأصلي كاملًا، amount=1 → خلفية كاملة
+    # amount=0 → اللون الأصلي كاملًا، amount=1 → أبيض كامل
     rr = int(round((r * (1 - amount) + sr * amount) * 255))
     gg = int(round((g * (1 - amount) + sg * amount) * 255))
     bb = int(round((b * (1 - amount) + sb * amount) * 255))
     return f"#{rr:02x}{gg:02x}{bb:02x}"
 
 
-def _pdf_write_wrapped(ax, text, x=0.0, y=1.0, width=96, fontsize=9.2, line_spacing=1.28, color=PDF_INK):
+def _pdf_write_wrapped(ax, text, x=0.0, y=1.0, width=96, fontsize=10.5, line_spacing=1.28, color=PDF_INK):
     import textwrap
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -12062,9 +12063,9 @@ def _pdf_write_wrapped(ax, text, x=0.0, y=1.0, width=96, fontsize=9.2, line_spac
 
 
 def _pdf_section_heading(fig, section_title, subsection_title, accent="#0f4c81"):
-    fig.text(0.055, 0.925, section_title, ha="left", va="top", color=PDF_INK, fontsize=15, fontweight="bold", family="serif")
+    fig.text(0.055, 0.925, section_title, ha="left", va="top", color=PDF_INK, fontsize=16, fontweight="bold", family="serif")
     fig.add_artist(plt.Line2D([0.055, 0.945], [0.900, 0.900], transform=fig.transFigure, color=PDF_GOLD_LINE, lw=0.75))
-    fig.text(0.055, 0.875, subsection_title, ha="left", va="top", color=accent, fontsize=12.5, fontweight="bold", family="serif")
+    fig.text(0.055, 0.875, subsection_title, ha="left", va="top", color=accent, fontsize=13.5, fontweight="bold", family="serif")
 
 
 def _pdf_scorers_line(events, info):
@@ -12151,22 +12152,23 @@ def _pdf_metric_table(ax, rows, hn, an, h_color, a_color):
     n = len(rows) + 1
     row_h = 1.0 / n
     x0, w0, w1, w2 = 0.00, 0.48, 0.26, 0.26
-    ax.add_patch(plt.Rectangle((x0, 1-row_h), w0, row_h, facecolor="#111827", edgecolor=PDF_RULE, lw=0.6))
+    # Header row: use team colors + dark header for metric column
+    ax.add_patch(plt.Rectangle((x0, 1-row_h), w0, row_h, facecolor="#1F2937", edgecolor=PDF_RULE, lw=0.6))
     ax.add_patch(plt.Rectangle((x0+w0, 1-row_h), w1, row_h, facecolor=h_color, edgecolor=PDF_RULE, lw=0.6))
     ax.add_patch(plt.Rectangle((x0+w0+w1, 1-row_h), w2, row_h, facecolor=a_color, edgecolor=PDF_RULE, lw=0.6))
-    ax.text(x0+0.02, 1-row_h/2, "Metric", va="center", ha="left", color="white", fontsize=8.6, fontweight="bold", family="serif")
-    ax.text(x0+w0+w1/2, 1-row_h/2, hn, va="center", ha="center", color=_text_on_color(h_color), fontsize=8.6, fontweight="bold", family="serif")
-    ax.text(x0+w0+w1+w2/2, 1-row_h/2, an, va="center", ha="center", color=_text_on_color(a_color), fontsize=8.6, fontweight="bold", family="serif")
+    ax.text(x0+0.02, 1-row_h/2, "Metric", va="center", ha="left", color="#FFFFFF", fontsize=10, fontweight="bold", family="serif")
+    ax.text(x0+w0+w1/2, 1-row_h/2, hn, va="center", ha="center", color=_text_on_color(h_color), fontsize=10, fontweight="bold", family="serif")
+    ax.text(x0+w0+w1+w2/2, 1-row_h/2, an, va="center", ha="center", color=_text_on_color(a_color), fontsize=10, fontweight="bold", family="serif")
     for i, (metric, hv, av) in enumerate(rows):
         y = 1 - row_h * (i + 2)
-        # Dark Mode: تناوب بين PDF_SURFACE وظل أغمق قليلاً بدل الأبيض
+        # تناوب بين أبيض ورمادي فاتح
         fill = PDF_SURFACE if i % 2 == 0 else PDF_BG
         ax.add_patch(plt.Rectangle((x0, y), w0, row_h, facecolor=fill, edgecolor=PDF_RULE, lw=0.45))
         ax.add_patch(plt.Rectangle((x0+w0, y), w1, row_h, facecolor=_blend_hex_with_white(h_color, 0.82), edgecolor=PDF_RULE, lw=0.45))
         ax.add_patch(plt.Rectangle((x0+w0+w1, y), w2, row_h, facecolor=_blend_hex_with_white(a_color, 0.82), edgecolor=PDF_RULE, lw=0.45))
-        ax.text(x0+0.02, y+row_h/2, metric, va="center", ha="left", color=PDF_INK, fontsize=8.2, fontweight="bold", family="serif")
-        ax.text(x0+w0+w1/2, y+row_h/2, str(hv), va="center", ha="center", color=_pdf_team_text_color(h_color), fontsize=8.2, fontweight="bold", family="serif")
-        ax.text(x0+w0+w1+w2/2, y+row_h/2, str(av), va="center", ha="center", color=_pdf_team_text_color(a_color), fontsize=8.2, fontweight="bold", family="serif")
+        ax.text(x0+0.02, y+row_h/2, metric, va="center", ha="left", color=PDF_INK, fontsize=9.5, fontweight="bold", family="serif")
+        ax.text(x0+w0+w1/2, y+row_h/2, str(hv), va="center", ha="center", color=_pdf_team_text_color(h_color), fontsize=9.5, fontweight="bold", family="serif")
+        ax.text(x0+w0+w1+w2/2, y+row_h/2, str(av), va="center", ha="center", color=_pdf_team_text_color(a_color), fontsize=9.5, fontweight="bold", family="serif")
 
 
 def _render_executive_summary_page(pdf, info, stats, events, xg_data, page_num, total_pages):
@@ -12194,7 +12196,7 @@ def _render_executive_summary_page(pdf, info, stats, events, xg_data, page_num, 
         f"Read together, these sections provide a coaching-style interpretation of the match rather than a simple statistical recap."
     )
     text_ax = page.add_axes([0.055, 0.505, 0.89, 0.36])
-    _pdf_write_wrapped(text_ax, summary, width=104, fontsize=8.6, line_spacing=1.12)
+    _pdf_write_wrapped(text_ax, summary, width=96, fontsize=10, line_spacing=1.18)
     rows = [
         ("Goals", h_sc, a_sc),
         ("xG", _fmt_num(h["xG"], 2), _fmt_num(a["xG"], 2)),
@@ -12254,7 +12256,7 @@ def _render_visual_page(pdf, src_fig, info, meta, statline, commentary, page_num
     _pdf_section_heading(page, section_title, meta["title"], accent=accent)
 
     img = _figure_to_rgba(src_fig)
-    img_ax = page.add_axes([0.055, 0.515, 0.89, 0.335])
+    img_ax = page.add_axes([0.055, 0.525, 0.89, 0.325])
     img_ax.set_facecolor(PDF_SURFACE)
     img_ax.imshow(img, interpolation="lanczos")
     img_ax.axis("off")
@@ -12263,9 +12265,9 @@ def _render_visual_page(pdf, src_fig, info, meta, statline, commentary, page_num
         spine.set_color(PDF_RULE)
         spine.set_linewidth(0.6)
 
-    text_ax = page.add_axes([0.055, 0.065, 0.89, 0.405])
+    text_ax = page.add_axes([0.055, 0.065, 0.89, 0.415])
     body = f"{statline}\n\n{commentary}"
-    _pdf_write_wrapped(text_ax, body, width=108, fontsize=8.25, line_spacing=1.12)
+    _pdf_write_wrapped(text_ax, body, width=96, fontsize=10, line_spacing=1.18)
     pdf.savefig(page, dpi=PDF_EXPORT_DPI, bbox_inches="tight", facecolor=PDF_WHITE, edgecolor="none", pad_inches=0.08)
     plt.close(page)
 
@@ -13597,7 +13599,7 @@ def _render_board_image_page(pdf, image_path, info, title, page_num, total_pages
 
 
 def build_tactical_pdf(figs, info, events, xg_data, ts):
-    """Build an English PDF and guarantee every figure in figs is included."""
+    """Build an English PDF with white background and clear readable fonts."""
     import glob
     matplotlib.rcParams.update({
         "figure.facecolor": PDF_BG, "axes.facecolor": PDF_SURFACE, "text.color": PDF_TEXT,
