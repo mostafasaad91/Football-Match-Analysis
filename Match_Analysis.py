@@ -49,7 +49,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1903387/live/england-premier-league-2025-2026-arsenal-newcastle"
+MATCH_URL = "https://www.whoscored.com/matches/1903405/live/england-premier-league-2025-2026-arsenal-fulham"
 SAVE_DIR = "output"
 CHROMEDRIVER_PATH = ""  # فارغ = اترك undetected_chromedriver ينزّل نسخة متوافقة تلقائيًا
                          # (عدّله فقط لو عندك chromedriver مطابق لنسخة Chrome الحالية)
@@ -134,40 +134,170 @@ C_GOLD = "#f59e0b"
 #  TEAM COLORS — ألوان قمصان الفرق الرسمية
 # ══════════════════════════════════════════════════════
 TEAM_COLORS = {
-    # إنجلترا
-    "Arsenal":          "#EF0107",
-    "Manchester City":  "#6CABDD",
-    "Manchester United":"#DA291C",
-    "Liverpool":        "#C8102E",
-    "Chelsea":          "#034694",
-    "Tottenham":        "#FFFFFF",
-    "Newcastle":        "#2D2D2D",  # Black/White stripes (visible dark charcoal for dark charts)
-    "Aston Villa":      "#95BFE5",
-    "West Ham":         "#7A263A",
-    "Brighton":         "#0057B8",
-    "Brentford":        "#E30613",
-    "Fulham":           "#000000",
-    "Crystal Palace":   "#1B458F",
-    "Wolves":           "#FDB913",
-    "Everton":          "#003399",
-    "Nottm Forest":     "#DD0000",
-    "Bournemouth":      "#DA291C",
-    "Leicester":        "#003090",
-    "Ipswich":          "#0044A9",
-    "Southampton":      "#D71920",
-    # إسبانيا
-    "Barcelona":        "#A50044",
-    "Real Madrid":      "#FEBE10",
-    "Atletico Madrid":  "#CB3524",
-    # ألمانيا
-    "Bayern Munich":    "#DC052D",
-    "Borussia Dortmund":"#FDE100",
-    # إيطاليا
-    "Juventus":         "#000000",
-    "Inter Milan":      "#010E80",
-    "AC Milan":         "#FB090B",
-    # فرنسا
-    "PSG":              "#004170",
+    # ══════════════════════════════════════════════════════════
+    # Premier League
+    # ══════════════════════════════════════════════════════════
+    "Arsenal":              "#EF0107",   # Red
+    "Aston Villa":          "#7A003C",   # Claret
+    "Bournemouth":          "#DA291C",   # Red
+    "Brentford":            "#E30613",   # Red
+    "Brighton":             "#0057B8",   # Blue
+    "Chelsea":              "#034694",   # Blue
+    "Crystal Palace":       "#1B458F",   # Blue
+    "Everton":              "#003399",   # Blue
+    "Fulham":               "#000000",   # Black
+    "Ipswich":              "#0044A9",   # Blue
+    "Leeds United":         "#1D428A",   # Blue
+    "Leicester":            "#003090",   # Blue
+    "Leicester City":       "#003090",   # Blue
+    "Liverpool":            "#C8102E",   # Red
+    "Manchester City":      "#6CABDD",   # Sky Blue
+    "Manchester United":    "#DA291C",   # Red
+    "Newcastle":            "#2D2D2D",   # Black (charcoal for visibility)
+    "Newcastle United":     "#2D2D2D",   # Black
+    "Nottm Forest":         "#DD0000",   # Red
+    "Nottingham Forest":    "#DD0000",   # Red
+    "Southampton":          "#D71920",   # Red
+    "Sunderland":           "#EB172B",   # Red
+    "Tottenham":            "#132257",   # Navy (home kit white → use navy for visibility)
+    "Tottenham Hotspur":    "#132257",   # Navy
+    "West Ham":             "#7A263A",   # Claret
+    "West Ham United":      "#7A263A",   # Claret
+    "Wolves":               "#FDB913",   # Gold
+    "Wolverhampton Wanderers": "#FDB913",# Gold
+    # ══════════════════════════════════════════════════════════
+    # LaLiga
+    # ══════════════════════════════════════════════════════════
+    "Athletic Bilbao":      "#EE2523",   # Red
+    "Athletic Club":        "#EE2523",   # Red
+    "Atletico":             "#CB3524",   # Red/Blue
+    "Atletico Madrid":      "#CB3524",   # Red
+    "Atlético Madrid":      "#CB3524",   # Red
+    "Atlético de Madrid":   "#CB3524",   # Red
+    "Barcelona":            "#A50044",   # Blaugrana
+    "CA Osasuna":           "#0A346F",   # Navy
+    "Osasuna":              "#0A346F",   # Navy
+    "Celta":                "#8AC3EE",   # Sky Blue
+    "Celta Vigo":           "#8AC3EE",   # Sky Blue
+    "Espanyol":             "#005BAC",   # Blue
+    "RCD Espanyol":         "#005BAC",   # Blue
+    "Getafe":               "#0057A8",   # Blue
+    "Getafe CF":            "#0057A8",   # Blue
+    "Girona":               "#BA0C2F",   # Red/White
+    "Girona FC":            "#BA0C2F",   # Red
+    "Leganes":              "#004B98",   # Blue
+    "CD Leganes":           "#004B98",   # Blue
+    "Mallorca":             "#E30613",   # Red
+    "RCD Mallorca":         "#E30613",   # Red
+    "Real Betis":           "#00843D",   # Green
+    "Betis":                "#00843D",   # Green
+    "Real Madrid":          "#00529F",   # Blue (home kit white → use royal blue for visibility)
+    "Real Oviedo":          "#00529F",   # Blue
+    "Real Sociedad":        "#0067B1",   # Blue
+    "Sevilla":              "#D71920",   # Red (home kit white → use red accent)
+    "Sevilla FC":           "#D71920",   # Red
+    "Valencia":             "#F58220",   # Orange (home kit white → use orange accent)
+    "Valencia CF":          "#F58220",   # Orange
+    "Villarreal":           "#F5DD02",   # Yellow
+    "Villarreal CF":        "#F5DD02",   # Yellow
+    # ══════════════════════════════════════════════════════════
+    # Bundesliga
+    # ══════════════════════════════════════════════════════════
+    "Augsburg":             "#BA0C2F",   # Red
+    "Bayer Leverkusen":     "#E32221",   # Red
+    "Leverkusen":           "#E32221",   # Red
+    "Bayern Munich":        "#DC052D",   # Red
+    "FC Bayern Munich":     "#DC052D",   # Red
+    "Borussia Dortmund":    "#FDE100",   # Yellow
+    "Dortmund":             "#FDE100",   # Yellow
+    "Borussia Mönchengladbach": "#00843D",# Green (home kit white → use green accent)
+    "Borussia Monchengladbach": "#00843D",# Green
+    "M'gladbach":           "#00843D",   # Green
+    "Eintracht Frankfurt":  "#E1000F",   # Red
+    "Frankfurt":            "#E1000F",   # Red
+    "FC Köln":              "#ED1C24",   # Red (home kit white → use red accent)
+    "FC Koln":              "#ED1C24",   # Red
+    "Cologne":              "#ED1C24",   # Red
+    "Freiburg":             "#D50032",   # Red
+    "SC Freiburg":          "#D50032",   # Red
+    "Hamburger SV":         "#005CA9",   # Blue
+    "Hamburg":              "#005CA9",   # Blue
+    "Heidenheim":           "#E30613",   # Red
+    "Hoffenheim":           "#0057B8",   # Blue
+    "TSG Hoffenheim":       "#0057B8",   # Blue
+    "Mainz":                "#C31432",   # Red
+    "Mainz 05":             "#C31432",   # Red
+    "RB Leipzig":           "#DD0741",   # Red (home kit white → use red accent)
+    "Leipzig":              "#DD0741",   # Red
+    "St. Pauli":            "#5B3A29",   # Brown
+    "Stuuttgart":           "#E32219",   # Red (home kit white → use red accent)
+    "VfB Stuttgart":        "#E32219",   # Red
+    "Union Berlin":         "#D00000",   # Red
+    "Werder Bremen":        "#00843D",   # Green
+    "Wolfsburg":            "#65B32E",   # Green
+    # ══════════════════════════════════════════════════════════
+    # Serie A
+    # ══════════════════════════════════════════════════════════
+    "AC Milan":             "#FB090B",   # Red
+    "Milan":                "#FB090B",   # Red
+    "Atalanta":             "#1D3C6A",   # Navy
+    "Bologna":              "#1B365D",   # Navy
+    "Cagliari":             "#0B2B5C",   # Navy
+    "Como":                 "#005CA8",   # Blue
+    "Cremonese":            "#8A1538",   # Maroon
+    "Fiorentina":           "#5A1A8B",   # Purple
+    "Genoa":                "#0E2240",   # Navy
+    "Hellas Verona":        "#002F6C",   # Blue
+    "Inter":                "#010E80",   # Blue/Black
+    "Inter Milan":          "#010E80",   # Blue/Black
+    "Internazionale":       "#010E80",   # Blue/Black
+    "Juventus":             "#111111",   # Black (home kit white/black → use black)
+    "Lazio":                "#87CEEB",   # Sky Blue
+    "Lecce":                "#D71920",   # Red
+    "Napoli":               "#12A8E0",   # Light Blue
+    "Parma":                "#003DA5",   # Blue (home kit white → use blue accent)
+    "Pisa":                 "#00205B",   # Navy
+    "Roma":                 "#8E1F2F",   # Dark Red
+    "Sassuolo":             "#009A44",   # Green
+    "Torino":               "#7C2D2D",   # Maroon
+    "Udinese":              "#111111",   # Black (home kit white → use black)
+    # ══════════════════════════════════════════════════════════
+    # Ligue 1
+    # ══════════════════════════════════════════════════════════
+    "Angers":               "#111111",   # Black (home kit white → use black)
+    "SCO Angers":           "#111111",   # Black
+    "Auxerre":              "#0057B8",   # Blue
+    "AJ Auxerre":           "#0057B8",   # Blue
+    "Brest":                "#E30613",   # Red
+    "Stade Brestois":       "#E30613",   # Red
+    "Le Havre":             "#6CB4EE",   # Sky Blue
+    "Havre AC":             "#6CB4EE",   # Sky Blue
+    "Lens":                 "#FFD100",   # Yellow
+    "RC Lens":              "#FFD100",   # Yellow
+    "Lille":                "#E01E37",   # Red
+    "LOSC":                 "#E01E37",   # Red
+    "Lorient":              "#F58220",   # Orange
+    "Lyon":                 "#003DA5",   # Blue (home kit white → use blue accent)
+    "Olympique Lyonnais":   "#003DA5",   # Blue
+    "Marseille":            "#00A3E0",   # Blue (home kit white → use blue accent)
+    "Olympique de Marseille":"#00A3E0",  # Blue
+    "Metz":                 "#8A1538",   # Maroon
+    "FC Metz":              "#8A1538",   # Maroon
+    "Monaco":               "#E30613",   # Red (home kit white → use red accent)
+    "AS Monaco":            "#E30613",   # Red
+    "Nantes":               "#FFE500",   # Yellow
+    "FC Nantes":            "#FFE500",   # Yellow
+    "Nice":                 "#D71920",   # Red
+    "OGC Nice":             "#D71920",   # Red
+    "Paris FC":             "#132257",   # Navy
+    "PSG":                  "#004170",   # Navy
+    "Paris Saint-Germain":  "#004170",   # Navy
+    "Rennes":               "#E30613",   # Red
+    "Stade Rennais":        "#E30613",   # Red
+    "Strasbourg":           "#00A3E0",   # Blue
+    "RC Strasbourg":        "#00A3E0",   # Blue
+    "Toulouse":             "#5B2C83",   # Purple
+    "Toulouse FC":          "#5B2C83",   # Purple
 }
 
 # أسماء مختصرة/بديلة كما تظهر في بيانات WhoScored/Opta
@@ -220,8 +350,8 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Chelsea": ["#034694", "#FFFFFF", "#D1D3D4"],             # Home: Blue | Away: Silver/Grey
     "Crystal Palace": ["#1B458F", "#C4122E", "#A7D8FF"],      # Home: Blue/Red | Away: Light Blue
     "Everton": ["#003399", "#FFFFFF", "#FFD100"],             # Home: Blue | Away: Yellow
-    "Fulham": ["#F4F4F4", "#111111", "#CC0000"],             # Home: White | Away: Black/Red
-    "Leeds United": ["#FFFFFF", "#1D428A", "#FFCD00"],        # Home: White | Away: Blue
+    "Fulham": ["#111111", "#FFFFFF", "#CC0000"],         # Home: White (display: Black) | Away: Red             # Home: White | Away: Black/Red
+    "Leeds United": ["#1D428A", "#FFFFFF", "#FFCD00"],   # Home: White (display: Blue) | Away: Yellow        # Home: White | Away: Blue
     "Liverpool": ["#C8102E", "#00B2A9", "#F6EB61"],           # Home: Red | Away: Teal/Yellow
     "Manchester City": ["#6CABDD", "#FFFFFF", "#1C2C5B"],      # Home: Sky Blue | Away: Navy
     "Manchester United": ["#DA291C", "#FBE122", "#000000"],    # Home: Red | Away: Black
@@ -230,8 +360,8 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Nottm Forest": ["#DD0000", "#FFFFFF", "#FDB913"],        # Home: Red | Away: Yellow
     "Nottingham Forest": ["#DD0000", "#FFFFFF", "#FDB913"],    # Home: Red | Away: Yellow
     "Sunderland": ["#EB172B", "#FFFFFF", "#000000"],          # Home: Red/White | Away: Black
-    "Tottenham": ["#FFFFFF", "#132257", "#C0C0C0"],           # Home: White | Away: Navy
-    "Tottenham Hotspur": ["#FFFFFF", "#132257", "#C0C0C0"],    # Home: White | Away: Navy
+    "Tottenham": ["#FFFFFF", "#132257", "#C0C0C0"],      # Home: White | Navy accent | Away: Silver           # Home: White | Away: Navy
+    "Tottenham Hotspur": ["#FFFFFF", "#132257", "#C0C0C0"], # Home: White | Navy accent | Away: Silver    # Home: White | Away: Navy
     "West Ham": ["#7A263A", "#1BB1E7", "#F3D459"],            # Home: Claret/Blue | Away: Yellow
     "West Ham United": ["#7A263A", "#1BB1E7", "#F3D459"],      # Home: Claret/Blue | Away: Yellow
     "Wolves": ["#FDB913", "#231F20", "#FFFFFF"],              # Home: Gold/Black | Away: White
@@ -268,13 +398,13 @@ TOP5_2025_26_TEAM_PALETTES = {
     "RCD Mallorca": ["#E30613", "#111111", "#F7C600"],            # Home: Red/Black | Away: Yellow
     "Real Betis": ["#00843D", "#FFFFFF", "#111111"],              # Home: Green | Away: Black
     "Betis": ["#00843D", "#FFFFFF", "#111111"],                    # Home: Green | Away: Black
-    "Real Madrid": ["#FFFFFF", "#FEBE10", "#00529F"],             # Home: White | Away: Blue
+    "Real Madrid": ["#FFFFFF", "#00529F", "#FEBE10"],    # Home: White | Blue accent | Away: Gold             # Home: White | Away: Blue
     "Real Oviedo": ["#00529F", "#FFFFFF", "#F7C600"],             # Home: Blue | Away: Yellow
     "Real Sociedad": ["#0067B1", "#FFFFFF", "#111111"],           # Home: Blue/White | Away: Black
-    "Sevilla": ["#FFFFFF", "#D71920", "#111111"],                 # Home: White/Red | Away: Black
-    "Sevilla FC": ["#FFFFFF", "#D71920", "#111111"],              # Home: White/Red | Away: Black
-    "Valencia": ["#FFFFFF", "#F58220", "#111111"],                # Home: White/Orange | Away: Black
-    "Valencia CF": ["#FFFFFF", "#F58220", "#111111"],             # Home: White/Orange | Away: Black
+    "Sevilla": ["#D71920", "#FFFFFF", "#111111"],        # Home: White (display: Red) | Away: Black                 # Home: White/Red | Away: Black
+    "Sevilla FC": ["#D71920", "#FFFFFF", "#111111"],     # Home: White (display: Red) | Away: Black              # Home: White/Red | Away: Black
+    "Valencia": ["#F58220", "#FFFFFF", "#111111"],       # Home: White (display: Orange) | Away: Black                # Home: White/Orange | Away: Black
+    "Valencia CF": ["#F58220", "#FFFFFF", "#111111"],    # Home: White (display: Orange) | Away: Black             # Home: White/Orange | Away: Black
     "Villarreal": ["#F5DD02", "#005BAC", "#111111"],              # Home: Yellow | Away: Blue
     "Villarreal CF": ["#F5DD02", "#005BAC", "#111111"],           # Home: Yellow | Away: Blue
 
@@ -289,28 +419,28 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Hellas Verona": ["#002F6C", "#F7C600", "#FFFFFF"],         # Home: Blue/Yellow | Away: White
     "Inter": ["#010E80", "#0068B5", "#111111"],                 # Home: Blue/Black | Away: Black
     "Inter Milan": ["#010E80", "#0068B5", "#111111"],           # Home: Blue/Black | Away: Black
-    "Juventus": ["#FFFFFF", "#111111", "#FBCB05"],              # Home: White/Black | Away: Gold
+    "Juventus": ["#111111", "#FFFFFF", "#FBCB05"],       # Home: Black | White accent | Away: Gold              # Home: White/Black | Away: Gold
     "Lazio": ["#87CEEB", "#FFFFFF", "#0B2240"],                 # Home: Sky Blue | Away: Navy
     "Lecce": ["#D71920", "#F7C600", "#0057B8"],                 # Home: Red/Yellow | Away: Blue
     "AC Milan": ["#FB090B", "#111111", "#FFFFFF"],              # Home: Red/Black | Away: White
     "Milan": ["#FB090B", "#111111", "#FFFFFF"],                  # Home: Red/Black | Away: White
     "Napoli": ["#12A8E0", "#FFFFFF", "#111111"],                 # Home: Light Blue | Away: Black
-    "Parma": ["#FFFFFF", "#003DA5", "#FECB00"],                 # Home: White/Blue | Away: Yellow
+    "Parma": ["#003DA5", "#FFFFFF", "#FECB00"],          # Home: White (display: Blue) | Away: Yellow                 # Home: White/Blue | Away: Yellow
     "Pisa": ["#00205B", "#111111", "#D4AF37"],                  # Home: Navy | Away: Gold
     "Roma": ["#8E1F2F", "#F9B233", "#111111"],                  # Home: Giallorosso | Away: Black
     "Sassuolo": ["#009A44", "#111111", "#FFFFFF"],               # Home: Green/Black | Away: White
     "Torino": ["#7C2D2D", "#FFFFFF", "#D4AF37"],                 # Home: Maroon | Away: Gold
-    "Udinese": ["#FFFFFF", "#111111", "#A6A6A6"],                # Home: White/Black | Away: Grey
+    "Udinese": ["#111111", "#FFFFFF", "#A6A6A6"],        # Home: White/Black (display: Black) | Away: Grey                # Home: White/Black | Away: Grey
 
     # Bundesliga 2025/26
     "Bayern Munich": ["#DC052D", "#FFFFFF", "#0066B2"],         # Home: Red | Away: Blue
     "FC Bayern Munich": ["#DC052D", "#FFFFFF", "#0066B2"],      # Home: Red | Away: Blue
     "Borussia Dortmund": ["#FDE100", "#111111", "#FFFFFF"],      # Home: Yellow/Black | Away: White
     "Dortmund": ["#FDE100", "#111111", "#FFFFFF"],               # Home: Yellow/Black | Away: White
-    "RB Leipzig": ["#FFFFFF", "#DD0741", "#0C2340"],             # Home: White/Red | Away: Navy
-    "Leipzig": ["#FFFFFF", "#DD0741", "#0C2340"],                # Home: White/Red | Away: Navy
-    "VfB Stuttgart": ["#FFFFFF", "#E32219", "#111111"],          # Home: White/Red | Away: Black
-    "Stuttgart": ["#FFFFFF", "#E32219", "#111111"],              # Home: White/Red | Away: Black
+    "RB Leipzig": ["#DD0741", "#FFFFFF", "#0C2340"],     # Home: White (display: Red) | Away: Navy             # Home: White/Red | Away: Navy
+    "Leipzig": ["#DD0741", "#FFFFFF", "#0C2340"],        # Home: White (display: Red) | Away: Navy                # Home: White/Red | Away: Navy
+    "VfB Stuttgart": ["#E32219", "#FFFFFF", "#111111"],  # Home: White (display: Red) | Away: Black          # Home: White/Red | Away: Black
+    "Stuttgart": ["#E32219", "#FFFFFF", "#111111"],      # Home: White (display: Red) | Away: Black              # Home: White/Red | Away: Black
     "Hoffenheim": ["#0057B8", "#FFFFFF", "#111111"],             # Home: Blue | Away: Black
     "TSG Hoffenheim": ["#0057B8", "#FFFFFF", "#111111"],         # Home: Blue | Away: Black
     "Bayer Leverkusen": ["#E32221", "#111111", "#FFFFFF"],       # Home: Red/Black | Away: White
@@ -322,14 +452,14 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Augsburg": ["#BA0C2F", "#007A33", "#FFFFFF"],              # Home: Red/Green | Away: White
     "Mainz": ["#C31432", "#FFFFFF", "#111111"],                  # Home: Red | Away: Black
     "Mainz 05": ["#C31432", "#FFFFFF", "#111111"],               # Home: Red | Away: Black
-    "Borussia Mönchengladbach": ["#FFFFFF", "#00843D", "#111111"],# Home: White/Green | Away: Black
-    "M'gladbach": ["#FFFFFF", "#00843D", "#111111"],             # Home: White/Green | Away: Black
-    "Borussia Monchengladbach": ["#FFFFFF", "#00843D", "#111111"],# Home: White/Green | Away: Black
+    "Borussia Mönchengladbach": ["#00843D", "#FFFFFF", "#111111"], # Home: White (display: Green)# Home: White/Green | Away: Black
+    "M'gladbach": ["#00843D", "#FFFFFF", "#111111"],    # Home: White (display: Green)             # Home: White/Green | Away: Black
+    "Borussia Monchengladbach": ["#00843D", "#FFFFFF", "#111111"], # Home: White (display: Green)# Home: White/Green | Away: Black
     "Werder Bremen": ["#00843D", "#FFFFFF", "#F7C600"],          # Home: Green | Away: Yellow
     "Union Berlin": ["#D00000", "#F7C600", "#FFFFFF"],           # Home: Red/Yellow | Away: White
-    "Cologne": ["#FFFFFF", "#ED1C24", "#111111"],                # Home: White/Red | Away: Black
-    "FC Koln": ["#FFFFFF", "#ED1C24", "#111111"],                # Home: White/Red | Away: Black
-    "FC Köln": ["#FFFFFF", "#ED1C24", "#111111"],                # Home: White/Red | Away: Black
+    "Cologne": ["#ED1C24", "#FFFFFF", "#111111"],        # Home: White (display: Red) | Away: Black                # Home: White/Red | Away: Black
+    "FC Koln": ["#ED1C24", "#FFFFFF", "#111111"],        # Home: White (display: Red) | Away: Black                # Home: White/Red | Away: Black
+    "FC Köln": ["#ED1C24", "#FFFFFF", "#111111"],        # Home: White (display: Red) | Away: Black                # Home: White/Red | Away: Black
     "Hamburg": ["#005CA9", "#FFFFFF", "#111111"],                # Home: Blue | Away: Black
     "Hamburger SV": ["#005CA9", "#FFFFFF", "#111111"],           # Home: Blue | Away: Black
     "St. Pauli": ["#5B3A29", "#FFFFFF", "#D71920"],              # Home: Brown | Away: Red
@@ -337,8 +467,8 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Heidenheim": ["#E30613", "#005BAC", "#FFFFFF"],             # Home: Red/Blue | Away: White
 
     # Ligue 1 2025/26
-    "Angers": ["#FFFFFF", "#111111", "#D4AF37"],               # Home: White/Black | Away: Gold
-    "SCO Angers": ["#FFFFFF", "#111111", "#D4AF37"],            # Home: White/Black | Away: Gold
+    "Angers": ["#111111", "#FFFFFF", "#D4AF37"],         # Home: White (display: Black) | Away: Gold               # Home: White/Black | Away: Gold
+    "SCO Angers": ["#111111", "#FFFFFF", "#D4AF37"],     # Home: White (display: Black) | Away: Gold            # Home: White/Black | Away: Gold
     "Auxerre": ["#0057B8", "#FFFFFF", "#111111"],               # Home: Blue | Away: Black
     "AJ Auxerre": ["#0057B8", "#FFFFFF", "#111111"],            # Home: Blue | Away: Black
     "Brest": ["#E30613", "#FFFFFF", "#111111"],                  # Home: Red | Away: Black
@@ -352,12 +482,12 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Lorient": ["#F58220", "#111111", "#FFFFFF"],                # Home: Orange/Black | Away: White
     "Metz": ["#8A1538", "#FFFFFF", "#111111"],                   # Home: Maroon | Away: Black
     "FC Metz": ["#8A1538", "#FFFFFF", "#111111"],                # Home: Maroon | Away: Black
-    "Lyon": ["#FFFFFF", "#003DA5", "#D71920"],                   # Home: White/Blue | Away: Red
-    "Olympique Lyonnais": ["#FFFFFF", "#003DA5", "#D71920"],      # Home: White/Blue | Away: Red
-    "Marseille": ["#FFFFFF", "#00A3E0", "#111111"],              # Home: White/Blue | Away: Black
-    "Olympique de Marseille": ["#FFFFFF", "#00A3E0", "#111111"], # Home: White/Blue | Away: Black
-    "Monaco": ["#FFFFFF", "#E30613", "#C0C0C0"],                 # Home: White/Red | Away: Silver
-    "AS Monaco": ["#FFFFFF", "#E30613", "#C0C0C0"],              # Home: White/Red | Away: Silver
+    "Lyon": ["#003DA5", "#FFFFFF", "#D71920"],           # Home: White (display: Blue) | Away: Red                   # Home: White/Blue | Away: Red
+    "Olympique Lyonnais": ["#003DA5", "#FFFFFF", "#D71920"], # Home: White (display: Blue) | Away: Red      # Home: White/Blue | Away: Red
+    "Marseille": ["#00A3E0", "#FFFFFF", "#111111"],      # Home: White (display: Blue) | Away: Black              # Home: White/Blue | Away: Black
+    "Olympique de Marseille": ["#00A3E0", "#FFFFFF", "#111111"], # Home: White (display: Blue) # Home: White/Blue | Away: Black
+    "Monaco": ["#E30613", "#FFFFFF", "#C0C0C0"],         # Home: Red/White (display: Red) | Away: Silver                 # Home: White/Red | Away: Silver
+    "AS Monaco": ["#E30613", "#FFFFFF", "#C0C0C0"],      # Home: Red/White (display: Red) | Away: Silver              # Home: White/Red | Away: Silver
     "Nantes": ["#FFE500", "#00843D", "#111111"],                  # Home: Yellow/Green | Away: Black
     "FC Nantes": ["#FFE500", "#00843D", "#111111"],              # Home: Yellow/Green | Away: Black
     "Nice": ["#D71920", "#111111", "#FFFFFF"],                    # Home: Red/Black | Away: White
@@ -498,31 +628,46 @@ def _relative_luminance(color: str) -> float:
 
 
 def _is_light_color(color: str) -> bool:
-    return _relative_luminance(color) >= 0.62
+    """True for colours bright enough to need dark text (WCAG-based)."""
+    return _relative_luminance(color) >= 0.40
 
 
-def _text_on_color(color: str, light: str = "#ffffff", dark: str = "#111827") -> str:
-    """Pick readable text for labels on team-colour bands.
+def _text_on_color(color: str, light: str = "#ffffff", dark: str = "#111111") -> str:
+    """
+    Pick readable text colour for labels rendered on a team-colour background.
 
-    v6 contrast fix:
-    - Dark/mid colours always get white text, including Arsenal-style blue panels.
-    - Dark text is used only on genuinely light colours such as white/yellow.
+    Uses the WCAG relative-luminance formula:
+      - background lum > 0.40  →  dark text  (#111111)
+      - background lum ≤ 0.40  →  light text (#ffffff)
+
+    This ensures white-kit teams (Tottenham, Real Madrid, Juventus, etc.)
+    always get dark text, and genuinely dark backgrounds keep white text.
+    The saturation guard prevents vivid mid-tone yellows (Wolves/Dortmund)
+    from getting dark text when they would contrast poorly.
     """
     try:
         lum = _relative_luminance(color)
-        r, g, b = _hex_to_rgb01(color)
-        maxc, minc = max(r, g, b), min(r, g, b)
-        saturation = maxc - minc
-        if lum < 0.56:
-            return light
-        if saturation > 0.30 and lum < 0.68:
-            return light
-        return dark
+        r, g, b   = _hex_to_rgb01(color)
+        maxc       = max(r, g, b)
+        saturation = maxc - min(r, g, b)
+
+        # Genuinely light or near-white → dark text
+        if lum >= 0.30:
+            return dark
+
+        # Vivid yellow-family colours (e.g. #FDE100, #FDB913, #FFD100):
+        # luminance around 0.25-0.40 but yellow on white is unreadable.
+        # If the colour is strongly yellow and mid-bright, use dark text.
+        if saturation > 0.45 and lum >= 0.18 and r > 0.75 and g > 0.65 and b < 0.30:
+            return dark
+
+        return light
     except Exception:
         return light
 
+
 def _stroke_on_color(color: str) -> str:
-    """Outline colour opposite to the chosen text colour."""
+    """Outline colour opposite to the chosen text colour for path-effects."""
     try:
         return "#000000" if _text_on_color(color) == "#ffffff" else "#ffffff"
     except Exception:
@@ -530,9 +675,14 @@ def _stroke_on_color(color: str) -> str:
 
 
 def _accent_on_color(color: str) -> str:
-    """Readable accent for labels placed on coloured team bands."""
+    """Readable accent for secondary labels placed on coloured team bands."""
     try:
-        return "#111827" if _relative_luminance(color) >= 0.70 else "#FFD700"
+        lum = _relative_luminance(color)
+        if lum >= 0.40:
+            return "#111111"   # dark bg-is-light
+        if lum >= 0.18:
+            return "#FFD700"   # mid-dark: gold accent
+        return "#FFFFFF"       # very dark: white accent
     except Exception:
         return "#FFD700"
 
@@ -607,11 +757,18 @@ def _relative_luminance(hex_color: str) -> float:
 def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
     """
     Avoid invisible black/navy on the dark visual background.
-    Shirt identity is preserved through the palette, but black-heavy kits are lifted to a visible slate.
+
+    Priority for very dark colours (lum < 0.10):
+      1. If the colour is essentially white (#fff-ish), keep it — white is visible on dark.
+      2. If the colour is black/near-black, prefer #E0E0E0 (off-white) so it resembles
+         the team's white alternate kit rather than a generic grey slate.
+      3. Otherwise use the provided fallback.
     """
-    if _relative_luminance(hex_color) < 0.10:
-        return fallback
-    return hex_color
+    lum = _relative_luminance(hex_color)
+    if lum >= 0.10:
+        return hex_color
+    # Very dark: return off-white — more distinctive and kit-accurate for black-kit teams
+    return "#E0E0E0"
 
 
 def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
@@ -3993,6 +4150,10 @@ def draw_xg_flow(fig, ax, events, info, xg_data, status):
     names = list(xg_data.keys())
     if len(names) >= 2:
         for i, (name, col) in enumerate(zip(names, [C_RED, C_BLUE])):
+            # حساب لون النص بناءً على لون خلفية الـ bbox
+            # لو الخلفية فاتحة (رمادي، أبيض) → نص داكن | لو داكنة → نص أبيض
+            txt_col   = _text_on_color(col)
+            edge_col  = _stroke_on_color(col)
             ax.text(
                 0.01,
                 0.97 - i * 0.11,
@@ -4002,14 +4163,15 @@ def draw_xg_flow(fig, ax, events, info, xg_data, status):
                 transform=ax.transAxes,
                 ha="left",
                 va="top",
-                color="white",
+                color=txt_col,
                 fontsize=10,
                 fontweight="bold",
                 bbox=dict(
                     boxstyle="round,pad=0.42",
                     facecolor=col,
-                    alpha=0.84,
-                    edgecolor="none",
+                    alpha=0.90,
+                    edgecolor=edge_col,
+                    lw=0.9,
                 ),
                 zorder=10,
             )
@@ -12642,12 +12804,27 @@ def main():
         cax.set_xlim(0, 1)
         cax.set_ylim(0, 1)
         cax.axis("off")
+        # ── رسم شريط الألوان ─────────────────────────────────
+        # إذا كان لون الفريق قريب من الخلفية الداكنة نضيف border خفيف
+        _home_edge = "#4a4a4a" if _relative_luminance(C_RED)  < 0.06 else "none"
+        _away_edge = "#4a4a4a" if _relative_luminance(C_BLUE) < 0.06 else "none"
+
         cax.add_patch(
-            plt.Rectangle((0, 0), 0.50, 1, facecolor=C_RED, alpha=0.92, zorder=0)
+            plt.Rectangle((0, 0), 0.50, 1, facecolor=C_RED, alpha=0.95, zorder=0)
         )
+        if _home_edge != "none":
+            cax.add_patch(plt.Rectangle(
+                (0, 0), 0.50, 1, facecolor="none",
+                edgecolor=_home_edge, lw=1.2, zorder=1))
+
         cax.add_patch(
-            plt.Rectangle((0.50, 0), 0.50, 1, facecolor=C_BLUE, alpha=0.92, zorder=0)
+            plt.Rectangle((0.50, 0), 0.50, 1, facecolor=C_BLUE, alpha=0.95, zorder=0)
         )
+        if _away_edge != "none":
+            cax.add_patch(plt.Rectangle(
+                (0.50, 0), 0.50, 1, facecolor="none",
+                edgecolor=_away_edge, lw=1.2, zorder=1))
+
         cax.plot(
             [0.50, 0.50], [0.08, 0.92], color="white", lw=0.8, alpha=0.35, zorder=2
         )
@@ -12662,6 +12839,8 @@ def main():
             fontsize=7.5,
             fontweight="bold",
             zorder=3,
+            path_effects=[pe.withStroke(linewidth=1.4,
+                          foreground=_stroke_on_color(C_RED))],
         )
         # Credit — CENTRE of bar
         cax.text(
@@ -12687,6 +12866,8 @@ def main():
             fontsize=7.5,
             fontweight="bold",
             zorder=3,
+            path_effects=[pe.withStroke(linewidth=1.4,
+                          foreground=_stroke_on_color(C_BLUE))],
         )
         # ── Line 1: stat name (with glow) ─────────────────────────
         fig.text(
