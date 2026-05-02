@@ -6018,11 +6018,11 @@ def _rpt_pass_zones(ax, events, tid, tc, name):
                 f"{int(pct)}%",
                 ha="center",
                 va="center",
-                color="white",
+                color=_text_on_color(tc),
                 fontsize=7.5,
                 fontweight="bold",
                 zorder=3,
-                path_effects=[pe.withStroke(linewidth=1.8, foreground="black")],
+                path_effects=[pe.withStroke(linewidth=1.8, foreground=_stroke_on_color(tc))],
             )
 
 
@@ -6284,7 +6284,7 @@ def _page_header(
         hn,
         ha="center",
         va="center",
-        color="white",
+        color=_text_on_color(C_RED),
         fontsize=12,
         fontweight="bold",
     )
@@ -6294,7 +6294,7 @@ def _page_header(
         an,
         ha="center",
         va="center",
-        color="white",
+        color=_text_on_color(C_BLUE),
         fontsize=12,
         fontweight="bold",
     )
@@ -7885,7 +7885,7 @@ def _panel_territorial(ax, events, info):
                 f"{h_n}  ({hr*100:.0f}%)",
                 ha="center",
                 va="center",
-                color="white",
+                color=_text_on_color(C_RED),
                 fontsize=8.5,
                 fontweight="bold",
             )
@@ -7896,7 +7896,7 @@ def _panel_territorial(ax, events, info):
                 f"({(1-hr)*100:.0f}%)  {a_n}",
                 ha="center",
                 va="center",
-                color="white",
+                color=_text_on_color(C_BLUE),
                 fontsize=8.5,
                 fontweight="bold",
             )
@@ -11031,10 +11031,10 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
                         return c
                 return "#9CA3AF"  # last-resort visible grey
             # Too light: harsh white pill on dark header
-            if primary.lower() in ("#ffffff", "#fff", "#f0f0f0", "#f4f4f4", "#f4f4f4"):
+            if _relative_luminance(primary) >= 0.80:
                 pal = _team_palette(team_name, primary)
                 for c in pal[1:]:
-                    if c and c.lower() not in ("#ffffff", "#fff", "#f0f0f0", "#f4f4f4"):
+                    if c and _relative_luminance(c) < 0.80:
                         return c
                 return "#333333"  # last-resort dark grey
             return primary
@@ -11453,10 +11453,10 @@ def _draw_pdf_header(fig, info, page_title, section_title, page_num, total_pages
         hn,
         ha="center",
         va="center",
-        color="white",
+        color=_text_on_color(C_RED),
         fontsize=14,
         fontweight="bold",
-        path_effects=[pe.withStroke(linewidth=2, foreground="#000")],
+        path_effects=[pe.withStroke(linewidth=2, foreground=_stroke_on_color(C_RED))],
     )
     ax.text(
         0.83,
@@ -11464,10 +11464,10 @@ def _draw_pdf_header(fig, info, page_title, section_title, page_num, total_pages
         an,
         ha="center",
         va="center",
-        color="white",
+        color=_text_on_color(C_BLUE),
         fontsize=14,
         fontweight="bold",
-        path_effects=[pe.withStroke(linewidth=2, foreground="#000")],
+        path_effects=[pe.withStroke(linewidth=2, foreground=_stroke_on_color(C_BLUE))],
     )
 
     # ── Centre: section title (top) + page title (bottom) ──────────
