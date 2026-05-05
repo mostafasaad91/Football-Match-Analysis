@@ -621,15 +621,35 @@ def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
 def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") -> str:
     """
     Return a colour that is clearly visible on a dark dashboard background.
-    - Too-dark colours (luminance < 0.10) are replaced with the fallback.
+    - Truly dark colours (luminance < 0.04 AND no bright channel) are replaced
+      with the team's accent/alternate palette colour first, then fallback.
+      Navy/blue tones with low luminance but bright channels
+      (e.g. Everton #003399, Inter #010E3D) are kept because they ARE visible.
     - Too-light colours (luminance >= 0.80, e.g. white/off-white kits)
       are replaced with the team's accent or alternate palette colour
       so the team still has a visible identity on dark visuals.
     """
+    r, g, b = _hex_to_rgb01(hex_color)
     lum = _relative_luminance(hex_color)
-    # Too dark: use fallback
-    if lum < 0.10:
+    max_ch = max(r, g, b)
+    is_too_dark = (lum < 0.04 and max_ch < 0.18) or (lum < 0.10 and max_ch < 0.22)
+
+    if is_too_dark:
+        # Black/near-black kit (e.g. Juventus, Newcastle): try palette accent
+        # before falling back to the generic red/gray fallback.
+        pal = _team_palette(team_name, fallback)
+        for c in pal[1:]:
+            c = _usable_on_dark(c, fallback)
+            c_lum = _relative_luminance(c) if c else 0
+            c_r, c_g, c_b = _hex_to_rgb01(c) if c else (0, 0, 0)
+            # Accept a palette colour that is visible on dark (not too dark, not too light)
+            if c and 0.10 <= c_lum < 0.80:
+                return c
+            # Also accept saturated dark colours with bright channels (navy, deep red)
+            if c and c_lum < 0.10 and max(c_r, c_g, c_b) >= 0.25:
+                return c
         return fallback
+
     # Too light (white/off-white kit): use a darker palette entry instead
     if lum >= 0.80:
         pal = _team_palette(team_name, fallback)
