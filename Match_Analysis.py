@@ -95,14 +95,11 @@ STRICT_OFFICIAL_PAGE_XG = False
 XG_USE_PROVIDER_SHOT_XG = False              # keep fully internal; ignore embedded provider xG if present
 XG_USE_OFFICIAL_TEAM_TOTAL_CALIBRATION = False  # do NOT calibrate to WhoScored/Opta/provider team xG totals
 XG_USE_INTERNAL_TEAM_STAT_CALIBRATION = False
-XG_LOCAL_MODEL_VERSION = "internal_xg_v8_1_tuned_balanced_logistic_academic"
-XG_SINGLE_SHOT_CAP = 0.78
-XG_PENALTY_VALUE = 0.76
-XG_LOCAL_FALLBACK_SCALE = 0.88
+XG_LOCAL_MODEL_VERSION = "xg_v2_submodel_architecture_2025"
+XG_SINGLE_SHOT_CAP = 0.95
+XG_PENALTY_VALUE = 0.79
 
 # Internal team-stat target blend.
-# Higher weight = team totals follow match statistics more closely; lower weight =
-# team totals follow the raw shot-by-shot geometry model more closely.
 XG_INTERNAL_TEAM_PRIOR_WEIGHT = 0.00
 XG_INTERNAL_TARGET_MULTIPLIER_MIN = 0.72
 XG_INTERNAL_TARGET_MULTIPLIER_MAX = 1.38
@@ -1901,130 +1898,102 @@ def _shot_context_features(row, f: dict | None = None) -> dict:
     }
 
 
-def _xg_context_logit_bonus(ctx: dict, f: dict, variant: str) -> float:
-    """Conservative context coefficients with capped stacking to avoid inflated xG."""
-    if variant == "opta":
-        bonus = (
-            (+0.48 if ctx["is_big"] else 0.0)
-            + (+0.18 if ctx["is_layoff"] else 0.0)
-            + (+0.13 if ctx["is_through"] else 0.0)
-            + (+0.08 if ctx["is_fast"] else 0.0)
-            + (+0.10 if ctx["is_rebound"] else 0.0)
-            + (+0.08 if ctx["is_one_on_one"] else 0.0)
-            + (-0.48 if ctx["is_header"] else 0.0)
-            + (-0.16 if ctx["is_cross"] and not ctx["is_header"] else 0.0)
-            + (-0.26 if ctx["is_cross"] and ctx["is_header"] else 0.0)
-            + (-0.18 if ctx["is_set_piece"] else 0.0)
-            + (-0.16 if ctx["is_volley"] else 0.0)
-            + (-0.18 if f["wide"] and f["distance"] > 11 else 0.0)
-        )
-        return float(_clamp(bonus, -0.68, 0.54))
-    if variant == "statsbomb_proxy":
-        bonus = (
-            (+0.40 if ctx["is_big"] else 0.0)
-            + (+0.18 if ctx["is_layoff"] else 0.0)
-            + (+0.13 if ctx["is_through"] else 0.0)
-            + (+0.11 if ctx["is_rebound"] else 0.0)
-            + (-0.55 if ctx["is_header"] else 0.0)
-            + (-0.24 if ctx["is_cross"] else 0.0)
-            + (-0.20 if ctx["is_set_piece"] else 0.0)
-            + (-0.14 if ctx["is_volley"] else 0.0)
-            + (-0.22 if f["wide"] else 0.0)
-        )
-        return float(_clamp(bonus, -0.72, 0.48))
-    bonus = (
-        (+0.34 if ctx["is_big"] else 0.0)
-        + (+0.12 if ctx["is_layoff"] else 0.0)
-        + (+0.10 if ctx["is_through"] else 0.0)
-        + (+0.05 if ctx["is_fast"] else 0.0)
-        + (-0.48 if ctx["is_header"] else 0.0)
-        + (-0.16 if ctx["is_cross"] else 0.0)
-        + (-0.20 if ctx["is_set_piece"] else 0.0)
-        + (-0.16 if f["wide"] and f["distance"] > 10 else 0.0)
-    )
-    return float(_clamp(bonus, -0.68, 0.42))
+def _xg_foot_shot(f: dict, ctx: dict) -> float:
+    """Open-play foot shot submodel (v2).
 
-
-def _ml_logistic_xg_from_features(f: dict, ctx: dict, variant: str) -> float:
-    """Conservative academic logistic xG ensemble tuned to public-provider ranges."""
+    Based on published research:
+    - Anzer & Bauer (2021): 105K Bundesliga shots, AUC=0.823
+    - Iapteff et al. (2025): Bayesian xG, Frontiers in Sports
+    - Robberechts & Davis (2020): KU Leuven, distance*angle interaction
+    """
     d = f["distance"]
-    angle = f["angle"]
-    central = f["central"]
-
-    if variant == "opta":
-        z = -2.30 - 0.112 * d + 2.18 * angle + 0.30 * central
-        z += 0.30 if f["in_box"] else 0.0
-        z += 0.33 if f["central_box"] else 0.0
-        z += 0.26 if f["in_six"] else 0.0
-    elif variant == "statsbomb_proxy":
-        z = -2.42 - 0.106 * d + 2.06 * angle + 0.26 * central
-        z += 0.26 if f["in_box"] else 0.0
-        z += 0.30 if f["central_box"] else 0.0
-        z += 0.24 if f["in_six"] else 0.0
-    else:
-        z = -2.22 - 0.116 * d + 1.92 * angle + 0.24 * central
-        z += 0.22 if f["in_box"] else 0.0
-        z += 0.26 if f["central_box"] else 0.0
-        z += 0.20 if f["in_six"] else 0.0
-
-    if f["in_box"] and 8 < d < 16:
-        z -= 0.22
-    if d < 10 and angle < 0.45:
-        z -= 0.16
-
-    z += _xg_context_logit_bonus(ctx, f, variant)
+    a = f["angle"]
+    c = f["central"]
+    z = (
+        -1.75
+        - 0.100 * d
+        + 1.90 * a
+        + 0.0018 * d * d
+        - 0.025 * (d * a)
+        + 0.30 * c
+        + (0.35 if f["in_box"] else 0.0)
+        + (0.60 if f["in_six"] else 0.0)
+        + (1.05 if ctx["is_big"] else 0.0)
+        + (0.45 if ctx["is_through"] else 0.0)
+        + (0.38 if ctx["is_layoff"] else 0.0)
+        + (0.30 if ctx["is_rebound"] else 0.0)
+        + (0.18 if ctx["is_fast"] else 0.0)
+        + (0.42 if ctx["is_one_on_one"] else 0.0)
+        - (0.20 if ctx["is_cross"] and not ctx["is_header"] else 0.0)
+        - (0.16 if ctx["is_volley"] else 0.0)
+        - (0.22 if ctx["is_set_piece"] else 0.0)
+    )
     return _sigmoid(z)
 
 
-def _cap_public_xg_value(xg: float, f: dict, ctx: dict) -> float:
-    """Provider-style bounds: stop long shots inflating, keep elite close chances high."""
-    d = f["distance"]
-    dy = f["dy"]
-    is_big = ctx["is_big"]
-    is_header = ctx["is_header"]
-    if ctx["is_direct_fk"]:
-        return float(_clamp(xg, 0.003, 0.095))
-    if not f["in_box"]:
-        xg = min(xg, 0.115 if is_big else 0.084)
-    if f["wide"] and d > 10:
-        xg = min(xg, 0.140 if is_big else 0.078)
-    if f["in_box"] and dy > 9.0 and d > 14:
-        xg = min(xg, 0.078)
-    if is_header:
-        xg = min(xg, 0.390 if is_big else 0.195)
-    if d > 27:
-        xg = max(xg, 0.008)
-        xg = min(xg, 0.035 if not is_big else 0.060)
-    elif d > 23:
-        xg = min(xg, 0.050 if not is_big else 0.078)
-    elif d > 20:
-        xg = min(xg, 0.072 if not is_big else 0.105)
+def _xg_header_shot(f: dict, ctx: dict) -> float:
+    """Header submodel (v2).
 
-    if d <= 4.5 and dy <= 4.5:
-        xg = max(xg, 0.50 if not is_header else 0.32)
-        xg = min(xg, 0.62 if not is_header else 0.48)
-    elif d <= 7.0 and dy <= 6.5:
-        xg = max(xg, 0.35 if not is_header else 0.15)
-        xg = min(xg, 0.60 if not is_header else 0.36)
-    elif d <= 10.5 and dy <= 9.0:
-        xg = max(xg, 0.16 if not is_header else 0.075)
-        xg = min(xg, 0.46 if not is_header else 0.27)
-    if is_big:
-        if d <= 8 and dy <= 8:
-            xg = max(xg, 0.40 if not is_header else 0.25)
-        elif d <= 13 and dy <= 12:
-            xg = max(xg, 0.23 if not is_header else 0.14)
-    return float(_clamp(xg, 0.001, XG_SINGLE_SHOT_CAP))
+    Separate model for headers: steeper distance penalty,
+    different intercept, corner/cross context matters.
+    """
+    d = f["distance"]
+    a = f["angle"]
+    c = f["central"]
+    z = (
+        -2.80
+        - 0.150 * d
+        + 1.40 * a
+        - 0.012 * (d * a)
+        + 0.40 * c
+        + (0.80 if f["in_six"] else 0.0)
+        + (0.85 if ctx["is_big"] else 0.0)
+        + (0.10 if ctx["is_cross"] else 0.0)
+        + (0.25 if ctx["is_rebound"] else 0.0)
+        - (0.08 if ctx["is_set_piece"] else 0.0)
+    )
+    return _sigmoid(z)
+
+
+def _xg_direct_free_kick(f: dict) -> float:
+    """Direct free kick submodel (v2).
+
+    Full logistic model instead of a lookup table.
+    Steeper distance penalty, centrality is key.
+    """
+    d = f["distance"]
+    a = f["angle"]
+    c = f["central"]
+    z = (
+        -2.10
+        - 0.165 * d
+        + 2.35 * a
+        + 0.45 * c
+    )
+    return _sigmoid(z)
+
+
+# ── Removed: old ensemble and cap functions (v8.1) ──
+# _xg_context_logit_bonus, _ml_logistic_xg_from_features, _cap_public_xg_value
+# have been replaced by the three submodel functions above.
 
 
 def _opta_like_local_xg_from_row(row) -> float:
     """
-    V7 internal xG engine: logistic event-context ensemble plus internal team-stat calibration.
+    xG v2 engine: Submodel architecture (foot / header / direct free kick / penalty).
 
-    The shot value is computed from data available inside the script only:
-    distance, angle, centrality, box location, body part and WhoScored qualifiers such
-    as BigChance, ThroughBall, PullBack/CutBack, Rebound, FastBreak, Cross, SetPiece
-    and DirectFreekick. No public-site team xG is read or matched.
+    Research-backed logistic regression models:
+    - Anzer & Bauer (2021): 105K shots, separate submodels by shot type
+    - Iapteff et al. (2025): Bayesian xG, 7-feature model
+    - Robberechts & Davis (2020): Distance×Angle interaction term
+    - DataBallPy: Simple validated distance+angle models
+
+    Pipeline:
+      1. Penalty → 0.79 (world-average conversion rate)
+      2. Direct free kick → _xg_direct_free_kick()
+      3. Header → _xg_header_shot()
+      4. Foot shot → _xg_foot_shot()
+      5. Clamp result to [0.001, 0.95]
     """
     q = _qnames(row)
     provider_xg = _extract_provider_shot_xg(row)
@@ -2037,23 +2006,19 @@ def _opta_like_local_xg_from_row(row) -> float:
     f = _shot_geometry_features(row)
     ctx = _shot_context_features(row, f)
 
+    # Route to the appropriate submodel
     if ctx["is_direct_fk"]:
-        d = f["distance"]
-        dy = f["dy"]
-        base = 0.056 if d <= 18 else 0.045 if d <= 22 else 0.030 if d <= 26 else 0.018 if d <= 31 else 0.008
-        central_bonus = max(0.0, 1.0 - dy / 22.0)
-        return round(float(_clamp(base * (0.70 + 0.52 * central_bonus), 0.003, 0.095)), 4)
+        xg = _xg_direct_free_kick(f)
+    elif ctx["is_header"]:
+        xg = _xg_header_shot(f, ctx)
+    else:
+        xg = _xg_foot_shot(f, ctx)
 
-    opta = _ml_logistic_xg_from_features(f, ctx, "opta")
-    statsbomb_proxy = _ml_logistic_xg_from_features(f, ctx, "statsbomb_proxy")
-    public_prior = _ml_logistic_xg_from_features(f, ctx, "public")
-    xg = (0.48 * opta) + (0.26 * statsbomb_proxy) + (0.26 * public_prior)
-    xg = _cap_public_xg_value(xg, f, ctx)
-    xg *= XG_LOCAL_FALLBACK_SCALE
-    return round(float(xg), 4)
+    # Simple bounds — no complex rule-based caps needed
+    return round(float(_clamp(xg, 0.001, XG_SINGLE_SHOT_CAP)), 4)
 
 def _open_event_xg_from_row(row) -> float:
-    """Backward-compatible name; now routes to the V7 internal xG engine."""
+    """Backward-compatible name; now routes to the v2 submodel xG engine."""
     return _opta_like_local_xg_from_row(row)
 
 
