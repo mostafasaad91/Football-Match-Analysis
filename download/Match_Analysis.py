@@ -95,7 +95,7 @@ STRICT_OFFICIAL_PAGE_XG = False
 XG_USE_PROVIDER_SHOT_XG = False              # keep fully internal; ignore embedded provider xG if present
 XG_USE_OFFICIAL_TEAM_TOTAL_CALIBRATION = False  # do NOT calibrate to WhoScored/Opta/provider team xG totals
 XG_USE_INTERNAL_TEAM_STAT_CALIBRATION = False
-XG_LOCAL_MODEL_VERSION = "xg_v2_submodel_architecture_2025"
+XG_LOCAL_MODEL_VERSION = "xg_v3_submodel_calibrated_2025"
 XG_SINGLE_SHOT_CAP = 0.95
 XG_PENALTY_VALUE = 0.79
 
@@ -1899,76 +1899,88 @@ def _shot_context_features(row, f: dict | None = None) -> dict:
 
 
 def _xg_foot_shot(f: dict, ctx: dict) -> float:
-    """Open-play foot shot submodel (v2).
+    """Open-play foot shot submodel (v3 — recalibrated).
 
     Based on published research:
     - Anzer & Bauer (2021): 105K Bundesliga shots, AUC=0.823
     - Iapteff et al. (2025): Bayesian xG, Frontiers in Sports
     - Robberechts & Davis (2020): KU Leuven, distance*angle interaction
+
+    v3 changes vs v2: lower intercept and reduced context bonuses to prevent
+    inflation when multiple flags stack.  Big_chance capped at 0.65 (was 1.05),
+    in_six at 0.40 (was 0.60), in_box at 0.22 (was 0.35).  Intercept moved
+    from -1.75 to -2.30 to anchor the baseline closer to Opta-scale.
     """
     d = f["distance"]
     a = f["angle"]
     c = f["central"]
     z = (
-        -1.75
-        - 0.100 * d
-        + 1.90 * a
-        + 0.0018 * d * d
-        - 0.025 * (d * a)
-        + 0.30 * c
-        + (0.35 if f["in_box"] else 0.0)
-        + (0.60 if f["in_six"] else 0.0)
-        + (1.05 if ctx["is_big"] else 0.0)
-        + (0.45 if ctx["is_through"] else 0.0)
-        + (0.38 if ctx["is_layoff"] else 0.0)
-        + (0.30 if ctx["is_rebound"] else 0.0)
-        + (0.18 if ctx["is_fast"] else 0.0)
-        + (0.42 if ctx["is_one_on_one"] else 0.0)
-        - (0.20 if ctx["is_cross"] and not ctx["is_header"] else 0.0)
-        - (0.16 if ctx["is_volley"] else 0.0)
-        - (0.22 if ctx["is_set_piece"] else 0.0)
+        -2.30
+        - 0.108 * d
+        + 1.82 * a
+        + 0.0021 * d * d
+        - 0.028 * (d * a)
+        + 0.28 * c
+        + (0.22 if f["in_box"] else 0.0)
+        + (0.40 if f["in_six"] else 0.0)
+        + (0.65 if ctx["is_big"] else 0.0)
+        + (0.32 if ctx["is_through"] else 0.0)
+        + (0.25 if ctx["is_layoff"] else 0.0)
+        + (0.18 if ctx["is_rebound"] else 0.0)
+        + (0.12 if ctx["is_fast"] else 0.0)
+        + (0.45 if ctx["is_one_on_one"] else 0.0)
+        - (0.24 if ctx["is_cross"] and not ctx["is_header"] else 0.0)
+        - (0.18 if ctx["is_volley"] else 0.0)
+        - (0.25 if ctx["is_set_piece"] else 0.0)
     )
     return _sigmoid(z)
 
 
 def _xg_header_shot(f: dict, ctx: dict) -> float:
-    """Header submodel (v2).
+    """Header submodel (v3 — recalibrated).
 
     Separate model for headers: steeper distance penalty,
     different intercept, corner/cross context matters.
+
+    v3 changes vs v2: intercept from -2.80 to -2.60, distance penalty 0.165
+    (was 0.150), big_chance from 0.85 to 0.70, in_six from 0.80 to 0.70.
+    This brings header xG in line with published values (typical header from
+    8m ≈ 0.04, big-chance header from 6yd ≈ 0.22).
     """
     d = f["distance"]
     a = f["angle"]
     c = f["central"]
     z = (
-        -2.80
-        - 0.150 * d
-        + 1.40 * a
+        -2.60
+        - 0.165 * d
+        + 1.30 * a
         - 0.012 * (d * a)
-        + 0.40 * c
-        + (0.80 if f["in_six"] else 0.0)
-        + (0.85 if ctx["is_big"] else 0.0)
-        + (0.10 if ctx["is_cross"] else 0.0)
-        + (0.25 if ctx["is_rebound"] else 0.0)
-        - (0.08 if ctx["is_set_piece"] else 0.0)
+        + 0.38 * c
+        + (0.70 if f["in_six"] else 0.0)
+        + (0.70 if ctx["is_big"] else 0.0)
+        + (0.08 if ctx["is_cross"] else 0.0)
+        + (0.20 if ctx["is_rebound"] else 0.0)
+        - (0.10 if ctx["is_set_piece"] else 0.0)
     )
     return _sigmoid(z)
 
 
 def _xg_direct_free_kick(f: dict) -> float:
-    """Direct free kick submodel (v2).
+    """Direct free kick submodel (v3 — recalibrated).
 
     Full logistic model instead of a lookup table.
-    Steeper distance penalty, centrality is key.
+    v3: reduced distance penalty (0.08 vs 0.165) because DFKs are taken
+    from a dead ball with a wall — distance matters less than angle/centrality.
+    Intercept from -2.10 to -1.80 so a 25m central DFK ≈ 0.06.
     """
     d = f["distance"]
     a = f["angle"]
     c = f["central"]
     z = (
-        -2.10
-        - 0.165 * d
-        + 2.35 * a
-        + 0.45 * c
+        -1.80
+        - 0.08 * d
+        + 2.50 * a
+        + 0.50 * c
     )
     return _sigmoid(z)
 
