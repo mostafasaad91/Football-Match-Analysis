@@ -1,0 +1,2184 @@
+"""
+match_extensions.py
+═════════════════════════════════════════════════════════════════════════════
+Additive upgrades — styled to match the original Match_Analysis_Dark theme.
+
+  Upgrade 1 — PPDA (Passes per Defensive Action) per team
+  Upgrade 2 — Assist names + Open Play / Set Piece goal classification
+  Upgrade 3 — Full per-player stats + polished per-team visual tables
+  Upgrade 4 — Unified entry point: run_analysis(match_data) -> single PDF
+
+Visuals use the same dark palette (BG_DARK / BG_MID / TEXT_BRIGHT / GRID_COL)
+and team colours (C_RED for home, C_BLUE for away) as the original report.
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.patheffects as pe
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.colors import LinearSegmentedColormap
+
+# Unified design system (yellow top/side bars, fonts, palette)
+try:
+    from viz_design_system import apply_unified_frame, rebrand_figure  # type: ignore
+except Exception:  # pragma: no cover
+    apply_unified_frame = None  # graceful fallback
+    rebrand_figure = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THEME — matches the original Match_Analysis_Dark palette
+# ─────────────────────────────────────────────────────────────────────────────
+BG_DARK     = "#050508"
+BG_MID      = "#0d1117"
+BG_PANEL    = "#0a0e16"
+GRID_COL    = "#1e2836"
+TEXT_MAIN   = "#f0f4ff"
+TEXT_BRIGHT = "#ffffff"
+TEXT_DIM    = "#94a3b8"
+TEXT_FADED  = "#64748b"
+
+C_HOME      = "#e63946"   # home team
+C_AWAY      = "#1e90ff"   # away team
+C_GOLD      = "#facc15"
+C_GREEN     = "#22c55e"
+C_PURPLE    = "#a855f7"
+OG_COLOR    = "#ff00ff"
+
+# heatmap for player ratings
+RATING_CMAP = LinearSegmentedColormap.from_list(
+    "rating",
+    ["#3a0f10", "#7a1d1f", "#b45309", "#facc15", "#22c55e", "#0ea5e9"],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Output paths
+# ─────────────────────────────────────────────────────────────────────────────
+OUTPUT_DIR = "output"
+VISUALS_DIR = os.path.join(OUTPUT_DIR, "visuals")
+
+
+def _ensure_output_dirs() -> None:
+    """Create /output and /output/visuals if they do not exist."""
+    os.makedirs(VISUALS_DIR, exist_ok=True)
+
+
+def _new_dark_fig(w: float, h: float):
+    """Create a dark-theme figure matching the original."""
+    fig = plt.figure(figsize=(w, h), facecolor=BG_DARK)
+    return fig
+
+
+def _style_dark_axes(ax, title: str = "", subtitle: str = ""):
+    """Apply the dark theme to an axes."""
+    ax.set_facecolor(BG_MID)
+    for spine in ax.spines.values():
+        spine.set_edgecolor(GRID_COL)
+        spine.set_linewidth(0.8)
+    ax.tick_params(colors=TEXT_DIM, labelsize=9)
+    if title:
+        ax.set_title(title, color=TEXT_BRIGHT, fontsize=14,
+                     fontweight="bold", pad=12, loc="left")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _na(value: Any, fmt: str | None = None) -> str:
+    """Format a value, or 'N/A' if missing."""
+    if value is None:
+        return "N/A"
+    try:
+        if isinstance(value, float) and np.isnan(value):
+            return "N/A"
+    except Exception:
+        pass
+    if fmt and isinstance(value, (int, float)):
+        try:
+            return format(value, fmt)
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+def _safe_int(v, default: int = 0) -> int:
+    try:
+        if v is None:
+            return default
+        return int(v)
+    except Exception:
+        return default
+
+
+def _short_name(name: str, max_len: int = 22) -> str:
+    """Truncate a long player name."""
+    if not name or name == "N/A":
+        return name or "N/A"
+    if len(name) <= max_len:
+        return name
+    parts = name.split()
+    if len(parts) >= 2:
+        return f"{parts[0][0]}. {parts[-1]}"
+    return name[:max_len - 1] + "…"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UPGRADE 1 — PPDA
+# ═════════════════════════════════════════════════════════════════════════════
+def calculate_ppda(events: pd.DataFrame, team_id: int, opp_id: int,
+                   threshold: float = 40.0) -> dict:
+    """
+    PPDA = (opponent passes in their own half) /
+           (tackles + interceptions + fouls + recoveries by pressing team in same zone).
+
+    threshold=40 -> the front 60% of the pitch from the pressing team's view
+    (classic Colin Trainor method).
+    """
+    if events is None or events.empty:
+        return {"passes_allowed": 0, "defensive_actions": 0,
+                "ppda": None, "zone_label": "opp own half"}
+
+    opp_threshold = 100.0 - threshold
+
+    # Step 1: opponent passes in their own half (x < 60 from their view)
+    opp_passes_mask = (
+        (events["team_id"] == opp_id)
+        & (events.get("is_pass", False) == True)  # noqa: E712
+        & (events["x"].astype(float) < opp_threshold)
+    )
+    passes_allowed = int(opp_passes_mask.sum())
+
+    # Step 2: pressing team's defensive actions in the same zone (x > 40 from their view)
+    DEF_TYPES = {"Tackle", "Interception", "Foul", "Challenge", "BallRecovery"}
+    def_mask = (
+        (events["team_id"] == team_id)
+        & (events["type"].isin(DEF_TYPES))
+        & (events["x"].astype(float) > threshold)
+    )
+    defensive_actions = int(def_mask.sum())
+
+    # Step 3: divide (if 0 actions -> None to avoid division by zero)
+    ppda = (passes_allowed / defensive_actions) if defensive_actions > 0 else None
+
+    return {
+        "passes_allowed": passes_allowed,
+        "defensive_actions": defensive_actions,
+        "ppda": ppda,
+        "zone_label": f"opp 60% (x<{opp_threshold:.0f} for opp)",
+    }
+
+
+def compute_ppda_both(info: dict, events: pd.DataFrame) -> dict:
+    """ PPDA for both teams ."""
+    return {
+        "home": calculate_ppda(events, info.get("home_id"), info.get("away_id")),
+        "away": calculate_ppda(events, info.get("away_id"), info.get("home_id")),
+    }
+
+
+def _ppda_intensity_label(ppda: float | None) -> tuple[str, str]:
+    """Classify PPDA into a press tier: Elite/High/Medium/Low + colour."""
+    if ppda is None:
+        return "N/A", TEXT_FADED
+    if ppda < 8.0:
+        return "ELITE PRESS", "#22c55e"
+    if ppda < 11.0:
+        return "HIGH PRESS", "#84cc16"
+    if ppda < 14.0:
+        return "MEDIUM BLOCK", "#facc15"
+    return "LOW BLOCK", "#f97316"
+
+
+def draw_ppda_gauge(ppda_data: dict, info: dict,
+                    save_path: str | None = None):
+    """
+    Render the full PPDA analysis: a dial per team + numeric breakdown
+    + zone diagram on a mini pitch + intensity classification.
+    """
+    fig = _new_dark_fig(14, 8)
+    fig.patch.set_facecolor(BG_DARK)
+
+    home_name = info.get("home_name") or "Home"
+    away_name = info.get("away_name") or "Away"
+    h = ppda_data.get("home", {}).get("ppda")
+    a = ppda_data.get("away", {}).get("ppda")
+    h_passes = ppda_data.get("home", {}).get("passes_allowed", 0)
+    h_def = ppda_data.get("home", {}).get("defensive_actions", 0)
+    a_passes = ppda_data.get("away", {}).get("passes_allowed", 0)
+    a_def = ppda_data.get("away", {}).get("defensive_actions", 0)
+
+    # ── Unified frame (yellow top + side bars, section label, title) ──
+    score = info.get("score") or "—"
+    if apply_unified_frame is not None:
+        apply_unified_frame(
+            fig,
+            section="PRESSING · PPDA",
+            title="Pressing Analysis — Passes Per Defensive Action",
+            subtitle="Lower PPDA = more aggressive press in the opponent's "
+                     "60% of the pitch",
+            accent=C_GOLD,
+            home_name=home_name,
+            away_name=away_name,
+            score=str(score),
+            footer_note="Method: Colin Trainor (2014)",
+        )
+    else:
+        fig.text(0.5, 0.95, "PRESSING ANALYSIS — PPDA",
+                 ha="center", color=TEXT_BRIGHT, fontsize=22, fontweight="bold",
+                 path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+        fig.text(0.5, 0.91,
+                 "Passes Per Defensive Action  •  lower = more aggressive press",
+                 ha="center", color=TEXT_DIM, fontsize=11, style="italic")
+
+    # ── Two semi-circular dials ──
+    def _draw_dial(ax_pos, name, value, passes, def_acts, color):
+        ax = fig.add_axes(ax_pos, projection="polar")
+        ax.set_facecolor(BG_DARK)
+        # Half-circle: 0 to pi
+        ax.set_theta_zero_location("W")
+        ax.set_theta_direction(-1)
+        ax.set_thetamin(0); ax.set_thetamax(180)
+        ax.set_ylim(0, 1)
+
+        # Scale: 5 (elite press) -> 25 (no press)
+        v = value if value is not None else 0
+        vmin, vmax = 5.0, 25.0
+        # mapping: ppda=5 -> 0deg (left), ppda=25 -> 180deg (right)
+        ratio = max(0.0, min(1.0, (v - vmin) / (vmax - vmin)))
+        angle = ratio * np.pi
+
+        # arc background — gradient
+        n_seg = 60
+        thetas = np.linspace(0, np.pi, n_seg + 1)
+        zone_colors = []
+        for i in range(n_seg):
+            t = i / n_seg
+            if t < 0.15:
+                zone_colors.append("#22c55e")
+            elif t < 0.30:
+                zone_colors.append("#84cc16")
+            elif t < 0.45:
+                zone_colors.append("#facc15")
+            else:
+                zone_colors.append("#f97316")
+        for i in range(n_seg):
+            ax.bar((thetas[i] + thetas[i+1]) / 2, 0.18, bottom=0.78,
+                   width=(thetas[i+1] - thetas[i]) * 0.95,
+                   color=zone_colors[i], edgecolor="none",
+                   alpha=0.75)
+
+        # needle indicator
+        if value is not None:
+            ax.plot([angle, angle], [0, 0.92],
+                    color=color, lw=4,
+                    solid_capstyle="round", zorder=5)
+            ax.scatter([angle], [0], s=140, color=color,
+                       edgecolor=TEXT_BRIGHT, linewidth=1.5, zorder=6)
+            ax.scatter([angle], [0.92], s=70, color=TEXT_BRIGHT,
+                       edgecolor=color, linewidth=2, zorder=7)
+
+        # remove default ticks/labels
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.spines["polar"].set_visible(False)
+
+        # numeric tick marks
+        for tick_v, tick_label in [(5, "5"), (10, "10"), (15, "15"),
+                                    (20, "20"), (25, "25")]:
+            r = (tick_v - vmin) / (vmax - vmin)
+            theta_t = r * np.pi
+            ax.text(theta_t, 1.05, tick_label,
+                    ha="center", va="center",
+                    color=TEXT_DIM, fontsize=8.5)
+
+        # large central value text
+        cx, cy = ax_pos[0] + ax_pos[2] / 2, ax_pos[1] + 0.06
+        val_str = f"{value:.2f}" if value is not None else "N/A"
+        fig.text(cx, cy + 0.04, val_str,
+                 ha="center", color=color, fontsize=36, fontweight="bold",
+                 path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+
+        intensity_lbl, intensity_col = _ppda_intensity_label(value)
+        fig.text(cx, cy, intensity_lbl,
+                 ha="center", color=intensity_col, fontsize=11,
+                 fontweight="bold")
+
+        # team name above
+        fig.text(cx, ax_pos[1] + ax_pos[3] - 0.02, name,
+                 ha="center", color=TEXT_BRIGHT,
+                 fontsize=15, fontweight="bold",
+                 path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+
+        # numeric breakdown below
+        fig.text(cx - 0.06, cy - 0.05, str(passes),
+                 ha="center", color=color, fontsize=18, fontweight="bold")
+        fig.text(cx - 0.06, cy - 0.085, "OPP PASSES",
+                 ha="center", color=TEXT_DIM, fontsize=8, fontweight="bold")
+        fig.text(cx + 0.06, cy - 0.05, str(def_acts),
+                 ha="center", color=color, fontsize=18, fontweight="bold")
+        fig.text(cx + 0.06, cy - 0.085, "DEF ACTIONS",
+                 ha="center", color=TEXT_DIM, fontsize=8, fontweight="bold")
+
+    _draw_dial([0.05, 0.42, 0.40, 0.45], home_name, h, h_passes, h_def, C_HOME)
+    _draw_dial([0.55, 0.42, 0.40, 0.45], away_name, a, a_passes, a_def, C_AWAY)
+
+    # ── Comparison strip in the centre ──
+    if h is not None and a is not None:
+        if h < a:
+            verdict = f"{home_name} pressed more aggressively"
+            v_color = C_HOME
+            diff = a - h
+        elif a < h:
+            verdict = f"{away_name} pressed more aggressively"
+            v_color = C_AWAY
+            diff = h - a
+        else:
+            verdict = "Both teams pressed equally"
+            v_color = TEXT_BRIGHT
+            diff = 0
+        fig.text(0.5, 0.34, verdict,
+                 ha="center", color=v_color, fontsize=14, fontweight="bold")
+        if diff > 0:
+            fig.text(0.5, 0.305, f"PPDA differential: {diff:.2f}",
+                     ha="center", color=TEXT_DIM, fontsize=10)
+
+    # ── simple pitch-zone legend ──
+    pitch_ax = fig.add_axes([0.10, 0.06, 0.80, 0.18])
+    pitch_ax.set_facecolor("#040c04")
+    pitch_ax.set_xlim(0, 100); pitch_ax.set_ylim(0, 30)
+    pitch_ax.set_xticks([]); pitch_ax.set_yticks([])
+    for s in pitch_ax.spines.values():
+        s.set_edgecolor(GRID_COL)
+    # centre line
+    pitch_ax.plot([50, 50], [0, 30], color=TEXT_DIM, lw=1, ls="--", alpha=0.6)
+    # x=60 line
+    pitch_ax.axvline(60, color="#facc15", lw=1.2, alpha=0.7, ls="--")
+    # the opponent's own half (60%)
+    pitch_ax.add_patch(mpatches.Rectangle(
+        (60, 0), 40, 30, facecolor="#facc15", alpha=0.15, lw=0))
+    pitch_ax.text(80, 15, "PRESSING ZONE\n(opp 60% of pitch)",
+                  ha="center", va="center", color="#facc15",
+                  fontsize=10, fontweight="bold")
+    pitch_ax.text(30, 15, "OWN HALF",
+                  ha="center", va="center", color=TEXT_FADED,
+                  fontsize=9, style="italic")
+    pitch_ax.text(2, 27, "← own goal", color=TEXT_FADED, fontsize=8)
+    pitch_ax.text(98, 27, "opp goal →", color=TEXT_FADED, fontsize=8, ha="right")
+
+    fig.text(0.5, 0.025,
+             "Method: opponent passes attempted in their own 60% "
+             "÷ tackles + interceptions + fouls + challenges + recoveries  "
+             "(Colin Trainor, 2014)",
+             ha="center", color=TEXT_FADED, fontsize=8.5, style="italic")
+
+    if save_path:
+        fig.savefig(save_path, dpi=160, bbox_inches="tight",
+                    facecolor=BG_DARK)
+    return fig
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UPGRADE 2 — Goals classification
+# ═════════════════════════════════════════════════════════════════════════════
+def classify_goal_type(row: pd.Series) -> tuple[str, str]:
+    """Classify a goal as Open Play or Set Piece + subtype."""
+    quals = row.get("qualifier_names") or []
+    if not isinstance(quals, (list, tuple, set)):
+        quals = []
+    qset = set(quals)
+
+    if bool(row.get("is_own_goal", False)):
+        return "Open Play", "Own Goal"
+    if bool(row.get("is_penalty", False)) or "Penalty" in qset:
+        return "Set Piece", "Penalty"
+    if bool(row.get("is_direct_fk", False)) or "DirectFreekick" in qset:
+        return "Set Piece", "Direct Free Kick"
+    if "FromCorner" in qset or "CornerTaken" in qset:
+        return "Set Piece", "Corner"
+    if "FreekickTaken" in qset or "IndirectFreekickTaken" in qset:
+        return "Set Piece", "Indirect Free Kick"
+    if "ThrowIn" in qset:
+        return "Set Piece", "Throw-In"
+    return "Open Play", "Open Play"
+
+
+def build_goals_log(events: pd.DataFrame, info: dict) -> pd.DataFrame:
+    """Build the goals log with assist providers and classification."""
+    cols = ["minute", "team", "scorer", "assist", "category", "subtype",
+            "xG", "is_own_goal"]
+    if events is None or events.empty:
+        return pd.DataFrame(columns=cols)
+
+    gdf = events[events["is_goal"] == True].copy()  # noqa: E712
+    if gdf.empty:
+        return pd.DataFrame(columns=cols)
+
+    rows = []
+    for _, r in gdf.sort_values("minute").iterrows():
+        category, subtype = classify_goal_type(r)
+        scoring_team_id = r.get("scoring_team", r.get("team_id"))
+        team_name = (info.get("home_name") if scoring_team_id == info.get("home_id")
+                     else info.get("away_name"))
+        assist = r.get("assist_player") or ""
+        rows.append({
+            "minute": _safe_int(r.get("minute")),
+            "team": team_name or "N/A",
+            "scorer": r.get("player") or "N/A",
+            "assist": assist if assist else "N/A",
+            "category": category,
+            "subtype": subtype,
+            "xG": r.get("xG"),
+            "is_own_goal": bool(r.get("is_own_goal", False)),
+            "scoring_team_id": scoring_team_id,
+        })
+    return pd.DataFrame(rows)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UPGRADE 3 — Player stats extraction & polished tables
+# ═════════════════════════════════════════════════════════════════════════════
+def _flatten_stat(value: Any) -> Any:
+    """Reduce a WhoScored stat dict to a single value."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float, str)):
+        return value
+    if isinstance(value, dict):
+        if "total" in value:
+            return value["total"]
+        nums = [v for v in value.values() if isinstance(v, (int, float))]
+        if nums:
+            return sum(nums)
+    return None
+
+
+# Group stats into logical clusters — shown in the table headers
+STAT_GROUPS = [
+    ("Identity",  [("name",          "Player"),
+                   ("position",      "Pos"),
+                   ("shirt_no",      "#"),
+                   ("minutesPlayed", "Min")]),
+    ("Attack",    [("goals",         "G"),
+                   ("assists",       "A"),
+                   ("shotsTotal",    "Sh"),
+                   ("shotsOnTarget", "SoT"),
+                   ("passesKey",     "KP"),
+                   ("dribblesWon",   "Drb")]),
+    ("Passing",   [("passesTotal",   "Pass"),
+                   ("passesAccurate","Acc"),
+                   ("touches",       "Tch")]),
+    ("Defense",   [("tacklesTotal",  "Tkl"),
+                   ("interceptions", "Int"),
+                   ("aerialsWon",    "Aer"),
+                   ("foulsCommited", "Fls"),
+                   ("wasFouled",     "Fld")]),
+    ("Score",     [("ratings",       "Rating")]),
+]
+
+# group-header colours
+GROUP_HEADER_COLORS = {
+    "Identity": "#1f2a3a",
+    "Attack":   "#3b1f2f",
+    "Passing":  "#1f3a2f",
+    "Defense":  "#3a2f1f",
+    "Score":    "#2a1f3a",
+}
+
+
+def extract_player_stats(md: dict) -> dict:
+    """Extract every player stat for both teams."""
+    out: dict = {}
+
+    for side in ("home", "away"):
+        team = md.get(side, {}) or {}
+        rows = []
+        for p in team.get("players", []) or []:
+            stats_raw = p.get("stats", {}) or {}
+            row = {
+                "name": p.get("name") or "N/A",
+                "position": p.get("position") or "N/A",
+                "shirt_no": p.get("shirtNo"),
+                "is_first_xi": bool(p.get("isFirstEleven", False)),
+            }
+            for k, v in stats_raw.items():
+                row[k] = _flatten_stat(v)
+            if row.get("ratings") is None and p.get("playerScore") is not None:
+                row["ratings"] = p.get("playerScore")
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            sort_cols = ["is_first_xi"]
+            ascending = [False]
+            if "ratings" in df.columns:
+                sort_cols.append("ratings")
+                ascending.append(False)
+            df = df.sort_values(sort_cols, ascending=ascending,
+                                na_position="last").reset_index(drop=True)
+        out[side] = df
+
+    return out
+
+
+def _rating_color(rating: Any) -> str:
+    """Colour map from rating (5.0 -> 8.5+)."""
+    try:
+        r = float(rating)
+    except (TypeError, ValueError):
+        return BG_PANEL
+    # normalize 5..9 → 0..1
+    t = max(0.0, min(1.0, (r - 5.0) / 4.0))
+    rgba = RATING_CMAP(t)
+    return f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
+
+
+def _format_cell(key: str, value: Any) -> str:
+    """Format the value according to the column type."""
+    if value is None:
+        return "—"
+    try:
+        if isinstance(value, float) and np.isnan(value):
+            return "—"
+    except Exception:
+        pass
+    if key == "name":
+        return _short_name(str(value), 20)
+    if key == "ratings":
+        try:
+            return f"{float(value):.2f}"
+        except Exception:
+            return str(value)
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.0f}"
+    return str(value)
+
+
+def draw_player_stats_table(df: pd.DataFrame, team_name: str,
+                            team_color: str = C_HOME,
+                            save_path: str | None = None):
+    """
+    Render a player-stats table with variable column widths (Player wider than the rest
+    ), grouped by cluster, dark theme, with a rating heatmap.
+    """
+    # Per-column width in 'units' — Player widest, Pos medium, others narrow
+    COL_W = {
+        "name": 3.6, "position": 1.05, "shirt_no": 0.55,
+        "minutesPlayed": 0.7, "ratings": 1.15,
+    }
+    DEFAULT_W = 0.85  # default for other stats
+
+    # ── Build flat columns from groups ──
+    flat_keys: list[str] = []
+    flat_labels: list[str] = []
+    flat_widths: list[float] = []
+    group_spans: list[tuple[str, float, float]] = []  # (gname, x_start, x_end)
+    x_cursor = 0.0
+    for gname, items in STAT_GROUPS:
+        actual = []
+        for k, lbl in items:
+            if k in df.columns or k in ("name", "position", "shirt_no"):
+                actual.append((k, lbl))
+        if not actual:
+            continue
+        x_start = x_cursor
+        for k, lbl in actual:
+            w = COL_W.get(k, DEFAULT_W)
+            flat_keys.append(k); flat_labels.append(lbl); flat_widths.append(w)
+            x_cursor += w
+        group_spans.append((gname, x_start, x_cursor))
+
+    total_w = x_cursor if x_cursor > 0 else 1.0
+    # x positions (left edges) per column
+    x_lefts = []
+    acc = 0.0
+    for w in flat_widths:
+        x_lefts.append(acc); acc += w
+
+    n_rows = max(len(df), 1)
+
+    # Figure size scales with total_w
+    fig = _new_dark_fig(max(15, total_w * 0.95),
+                        max(7, 0.42 * n_rows + 3.0))
+    fig.patch.set_facecolor(BG_DARK)
+
+    # ── Title bar ──
+    fig.text(0.04, 0.965, f"PLAYER STATISTICS — {team_name.upper()}",
+             color=TEXT_BRIGHT, fontsize=18, fontweight="bold")
+    fig.text(0.04, 0.935,
+             "Starters first  •  ratings coloured by performance  •  "
+             "G / A highlighted  •  '—' = unavailable",
+             color=TEXT_DIM, fontsize=10, style="italic")
+
+    bar_ax = fig.add_axes([0.04, 0.91, 0.92, 0.012])
+    bar_ax.set_facecolor(team_color)
+    bar_ax.set_xticks([]); bar_ax.set_yticks([])
+    for s in bar_ax.spines.values():
+        s.set_visible(False)
+
+    # ── Main table axes ──
+    ax = fig.add_axes([0.04, 0.06, 0.92, 0.83])
+    ax.set_facecolor(BG_PANEL)
+    ax.set_xlim(0, total_w)
+    ax.set_ylim(0, n_rows + 2.4)
+    ax.invert_yaxis()
+    ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_edgecolor(GRID_COL)
+
+    if df.empty:
+        ax.text(total_w / 2, n_rows / 2 + 1.2, "No player data available",
+                ha="center", va="center", color=TEXT_DIM, fontsize=14,
+                style="italic")
+        if save_path:
+            fig.savefig(save_path, dpi=160, bbox_inches="tight",
+                        facecolor=BG_DARK)
+        return fig
+
+    # ── Group header row (y=0..1) ──
+    for gname, x0, x1 in group_spans:
+        ax.add_patch(mpatches.Rectangle(
+            (x0, 0), x1 - x0, 1.0,
+            facecolor=GROUP_HEADER_COLORS.get(gname, BG_MID),
+            edgecolor=GRID_COL, lw=0.6,
+        ))
+        ax.text((x0 + x1) / 2, 0.5, gname.upper(),
+                ha="center", va="center",
+                color=TEXT_BRIGHT, fontsize=10.5, fontweight="bold",
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+
+    # ── Column header row (y=1..2.2) ──
+    for j, lbl in enumerate(flat_labels):
+        x0 = x_lefts[j]; w = flat_widths[j]
+        ax.add_patch(mpatches.Rectangle(
+            (x0, 1.0), w, 1.2, facecolor=BG_MID,
+            edgecolor=GRID_COL, lw=0.5,
+        ))
+        if flat_keys[j] == "name":
+            ha = "left"; tx = x0 + 0.55
+        else:
+            ha = "center"; tx = x0 + w / 2
+        ax.text(tx, 1.6, lbl, ha=ha, va="center",
+                color=TEXT_DIM, fontsize=9.5, fontweight="bold")
+
+    # ── Data rows ──
+    y0 = 2.2
+    row_h = 1.0
+    for i, (_, r) in enumerate(df.iterrows()):
+        y = y0 + i * row_h
+        is_starter = bool(r.get("is_first_xi", False))
+
+        base_color = BG_PANEL if i % 2 == 0 else "#0f1520"
+        if not is_starter:
+            base_color = "#080a10"
+        ax.add_patch(mpatches.Rectangle(
+            (0, y), total_w, row_h, facecolor=base_color,
+            edgecolor=GRID_COL, lw=0.3, alpha=0.95,
+        ))
+
+        # side bar for starters
+        starter_col = team_color if is_starter else TEXT_FADED
+        ax.add_patch(mpatches.Rectangle(
+            (0, y), 0.10, row_h, facecolor=starter_col, lw=0,
+            alpha=0.9 if is_starter else 0.35,
+        ))
+
+        for j, key in enumerate(flat_keys):
+            x0 = x_lefts[j]; w = flat_widths[j]
+            raw = r.get(key)
+            text = _format_cell(key, raw)
+            text_color = TEXT_MAIN
+            fontweight = "normal"
+
+            if key == "name":
+                # left-aligned name, truncated to column width
+                max_chars = int(w * 7)
+                disp = _short_name(str(raw or "N/A"), max_chars)
+                ax.text(x0 + 0.20, y + row_h / 2, disp,
+                        ha="left", va="center",
+                        color=TEXT_BRIGHT if is_starter else TEXT_DIM,
+                        fontsize=10,
+                        fontweight="bold" if is_starter else "normal")
+                continue
+
+            if key == "position":
+                if text and text != "—":
+                    pad_x = 0.12
+                    ax.add_patch(mpatches.FancyBboxPatch(
+                        (x0 + pad_x, y + 0.22), w - 2 * pad_x, row_h - 0.44,
+                        boxstyle="round,pad=0.02,rounding_size=0.10",
+                        facecolor=GRID_COL, edgecolor=team_color, lw=0.7,
+                    ))
+                ax.text(x0 + w / 2, y + row_h / 2, text,
+                        ha="center", va="center",
+                        color=TEXT_BRIGHT, fontsize=9, fontweight="bold")
+                continue
+
+            if key == "ratings" and raw is not None:
+                rc = _rating_color(raw)
+                pad_x = 0.10
+                ax.add_patch(mpatches.FancyBboxPatch(
+                    (x0 + pad_x, y + 0.18), w - 2 * pad_x, row_h - 0.36,
+                    boxstyle="round,pad=0.02,rounding_size=0.12",
+                    facecolor=rc, edgecolor="white", lw=0.7,
+                ))
+                ax.text(x0 + w / 2, y + row_h / 2, text,
+                        ha="center", va="center",
+                        color="#0a0a0a" if _is_light(rc) else TEXT_BRIGHT,
+                        fontsize=10, fontweight="bold")
+                continue
+
+            if key == "goals" and raw and float(raw) > 0:
+                text_color = C_GOLD; fontweight = "bold"
+            elif key == "assists" and raw and float(raw) > 0:
+                text_color = C_GREEN; fontweight = "bold"
+            elif text in ("—", "N/A"):
+                text_color = TEXT_FADED
+
+            ax.text(x0 + w / 2, y + row_h / 2, text,
+                    ha="center", va="center",
+                    color=text_color, fontsize=9.2, fontweight=fontweight)
+
+    # ── Footer legend ──
+    fig.text(
+        0.04, 0.025,
+        "Starters: bold + coloured side-bar    •    Substitutes/unused: dimmed    "
+        "•    Rating cell: red→yellow→green→blue (5.0 → 9.0)",
+        color=TEXT_FADED, fontsize=8.5, style="italic",
+    )
+
+    if save_path:
+        fig.savefig(save_path, dpi=160, bbox_inches="tight",
+                    facecolor=BG_DARK)
+    return fig
+
+
+def _is_light(hex_color: str) -> bool:
+    """Decide whether the colour is light to pick a readable text colour."""
+    try:
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+        return lum > 0.55
+    except Exception:
+        return False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UPGRADE 4 — Unified PDF + dark-themed pages
+# ═════════════════════════════════════════════════════════════════════════════
+def _draw_section_divider(pdf, num: str, title: str, subtitle: str,
+                          accent: str = C_GOLD):
+    """Section divider page for each report section."""
+    fig = _new_dark_fig(11.7, 8.27)
+    fig.patch.set_facecolor(BG_DARK)
+
+    # vertical coloured bar on the left
+    bar_ax = fig.add_axes([0.06, 0.20, 0.008, 0.60])
+    bar_ax.set_facecolor(accent)
+    bar_ax.set_xticks([]); bar_ax.set_yticks([])
+    for s in bar_ax.spines.values():
+        s.set_visible(False)
+
+    # section number — very large, faint
+    fig.text(0.10, 0.55, num,
+             color=accent, fontsize=140, fontweight="bold",
+             alpha=0.18, family="serif")
+
+    # section title
+    fig.text(0.10, 0.62, f"SECTION {num}",
+             color=accent, fontsize=12, fontweight="bold",
+             family="sans-serif")
+    fig.text(0.10, 0.55, title,
+             color=TEXT_BRIGHT, fontsize=36, fontweight="bold",
+             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+    fig.text(0.10, 0.49, subtitle,
+             color=TEXT_DIM, fontsize=12.5, style="italic")
+
+    # separator line
+    line_ax = fig.add_axes([0.10, 0.45, 0.40, 0.002])
+    line_ax.set_facecolor(accent)
+    line_ax.set_xticks([]); line_ax.set_yticks([])
+    for s in line_ax.spines.values():
+        s.set_visible(False)
+
+    # signature
+    fig.text(0.10, 0.20, "M A T C H   A N A L Y S I S   R E P O R T",
+             color=TEXT_FADED, fontsize=8, fontweight="bold")
+
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _draw_closing_page(pdf, info):
+    """Final/closing page of the report."""
+    fig = _new_dark_fig(11.7, 8.27)
+    fig.patch.set_facecolor(BG_DARK)
+
+    home = info.get("home_name") or "Home"
+    away = info.get("away_name") or "Away"
+    score = info.get("score") or "? - ?"
+
+    fig.text(0.5, 0.65, "END OF REPORT",
+             ha="center", color=TEXT_BRIGHT, fontsize=28, fontweight="bold",
+             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+    fig.text(0.5, 0.58, f"{home}  {score}  {away}",
+             ha="center", color=TEXT_DIM, fontsize=13)
+
+    line_ax = fig.add_axes([0.35, 0.52, 0.30, 0.002])
+    line_ax.set_facecolor(C_GOLD)
+    line_ax.set_xticks([]); line_ax.set_yticks([])
+    for s in line_ax.spines.values():
+        s.set_visible(False)
+
+    fig.text(0.5, 0.45,
+             "Generated by WhoScored Post-Match Analyzer",
+             ha="center", color=TEXT_DIM, fontsize=10)
+    fig.text(0.5, 0.42,
+             f"{datetime.now().strftime('%Y-%m-%d %H:%M')}",
+             ha="center", color=TEXT_FADED, fontsize=9)
+
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _draw_match_summary_page(pdf, info, goals_df, ppda):
+    """Cover page in the dark theme."""
+    fig = _new_dark_fig(11.7, 8.27)
+    home = info.get("home_name") or "Home"
+    away = info.get("away_name") or "Away"
+    score = info.get("score") or "? - ?"
+    venue = info.get("venue") or "N/A"
+    date = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    fig.text(0.5, 0.92, "MATCH ANALYSIS REPORT",
+             ha="center", color=TEXT_BRIGHT,
+             fontsize=24, fontweight="bold",
+             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+    fig.text(0.5, 0.875, "Extended Tactical Pack",
+             ha="center", color=TEXT_DIM, fontsize=11,
+             style="italic")
+
+    # scoreline
+    fig.text(0.27, 0.74, home, ha="right", color=C_HOME,
+             fontsize=22, fontweight="bold",
+             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+    fig.text(0.50, 0.74, score, ha="center", color=TEXT_BRIGHT,
+             fontsize=30, fontweight="bold")
+    fig.text(0.73, 0.74, away, ha="left", color=C_AWAY,
+             fontsize=22, fontweight="bold",
+             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+
+    fig.text(0.5, 0.66, f"Venue: {venue}    •    Generated: {date}",
+             ha="center", color=TEXT_DIM, fontsize=11)
+
+    # metric cards
+    h_ppda = ppda.get("home", {}).get("ppda")
+    a_ppda = ppda.get("away", {}).get("ppda")
+    n_goals = len(goals_df)
+    sp = int((goals_df["category"] == "Set Piece").sum()) if not goals_df.empty else 0
+    op = n_goals - sp
+
+    cards = [
+        ("GOALS", str(n_goals), TEXT_BRIGHT),
+        ("OPEN PLAY", str(op), C_GREEN),
+        ("SET PIECE", str(sp), C_GOLD),
+        (f"PPDA · {home[:14]}", _na(h_ppda, ".2f"), C_HOME),
+        (f"PPDA · {away[:14]}", _na(a_ppda, ".2f"), C_AWAY),
+    ]
+    n = len(cards)
+    card_w = 0.16
+    gap = (1 - n * card_w) / (n + 1)
+    for i, (label, val, col) in enumerate(cards):
+        x0 = gap + i * (card_w + gap)
+        ax = fig.add_axes([x0, 0.30, card_w, 0.20])
+        ax.set_facecolor(BG_MID)
+        for s in ax.spines.values():
+            s.set_edgecolor(col); s.set_linewidth(1.2)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.text(0.5, 0.65, val, ha="center", va="center",
+                color=col, fontsize=22, fontweight="bold",
+                transform=ax.transAxes)
+        ax.text(0.5, 0.22, label, ha="center", va="center",
+                color=TEXT_DIM, fontsize=8.5, fontweight="bold",
+                transform=ax.transAxes)
+
+    fig.text(0.5, 0.18,
+             f"Formations — {home}: {_na(info.get('home_form'))}    "
+             f"|    {away}: {_na(info.get('away_form'))}",
+             ha="center", color=TEXT_DIM, fontsize=10.5)
+
+    fig.text(0.5, 0.05,
+             f"01 Player Ratings   ·   02 {info.get('home_name','Home')} "
+             f"Analysis   ·   03 {info.get('away_name','Away')} Analysis"
+             f"   ·   04 Shared Insights",
+             ha="center", color=TEXT_FADED, fontsize=9, style="italic")
+
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _draw_goals_log_page(pdf, goals_df, info):
+    """Goals log with the unified visual identity."""
+    fig = _new_dark_fig(14, 9)
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    if apply_unified_frame is not None:
+        apply_unified_frame(
+            fig,
+            section="GOALS LOG",
+            title=f"Goals Log — {hn} vs {an}",
+            subtitle="Every goal with scorer, assist, goal category and "
+                     "shot xG · own goals shown in magenta",
+            accent=C_GOLD,
+            home_name=hn, away_name=an, score=str(score),
+            footer_note="Open Play (green) · Set Piece (gold) · Own Goal "
+                        "(magenta)",
+        )
+    else:
+        fig.text(0.04, 0.94, "GOALS LOG",
+                 color=TEXT_BRIGHT, fontsize=20, fontweight="bold")
+        fig.text(0.04, 0.91, "Scorer  ·  Assist  ·  Goal type",
+                 color=TEXT_DIM, fontsize=10, style="italic")
+
+    if goals_df.empty:
+        fig.text(0.5, 0.5, "No goals recorded.",
+                 ha="center", color=TEXT_DIM, fontsize=14, style="italic")
+        pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+        plt.close(fig)
+        return
+
+    headers = [("MIN", 0.05, "center"),
+               ("TEAM", 0.14, "left"),
+               ("SCORER", 0.32, "left"),
+               ("ASSIST", 0.55, "left"),
+               ("CATEGORY", 0.74, "left"),
+               ("SUBTYPE", 0.86, "left"),
+               ("xG", 0.97, "right")]
+    ax = fig.add_axes([0.0, 0.05, 1.0, 0.83])
+    ax.set_facecolor(BG_DARK); ax.axis("off")
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+    y = 0.94
+    for lbl, x, ha in headers:
+        ax.text(x, y, lbl, ha=ha, va="center",
+                color=TEXT_DIM, fontsize=9, fontweight="bold",
+                transform=ax.transAxes)
+    y -= 0.018
+    ax.plot([0.03, 0.99], [y, y], color=GRID_COL, lw=0.8,
+            transform=ax.transAxes)
+
+    n = len(goals_df)
+    row_h = min(0.78 / max(n, 1), 0.07)
+    y -= 0.012
+
+    for _, r in goals_df.iterrows():
+        is_og = bool(r.get("is_own_goal", False))
+        team_id = r.get("scoring_team_id")
+        col = (OG_COLOR if is_og
+               else (C_HOME if team_id == info.get("home_id") else C_AWAY))
+
+        bg = "#1a0a0a" if col == C_HOME else ("#060f1e" if col == C_AWAY else "#1e0a2e")
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (0.02, y - row_h * 0.92), 0.96, row_h * 0.85,
+            boxstyle="round,pad=0.005,rounding_size=0.005",
+            facecolor=bg, edgecolor=col, lw=0.8, alpha=0.92,
+            transform=ax.transAxes,
+        ))
+        cy = y - row_h * 0.5
+
+        # minute badge
+        ax.text(0.05, cy, f"{_safe_int(r['minute'])}'",
+                ha="center", va="center",
+                color="white", fontsize=10, fontweight="bold",
+                transform=ax.transAxes,
+                bbox=dict(boxstyle="round,pad=0.30",
+                          facecolor=col, edgecolor="none"))
+
+        ax.text(0.14, cy, _short_name(str(r["team"]), 18),
+                ha="left", va="center",
+                color=col, fontsize=10, fontweight="bold",
+                transform=ax.transAxes)
+        scorer_label = _short_name(str(r["scorer"]), 24)
+        if is_og:
+            scorer_label += "  (OG)"
+        ax.text(0.32, cy, scorer_label,
+                ha="left", va="center",
+                color=TEXT_BRIGHT, fontsize=10, fontweight="bold",
+                transform=ax.transAxes)
+        ax.text(0.55, cy, _short_name(str(r["assist"]), 22),
+                ha="left", va="center",
+                color=TEXT_DIM, fontsize=9.5, transform=ax.transAxes)
+
+        cat_col = C_GREEN if r["category"] == "Open Play" else C_GOLD
+        ax.text(0.74, cy, r["category"],
+                ha="left", va="center",
+                color=cat_col, fontsize=9.5, fontweight="bold",
+                transform=ax.transAxes)
+        ax.text(0.86, cy, r["subtype"],
+                ha="left", va="center",
+                color=TEXT_MAIN, fontsize=9.5, transform=ax.transAxes)
+        xg_txt = f"{r['xG']:.2f}" if isinstance(r["xG"], (int, float)) and r["xG"] else "—"
+        ax.text(0.97, cy, xg_txt,
+                ha="right", va="center",
+                color=C_GOLD, fontsize=9.5, transform=ax.transAxes)
+
+        y -= row_h
+
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _draw_ppda_page(pdf, ppda, info, visuals_dir):
+    """PPDA page — do NOT save a PNG (the visual is produced as fig 40 in Dark.py)."""
+    fig = draw_ppda_gauge(ppda, info, save_path=None)
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _commentary_for_filename(fname: str, hn: str, an: str):
+    """
+    Look up tactical commentary for a saved-fig filename. Returns
+    (heading, body). Falls back to a neutral message if no match.
+    """
+    f = (fname or "").lower()
+
+    def _t(side):
+        return hn if side == "home" else an
+
+    # Identify side ("home"/"away"/"shared") from filename
+    if "_home_" in f:
+        side = "home"; team = hn
+    elif "_away_" in f:
+        side = "away"; team = an
+    else:
+        side, team = "shared", None
+
+    if "xg_flow" in f:
+        return (
+            "Reading the xG Flow",
+            f"The xG Flow plots cumulative Expected Goals minute by minute "
+            f"as a staircase, with every step marking a shot whose height "
+            f"equals its chance quality. Stars sit on goals; the shaded "
+            f"territory under each curve is total chance creation. A team "
+            f"that pulls clearly above the other built the stronger shot "
+            f"profile, even if the scoreline says otherwise."
+        )
+    if "shot_map" in f:
+        return (
+            f"Reading {team}'s Shot Map",
+            f"Each dot is a single shot, located at where it was struck. "
+            f"Marker size scales with xG, so big circles are big chances. "
+            f"Filled circles are goals, hollow ones are misses. Cluster "
+            f"density inside the box shows where {team} manufactured looks; "
+            f"wide-area dots usually indicate speculative efforts that "
+            f"rarely trouble keepers."
+        )
+    if "breakdown_goals" in f:
+        return (
+            "Reading the Shot Breakdown",
+            "The bar group counts every shot by outcome — total, woodwork, "
+            "on target, off target, blocked. On-target conversion (goals "
+            "divided by shots on target) reflects finishing efficiency. "
+            "The Goals & Assists table below records the scorer, the play "
+            "type (Open Play / Set Piece / Penalty), the assister and the "
+            "chance's xG."
+        )
+    if "pass_network" in f:
+        return (
+            f"Reading {team}'s Pass Network",
+            f"Each node is a player placed at their average pass position. "
+            f"Node size scales with passes attempted; line width between "
+            f"two players scales with the volume of completed passes "
+            f"between them. Heavy lines reveal {team}'s preferred "
+            f"partnerships and which axis the build-up flowed through. "
+            f"Top-8 partnerships also carry their pass count for quick "
+            f"reading."
+        )
+    if "xt_map" in f:
+        return (
+            f"Reading {team}'s xT Map",
+            f"The grid colours each pitch zone by its xT (Expected Threat) "
+            f"value — the probability that owning the ball there leads to "
+            f"a shot in the next few seconds. White arrows are positive-xT "
+            f"passes (gained threat); red arrows are negative-xT passes "
+            f"(gave threat back). The five gold arrows highlight {team}'s "
+            f"five highest-xT progressive passes — usually the moments "
+            f"that broke a defensive line."
+        )
+    if "shot_comparison" in f:
+        return (
+            "Reading the Shot Comparison",
+            "A side-by-side bar chart of the headline shooting numbers — "
+            "total shots, on target, big chances, xG, xGoT. The fastest "
+            "single view to answer: who was the more dangerous attacking "
+            "side? Gold-coloured numbers mark the metric leader."
+        )
+    if "danger" in f and "home" in f or "danger" in f and "away" in f or \
+       "danger_" in f:
+        return (
+            f"Reading {team}'s Danger Creation",
+            f"Every action that ended in a shot, key pass or box entry "
+            f"is plotted to show which channels generated {team}'s "
+            f"high-value moments. Concentrate on the warm zones — those "
+            f"are {team}'s true danger lanes. Diamonds are key passes; "
+            f"circles are shots; faint arrows are box entries underneath."
+        )
+    if "gk_saves" in f:
+        return (
+            "Reading the Goalkeeper Saves",
+            "Plots the location of every shot each keeper faced, with "
+            "marker size scaled to the chance's xG. Filled stars are goals "
+            "conceded; rings are saves. Save quality is a function of the "
+            "xG of the shots faced — saving a high-xG strike beats "
+            "stopping easy long-range efforts."
+        )
+    if "xg_tiles" in f or "xg_summary" in f:
+        return (
+            "Reading the xG and xGoT Summary",
+            "xG measures pre-shot chance quality; xGoT (Expected Goals on "
+            "Target) measures post-shot quality once placement and power "
+            "are known. A team with xGoT well above xG executed their "
+            "finishing better than average; below xG points to wasteful "
+            "conversion."
+        )
+    if "zone14" in f:
+        return (
+            f"Reading {team}'s Zone 14 & Half-Spaces",
+            f"Zone 14 is the central pocket just outside the box — "
+            f"historically the richest zone for chance creation. The "
+            f"half-spaces flank it. This map counts every action {team} "
+            f"completed in those zones; volume here is a proxy for how "
+            f"often they reached the most dangerous central real estate."
+        )
+    if "match_stats" in f:
+        return (
+            "Reading the Match Statistics",
+            "A consolidated head-to-head: Attack (goals, shots, passes, "
+            "key passes), Defense (tackles, interceptions, blocks, "
+            "clearances, recoveries, fouls) and Pressing (PPDA mini-dials "
+            "with intensity verdict). Read it as the single-page summary "
+            "of the entire match."
+        )
+    if "territorial" in f or "possession" in f or "ball_touches" in f:
+        return (
+            "Reading the Ball Touches",
+            "Splits the pitch into zones and reads which side had more "
+            "touches in each. Red dominance signals home-team control of "
+            "that area; blue signals away. The donut totals beneath show "
+            "the overall share of touches — whoever owned the territory "
+            "owned the game."
+        )
+    if "pass_thirds" in f:
+        return (
+            f"Reading {team}'s Pass Map by Third",
+            f"Splits passes into defensive, middle and attacking-third "
+            f"buckets and visualises each on the pitch. Final-third pass "
+            f"density and completion rate are the two quickest reads of "
+            f"{team}'s break-down activity in the opposition area."
+        )
+    if "xt_per_minute" in f:
+        return (
+            "Reading xT per Minute",
+            "A diverging bar chart: home xT bars rise above the zero line, "
+            "away xT drops below it. Tall spikes mark the moments each "
+            "side surged in threat creation. The 5-minute rolling average "
+            "overlay smooths the noise and shows momentum windows."
+        )
+    if "progressive" in f:
+        return (
+            f"Reading {team}'s Progressive Passes",
+            f"Plots every pass that closed at least 25% of the distance "
+            f"to goal (or any pass into the final third). The five gold "
+            f"arrows highlight {team}'s top forward gains by raw distance. "
+            f"Wide-spread arrows mean the progression load was shared; "
+            f"concentration around one source marks a single play-maker."
+        )
+    if "crosses" in f:
+        return (
+            f"Reading {team}'s Crosses",
+            f"Every cross into the box plotted with origin and end point. "
+            f"Solid arrows are successful, faded ones are unsuccessful. "
+            f"Cross volume and the flank split (left vs right) reveal "
+            f"{team}'s wide-attack channel and how much of {team}'s box "
+            f"entry came through wide play versus central combinations."
+        )
+    if "defensive_hm" in f:
+        return (
+            f"Reading {team}'s Defensive Heatmap",
+            f"A density map of every defensive action {team} completed — "
+            f"tackles, interceptions, clearances, blocks, recoveries, "
+            f"fouls. Hot zones reveal {team}'s defensive line height: "
+            f"high up the pitch (press) or deep in their own block."
+        )
+    if "defensive_summary" in f:
+        return (
+            "Reading the Defensive Summary",
+            "Six defensive-action types — head-to-head counts. Tackles "
+            "and interceptions describe ground duels; blocks count shots "
+            "stopped by a body in the way; recoveries and clearances mark "
+            "how each side escaped pressure; fouls show where containment "
+            "broke down. Gold labels mark the side leading on each metric."
+        )
+    if "avg_position" in f:
+        return (
+            f"Reading {team}'s Average Positions",
+            f"Each player placed at their mean touch position, with node "
+            f"size scaled to total touches. Faint lines connect every "
+            f"node to the team centroid so the overall shape pops out: a "
+            f"high, narrow shape signals an aggressive pressing block; a "
+            f"deep, wide shape points to a low-block defensive setup."
+        )
+    if "dominating_zone" in f:
+        return (
+            "Reading the Dominating Zone",
+            "Each grid cell is coloured by the team that had more touches "
+            "there. Block colour reveals territorial dominance at a glance "
+            "— large contiguous regions in one team's colour mark areas "
+            "they controlled outright. Touch counts on every cell make "
+            "the heatmap quantitative."
+        )
+    if "box_entries" in f:
+        return (
+            f"Reading {team}'s Box Entries",
+            f"Every successful entry into the opposition penalty area — "
+            f"pass (gold) or carry (green). Clusters near the byline mean "
+            f"wide-and-cut-back access; clusters at the D mean central, "
+            f"through-ball access. The total count is a direct measure "
+            f"of {team}'s break-down volume."
+        )
+    if "high_turnovers" in f:
+        return (
+            f"Reading {team}'s High Turnovers",
+            f"Marks every regain of possession in the final 40 metres. "
+            f"Frequent high turnovers are a hallmark of a successful "
+            f"press — the more concentrated the dots near the opposition "
+            f"box, the more often {team} won the ball in dangerous areas."
+        )
+    if "pass_target" in f:
+        return (
+            f"Reading {team}'s Pass Target Zones",
+            f"Heatmap of where {team}'s successful passes landed — i.e. "
+            f"their preferred receiving zones. Compare with the pass "
+            f"network to see whether the receiving pattern matches the "
+            f"network's shape, or whether passes were aiming for "
+            f"under-served outlets."
+        )
+    if "ppda" in f:
+        return (
+            "Reading the PPDA Gauge",
+            "PPDA (Passes per Defensive Action) measures pressing "
+            "intensity. Low PPDA = aggressive press (fewer opponent "
+            "passes allowed before forcing a defensive action). High PPDA "
+            "= deeper block. The dial reads green for an aggressive "
+            "press and slides toward orange for a low-block setup."
+        )
+    if "player_stats" in f:
+        return (
+            f"Reading {team or 'the squad'}'s Player Stats",
+            f"Per-player totals across the match — minutes, touches, "
+            f"shots, passes attempted/completed, key passes, defensive "
+            f"actions, and a colour-coded performance rating. Starters "
+            f"appear first, substitutes follow."
+        )
+    return (
+        "Reading this visual",
+        "This chart adds context to the tactical story. Read it alongside "
+        "the rest of the report — chance quality, territory, pressing "
+        "and ball progression all reinforce the same narrative when the "
+        "numbers line up."
+    )
+
+
+def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
+    """
+    Compose ONE PDF page that has the visual on top and a tactical
+    commentary panel directly below it (no separate page).
+    """
+    import io as _io
+    # Render the original figure to an in-memory PNG.
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=170, bbox_inches="tight",
+                facecolor=BG_DARK)
+    buf.seek(0)
+    try:
+        from PIL import Image as _Image
+        img_arr = _Image.open(buf)
+        img = np.asarray(img_arr)
+    except Exception:
+        # Fallback: matplotlib-only path
+        import matplotlib.image as _mpimg
+        buf.seek(0)
+        img = _mpimg.imread(buf, format="png")
+
+    img_h, img_w = img.shape[:2]
+    aspect = img_w / max(img_h, 1)
+
+    # Page size — keep landscape; reserve ~22% height for commentary.
+    page_h = 11.0
+    page_w = page_h * aspect * 0.78  # tweak so visual fills cleanly
+    new_fig = plt.figure(figsize=(page_w, page_h), facecolor=BG_DARK)
+    new_fig.patch.set_facecolor(BG_DARK)
+
+    # Visual axes — top 76%
+    ax_img = new_fig.add_axes([0.0, 0.24, 1.0, 0.76])
+    ax_img.imshow(img, aspect="auto")
+    ax_img.set_xticks([]); ax_img.set_yticks([])
+    for s in ax_img.spines.values():
+        s.set_visible(False)
+
+    # Commentary axes — bottom band
+    ax_txt = new_fig.add_axes([0.04, 0.04, 0.92, 0.18])
+    ax_txt.set_facecolor(BG_PANEL)
+    ax_txt.set_xticks([]); ax_txt.set_yticks([])
+    for s in ax_txt.spines.values():
+        s.set_edgecolor(GRID_COL); s.set_linewidth(0.6)
+    ax_txt.set_xlim(0, 1); ax_txt.set_ylim(0, 1)
+    # Top accent stripe
+    ax_txt.add_patch(mpatches.Rectangle((0, 0.86), 1, 0.14,
+                                         facecolor=C_GOLD, alpha=0.22, lw=0,
+                                         transform=ax_txt.transAxes))
+    ax_txt.text(0.02, 0.93, "TACTICAL COMMENTARY", ha="left", va="center",
+                color=C_GOLD, fontsize=10, fontweight="bold",
+                transform=ax_txt.transAxes,
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+    ax_txt.text(0.18, 0.93, heading, ha="left", va="center",
+                color=TEXT_BRIGHT, fontsize=10, fontweight="bold",
+                transform=ax_txt.transAxes,
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+
+    # Body — wrapped so it never overflows the panel
+    import textwrap as _tw
+    wrapped = _tw.fill(body, width=180)
+    ax_txt.text(0.02, 0.74, wrapped, ha="left", va="top",
+                color=TEXT_MAIN, fontsize=9.5,
+                transform=ax_txt.transAxes, linespacing=1.55)
+
+    pdf.savefig(new_fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(new_fig)
+    plt.close(fig)
+
+
+def _draw_visual_commentary(pdf, heading: str, body: str):
+    """
+    Companion 'Reading this visual' page placed right after each tactical
+    visual. Carries the unified visual identity (yellow accent bars + footer)
+    so the explanation feels part of the same report.
+    """
+    fig = _new_dark_fig(14, 9)
+    if apply_unified_frame is not None:
+        apply_unified_frame(
+            fig,
+            section="READING THIS VISUAL",
+            title=heading,
+            subtitle="Tactical commentary — what the chart on the previous "
+                     "page is telling you",
+            accent=C_GOLD,
+            footer_note="Commentary is generated from the metric definitions "
+                        "applied to the event stream",
+        )
+    # Body text panel
+    ax = fig.add_axes([0.06, 0.20, 0.88, 0.62])
+    ax.set_facecolor(BG_PANEL)
+    for s in ax.spines.values():
+        s.set_edgecolor(GRID_COL); s.set_linewidth(0.8)
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    # Soft accent stripe at the top of the panel
+    ax.add_patch(mpatches.Rectangle((0, 0.94), 1, 0.06,
+                                     facecolor=C_GOLD, alpha=0.18, lw=0,
+                                     transform=ax.transAxes))
+    ax.text(0.04, 0.97, "KEY TAKEAWAYS", ha="left", va="center",
+            color=C_GOLD, fontsize=10, fontweight="bold",
+            transform=ax.transAxes,
+            path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+    # Wrap body text into the panel
+    import textwrap as _tw
+    wrapped = "\n\n".join(
+        _tw.fill(p.strip(), width=110) for p in body.split("\n\n") if p.strip()
+    )
+    ax.text(0.04, 0.88, wrapped, ha="left", va="top",
+            color=TEXT_MAIN, fontsize=11, transform=ax.transAxes,
+            linespacing=1.55, wrap=True)
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ── Commentary catalogue: position-keyed text for the 39 tactical visuals ──
+# Order must match Match_Analysis_Dark._build_visual_catalog (idx 1..N).
+_VISUAL_COMMENTARY = [
+    # 1. xG Flow
+    ("Reading the xG Flow",
+     "The xG Flow plots cumulative xG minute by minute as a staircase, with "
+     "every step marking a shot whose height equals its chance quality. "
+     "Stars sit on goals; the shaded territory under each curve is total "
+     "chance creation. A team that pulls clearly above the other built the "
+     "stronger shot profile, even if the scoreline says otherwise."),
+    # 2. Home Shot Map
+    ("Reading the Home Shot Map",
+     "Each dot is a single shot, located at where it was struck. Marker "
+     "size scales with xG, so big circles are big chances. Filled circles "
+     "are goals, hollow ones are misses. Cluster density inside the box "
+     "shows where the team manufactured looks — wide-area dots usually "
+     "indicate speculative efforts."),
+    # 3. Away Shot Map
+    ("Reading the Away Shot Map",
+     "Same encoding as the home shot map: dot location is where the shot "
+     "was taken, dot size is xG, fill = goal. Compare both maps side by "
+     "side to read which side accessed central, high-value zones and which "
+     "had to settle for low-percentage outside-the-box attempts."),
+    # 4. Shot Breakdown & Goals
+    ("Reading the Shot Breakdown",
+     "The bar group counts every shot by outcome — total, woodwork, on "
+     "target, off target, blocked. On-target conversion (goals divided by "
+     "shots on target) reflects finishing efficiency. The Goals & Assists "
+     "table below records the scorer, the play type (Open Play / Set "
+     "Piece / Penalty), the assister and the chance's xG."),
+    # 5. Home Pass Network
+    ("Reading the Home Pass Network",
+     "Each node is a player placed at their average pass position. Node "
+     "size scales with passes attempted; line width between two players "
+     "scales with the volume of completed passes between them. Heavy lines "
+     "reveal the side's preferred passing partnerships and which axis the "
+     "build-up flowed through."),
+    # 6. Away Pass Network
+    ("Reading the Away Pass Network",
+     "Same encoding as the home network. Read each side's shape: a flat, "
+     "wide network indicates a pass-through-the-thirds approach; a tall, "
+     "narrow one points to vertical, central build-up. Isolated nodes far "
+     "from the cluster usually mark a wide outlet who barely received."),
+    # 7. Home xT Map
+    ("Reading the Home xT Map",
+     "The grid colours each pitch zone by its xT (expected threat) value — "
+     "the probability that owning the ball there leads to a shot in the "
+     "next few seconds. White arrows are positive-xT passes (gained "
+     "threat); red arrows are negative-xT passes (gave threat back). "
+     "Dense white traffic into the warm zones is the team's progression "
+     "signature."),
+    # 8. Away xT Map
+    ("Reading the Away xT Map",
+     "Same grid + arrow encoding for the away side. The total xT in the "
+     "side panel sums all positive-xT passes; compare totals to read who "
+     "carried the threat-creation load and where on the pitch each side's "
+     "progression actually happened."),
+    # 9. Shot Comparison
+    ("Reading the Shot Comparison",
+     "A side-by-side bar chart of the headline shooting numbers — total "
+     "shots, shots on target, big chances, xG. It is the fastest single "
+     "view to answer 'who was the more dangerous attacking side?' before "
+     "diving into the maps."),
+    # 10. Home Danger Creation
+    ("Reading the Home Danger Creation",
+     "Every event that ended in a shot, key pass or box entry is plotted "
+     "to show which channels generated the high-value moments. Concentrate "
+     "on the warm zones — those are the side's true danger lanes."),
+    # 11. Away Danger Creation
+    ("Reading the Away Danger Creation",
+     "Same encoding for the away side: shots, key passes and box entries "
+     "overlaid on the pitch. Compare the two danger maps to see which "
+     "side's attack lived in central, high-quality areas vs. the flanks."),
+    # 12. Goalkeeper Saves
+    ("Reading the Goalkeeper Saves",
+     "Plots the location of every shot the keeper faced, colour-coded by "
+     "outcome (saved / goal / off-target). Save quality is a function of "
+     "the xG of the shots faced — saving a high-xG strike beats stopping "
+     "easy long-range efforts."),
+    # 13. xG / xGoT Summary
+    ("Reading the xG and xGoT Summary",
+     "xG measures pre-shot chance quality; xGoT (expected goals on target) "
+     "measures the post-shot quality once placement and power are known. "
+     "A team with xGoT well above xG executed their finishing better than "
+     "the average; below xG points to wasteful conversion."),
+    # 14. Home Zone 14 and Half-Spaces
+    ("Reading Home Zone 14 & Half-Spaces",
+     "Zone 14 is the central pocket just outside the box — historically the "
+     "richest zone for chance creation. The half-spaces flank it. This map "
+     "counts every action the side completed in those zones; volume here "
+     "is a proxy for how often they reached the most dangerous central "
+     "real estate."),
+    # 15. Away Zone 14 and Half-Spaces
+    ("Reading Away Zone 14 & Half-Spaces",
+     "Same encoding for the away side. Compare central-pocket access — "
+     "the side that worked the ball into Zone 14 more often usually had "
+     "the better creative platform, even before chance quality is "
+     "measured."),
+    # 16. Match Statistics (legacy table)
+    ("Reading the Match Statistics",
+     "A consolidated table of headline numbers — possession, passes, "
+     "shots, on-target, xG, xT, key passes, big chances. Each row is a "
+     "head-to-head with the leader bolded. Use it as the single-page "
+     "summary of the entire match."),
+    # 17. Territorial Control
+    ("Reading Territorial Control",
+     "Splits the pitch into bands and reads which team had the ball more "
+     "often in each. A side with most of its colour in the opponent's "
+     "third was camped high and aggressive; deep colour bands mean the "
+     "side defended low and tried to play out from the back."),
+    # 18. Ball Touches
+    ("Reading the Ball Touches",
+     "Plots every touch on the pitch as a heatmap. Hot zones reveal the "
+     "side's centre of gravity — where the game actually got played. "
+     "Compare the two heatmaps to see which territory each side owned."),
+    # 19. Home Pass Map by Third
+    ("Reading the Home Pass Map by Third",
+     "Splits passes into defensive, middle and attacking third buckets "
+     "and visualises each on the pitch. Final-third pass density and "
+     "completion rate are the two quickest reads of break-down activity "
+     "in the opposition area."),
+    # 20. Away Pass Map by Third
+    ("Reading the Away Pass Map by Third",
+     "Same per-third pass map for the away side. A team that had heavy "
+     "middle-third volume but thin attacking-third volume struggled to "
+     "convert build-up into break-down; that is the classic 'sideways "
+     "possession' pattern."),
+    # 21. xT per Minute
+    ("Reading xT per Minute",
+     "A diverging bar chart: home xT bars rise above the zero line, away "
+     "xT drops below it. Tall spikes mark the moments each side surged in "
+     "threat creation. The 5-minute rolling average overlay smooths the "
+     "noise and shows momentum windows."),
+    # 22. Home Progressive Passes
+    ("Reading Home Progressive Passes",
+     "Plots every pass that moved the ball at least 25% closer to goal "
+     "(or any pass into the final third). Wide-spread arrows mean the "
+     "progression load was shared; concentration around one player marks "
+     "a single source of forward play."),
+    # 23. Away Progressive Passes
+    ("Reading Away Progressive Passes",
+     "Same encoding for the away side. The total count and the spatial "
+     "distribution together tell you whether the side moved the ball "
+     "forward by volume, by quality, or both."),
+    # 24. Home Crosses
+    ("Reading Home Crosses",
+     "Every cross into the box plotted with its origin and end point. "
+     "Successful crosses are colour-coded distinctly. A cluster from the "
+     "byline indicates a touchline-and-cut-back attack; deeper origins "
+     "mark whipped, second-phase deliveries."),
+    # 25. Away Crosses
+    ("Reading Away Crosses",
+     "Same cross map for the away side. Compare cross volume and accuracy "
+     "to understand how much of each side's box entry came through wide "
+     "play versus central combinations."),
+    # 26. Home Defensive Heatmap
+    ("Reading the Home Defensive Heatmap",
+     "A density map of every defensive action the side completed — "
+     "tackles, interceptions, clearances, blocks, recoveries. The hot "
+     "zones reveal where the team chose to defend: high up the pitch "
+     "(press) or deep in their own block."),
+    # 27. Away Defensive Heatmap
+    ("Reading the Away Defensive Heatmap",
+     "Same defensive density map for the away side. Compare the heat "
+     "centres to read each team's defensive line height — a side whose "
+     "actions cluster near the halfway line was pressing; one whose "
+     "actions sit near their own box was sitting deep."),
+    # 28. Defensive Summary
+    ("Reading the Defensive Summary",
+     "A headline panel of defensive metrics for both sides — tackles, "
+     "interceptions, blocks, clearances, recoveries, aerial duels. "
+     "Tackles show direct duels, interceptions show anticipation and "
+     "cover-shadow play, recoveries show control of loose-ball moments "
+     "after pressure or clearances."),
+    # 29. Home Average Positions
+    ("Reading Home Average Positions",
+     "Each player's average XY position across all their touches, scaled "
+     "and connected to show team shape. A high, narrow shape signals an "
+     "aggressive, compact pressing block; a deep, wide shape points to a "
+     "low-block defensive setup."),
+    # 30. Away Average Positions
+    ("Reading Away Average Positions",
+     "Same average-position shape for the away side. Compare the two "
+     "shapes to read the structural matchup — overlap on the centre line "
+     "indicates a battle for the middle, separation indicates one side "
+     "controlled the territory."),
+    # 31. Dominating Zone
+    ("Reading the Dominating Zone",
+     "The pitch is divided into a grid; each cell is coloured by the side "
+     "that had more ball-touches there. Block colour reveals territorial "
+     "dominance at a glance — large contiguous regions in one team's "
+     "colour mark areas they controlled outright."),
+    # 32. Home Box Entries
+    ("Reading Home Box Entries",
+     "Plots every entry into the opposition penalty area — through pass, "
+     "carry, cross or set piece. Clusters near the byline mean wide-and-"
+     "cut-back access; clusters at the D mean central, through-ball "
+     "access. The total count is a direct measure of break-down volume."),
+    # 33. Away Box Entries
+    ("Reading Away Box Entries",
+     "Same encoding for the away side. Compare both maps to see whose "
+     "attack actually arrived inside the 18-yard box, and through which "
+     "channel the bulk of the entries came."),
+    # 34. Home High Turnovers
+    ("Reading Home High Turnovers",
+     "Marks every regain of possession in the attacking third. Frequent "
+     "high turnovers are a hallmark of a successful press — the more "
+     "concentrated the dots near the opposition box, the more often the "
+     "team won the ball in dangerous areas."),
+    # 35. Away High Turnovers
+    ("Reading Away High Turnovers",
+     "Same high-turnover map for the away side. The team with more "
+     "attacking-third regains generated more counter-press shot threats. "
+     "Empty heatmaps point to a team that ceded the high zone to the "
+     "opposition."),
+    # 36. Home Pass Target Zones
+    ("Reading Home Pass Target Zones",
+     "Heatmap of where on the pitch the side's passes landed — i.e. their "
+     "preferred receiving zones. Compare with the pass network to see "
+     "whether the receiving pattern matches the network's shape, or "
+     "whether passes were aiming for under-served outlets."),
+    # 37. Away Pass Target Zones
+    ("Reading Away Pass Target Zones",
+     "Same pass-target heatmap for the away side. A side whose target "
+     "zones cluster high and central had build-up reaching dangerous "
+     "areas; clusters in their own half indicate possession recycled but "
+     "rarely advanced."),
+]
+
+
+def _commentary_for_visual(idx_zero_based: int, hn: str, an: str):
+    """
+    Look up the (heading, body) commentary for a tactical visual by its
+    position in extra_figs. Falls back to a generic message for any
+    out-of-range index so the PDF never breaks.
+    """
+    if 0 <= idx_zero_based < len(_VISUAL_COMMENTARY):
+        return _VISUAL_COMMENTARY[idx_zero_based]
+    return (
+        "Reading this visual",
+        "This chart adds context to the tactical story above. Read it "
+        "alongside the previous pages — chance quality, territory, "
+        "pressing and ball progression all reinforce the same story when "
+        "the numbers line up.",
+    )
+
+
+def _draw_team_stats_compare_page(pdf, info, events, ppda):
+    """
+    Team comparison page with the unified visual identity.
+    Layout (top → bottom):
+        • Yellow accent frame + section header
+        • Attacking & passing stats bars (top)
+        • PPDA mini-gauges + verdict EMBEDDED in the middle
+        • Defensive stats bars (bottom) — including correct Blocks count
+        • Detailed English commentary footer
+    """
+    fig = _new_dark_fig(14, 9)
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+
+    if apply_unified_frame is not None:
+        apply_unified_frame(
+            fig,
+            section="TEAM STATISTICS",
+            title=f"{hn} vs {an} — Match Statistics",
+            subtitle="Attack · Passing · Pressing (PPDA) · Defense — "
+                     "every metric is computed directly from the event stream",
+            accent=C_GOLD,
+            home_name=hn, away_name=an, score=str(score),
+            footer_note="Bars scaled to the higher value · bold = leader",
+        )
+    else:
+        fig.text(0.04, 0.94, "TEAM STATISTICS — COMPARISON",
+                 color=TEXT_BRIGHT, fontsize=20, fontweight="bold")
+        fig.text(0.04, 0.91, "Side-by-side counts from event data",
+                 color=TEXT_DIM, fontsize=10, style="italic")
+
+    home_id = info.get("home_id")
+    away_id = info.get("away_id")
+
+    def _count(team_id, mask_fn) -> int:
+        if events is None or events.empty:
+            return 0
+        try:
+            return int(mask_fn(events[events["team_id"] == team_id]).sum())
+        except Exception:
+            return 0
+
+    # ── Stats grouped: attacking/passing on top, defensive on bottom ──
+    attack_rows = [
+        ("Goals",
+         _count(home_id, lambda d: (d.get("is_goal", False) == True) &  # noqa: E712
+                (d.get("scoring_team", -1) == home_id)),
+         _count(away_id, lambda d: (d.get("is_goal", False) == True) &  # noqa: E712
+                (d.get("scoring_team", -1) == away_id))),
+        ("Shots",
+         _count(home_id, lambda d: d.get("is_shot", False) == True),  # noqa: E712
+         _count(away_id, lambda d: d.get("is_shot", False) == True)),  # noqa: E712
+        ("Passes attempted",
+         _count(home_id, lambda d: d.get("is_pass", False) == True),  # noqa: E712
+         _count(away_id, lambda d: d.get("is_pass", False) == True)),  # noqa: E712
+        ("Key passes",
+         _count(home_id, lambda d: d.get("is_key_pass", False) == True),  # noqa: E712
+         _count(away_id, lambda d: d.get("is_key_pass", False) == True)),  # noqa: E712
+    ]
+
+    # ── Defensive stats (Blocks fixed: count BlockedShot events done BY team
+    #    = the times this team blocked an opponent's shot) ──
+    defensive_rows = [
+        ("Tackles",
+         _count(home_id, lambda d: d["type"] == "Tackle"),
+         _count(away_id, lambda d: d["type"] == "Tackle")),
+        ("Interceptions",
+         _count(home_id, lambda d: d["type"] == "Interception"),
+         _count(away_id, lambda d: d["type"] == "Interception")),
+        ("Blocks",
+         _count(home_id, lambda d: d["type"] == "BlockedShot"),
+         _count(away_id, lambda d: d["type"] == "BlockedShot")),
+        ("Clearances",
+         _count(home_id, lambda d: d["type"] == "Clearance"),
+         _count(away_id, lambda d: d["type"] == "Clearance")),
+        ("Recoveries",
+         _count(home_id, lambda d: d["type"] == "BallRecovery"),
+         _count(away_id, lambda d: d["type"] == "BallRecovery")),
+        ("Fouls",
+         _count(home_id, lambda d: d["type"] == "Foul"),
+         _count(away_id, lambda d: d["type"] == "Foul")),
+    ]
+
+    h_ppda = ppda.get("home", {}).get("ppda")
+    a_ppda = ppda.get("away", {}).get("ppda")
+
+    # ── Helper to draw a stats panel with bar comparison ──
+    def _draw_stats_panel(panel_xywh, title, rows_list, accent):
+        x, y, w, h = panel_xywh
+        ax = fig.add_axes([x, y, w, h])
+        ax.set_facecolor(BG_MID)
+        for s in ax.spines.values():
+            s.set_edgecolor(accent); s.set_linewidth(1.0)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+        # ── Panel title row (top) — accent strip with title only ──
+        ax.add_patch(mpatches.Rectangle((0, 0.93), 1, 0.07,
+                                         facecolor=accent, alpha=0.22, lw=0,
+                                         transform=ax.transAxes))
+        ax.text(0.02, 0.965, title.upper(), ha="left", va="center",
+                color=accent, fontsize=11, fontweight="bold",
+                transform=ax.transAxes,
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+
+        # ── Team labels row (just below the title strip) ──
+        ax.text(0.02, 0.885, hn, ha="left", va="center",
+                color=C_HOME, fontsize=9.5, fontweight="bold",
+                transform=ax.transAxes,
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+        ax.text(0.98, 0.885, an, ha="right", va="center",
+                color=C_AWAY, fontsize=9.5, fontweight="bold",
+                transform=ax.transAxes,
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+        # subtle divider under team labels
+        ax.plot([0.02, 0.98], [0.85, 0.85], color=accent, lw=0.5,
+                alpha=0.35, transform=ax.transAxes)
+
+        n = len(rows_list)
+        if n == 0:
+            return
+        # Layout zones (axes-fraction, x-axis):
+        #   value_home at 0.06  | bars 0.10–0.42 (anchored right at 0.42,
+        #   grow left)         |  LABEL center 0.50  |  bars 0.58–0.90
+        #   (anchored left at 0.58, grow right) | value_away at 0.94
+        top, bot = 0.83, 0.05
+        spacing = (top - bot) / n
+        for i, (label, hv, av) in enumerate(rows_list):
+            cy = top - (i + 0.5) * spacing
+            try:
+                hh, aa = float(hv), float(av)
+                mx = max(hh, aa, 1)
+                h_ratio, a_ratio = hh / mx, aa / mx
+            except (TypeError, ValueError):
+                h_ratio = a_ratio = 0
+                hh = aa = None
+
+            bar_h = spacing * 0.40
+            # home bar (anchored at 0.42, grows leftwards)
+            if h_ratio:
+                bw = 0.32 * h_ratio
+                ax.add_patch(mpatches.Rectangle(
+                    (0.42 - bw, cy - bar_h / 2), bw, bar_h,
+                    facecolor=C_HOME, alpha=0.80, lw=0,
+                    transform=ax.transAxes))
+            # away bar (anchored at 0.58, grows rightwards)
+            if a_ratio:
+                bw = 0.32 * a_ratio
+                ax.add_patch(mpatches.Rectangle(
+                    (0.58, cy - bar_h / 2), bw, bar_h,
+                    facecolor=C_AWAY, alpha=0.80, lw=0,
+                    transform=ax.transAxes))
+
+            h_better = hh is not None and aa is not None and hh > aa
+            a_better = aa is not None and hh is not None and aa > hh
+
+            # Numbers — placed OUTSIDE the bars so nothing overlaps them.
+            # Leader gets gold + bold for instant scan; loser stays bright.
+            home_col = C_GOLD if h_better else TEXT_BRIGHT
+            away_col = C_GOLD if a_better else TEXT_BRIGHT
+            ax.text(0.06, cy, _na(hv), ha="right", va="center",
+                    color=home_col,
+                    fontsize=12.5, fontweight="bold",
+                    transform=ax.transAxes,
+                    path_effects=[pe.withStroke(linewidth=2.4, foreground=BG_DARK)])
+            ax.text(0.94, cy, _na(av), ha="left", va="center",
+                    color=away_col,
+                    fontsize=12.5, fontweight="bold",
+                    transform=ax.transAxes,
+                    path_effects=[pe.withStroke(linewidth=2.4, foreground=BG_DARK)])
+            # Stat label — centered, on a clean dark gap between the bars
+            ax.text(0.50, cy, label, ha="center", va="center",
+                    color=TEXT_BRIGHT, fontsize=9.5, fontweight="bold",
+                    transform=ax.transAxes,
+                    path_effects=[pe.withStroke(linewidth=2.6, foreground=BG_DARK)])
+
+    # Top-left: attacking/passing  ·  Bottom-left: defensive
+    _draw_stats_panel((0.04, 0.55, 0.42, 0.30),
+                      "Attack & Passing", attack_rows, C_HOME)
+    _draw_stats_panel((0.04, 0.14, 0.42, 0.36),
+                      "Defensive Actions", defensive_rows, C_AWAY)
+
+    # ── Centre column: PPDA mini-gauges (the requested embedded PPDA) ──
+    def _mini_dial(ax_pos, name, value, color):
+        ax = fig.add_axes(ax_pos, projection="polar")
+        ax.set_facecolor(BG_DARK)
+        ax.set_theta_zero_location("W"); ax.set_theta_direction(-1)
+        ax.set_thetamin(0); ax.set_thetamax(180); ax.set_ylim(0, 1)
+
+        v = value if value is not None else 0
+        vmin, vmax = 5.0, 25.0
+        ratio = max(0.0, min(1.0, (v - vmin) / (vmax - vmin)))
+        angle = ratio * np.pi
+
+        n_seg = 48
+        thetas = np.linspace(0, np.pi, n_seg + 1)
+        for i in range(n_seg):
+            t = i / n_seg
+            if t < 0.15:   c = "#22c55e"
+            elif t < 0.30: c = "#84cc16"
+            elif t < 0.45: c = "#facc15"
+            else:          c = "#f97316"
+            ax.bar((thetas[i] + thetas[i+1]) / 2, 0.18, bottom=0.78,
+                   width=(thetas[i+1] - thetas[i]) * 0.95,
+                   color=c, edgecolor="none", alpha=0.80)
+        if value is not None:
+            ax.plot([angle, angle], [0, 0.92], color=color, lw=3.5,
+                    solid_capstyle="round", zorder=5)
+            ax.scatter([angle], [0.92], s=55, color=TEXT_BRIGHT,
+                       edgecolor=color, linewidth=1.8, zorder=7)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.spines["polar"].set_visible(False)
+
+        cx = ax_pos[0] + ax_pos[2] / 2
+        cy = ax_pos[1] + 0.02
+        val_str = f"{value:.2f}" if value is not None else "N/A"
+        fig.text(cx, cy + 0.045, val_str, ha="center", color=color,
+                 fontsize=22, fontweight="bold",
+                 path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+        lbl, lcol = _ppda_intensity_label(value)
+        fig.text(cx, cy, lbl, ha="center", color=lcol,
+                 fontsize=8, fontweight="bold")
+        fig.text(cx, ax_pos[1] + ax_pos[3] - 0.005, name,
+                 ha="center", color=TEXT_BRIGHT, fontsize=10,
+                 fontweight="bold")
+
+    # PPDA section header (centre column)
+    _hdr = fig.add_axes([0.49, 0.86, 0.30, 0.004])
+    _hdr.set_facecolor(C_GOLD)
+    _hdr.set_xticks([]); _hdr.set_yticks([])
+    for _s in _hdr.spines.values():
+        _s.set_visible(False)
+
+    fig.text(0.64, 0.88, "PRESSING · PPDA",
+             ha="center", color=C_GOLD, fontsize=11, fontweight="bold")
+    fig.text(0.64, 0.855,
+             "Passes per Defensive Action — lower = more aggressive press",
+             ha="center", color=TEXT_DIM, fontsize=8.5, style="italic")
+
+    _mini_dial([0.49, 0.66, 0.14, 0.16], hn, h_ppda, C_HOME)
+    _mini_dial([0.65, 0.66, 0.14, 0.16], an, a_ppda, C_AWAY)
+
+    # PPDA verdict line
+    if h_ppda is not None and a_ppda is not None:
+        if h_ppda < a_ppda:
+            verdict = f"{hn} pressed more aggressively"; vcol = C_HOME
+            diff = a_ppda - h_ppda
+        elif a_ppda < h_ppda:
+            verdict = f"{an} pressed more aggressively"; vcol = C_AWAY
+            diff = h_ppda - a_ppda
+        else:
+            verdict = "Both teams pressed equally"; vcol = TEXT_BRIGHT
+            diff = 0.0
+        fig.text(0.64, 0.62, verdict, ha="center", color=vcol,
+                 fontsize=11, fontweight="bold")
+        if diff > 0:
+            fig.text(0.64, 0.60, f"PPDA differential: {diff:.2f}",
+                     ha="center", color=TEXT_DIM, fontsize=9)
+
+    # ── Right column: structured commentary ─────────────────────────
+    com_ax = fig.add_axes([0.81, 0.14, 0.16, 0.71])
+    com_ax.set_facecolor(BG_PANEL)
+    for s in com_ax.spines.values():
+        s.set_edgecolor(GRID_COL)
+    com_ax.set_xticks([]); com_ax.set_yticks([])
+    com_ax.set_xlim(0, 1); com_ax.set_ylim(0, 1)
+
+    # Header strip
+    com_ax.add_patch(mpatches.Rectangle((0, 0.945), 1, 0.055,
+                                         facecolor=C_GOLD, alpha=0.22,
+                                         transform=com_ax.transAxes, lw=0))
+    com_ax.text(0.06, 0.972, "READING THIS PAGE",
+                ha="left", va="center", color=C_GOLD,
+                fontsize=9.5, fontweight="bold",
+                transform=com_ax.transAxes,
+                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+    com_ax.plot([0.06, 0.94], [0.945, 0.945], color=C_GOLD, lw=0.6,
+                alpha=0.45, transform=com_ax.transAxes)
+
+    # Three structured sections — heading + body
+    sections = [
+        (C_HOME,
+         "ATTACK & PASSING",
+         "Shots and key passes show how often each side created looks at "
+         "goal. Pass volume reflects how long the team kept the ball "
+         "circulating between phases."),
+        (C_GOLD,
+         "PRESSING (PPDA)",
+         "Lower PPDA = more aggressive press. The dial sits in green when "
+         "an opponent action was forced every few passes; it slides toward "
+         "orange when the side sat in a deeper block. The verdict names "
+         "the more aggressive presser."),
+        (C_AWAY,
+         "DEFENSIVE ACTIONS",
+         "Tackles and interceptions describe ground duels. Blocks count "
+         "shots stopped by a body in the way. Recoveries and clearances "
+         "show how pressure was escaped; fouls mark where containment "
+         "broke down."),
+    ]
+
+    cy = 0.905
+    for color, heading, body in sections:
+        # accent dot
+        com_ax.add_patch(mpatches.Circle((0.075, cy), 0.012,
+                                          facecolor=color, lw=0,
+                                          transform=com_ax.transAxes,
+                                          zorder=4))
+        com_ax.text(0.115, cy, heading, ha="left", va="center",
+                    color=color, fontsize=8.5, fontweight="bold",
+                    transform=com_ax.transAxes,
+                    path_effects=[pe.withStroke(linewidth=2,
+                                                foreground=BG_DARK)])
+        # body — wrapped, indented under heading
+        com_ax.text(0.075, cy - 0.025, body,
+                    ha="left", va="top", color=TEXT_MAIN,
+                    fontsize=7.8, transform=com_ax.transAxes,
+                    wrap=True, linespacing=1.55)
+        cy -= 0.27
+
+    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _draw_player_stats_pages(pdf, player_stats, info, visuals_dir):
+    """Player-stats pages — do NOT save PNGs (the visuals are produced as
+    figs 41/42 by Dark.py and saved alongside the rest of the figs in SAVE_DIR)."""
+    for side, color in (("home", C_HOME), ("away", C_AWAY)):
+        df = player_stats.get(side, pd.DataFrame())
+        team_name = info.get(f"{side}_name") or side.title()
+        fig = draw_player_stats_table(df, team_name, team_color=color,
+                                      save_path=None)
+        pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+        plt.close(fig)
+
+
+def _merge_pdfs(output_path: str, pdf_paths: list[str]) -> bool:
+    """
+    Merge several PDFs into one. Uses pypdf if available,
+    or PyPDF2 as a fallback. If neither is available, returns False.
+    """
+    pdf_paths = [p for p in pdf_paths if p and os.path.exists(p)]
+    if not pdf_paths:
+        return False
+
+    try:
+        from pypdf import PdfWriter
+        writer = PdfWriter()
+        for p in pdf_paths:
+            writer.append(p)
+        with open(output_path, "wb") as f:
+            writer.write(f)
+        writer.close()
+        return True
+    except ImportError:
+        pass
+    try:
+        from PyPDF2 import PdfMerger
+        merger = PdfMerger()
+        for p in pdf_paths:
+            merger.append(p)
+        merger.write(output_path)
+        merger.close()
+        return True
+    except ImportError:
+        return False
+
+
+def run_analysis(match_data: dict,
+                 parse_all_fn=None,
+                 extra_figs: list | None = None,
+                 extra_figs_filenames: list | None = None,
+                 merge_with_pdfs: list[str] | None = None,
+                 final_pdf_name: str | None = None) -> dict:
+    """
+    Unified entry point. Produces a single dark-theme PDF:
+        1. Match summary
+        2. Goals log
+        3. PPDA gauge
+        4. Team stats comparison
+        5. Player stats — Home
+        6. Player stats — Away
+        7. Embedded extra_figs (the 39 original visuals  )
+        8. (optional) merge with the original PDFs in merge_with_pdfs
+
+    Args:
+        match_data: raw matchCentreData dict.
+        parse_all_fn: the project's original parse_all().
+        extra_figs: the original 39 visuals as matplotlib Figures — embedded
+                    inside the same PDF after the new pages.
+        merge_with_pdfs: paths to external PDFs (e.g. the original tactical PDF)
+                         merged at the end into the final PDF.
+        final_pdf_name: name of the final PDF (when merging). Default:
+                        full_match_report_<ts>.pdf
+
+    Each visual is also saved as a standalone PNG in output/visuals/.
+    """
+    if parse_all_fn is None:
+        raise ValueError(
+            "run_analysis requires parse_all_fn (e.g. parse_all_fn=parse_all)."
+        )
+
+    _ensure_output_dirs()
+
+    info, events, _players_df = parse_all_fn(match_data)
+
+    ppda = compute_ppda_both(info, events)
+    goals_df = build_goals_log(events, info)
+    player_stats = extract_player_stats(match_data)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    try:
+        goals_df.to_csv(
+            os.path.join(OUTPUT_DIR, f"goals_log_{ts}.csv"),
+            index=False, encoding="utf-8-sig",
+        )
+    except Exception:
+        pass
+
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+
+    # ── Group extra_figs by side (home / away / shared / player_table) ──
+    grouped = {"player_table": [], "home": [], "away": [], "shared": []}
+    if extra_figs:
+        names = list(extra_figs_filenames or [])
+        # Pad with empty strings if shorter than figs
+        while len(names) < len(extra_figs):
+            names.append("")
+        for fig, fname in zip(extra_figs, names):
+            f = (fname or "").lower()
+            if "player_stats" in f:
+                grouped["player_table"].append((fig, fname))
+            elif "_home_" in f:
+                grouped["home"].append((fig, fname))
+            elif "_away_" in f:
+                grouped["away"].append((fig, fname))
+            else:
+                grouped["shared"].append((fig, fname))
+
+    def _emit_visual(fig, fname):
+        """Apply unified chrome (idempotent for v2 figs) + emit a single
+        composite PDF page with visual on top and commentary below."""
+        if rebrand_figure is not None:
+            try:
+                rebrand_figure(fig, home_name=hn, away_name=an,
+                               score=str(score), accent=C_GOLD)
+            except Exception:
+                pass
+        heading, body = _commentary_for_filename(fname or "", hn, an)
+        try:
+            _pdf_page_with_commentary(pdf, fig, heading, body)
+        except Exception:
+            try:
+                pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+            except Exception:
+                pass
+
+    pdf_path = os.path.join(OUTPUT_DIR, f"match_report_{ts}.pdf")
+    with PdfPages(pdf_path) as pdf:
+        # ── Cover page ─────────────────────────────────────────────
+        _draw_match_summary_page(pdf, info, goals_df, ppda)
+
+        # ── Section 1: PLAYER RATINGS (both squads) ────────────────
+        _draw_section_divider(
+            pdf, "01", "PLAYER RATINGS",
+            f"Per-player performance for both {hn} and {an} — starters "
+            f"first, ratings coloured by quality",
+            C_GREEN,
+        )
+        if grouped["player_table"]:
+            for fig, fname in grouped["player_table"]:
+                _emit_visual(fig, fname)
+        else:
+            _draw_player_stats_pages(pdf, player_stats, info, VISUALS_DIR)
+
+        # ── Section 2: HOME-TEAM ANALYSIS ──────────────────────────
+        _draw_section_divider(
+            pdf, "02", f"{hn.upper()} ANALYSIS",
+            f"How {hn} attacked, progressed the ball, and defended — "
+            f"every {hn.lower()}-specific visual with tactical commentary",
+            C_HOME,
+        )
+        for fig, fname in grouped["home"]:
+            _emit_visual(fig, fname)
+
+        # ── Section 3: AWAY-TEAM ANALYSIS ──────────────────────────
+        _draw_section_divider(
+            pdf, "03", f"{an.upper()} ANALYSIS",
+            f"How {an} attacked, progressed the ball, and defended — "
+            f"every {an.lower()}-specific visual with tactical commentary",
+            C_AWAY,
+        )
+        for fig, fname in grouped["away"]:
+            _emit_visual(fig, fname)
+
+        # ── Section 4: SHARED INSIGHTS ─────────────────────────────
+        _draw_section_divider(
+            pdf, "04", "SHARED INSIGHTS",
+            "Head-to-head visuals showing both sides together — chance "
+            "quality, territory, pressing and ball progression",
+            C_PURPLE,
+        )
+        # Shared figs already include match_stats (fig 18) and PPDA (fig 40)
+        # so we just iterate them in their natural order.
+        for fig, fname in grouped["shared"]:
+            _emit_visual(fig, fname)
+
+        # ── Closing page ───────────────────────────────────────────
+        _draw_closing_page(pdf, info)
+
+    return {
+        "pdf": pdf_path,
+        "extension_pdf": pdf_path,
+        "visuals_dir": VISUALS_DIR,
+        "ppda": ppda,
+        "goals": goals_df,
+        "player_stats": player_stats,
+    }
