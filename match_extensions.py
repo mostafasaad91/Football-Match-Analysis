@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false, reportRedeclaration=false, reportReturnType=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportCallIssue=false, reportPrivateImportUsage=false, reportOptionalMemberAccess=false, reportPossiblyUnboundVariable=false
 """
 match_extensions.py
 ═════════════════════════════════════════════════════════════════════════════
@@ -15,6 +16,7 @@ and team colours (C_RED for home, C_BLUE for away) as the original report.
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Any
 
@@ -35,51 +37,76 @@ except Exception:  # pragma: no cover
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# THEME — matches the original Match_Analysis_Dark palette
+# THEME — dark by default; light scripts can set MATCH_ANALYSIS_THEME=light
+# before calling this module.
 # ─────────────────────────────────────────────────────────────────────────────
-BG_DARK     = "#050508"
-BG_MID      = "#0d1117"
-BG_PANEL    = "#0a0e16"
-GRID_COL    = "#1e2836"
-TEXT_MAIN   = "#f0f4ff"
-TEXT_BRIGHT = "#ffffff"
-TEXT_DIM    = "#94a3b8"
-TEXT_FADED  = "#64748b"
+def configure_theme(theme: str | None = None) -> None:
+    global BG_DARK, BG_MID, BG_PANEL, GRID_COL, TEXT_MAIN, TEXT_BRIGHT, TEXT_DIM, TEXT_FADED, C_GOLD, RATING_CMAP
+    theme = (theme or os.environ.get("MATCH_ANALYSIS_THEME", "dark")).strip().lower()
+    if theme == "light":
+        BG_DARK     = "#FFFFFF"
+        BG_MID      = "#F3F4F6"
+        BG_PANEL    = "#FFFFFF"
+        GRID_COL    = "#D1D5DB"
+        TEXT_MAIN   = "#1F2937"
+        TEXT_BRIGHT = "#111827"
+        TEXT_DIM    = "#4B5563"
+        TEXT_FADED  = "#6B7280"
+        C_GOLD      = "#D97706"
+        RATING_CMAP = LinearSegmentedColormap.from_list(
+            "rating",
+            ["#FEE2E2", "#FDBA74", "#FACC15", "#86EFAC", "#38BDF8", "#2563EB"],
+        )
+    else:
+        BG_DARK     = "#050508"
+        BG_MID      = "#0d1117"
+        BG_PANEL    = "#0a0e16"
+        GRID_COL    = "#1e2836"
+        TEXT_MAIN   = "#f0f4ff"
+        TEXT_BRIGHT = "#ffffff"
+        TEXT_DIM    = "#94a3b8"
+        TEXT_FADED  = "#64748b"
+        C_GOLD      = "#facc15"
+        RATING_CMAP = LinearSegmentedColormap.from_list(
+            "rating",
+            ["#3a0f10", "#7a1d1f", "#b45309", "#facc15", "#22c55e", "#0ea5e9"],
+        )
 
-C_HOME      = "#e63946"   # home team
-C_AWAY      = "#1e90ff"   # away team
-C_GOLD      = "#facc15"
+
+configure_theme()
+
+C_HOME      = "#e63946"   # المضيف
+C_AWAY      = "#1e90ff"   # الضيف
+C_GOLD      = "#D97706" if os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower() == "light" else "#facc15"
 C_GREEN     = "#22c55e"
 C_PURPLE    = "#a855f7"
 OG_COLOR    = "#ff00ff"
 
-# heatmap for player ratings
-RATING_CMAP = LinearSegmentedColormap.from_list(
-    "rating",
-    ["#3a0f10", "#7a1d1f", "#b45309", "#facc15", "#22c55e", "#0ea5e9"],
-)
-
-
+# heatmap للتقييمات
 # ─────────────────────────────────────────────────────────────────────────────
 # Output paths
 # ─────────────────────────────────────────────────────────────────────────────
 OUTPUT_DIR = "output"
 VISUALS_DIR = os.path.join(OUTPUT_DIR, "visuals")
 
+# Higher-quality raster embedding for visuals inside the unified PDF.
+PDF_VISUAL_DPI = 320
+PDF_PAGE_DPI = 240
+
 
 def _ensure_output_dirs() -> None:
-    """Create /output and /output/visuals if they do not exist."""
+    """ينشئ /output و /output/visuals لو مش موجودين."""
     os.makedirs(VISUALS_DIR, exist_ok=True)
 
 
 def _new_dark_fig(w: float, h: float):
-    """Create a dark-theme figure matching the original."""
+    """ينشئ figure بالـ dark theme المطابق للأصلي."""
     fig = plt.figure(figsize=(w, h), facecolor=BG_DARK)
     return fig
 
 
 def _style_dark_axes(ax, title: str = "", subtitle: str = ""):
-    """Apply the dark theme to an axes."""
+    """يضبط axes على الـ dark theme."""
     ax.set_facecolor(BG_MID)
     for spine in ax.spines.values():
         spine.set_edgecolor(GRID_COL)
@@ -94,7 +121,7 @@ def _style_dark_axes(ax, title: str = "", subtitle: str = ""):
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 def _na(value: Any, fmt: str | None = None) -> str:
-    """Format a value, or 'N/A' if missing."""
+    """يطبع القيمة أو 'N/A'."""
     if value is None:
         return "N/A"
     try:
@@ -120,7 +147,7 @@ def _safe_int(v, default: int = 0) -> int:
 
 
 def _short_name(name: str, max_len: int = 22) -> str:
-    """Truncate a long player name."""
+    """يقصّر اسم اللاعب لو طويل."""
     if not name or name == "N/A":
         return name or "N/A"
     if len(name) <= max_len:
@@ -137,11 +164,11 @@ def _short_name(name: str, max_len: int = 22) -> str:
 def calculate_ppda(events: pd.DataFrame, team_id: int, opp_id: int,
                    threshold: float = 40.0) -> dict:
     """
-    PPDA = (opponent passes in their own half) /
-           (tackles + interceptions + fouls + recoveries by pressing team in same zone).
+    PPDA = (تمريرات الخصم في نص ملعبه) ÷
+           (تدخلات + قطع + أخطاء + استخلاصات الفريق الضاغط في نفس المنطقة).
 
-    threshold=40 -> the front 60% of the pitch from the pressing team's view
-    (classic Colin Trainor method).
+    threshold=40 ⇒ 60% الأمامية للملعب من منظور الفريق الضاغط
+    (طريقة Colin Trainor الكلاسيكية).
     """
     if events is None or events.empty:
         return {"passes_allowed": 0, "defensive_actions": 0,
@@ -149,7 +176,7 @@ def calculate_ppda(events: pd.DataFrame, team_id: int, opp_id: int,
 
     opp_threshold = 100.0 - threshold
 
-    # Step 1: opponent passes in their own half (x < 60 from their view)
+    # خطوة 1: تمريرات الخصم في نص ملعبه (x < 60 من منظوره)
     opp_passes_mask = (
         (events["team_id"] == opp_id)
         & (events.get("is_pass", False) == True)  # noqa: E712
@@ -157,7 +184,7 @@ def calculate_ppda(events: pd.DataFrame, team_id: int, opp_id: int,
     )
     passes_allowed = int(opp_passes_mask.sum())
 
-    # Step 2: pressing team's defensive actions in the same zone (x > 40 from their view)
+    # خطوة 2: الأكشنز الدفاعية للفريق الضاغط في نفس المنطقة (x > 40 من منظوره)
     DEF_TYPES = {"Tackle", "Interception", "Foul", "Challenge", "BallRecovery"}
     def_mask = (
         (events["team_id"] == team_id)
@@ -166,7 +193,7 @@ def calculate_ppda(events: pd.DataFrame, team_id: int, opp_id: int,
     )
     defensive_actions = int(def_mask.sum())
 
-    # Step 3: divide (if 0 actions -> None to avoid division by zero)
+    # خطوة 3: القسمة (لو 0 أكشنز ⇒ None لتجنّب القسمة على صفر)
     ppda = (passes_allowed / defensive_actions) if defensive_actions > 0 else None
 
     return {
@@ -178,7 +205,7 @@ def calculate_ppda(events: pd.DataFrame, team_id: int, opp_id: int,
 
 
 def compute_ppda_both(info: dict, events: pd.DataFrame) -> dict:
-    """ PPDA for both teams ."""
+    """يحسب PPDA للفريقين معًا."""
     return {
         "home": calculate_ppda(events, info.get("home_id"), info.get("away_id")),
         "away": calculate_ppda(events, info.get("away_id"), info.get("home_id")),
@@ -186,7 +213,7 @@ def compute_ppda_both(info: dict, events: pd.DataFrame) -> dict:
 
 
 def _ppda_intensity_label(ppda: float | None) -> tuple[str, str]:
-    """Classify PPDA into a press tier: Elite/High/Medium/Low + colour."""
+    """يصنّف PPDA لمستوى ضغط: Elite/High/Medium/Low + لون."""
     if ppda is None:
         return "N/A", TEXT_FADED
     if ppda < 8.0:
@@ -201,8 +228,8 @@ def _ppda_intensity_label(ppda: float | None) -> tuple[str, str]:
 def draw_ppda_gauge(ppda_data: dict, info: dict,
                     save_path: str | None = None):
     """
-    Render the full PPDA analysis: a dial per team + numeric breakdown
-    + zone diagram on a mini pitch + intensity classification.
+    يرسم تحليل PPDA كاملًا: لكل فريق dial + breakdown أرقام
+    + شرح المنطقة على ملعب صغير + تصنيف intensity.
     """
     fig = _new_dark_fig(14, 8)
     fig.patch.set_facecolor(BG_DARK)
@@ -243,20 +270,20 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
     def _draw_dial(ax_pos, name, value, passes, def_acts, color):
         ax = fig.add_axes(ax_pos, projection="polar")
         ax.set_facecolor(BG_DARK)
-        # Half-circle: 0 to pi
+        # نص الدائرة من 0 لـ π (نصف دائرة)
         ax.set_theta_zero_location("W")
         ax.set_theta_direction(-1)
         ax.set_thetamin(0); ax.set_thetamax(180)
         ax.set_ylim(0, 1)
 
-        # Scale: 5 (elite press) -> 25 (no press)
+        # الـ scale من 5 (ضغط ممتاز) لـ 25 (مفيش ضغط)
         v = value if value is not None else 0
         vmin, vmax = 5.0, 25.0
-        # mapping: ppda=5 -> 0deg (left), ppda=25 -> 180deg (right)
+        # mapping: ppda=5 ⇒ 0° (شمال), ppda=25 ⇒ 180° (يمين)
         ratio = max(0.0, min(1.0, (v - vmin) / (vmax - vmin)))
         angle = ratio * np.pi
 
-        # arc background — gradient
+        # خلفية الـ arc — متدرّج
         n_seg = 60
         thetas = np.linspace(0, np.pi, n_seg + 1)
         zone_colors = []
@@ -276,7 +303,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
                    color=zone_colors[i], edgecolor="none",
                    alpha=0.75)
 
-        # needle indicator
+        # المؤشر (الإبرة)
         if value is not None:
             ax.plot([angle, angle], [0, 0.92],
                     color=color, lw=4,
@@ -286,12 +313,12 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
             ax.scatter([angle], [0.92], s=70, color=TEXT_BRIGHT,
                        edgecolor=color, linewidth=2, zorder=7)
 
-        # remove default ticks/labels
+        # شيل الـ ticks/labels الافتراضية
         ax.set_xticks([])
         ax.set_yticks([])
         ax.spines["polar"].set_visible(False)
 
-        # numeric tick marks
+        # علامات رقمية
         for tick_v, tick_label in [(5, "5"), (10, "10"), (15, "15"),
                                     (20, "20"), (25, "25")]:
             r = (tick_v - vmin) / (vmax - vmin)
@@ -300,7 +327,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
                     ha="center", va="center",
                     color=TEXT_DIM, fontsize=8.5)
 
-        # large central value text
+        # القيمة الكبيرة في النص
         cx, cy = ax_pos[0] + ax_pos[2] / 2, ax_pos[1] + 0.06
         val_str = f"{value:.2f}" if value is not None else "N/A"
         fig.text(cx, cy + 0.04, val_str,
@@ -312,13 +339,13 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
                  ha="center", color=intensity_col, fontsize=11,
                  fontweight="bold")
 
-        # team name above
+        # اسم الفريق فوق
         fig.text(cx, ax_pos[1] + ax_pos[3] - 0.02, name,
                  ha="center", color=TEXT_BRIGHT,
                  fontsize=15, fontweight="bold",
                  path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
 
-        # numeric breakdown below
+        # breakdown أرقام تحت
         fig.text(cx - 0.06, cy - 0.05, str(passes),
                  ha="center", color=color, fontsize=18, fontweight="bold")
         fig.text(cx - 0.06, cy - 0.085, "OPP PASSES",
@@ -331,7 +358,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
     _draw_dial([0.05, 0.42, 0.40, 0.45], home_name, h, h_passes, h_def, C_HOME)
     _draw_dial([0.55, 0.42, 0.40, 0.45], away_name, a, a_passes, a_def, C_AWAY)
 
-    # ── Comparison strip in the centre ──
+    # ── Comparison strip في النص ──
     if h is not None and a is not None:
         if h < a:
             verdict = f"{home_name} pressed more aggressively"
@@ -351,18 +378,18 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
             fig.text(0.5, 0.305, f"PPDA differential: {diff:.2f}",
                      ha="center", color=TEXT_DIM, fontsize=10)
 
-    # ── simple pitch-zone legend ──
+    # ── Legend زون pitch بسيط ──
     pitch_ax = fig.add_axes([0.10, 0.06, 0.80, 0.18])
     pitch_ax.set_facecolor("#040c04")
     pitch_ax.set_xlim(0, 100); pitch_ax.set_ylim(0, 30)
     pitch_ax.set_xticks([]); pitch_ax.set_yticks([])
     for s in pitch_ax.spines.values():
         s.set_edgecolor(GRID_COL)
-    # centre line
+    # خط النص
     pitch_ax.plot([50, 50], [0, 30], color=TEXT_DIM, lw=1, ls="--", alpha=0.6)
-    # x=60 line
+    # خط 60
     pitch_ax.axvline(60, color="#facc15", lw=1.2, alpha=0.7, ls="--")
-    # the opponent's own half (60%)
+    # المنطقة الدفاعية للخصم (60%)
     pitch_ax.add_patch(mpatches.Rectangle(
         (60, 0), 40, 30, facecolor="#facc15", alpha=0.15, lw=0))
     pitch_ax.text(80, 15, "PRESSING ZONE\n(opp 60% of pitch)",
@@ -390,7 +417,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
 # UPGRADE 2 — Goals classification
 # ═════════════════════════════════════════════════════════════════════════════
 def classify_goal_type(row: pd.Series) -> tuple[str, str]:
-    """Classify a goal as Open Play or Set Piece + subtype."""
+    """يصنّف الهدف لـ Open Play أو Set Piece + النوع الفرعي."""
     quals = row.get("qualifier_names") or []
     if not isinstance(quals, (list, tuple, set)):
         quals = []
@@ -412,7 +439,7 @@ def classify_goal_type(row: pd.Series) -> tuple[str, str]:
 
 
 def build_goals_log(events: pd.DataFrame, info: dict) -> pd.DataFrame:
-    """Build the goals log with assist providers and classification."""
+    """يبني جدول الأهداف بالصانعين والتصنيف."""
     cols = ["minute", "team", "scorer", "assist", "category", "subtype",
             "xG", "is_own_goal"]
     if events is None or events.empty:
@@ -447,7 +474,7 @@ def build_goals_log(events: pd.DataFrame, info: dict) -> pd.DataFrame:
 # UPGRADE 3 — Player stats extraction & polished tables
 # ═════════════════════════════════════════════════════════════════════════════
 def _flatten_stat(value: Any) -> Any:
-    """Reduce a WhoScored stat dict to a single value."""
+    """يحوّل WhoScored stat dict لقيمة واحدة."""
     if value is None:
         return None
     if isinstance(value, (int, float, str)):
@@ -461,7 +488,7 @@ def _flatten_stat(value: Any) -> Any:
     return None
 
 
-# Group stats into logical clusters — shown in the table headers
+# تجميع الإحصائيات لمجموعات منطقية — بيظهر في رؤوس الجدول
 STAT_GROUPS = [
     ("Identity",  [("name",          "Player"),
                    ("position",      "Pos"),
@@ -484,7 +511,7 @@ STAT_GROUPS = [
     ("Score",     [("ratings",       "Rating")]),
 ]
 
-# group-header colours
+# ألوان رؤوس المجموعات
 GROUP_HEADER_COLORS = {
     "Identity": "#1f2a3a",
     "Attack":   "#3b1f2f",
@@ -493,9 +520,17 @@ GROUP_HEADER_COLORS = {
     "Score":    "#2a1f3a",
 }
 
+GROUP_HEADER_COLORS_LIGHT = {
+    "Identity": "#E0F2FE",
+    "Attack":   "#FCE7F3",
+    "Passing":  "#DCFCE7",
+    "Defense":  "#FEF3C7",
+    "Score":    "#EDE9FE",
+}
+
 
 def extract_player_stats(md: dict) -> dict:
-    """Extract every player stat for both teams."""
+    """يستخرج كل إحصائيات اللاعبين للفريقين."""
     out: dict = {}
 
     for side in ("home", "away"):
@@ -530,7 +565,7 @@ def extract_player_stats(md: dict) -> dict:
 
 
 def _rating_color(rating: Any) -> str:
-    """Colour map from rating (5.0 -> 8.5+)."""
+    """خريطة لون من التقييم (5.0 → 8.5+)."""
     try:
         r = float(rating)
     except (TypeError, ValueError):
@@ -542,7 +577,7 @@ def _rating_color(rating: Any) -> str:
 
 
 def _format_cell(key: str, value: Any) -> str:
-    """Format the value according to the column type."""
+    """يصيغ القيمة حسب نوع العمود."""
     if value is None:
         return "—"
     try:
@@ -568,15 +603,15 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
                             team_color: str = C_HOME,
                             save_path: str | None = None):
     """
-    Render a player-stats table with variable column widths (Player wider than the rest
-    ), grouped by cluster, dark theme, with a rating heatmap.
+    يرسم جدول إحصائيات لاعبين بأعمدة بعرض متغيّر (Player أعرض من بقية
+    الأعمدة)، مجمّع بمجموعات، dark theme، مع heatmap للتقييم.
     """
-    # Per-column width in 'units' — Player widest, Pos medium, others narrow
+    # عرض كل عمود بالـ "units" — Player أعرض، Pos متوسط، الباقي ضيق
     COL_W = {
         "name": 3.6, "position": 1.05, "shirt_no": 0.55,
         "minutesPlayed": 0.7, "ratings": 1.15,
     }
-    DEFAULT_W = 0.85  # default for other stats
+    DEFAULT_W = 0.85  # لباقي الإحصائيات
 
     # ── Build flat columns from groups ──
     flat_keys: list[str] = []
@@ -599,7 +634,7 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
         group_spans.append((gname, x_start, x_cursor))
 
     total_w = x_cursor if x_cursor > 0 else 1.0
-    # x positions (left edges) per column
+    # x positions (left edges) لكل عمود
     x_lefts = []
     acc = 0.0
     for w in flat_widths:
@@ -607,7 +642,7 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
 
     n_rows = max(len(df), 1)
 
-    # Figure size scales with total_w
+    # حجم الـ figure متناسب مع total_w
     fig = _new_dark_fig(max(15, total_w * 0.95),
                         max(7, 0.42 * n_rows + 3.0))
     fig.patch.set_facecolor(BG_DARK)
@@ -646,16 +681,18 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
         return fig
 
     # ── Group header row (y=0..1) ──
+    is_light_theme = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
+    group_header_colors = GROUP_HEADER_COLORS_LIGHT if is_light_theme else GROUP_HEADER_COLORS
     for gname, x0, x1 in group_spans:
         ax.add_patch(mpatches.Rectangle(
             (x0, 0), x1 - x0, 1.0,
-            facecolor=GROUP_HEADER_COLORS.get(gname, BG_MID),
+            facecolor=group_header_colors.get(gname, BG_MID),
             edgecolor=GRID_COL, lw=0.6,
         ))
         ax.text((x0 + x1) / 2, 0.5, gname.upper(),
                 ha="center", va="center",
                 color=TEXT_BRIGHT, fontsize=10.5, fontweight="bold",
-                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+                path_effects=[] if is_light_theme else [pe.withStroke(linewidth=2, foreground=BG_DARK)])
 
     # ── Column header row (y=1..2.2) ──
     for j, lbl in enumerate(flat_labels):
@@ -678,15 +715,15 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
         y = y0 + i * row_h
         is_starter = bool(r.get("is_first_xi", False))
 
-        base_color = BG_PANEL if i % 2 == 0 else "#0f1520"
+        base_color = BG_PANEL if i % 2 == 0 else ("#F8FAFC" if is_light_theme else "#0f1520")
         if not is_starter:
-            base_color = "#080a10"
+            base_color = "#F1F5F9" if is_light_theme else "#080a10"
         ax.add_patch(mpatches.Rectangle(
             (0, y), total_w, row_h, facecolor=base_color,
             edgecolor=GRID_COL, lw=0.3, alpha=0.95,
         ))
 
-        # side bar for starters
+        # شريط جانبي للأساسيين
         starter_col = team_color if is_starter else TEXT_FADED
         ax.add_patch(mpatches.Rectangle(
             (0, y), 0.10, row_h, facecolor=starter_col, lw=0,
@@ -701,7 +738,7 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
             fontweight = "normal"
 
             if key == "name":
-                # left-aligned name, truncated to column width
+                # اسم بمحاذاة يسار، يقص بحسب عرض العمود
                 max_chars = int(w * 7)
                 disp = _short_name(str(raw or "N/A"), max_chars)
                 ax.text(x0 + 0.20, y + row_h / 2, disp,
@@ -717,7 +754,8 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
                     ax.add_patch(mpatches.FancyBboxPatch(
                         (x0 + pad_x, y + 0.22), w - 2 * pad_x, row_h - 0.44,
                         boxstyle="round,pad=0.02,rounding_size=0.10",
-                        facecolor=GRID_COL, edgecolor=team_color, lw=0.7,
+                        facecolor="#E5E7EB" if is_light_theme else GRID_COL,
+                        edgecolor=team_color, lw=0.7,
                     ))
                 ax.text(x0 + w / 2, y + row_h / 2, text,
                         ha="center", va="center",
@@ -764,7 +802,7 @@ def draw_player_stats_table(df: pd.DataFrame, team_name: str,
 
 
 def _is_light(hex_color: str) -> bool:
-    """Decide whether the colour is light to pick a readable text colour."""
+    """يحدد لو اللون فاتح عشان يختار لون نص مناسب."""
     try:
         h = hex_color.lstrip("#")
         r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -779,23 +817,23 @@ def _is_light(hex_color: str) -> bool:
 # ═════════════════════════════════════════════════════════════════════════════
 def _draw_section_divider(pdf, num: str, title: str, subtitle: str,
                           accent: str = C_GOLD):
-    """Section divider page for each report section."""
+    """صفحة فاصلة لكل قسم في التقرير."""
     fig = _new_dark_fig(11.7, 8.27)
     fig.patch.set_facecolor(BG_DARK)
 
-    # vertical coloured bar on the left
+    # خط ملوّن طولي على الشمال
     bar_ax = fig.add_axes([0.06, 0.20, 0.008, 0.60])
     bar_ax.set_facecolor(accent)
     bar_ax.set_xticks([]); bar_ax.set_yticks([])
     for s in bar_ax.spines.values():
         s.set_visible(False)
 
-    # section number — very large, faint
+    # رقم القسم — كبير جدًا خافت
     fig.text(0.10, 0.55, num,
              color=accent, fontsize=140, fontweight="bold",
              alpha=0.18, family="serif")
 
-    # section title
+    # عنوان القسم
     fig.text(0.10, 0.62, f"SECTION {num}",
              color=accent, fontsize=12, fontweight="bold",
              family="sans-serif")
@@ -805,55 +843,40 @@ def _draw_section_divider(pdf, num: str, title: str, subtitle: str,
     fig.text(0.10, 0.49, subtitle,
              color=TEXT_DIM, fontsize=12.5, style="italic")
 
-    # separator line
+    # خط فاصل
     line_ax = fig.add_axes([0.10, 0.45, 0.40, 0.002])
     line_ax.set_facecolor(accent)
     line_ax.set_xticks([]); line_ax.set_yticks([])
     for s in line_ax.spines.values():
         s.set_visible(False)
 
-    # signature
+    # توقيع
     fig.text(0.10, 0.20, "M A T C H   A N A L Y S I S   R E P O R T",
              color=TEXT_FADED, fontsize=8, fontweight="bold")
 
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
 def _draw_closing_page(pdf, info):
-    """Final/closing page of the report."""
-    fig = _new_dark_fig(11.7, 8.27)
+    """Minimal closing page."""
+    fig = _new_dark_fig(8.27, 11.69)
     fig.patch.set_facecolor(BG_DARK)
 
-    home = info.get("home_name") or "Home"
-    away = info.get("away_name") or "Away"
-    score = info.get("score") or "? - ?"
+    fig.text(
+        0.5, 0.50,
+        "End of report by Mostafa Saad",
+        ha="center", va="center",
+        color=TEXT_DIM, fontsize=10,
+        family="serif",
+    )
 
-    fig.text(0.5, 0.65, "END OF REPORT",
-             ha="center", color=TEXT_BRIGHT, fontsize=28, fontweight="bold",
-             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
-    fig.text(0.5, 0.58, f"{home}  {score}  {away}",
-             ha="center", color=TEXT_DIM, fontsize=13)
-
-    line_ax = fig.add_axes([0.35, 0.52, 0.30, 0.002])
-    line_ax.set_facecolor(C_GOLD)
-    line_ax.set_xticks([]); line_ax.set_yticks([])
-    for s in line_ax.spines.values():
-        s.set_visible(False)
-
-    fig.text(0.5, 0.45,
-             "Generated by WhoScored Post-Match Analyzer",
-             ha="center", color=TEXT_DIM, fontsize=10)
-    fig.text(0.5, 0.42,
-             f"{datetime.now().strftime('%Y-%m-%d %H:%M')}",
-             ha="center", color=TEXT_FADED, fontsize=9)
-
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
 def _draw_match_summary_page(pdf, info, goals_df, ppda):
-    """Cover page in the dark theme."""
+    """صفحة كوفر بنفس الـ dark theme."""
     fig = _new_dark_fig(11.7, 8.27)
     home = info.get("home_name") or "Home"
     away = info.get("away_name") or "Away"
@@ -869,7 +892,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda):
              ha="center", color=TEXT_DIM, fontsize=11,
              style="italic")
 
-    # scoreline
+    # السكور
     fig.text(0.27, 0.74, home, ha="right", color=C_HOME,
              fontsize=22, fontweight="bold",
              path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
@@ -882,7 +905,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda):
     fig.text(0.5, 0.66, f"Venue: {venue}    •    Generated: {date}",
              ha="center", color=TEXT_DIM, fontsize=11)
 
-    # metric cards
+    # كروت أرقام
     h_ppda = ppda.get("home", {}).get("ppda")
     a_ppda = ppda.get("away", {}).get("ppda")
     n_goals = len(goals_df)
@@ -924,7 +947,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda):
              f"   ·   04 Shared Insights",
              ha="center", color=TEXT_FADED, fontsize=9, style="italic")
 
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -955,7 +978,7 @@ def _draw_goals_log_page(pdf, goals_df, info):
     if goals_df.empty:
         fig.text(0.5, 0.5, "No goals recorded.",
                  ha="center", color=TEXT_DIM, fontsize=14, style="italic")
-        pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
         plt.close(fig)
         return
 
@@ -998,7 +1021,7 @@ def _draw_goals_log_page(pdf, goals_df, info):
         ))
         cy = y - row_h * 0.5
 
-        # minute badge
+        # شارة الدقيقة
         ax.text(0.05, cy, f"{_safe_int(r['minute'])}'",
                 ha="center", va="center",
                 color="white", fontsize=10, fontweight="bold",
@@ -1036,14 +1059,14 @@ def _draw_goals_log_page(pdf, goals_df, info):
 
         y -= row_h
 
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
 def _draw_ppda_page(pdf, ppda, info, visuals_dir):
-    """PPDA page — do NOT save a PNG (the visual is produced as fig 40 in Dark.py)."""
+    """صفحة PPDA — لا تحفظ PNG (الفيجوال بيتولّد كـ fig 40 من Dark.py)."""
     fig = draw_ppda_gauge(ppda, info, save_path=None)
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -1301,15 +1324,172 @@ def _commentary_for_filename(fname: str, hn: str, an: str):
     )
 
 
+def _professional_tactical_commentary(fname: str, heading: str, body: str,
+                                      hn: str, an: str) -> str:
+    """Turn a chart description into a fuller human tactical read."""
+    f = (fname or "").lower()
+    if "_home_" in f:
+        team = hn
+        opponent = an
+    elif "_away_" in f:
+        team = an
+        opponent = hn
+    else:
+        team = "the stronger side"
+        opponent = "the opponent"
+
+    def _join(*parts: str) -> str:
+        return "\n\n".join(p.strip() for p in parts if p and p.strip())
+
+    opening = body
+    if "xg_flow" in f:
+        return _join(
+            opening,
+            "Tactically, this is the match rhythm page. A steady climb usually means sustained pressure: the team is repeatedly arriving in shooting positions, forcing the opponent to defend phases rather than isolated attacks. A flat line after a strong spell is just as important because it shows when control stopped turning into chances.",
+            f"The key coaching read is the timing of the separations. If {hn} or {an} created distance early, the game state may have allowed them to manage risk afterwards. If the curve changes late, it points to substitutions, fatigue, or a structural adjustment that finally opened access to goal."
+        )
+    if "shot_map" in f:
+        return _join(
+            opening,
+            f"For {team}, the quality of the shot locations matters more than the count. Central shots inside the box suggest the attack is breaking the defensive line or finding cut-backs. Shots from wide or long range usually mean {opponent} protected the middle and forced lower-value decisions.",
+            "The professional read is whether the team created repeatable chances. One large dot can come from a single transition; several good locations from similar zones suggest a deliberate route to goal. That is the difference between attacking noise and a real chance-creation pattern."
+        )
+    if "breakdown_goals" in f:
+        return _join(
+            opening,
+            "This page separates volume from efficiency. A team can shoot often without attacking well if most attempts are blocked or off target. By contrast, fewer shots with a high on-target share usually point to cleaner entries, better final actions, and calmer finishing decisions.",
+            "The goals and assists table gives the human layer of the story: who finished, who supplied the final pass, and whether the goal came from open play, a set piece, or a penalty. That makes it easier to distinguish a repeatable attacking mechanism from a one-off event."
+        )
+    if "pass_network" in f:
+        return _join(
+            opening,
+            f"For {team}, the network shows the build-up skeleton. A strong triangle around centre-back, pivot and full-back usually means controlled circulation. A heavy line into one wide player shows a clear outlet. If the striker or advanced midfielders are disconnected, possession may have looked stable without really threatening {opponent}.",
+            "Substitutes are useful here because they show how the structure changed after the starting shape broke. A late player appearing high and wide may indicate a chase phase; a substitute close to the midfield line may show an attempt to regain control."
+        )
+    if "xt_map" in f:
+        return _join(
+            opening,
+            f"xT is the best bridge between possession and danger. For {team}, the important question is not simply how many passes were completed, but whether those passes moved the ball into zones that changed {opponent}'s defensive problem.",
+            "Look for repeated arrows into the half-space, the box edge, or the far-side channel. Those actions normally force the back line to turn, narrow, or step out. When the highest-threat arrows come from deep or wide zones, it often reveals the team's main progression weapon."
+        )
+    if "shot_comparison" in f or "xg_tiles" in f or "xg_summary" in f:
+        return _join(
+            opening,
+            "This is the efficiency check on the attacking story. The side leading shots did not necessarily create the better game; the side leading xG usually created the clearer chances. xGoT then tells us whether the finishing improved or reduced those chances after contact.",
+            "A gap between xG and goals should be read carefully. It can indicate elite finishing, poor finishing, goalkeeping impact, or simply a small sample. The value of this page is that it tells you where to look next: shot map for locations, xG flow for timing, and goals table for the final actions."
+        )
+    if "danger" in f:
+        return _join(
+            opening,
+            f"This is the best page for reading where {team}'s attacks actually hurt {opponent}. Warm zones near the box or half-spaces suggest a clean attacking route. Warmth stuck near the touchline can still be useful, but it often means the next action had to be excellent to become a real chance.",
+            "The coaching point is repeatability. If shots, key passes and entries all come from the same lane, the team found a reliable pattern. If they are scattered, the attack may have depended more on individual actions than on a stable structure."
+        )
+    if "gk_saves" in f:
+        return _join(
+            opening,
+            "This page gives context to the scoreline. A goalkeeper with many saves from low-value shots may simply have done the routine work. A goalkeeper saving one or two high-xG chances has changed the game state.",
+            "The tactical read is also defensive: if most shots faced came from central close-range areas, the defensive block allowed access to premium zones. If the saves came from distance or angles, the outfield structure protected the most valuable space."
+        )
+    if "zone14" in f:
+        return _join(
+            opening,
+            f"Zone 14 and the half-spaces are where possession becomes creative pressure. When {team} receives or combines there, {opponent}'s centre-backs and midfield line are forced to make decisions: step out, hold shape, or pass runners on.",
+            "High volume in these lanes usually explains why a side looked dangerous even before the final shot. Low volume suggests the opponent closed the central door and pushed play toward safer wide areas."
+        )
+    if "match_stats" in f:
+        return _join(
+            opening,
+            "This is the report's control panel. The attacking rows explain output, the defensive rows explain resistance, and the PPDA view explains how aggressively each side tried to win the ball back.",
+            "Read the categories together rather than separately. High passes with low box threat can mean sterile possession. High defensive actions with low possession can mean a team spent too long reacting. The strongest performances usually connect territory, pressure and chance quality."
+        )
+    if "territorial" in f or "possession" in f or "ball_touches" in f or "dominating_zone" in f:
+        return _join(
+            opening,
+            "Territory is not the same as possession, but it tells us where the match was played. A team controlling advanced zones forced the opponent to defend closer to goal. A team with touches mostly in its own half may have had the ball without changing the opponent's shape.",
+            "The tactical value comes from connecting this page to chance creation. Territorial control is meaningful when it feeds entries, key passes and shots. If the territorial map looks dominant but the shot pages do not, the opponent probably defended the box well."
+        )
+    if "pass_thirds" in f:
+        return _join(
+            opening,
+            f"For {team}, this page shows whether possession travelled through the pitch or got stuck. Defensive-third volume is not a problem by itself; it becomes a problem when the middle and attacking-third numbers do not grow from it.",
+            "The best read is the balance between middle-third circulation and final-third penetration. A strong team normally has enough middle-third security to progress, then enough final-third quality to turn that progression into pressure."
+        )
+    if "xt_per_minute" in f:
+        return _join(
+            opening,
+            "This is the momentum page. Short spikes show individual threat moments; longer clusters show sustained tactical pressure. A team that repeatedly creates spikes after regains is probably dangerous in transition, while a team building smoother waves is likely progressing through possession.",
+            "Use the timing to understand coaching interventions. A change after half-time or substitutions can reveal whether the structure improved access to dangerous zones or whether the opponent lost control through fatigue."
+        )
+    if "progressive" in f:
+        return _join(
+            opening,
+            f"Progressive passes tell us who advanced the game for {team}. Vertical arrows through the middle usually break lines directly. Diagonal arrows from centre-back to winger or full-back can be just as valuable because they move the defensive block sideways before the next action.",
+            "When progression comes from multiple players, the team is harder to press. When it depends on one player, the opponent has a clear target for adjustment."
+        )
+    if "crosses" in f:
+        return _join(
+            opening,
+            f"Crosses show the final shape of {team}'s wide attacks. Byline crosses and cut-backs usually indicate penetration behind the full-back. Early crosses suggest the team reached wide areas but could not always enter the box with combinations.",
+            "The important detail is not just volume but delivery context. Crosses with runners in the box are a plan; crosses under pressure into a set defence are often a symptom of blocked central access."
+        )
+    if "defensive_hm" in f or "defensive_summary" in f:
+        return _join(
+            opening,
+            f"This is the defensive personality of the match. For {team}, actions high up the pitch point to pressing and counter-pressing; actions around the box point to protection, recovery defending and emergency defending.",
+            "Blocks and clearances should be read as pressure indicators. They can show commitment, but they can also show that the team spent long spells defending its own penalty area. Tackles and interceptions higher up usually suggest cleaner control."
+        )
+    if "avg_position" in f:
+        return _join(
+            opening,
+            f"Average positions give the structural picture of {team}'s match. A compact shape helps counter-press and combine. A stretched shape can create width, but it may also leave the midfield exposed if possession is lost.",
+            "Substitutes matter because they reveal the second game state. Late average positions can show whether the team protected a lead, chased the game, or changed the route of attack."
+        )
+    if "box_entries" in f:
+        return _join(
+            opening,
+            f"Box entries are one of the cleanest attacking indicators for {team}. They show whether the team actually breached {opponent}'s penalty-area shell, not just whether it had the ball around it.",
+            "The entry type matters. Carries often mean a player beat pressure; passes often mean the structure created a free receiver. A healthy attack usually has both."
+        )
+    if "high_turnovers" in f:
+        return _join(
+            opening,
+            f"High turnovers measure how much pressure {team} turned into immediate attacking opportunity. Winning the ball high compresses the distance to goal and often catches {opponent} before their defensive shape is rebuilt.",
+            "The best high-turnover sides do not just regain possession; they convert the regain into a shot, key pass or box entry quickly. If the regain count is high but chance quality is low, the counter-press worked but the next action lacked clarity."
+        )
+    if "pass_target" in f:
+        return _join(
+            opening,
+            f"Pass target zones show where {team} wanted the next receiver to be. This is different from pass origin: it tells us the intended destination of possession and therefore the spaces the team believed were available.",
+            "If targets collect between the lines, the team found pockets. If they collect wide and deep, the opponent probably blocked central access. The strongest attacking maps usually combine wide outlets with central receiving zones."
+        )
+    if "ppda" in f:
+        return _join(
+            opening,
+            "PPDA should be read as behaviour, not just a number. A low PPDA means the team allowed few passes before engaging; that usually reflects a higher line, stronger counter-press, or a deliberate plan to trap the opponent.",
+            "A higher PPDA is not automatically poor. It can reflect a controlled mid-block or game-state management. The key is whether the deeper approach still protected the box and limited high-quality shots."
+        )
+    if "player_stats" in f:
+        return _join(
+            opening,
+            "This page gives the individual layer underneath the team story. Minutes and touches explain involvement; passing and key passes explain influence on possession; defensive actions explain workload without the ball.",
+            "Use it to identify roles rather than just praise totals. A full-back with heavy touches may have been the outlet. A midfielder with fewer touches but high key passes may have been the connector. Substitutes show how the match plan changed late."
+        )
+    return _join(
+        opening,
+        "The tactical value of this visual is in how it connects with the pages around it. One chart rarely tells the whole match; the stronger read comes when the same theme appears in chance quality, territory, passing direction and defensive pressure.",
+        f"When those layers point in the same direction, the match story becomes reliable: which side controlled space, which side created the cleaner chances, and which team forced {opponent} to play in uncomfortable areas."
+    )
+
+
 def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
     """
-    Compose ONE PDF page that has the visual on top and a tactical
-    commentary panel directly below it (no separate page).
+    Compose one reference-style PDF page: portrait page, visual on top,
+    explanatory report text underneath, and no legacy commentary card.
     """
     import io as _io
-    # Render the original figure to an in-memory PNG.
+    import textwrap as _tw
     buf = _io.BytesIO()
-    fig.savefig(buf, format="png", dpi=170, bbox_inches="tight",
+    fig.savefig(buf, format="png", dpi=PDF_VISUAL_DPI, bbox_inches="tight",
                 facecolor=BG_DARK)
     buf.seek(0)
     try:
@@ -1325,47 +1505,78 @@ def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
     img_h, img_w = img.shape[:2]
     aspect = img_w / max(img_h, 1)
 
-    # Page size — keep landscape; reserve ~22% height for commentary.
-    page_h = 11.0
-    page_w = page_h * aspect * 0.78  # tweak so visual fills cleanly
+    page_w, page_h = 8.27, 11.69
     new_fig = plt.figure(figsize=(page_w, page_h), facecolor=BG_DARK)
     new_fig.patch.set_facecolor(BG_DARK)
 
-    # Visual axes — top 76%
-    ax_img = new_fig.add_axes([0.0, 0.24, 1.0, 0.76])
+    is_light_theme = str(BG_DARK).upper() in {"#FFFFFF", "WHITE"}
+    subtitle_color = TEXT_DIM
+    visual_bg = "#FFFFFF" if is_light_theme else BG_DARK
+
+    new_fig.text(
+        0.07, 0.945, "Tactical Commentary",
+        ha="left", va="center", color=TEXT_BRIGHT,
+        fontsize=18, fontweight="bold", family="serif",
+    )
+    line_ax = new_fig.add_axes((0.07, 0.922, 0.86, 0.002))
+    line_ax.set_facecolor(C_GOLD)
+    line_ax.set_xticks([]); line_ax.set_yticks([])
+    for s in line_ax.spines.values():
+        s.set_visible(False)
+
+    frame_x, frame_y, frame_w, frame_h = 0.07, 0.56, 0.86, 0.30
+    frame_aspect = frame_w / frame_h
+    if aspect >= frame_aspect:
+        draw_w = frame_w
+        draw_h = frame_w / aspect
+    else:
+        draw_h = frame_h
+        draw_w = frame_h * aspect
+    draw_x = frame_x + (frame_w - draw_w) / 2
+    draw_y = frame_y + (frame_h - draw_h) / 2
+
+    ax_img = new_fig.add_axes((draw_x, draw_y, draw_w, draw_h))
+    ax_img.set_facecolor(visual_bg)
     ax_img.imshow(img, aspect="auto")
     ax_img.set_xticks([]); ax_img.set_yticks([])
     for s in ax_img.spines.values():
         s.set_visible(False)
 
-    # Commentary axes — bottom band
-    ax_txt = new_fig.add_axes([0.04, 0.04, 0.92, 0.18])
-    ax_txt.set_facecolor(BG_PANEL)
+    ax_txt = new_fig.add_axes((0.07, 0.095, 0.86, 0.405))
+    ax_txt.set_facecolor(BG_DARK)
     ax_txt.set_xticks([]); ax_txt.set_yticks([])
     for s in ax_txt.spines.values():
-        s.set_edgecolor(GRID_COL); s.set_linewidth(0.6)
+        s.set_visible(False)
     ax_txt.set_xlim(0, 1); ax_txt.set_ylim(0, 1)
-    # Top accent stripe
-    ax_txt.add_patch(mpatches.Rectangle((0, 0.86), 1, 0.14,
-                                         facecolor=C_GOLD, alpha=0.22, lw=0,
-                                         transform=ax_txt.transAxes))
-    ax_txt.text(0.02, 0.93, "TACTICAL COMMENTARY", ha="left", va="center",
-                color=C_GOLD, fontsize=10, fontweight="bold",
-                transform=ax_txt.transAxes,
-                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
-    ax_txt.text(0.18, 0.93, heading, ha="left", va="center",
-                color=TEXT_BRIGHT, fontsize=10, fontweight="bold",
-                transform=ax_txt.transAxes,
-                path_effects=[pe.withStroke(linewidth=2, foreground=BG_DARK)])
+    ax_txt.text(
+        0.0, 0.98, heading,
+        ha="left", va="top", color=TEXT_BRIGHT,
+        fontsize=14, fontweight="bold", family="serif",
+        transform=ax_txt.transAxes,
+    )
+    wrapped = "\n\n".join(
+        _tw.fill(p.strip(), width=100)
+        for p in str(body).split("\n\n")
+        if p.strip()
+    )
+    ax_txt.text(
+        0.0, 0.83, wrapped,
+        ha="left", va="top", color=TEXT_MAIN,
+        fontsize=8.9, family="serif",
+        transform=ax_txt.transAxes, linespacing=1.20,
+    )
+    new_fig.text(
+        0.07, 0.055, "Match Analysis Report",
+        ha="left", va="center", color=subtitle_color,
+        fontsize=8.5, family="sans-serif",
+    )
+    new_fig.text(
+        0.93, 0.055, "Reading this visual",
+        ha="right", va="center", color=subtitle_color,
+        fontsize=8.5, family="sans-serif",
+    )
 
-    # Body — wrapped so it never overflows the panel
-    import textwrap as _tw
-    wrapped = _tw.fill(body, width=180)
-    ax_txt.text(0.02, 0.74, wrapped, ha="left", va="top",
-                color=TEXT_MAIN, fontsize=9.5,
-                transform=ax_txt.transAxes, linespacing=1.55)
-
-    pdf.savefig(new_fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(new_fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(new_fig)
     plt.close(fig)
 
@@ -1411,7 +1622,7 @@ def _draw_visual_commentary(pdf, heading: str, body: str):
     ax.text(0.04, 0.88, wrapped, ha="left", va="top",
             color=TEXT_MAIN, fontsize=11, transform=ax.transAxes,
             linespacing=1.55, wrap=True)
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -1723,8 +1934,44 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
          _count(away_id, lambda d: d.get("is_key_pass", False) == True)),  # noqa: E712
     ]
 
-    # ── Defensive stats (Blocks fixed: count BlockedShot events done BY team
-    #    = the times this team blocked an opponent's shot) ──
+    def _blocked_shots_by(shooter_id) -> int:
+        if events is None or events.empty or "team_id" not in events.columns:
+            return 0
+        sub = events[events["team_id"] == shooter_id]
+        if sub.empty:
+            return 0
+        hit = pd.Series(False, index=sub.index)
+        for col in ("type", "shot_whoscored_type", "shot_category"):
+            if col in sub.columns:
+                vals = sub[col].fillna("").astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
+                hit = hit | vals.isin({"blockedshot", "blocked"})
+        if "qualifier_names" in sub.columns:
+            hit = hit | sub["qualifier_names"].fillna("").astype(str).str.contains(r"\bBlocked\b", case=False, regex=True)
+        if "is_shot" in sub.columns:
+            hit = hit & ((sub["is_shot"] == True) | hit)
+        return int(hit.sum())
+
+    def _defensive_blocks_for(team_id) -> int:
+        opp_id = away_id if team_id == home_id else home_id
+        opp_blocks = _blocked_shots_by(opp_id)
+        own_blocks = _blocked_shots_by(team_id)
+        if not opp_blocks:
+            opp_side = "away" if team_id == home_id else "home"
+            mc = (info.get("matchcentre_stats", {}) or {}).get(opp_side, {}) or {}
+            try:
+                opp_blocks = int(mc.get("blocked") or 0)
+            except Exception:
+                opp_blocks = 0
+        if not own_blocks:
+            own_side = "home" if team_id == home_id else "away"
+            mc = (info.get("matchcentre_stats", {}) or {}).get(own_side, {}) or {}
+            try:
+                own_blocks = int(mc.get("blocked") or 0)
+            except Exception:
+                own_blocks = 0
+        return opp_blocks if opp_blocks else own_blocks
+
+    # ── Defensive stats: a blocked shot belongs to the defending team.
     defensive_rows = [
         ("Tackles",
          _count(home_id, lambda d: d["type"] == "Tackle"),
@@ -1733,8 +1980,8 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
          _count(home_id, lambda d: d["type"] == "Interception"),
          _count(away_id, lambda d: d["type"] == "Interception")),
         ("Blocks",
-         _count(home_id, lambda d: d["type"] == "BlockedShot"),
-         _count(away_id, lambda d: d["type"] == "BlockedShot")),
+         _defensive_blocks_for(home_id),
+         _defensive_blocks_for(away_id)),
         ("Clearances",
          _count(home_id, lambda d: d["type"] == "Clearance"),
          _count(away_id, lambda d: d["type"] == "Clearance")),
@@ -1784,10 +2031,8 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         n = len(rows_list)
         if n == 0:
             return
-        # Layout zones (axes-fraction, x-axis):
-        #   value_home at 0.06  | bars 0.10–0.42 (anchored right at 0.42,
-        #   grow left)         |  LABEL center 0.50  |  bars 0.58–0.90
-        #   (anchored left at 0.58, grow right) | value_away at 0.94
+        # Layout zones: fixed value columns, mirrored bars, and a clean
+        # centre label chip so long labels never sit on top of the bars.
         top, bot = 0.83, 0.05
         spacing = (top - bot) / n
         for i, (label, hv, av) in enumerate(rows_list):
@@ -1801,18 +2046,18 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
                 hh = aa = None
 
             bar_h = spacing * 0.40
-            # home bar (anchored at 0.42, grows leftwards)
+            # home bar (anchored at 0.38, grows leftwards)
             if h_ratio:
-                bw = 0.32 * h_ratio
+                bw = 0.27 * h_ratio
                 ax.add_patch(mpatches.Rectangle(
-                    (0.42 - bw, cy - bar_h / 2), bw, bar_h,
+                    (0.38 - bw, cy - bar_h / 2), bw, bar_h,
                     facecolor=C_HOME, alpha=0.80, lw=0,
                     transform=ax.transAxes))
-            # away bar (anchored at 0.58, grows rightwards)
+            # away bar (anchored at 0.62, grows rightwards)
             if a_ratio:
-                bw = 0.32 * a_ratio
+                bw = 0.27 * a_ratio
                 ax.add_patch(mpatches.Rectangle(
-                    (0.58, cy - bar_h / 2), bw, bar_h,
+                    (0.62, cy - bar_h / 2), bw, bar_h,
                     facecolor=C_AWAY, alpha=0.80, lw=0,
                     transform=ax.transAxes))
 
@@ -1825,19 +2070,21 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             away_col = C_GOLD if a_better else TEXT_BRIGHT
             ax.text(0.06, cy, _na(hv), ha="right", va="center",
                     color=home_col,
-                    fontsize=12.5, fontweight="bold",
+                    fontsize=11.5, fontweight="bold",
                     transform=ax.transAxes,
                     path_effects=[pe.withStroke(linewidth=2.4, foreground=BG_DARK)])
             ax.text(0.94, cy, _na(av), ha="left", va="center",
                     color=away_col,
-                    fontsize=12.5, fontweight="bold",
+                    fontsize=11.5, fontweight="bold",
                     transform=ax.transAxes,
                     path_effects=[pe.withStroke(linewidth=2.4, foreground=BG_DARK)])
-            # Stat label — centered, on a clean dark gap between the bars
+            # Stat label — centered on a chip, never over the bars.
             ax.text(0.50, cy, label, ha="center", va="center",
-                    color=TEXT_BRIGHT, fontsize=9.5, fontweight="bold",
+                    color=TEXT_BRIGHT, fontsize=8.7, fontweight="bold",
                     transform=ax.transAxes,
-                    path_effects=[pe.withStroke(linewidth=2.6, foreground=BG_DARK)])
+                    bbox=dict(boxstyle="round,pad=0.18,rounding_size=0.02",
+                              facecolor=BG_MID, edgecolor="none", alpha=0.96),
+                    path_effects=[pe.withStroke(linewidth=1.4, foreground=BG_DARK)])
 
     # Top-left: attacking/passing  ·  Bottom-left: defensive
     _draw_stats_panel((0.04, 0.55, 0.42, 0.30),
@@ -1982,26 +2229,26 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
                     wrap=True, linespacing=1.55)
         cy -= 0.27
 
-    pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
     plt.close(fig)
 
 
 def _draw_player_stats_pages(pdf, player_stats, info, visuals_dir):
-    """Player-stats pages — do NOT save PNGs (the visuals are produced as
-    figs 41/42 by Dark.py and saved alongside the rest of the figs in SAVE_DIR)."""
+    """صفحات إحصائيات اللاعبين — لا تحفظ PNG (الفيجوالز بتتولّد كـ
+    figs 41/42 من Dark.py وبتترتّب جنب باقي الفيجوالز في SAVE_DIR)."""
     for side, color in (("home", C_HOME), ("away", C_AWAY)):
         df = player_stats.get(side, pd.DataFrame())
         team_name = info.get(f"{side}_name") or side.title()
         fig = draw_player_stats_table(df, team_name, team_color=color,
                                       save_path=None)
-        pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
         plt.close(fig)
 
 
 def _merge_pdfs(output_path: str, pdf_paths: list[str]) -> bool:
     """
-    Merge several PDFs into one. Uses pypdf if available,
-    or PyPDF2 as a fallback. If neither is available, returns False.
+    يدمج عدة PDFs في ملف واحد. بيستخدم pypdf لو متاح،
+    أو PyPDF2 كـ fallback. لو الاتنين مش متاحين بيرجع False.
     """
     pdf_paths = [p for p in pdf_paths if p and os.path.exists(p)]
     if not pdf_paths:
@@ -2036,28 +2283,29 @@ def run_analysis(match_data: dict,
                  extra_figs_filenames: list | None = None,
                  merge_with_pdfs: list[str] | None = None,
                  final_pdf_name: str | None = None) -> dict:
+    configure_theme()
     """
-    Unified entry point. Produces a single dark-theme PDF:
+    نقطة الدخول الموحدة. بتطلع PDF واحد منظم بالـ dark theme:
         1. Match summary
         2. Goals log
         3. PPDA gauge
         4. Team stats comparison
         5. Player stats — Home
         6. Player stats — Away
-        7. Embedded extra_figs (the 39 original visuals  )
-        8. (optional) merge with the original PDFs in merge_with_pdfs
+        7. Embedded extra_figs (الـ 39 visual الأصلية لو اتبعتت)
+        8. (اختياري) دمج مع PDFs الأصلية في merge_with_pdfs
 
     Args:
         match_data: raw matchCentreData dict.
-        parse_all_fn: the project's original parse_all().
-        extra_figs: the original 39 visuals as matplotlib Figures — embedded
-                    inside the same PDF after the new pages.
-        merge_with_pdfs: paths to external PDFs (e.g. the original tactical PDF)
-                         merged at the end into the final PDF.
-        final_pdf_name: name of the final PDF (when merging). Default:
+        parse_all_fn: parse_all() الأصلية من المشروع.
+        extra_figs: الفيجوالز الأصلية (39) كـ matplotlib Figures — هتتدمج
+                    داخل نفس الـ PDF بعد الصفحات الجديدة.
+        merge_with_pdfs: مسارات لـ PDFs خارجية (مثلاً tactical PDF الأصلي)
+                         تتدمج في النهاية في الـ final PDF.
+        final_pdf_name: اسم الـ PDF النهائي (لو فيه دمج). افتراضي:
                         full_match_report_<ts>.pdf
 
-    Each visual is also saved as a standalone PNG in output/visuals/.
+    وكل visual بيتحفظ كـ PNG منفصل في output/visuals/.
     """
     if parse_all_fn is None:
         raise ValueError(
@@ -2113,11 +2361,12 @@ def run_analysis(match_data: dict,
             except Exception:
                 pass
         heading, body = _commentary_for_filename(fname or "", hn, an)
+        body = _professional_tactical_commentary(fname or "", heading, body, hn, an)
         try:
             _pdf_page_with_commentary(pdf, fig, heading, body)
         except Exception:
             try:
-                pdf.savefig(fig, facecolor=BG_DARK, bbox_inches="tight")
+                pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
             except Exception:
                 pass
 
@@ -2139,9 +2388,19 @@ def run_analysis(match_data: dict,
         else:
             _draw_player_stats_pages(pdf, player_stats, info, VISUALS_DIR)
 
-        # ── Section 2: HOME-TEAM ANALYSIS ──────────────────────────
+        # ── Section 2: SHARED INSIGHTS ─────────────────────────────
         _draw_section_divider(
-            pdf, "02", f"{hn.upper()} ANALYSIS",
+            pdf, "02", "SHARED INSIGHTS",
+            "Head-to-head visuals showing both sides together — chance "
+            "quality, territory, pressing and ball progression",
+            C_PURPLE,
+        )
+        for fig, fname in grouped["shared"]:
+            _emit_visual(fig, fname)
+
+        # ── Section 3: HOME-TEAM ANALYSIS ──────────────────────────
+        _draw_section_divider(
+            pdf, "03", f"{hn.upper()} ANALYSIS",
             f"How {hn} attacked, progressed the ball, and defended — "
             f"every {hn.lower()}-specific visual with tactical commentary",
             C_HOME,
@@ -2149,26 +2408,14 @@ def run_analysis(match_data: dict,
         for fig, fname in grouped["home"]:
             _emit_visual(fig, fname)
 
-        # ── Section 3: AWAY-TEAM ANALYSIS ──────────────────────────
+        # ── Section 4: AWAY-TEAM ANALYSIS ──────────────────────────
         _draw_section_divider(
-            pdf, "03", f"{an.upper()} ANALYSIS",
+            pdf, "04", f"{an.upper()} ANALYSIS",
             f"How {an} attacked, progressed the ball, and defended — "
             f"every {an.lower()}-specific visual with tactical commentary",
             C_AWAY,
         )
         for fig, fname in grouped["away"]:
-            _emit_visual(fig, fname)
-
-        # ── Section 4: SHARED INSIGHTS ─────────────────────────────
-        _draw_section_divider(
-            pdf, "04", "SHARED INSIGHTS",
-            "Head-to-head visuals showing both sides together — chance "
-            "quality, territory, pressing and ball progression",
-            C_PURPLE,
-        )
-        # Shared figs already include match_stats (fig 18) and PPDA (fig 40)
-        # so we just iterate them in their natural order.
-        for fig, fname in grouped["shared"]:
             _emit_visual(fig, fname)
 
         # ── Closing page ───────────────────────────────────────────

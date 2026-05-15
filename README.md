@@ -1,255 +1,302 @@
-# ⚽ WhoScored Post-Match Analyzer — Internal xG Engine
+# Football Match Analysis
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+"/>
-  <img src="https://img.shields.io/badge/xG_Model-V7_Internal-orange.svg" alt="xG Model V7"/>
-  <img src="https://img.shields.io/badge/Data_Source-WhoScored/Opta-green.svg" alt="Data Source"/>
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"/>
-</p>
+A Python post-match football analysis toolkit for WhoScored/Opta match data. The project produces high-resolution tactical visuals, light and dark report versions, player tables, defensive summaries, xG/xT analysis, pass networks, and a full tactical PDF report with written analysis for every visual.
 
-A comprehensive post-match football analytics tool that scrapes match data from **WhoScored**, computes **Expected Goals (xG)** using an internal logistic regression model, and produces **high-resolution dark-mode visualizations** and **PDF tactical reports** covering every aspect of the game.
-
-> **Created by Mostafa Saad**
+Created by Mostafa Saad.
 
 ---
 
-## 🌟 Features
+## What This Project Does
 
-### Data Acquisition
-- **Triple fallback scraping**: Automatically tries `cloudscraper` → `requests + rotating headers` → `undetected-chromedriver + Selenium` to bypass WhoScored's anti-bot protections.
-- **matchCentreData extraction**: Parses the embedded JSON from WhoScored's match centre using robust brace-counting for complete extraction.
-- **Official stat integration**: Extracts official Opta/WhoScored team statistics from DOM or HTTP when available.
+The tool reads a WhoScored match page, extracts the embedded match event data, calculates internal metrics such as xG and xT, then exports a complete analysis package:
 
-### Internal xG Engine (V7)
-- **Shot-level xG model**: Logistic regression based on shot distance, angle, body part, zone, and contextual qualifiers.
-- **Context-aware bonuses**: Big Chance, layoff/cutback, through-ball, cross, rebound, direct free kick, and set-piece adjustments.
-- **Ensemble blending**: Three model variants (Opta-like, SPADL-like, academic) with weighted averaging.
-- **Team-stat calibration**: Optionally calibrates team xG totals using match statistics (shots on target, possession, etc.).
-- **Bounded rescaling**: Ensures individual shot xG values are capped and team totals remain realistic.
+- Dark-theme visual report
+- Light-theme visual report
+- High-resolution PNG visuals
+- CSV event/player/xG outputs
+- Full `match_report_<timestamp>.pdf`
+- Detailed tactical commentary for every visual inside the PDF
 
-### Visualizations (11+ Figures)
-| # | Visualization | Description |
-|---|--------------|-------------|
-| 1 | **xG Flow** | Timeline of cumulative xG by minute with goal markers |
-| 2 | **Shot Map** | Pitch view of all shots with xG values and outcomes |
-| 3 | **Goals Breakdown** | Detailed view of all goals with xG context |
-| 4 | **Pass Map** | All passes on a pitch view, color-coded by zone |
-| 5 | **Pass Network** | Player passing network with node positioning |
-| 6 | **xT Map** | Expected Threat visualization for progressive actions |
-| 7 | **Match Report** | Full multi-panel match analysis dashboard |
-| 8 | **Grouped Boards** | Category-based visual boards for social sharing |
-| 9 | **Tactical PDF** | Multi-page PDF with tactical commentary and visuals |
-| 10+ | **Mini Panels** | Individual stat panels (GK saves, crosses, zones, etc.) |
+The current version includes both:
 
-### Team Color System
-- **100+ teams** across Top-5 European leagues with official kit colors.
-- **Kit-based palette system**: Home, accent, and alternate (away) colors per team.
-- **Automatic contrast selection**: `choose_matchup_colors()` ensures readable color pairs for any matchup.
-- **Dark-mode optimization**: Low-luminance colors are automatically lifted for visibility on dark backgrounds.
+- `Match_Analysis_Dark.py`
+- `Match_Analysis_Light.py`
 
-### PDF Tactical Report
-- **Cover page** with match info, team colors, and scoreline.
-- **Executive summary** with key metrics and tactical commentary.
-- **Visual pages** with AI-generated tactical notes for each chart.
-- **Match statistics** comparison table.
+Both scripts use the same core analysis logic, with theme-specific styling.
 
 ---
 
-## 🚀 Quick Start
+## Main Features
 
-### Prerequisites
-- Python 3.10 or higher
-- Google Chrome (for Selenium fallback)
-- ChromeDriver (auto-downloaded by `undetected-chromedriver`)
+### Match Data Pipeline
 
-### Installation
+- Scrapes WhoScored match pages.
+- Extracts `matchCentreData`.
+- Parses events, players, teams, formations, substitutions, shots, passes, defensive actions and match metadata.
+- Uses fallback scraping approaches for difficult pages.
+
+### Internal xG Engine
+
+- Shot-level xG model using distance, angle, body part, shot type and contextual qualifiers.
+- Support for penalties, set pieces, big chances, cut-backs, rebounds, crosses and through balls.
+- Team-level calibration from available match statistics.
+- xG flow, xG summary, xGoT-style finishing context and shot breakdown visuals.
+
+### Tactical Visuals
+
+The report now produces a large visual package, including:
+
+- xG Flow
+- Shot Maps
+- Shot Breakdown and Goals
+- Pass Networks
+- xT Maps
+- Shot Comparison
+- Danger Creation
+- Goalkeeper Saves
+- xG/xGoT Summary
+- Zone 14 and Half-Space Maps
+- Match Statistics Comparison
+- Territorial Control
+- Ball Touches
+- Pass Map by Third
+- xT per Minute
+- Progressive Passes
+- Cross Maps
+- Defensive Heatmaps
+- Defensive Summary
+- Average Positions
+- Dominating Zones
+- Box Entries
+- High Turnovers
+- Pass Target Zones
+- Player Ratings and player stat tables
+- Grouped summary boards
+
+---
+
+## Recent Updates
+
+### Light and Dark Versions
+
+- Added consistent support for both light and dark visual identities.
+- The light version now uses a clean white PDF/report style.
+- Dark visuals keep the original dark tactical look.
+- Text contrast has been improved across light visuals, especially on tables, maps, arrows and donut charts.
+
+### Dynamic Team Kit Colours
+
+- Team colours are now dynamic and based on the selected kit type.
+- Configurable kit options:
+
+```python
+HOME_KIT_TYPE = "home"
+AWAY_KIT_TYPE = "away"
+CUSTOM_KIT_COLORS = {}
+```
+
+- The same team colours are applied consistently across visuals:
+  - xG charts
+  - xT maps
+  - pass maps
+  - pass networks
+  - defensive visuals
+  - player tables
+  - PDF pages
+
+### Substitutes in Visuals
+
+- Substituted players are now included in pass-network and average-position visuals where data exists.
+- Player tables distinguish starters, substitutes and unused players more clearly.
+
+### Better Defensive Metrics
+
+- Blocks are now calculated properly instead of always showing zero.
+- Defensive summary and match statistics now include:
+  - Tackles
+  - Interceptions
+  - Blocks
+  - Clearances
+  - Recoveries
+  - Fouls
+
+### Shot Breakdown Improvements
+
+- Goals table now includes assist names where available.
+- If the direct assist field is missing, the code tries to infer the assister from the previous successful same-team pass/key pass before the goal.
+- The light version no longer uses dark rows in the goals table.
+
+### PDF Report Redesign
+
+The unified PDF report is generated through `match_extensions.py` as:
+
+```text
+output/match_report_<timestamp>.pdf
+```
+
+The PDF now includes:
+
+- A cleaner portrait page layout.
+- The visual placed at the top of each analysis page.
+- Detailed tactical commentary underneath each visual.
+- Human-style football analysis rather than short generic notes.
+- Higher-quality embedded visuals inside the PDF.
+- Player tables first.
+- Shared analysis section immediately after player tables.
+- Then home-team analysis.
+- Then away-team analysis.
+- A minimal final page:
+
+```text
+End of report by Mostafa Saad
+```
+
+### PDF Quality
+
+PDF visual quality has been increased:
+
+```python
+PDF_VISUAL_DPI = 320
+PDF_PAGE_DPI = 240
+```
+
+This improves clarity for:
+
+- Pitch maps
+- Arrows
+- Small labels
+- Player tables
+- xT grids
+- Pass networks
+
+---
+
+## Project Files
+
+| File | Purpose |
+|---|---|
+| `Match_Analysis_Dark.py` | Main dark-theme analysis script |
+| `Match_Analysis_Light.py` | Main light-theme analysis script |
+| `match_extensions.py` | Unified PDF report, PPDA, player tables, team stats and extended report pages |
+| `viz_v2.py` | Shared visual helpers |
+| `viz_v2_charts.py` | Main V2 tactical visual functions |
+| `viz_design_system.py` | Shared design system helpers |
+| `requirements.txt` | Python dependencies |
+
+---
+
+## Installation
+
+Use Python 3.10 or newer.
 
 ```bash
-# Clone the repository
 git clone https://github.com/mostafasaad91/Football-Match-Analysis.git
 cd Football-Match-Analysis
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Usage
+Google Chrome is recommended for Selenium/undetected-chromedriver fallback scraping.
 
-```bash
-# Run with default match URL (edit MATCH_URL in SETTINGS section)
-python Match_Analysis.py
-```
+---
 
-Or customize the match URL directly in the `SETTINGS` section at the top of the file:
+## Usage
+
+Edit the match URL in the settings section of the script you want to run:
 
 ```python
 MATCH_URL = "https://www.whoscored.com/matches/XXXXXXX/live/..."
 ```
 
-All output is saved to the `output/` directory:
-- High-resolution PNG images (420 DPI)
-- Match events CSV
-- Players CSV
-- xG summary CSV
-- Full tactical PDF report
+Run the dark version:
 
----
-
-## ⚙️ Configuration
-
-All settings are at the top of the script in the `SETTINGS` section:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `MATCH_URL` | *(match URL)* | WhoScored match page URL |
-| `SAVE_DIR` | `"output"` | Output directory |
-| `CHROMEDRIVER_PATH` | `""` | Empty = auto-download |
-| `BROWSER_HEADLESS` | `True` | Run Chrome in headless mode |
-| `BROWSER_USE_REAL_PROFILE` | `False` | Use real Chrome profile |
-| `SHOW_WINDOWS` | `False` | Open interactive matplotlib windows |
-| `OUTPUT_IMAGE_DPI` | `420` | Image resolution |
-| `PDF_EXPORT_DPI` | `400` | PDF resolution |
-| `XG_SINGLE_SHOT_CAP` | `0.78` | Maximum xG for a single shot |
-| `XG_PENALTY_VALUE` | `0.76` | xG value for penalties |
-| `STRICT_OFFICIAL_PAGE_XG` | `False` | Fail if official xG unavailable |
-
----
-
-## 🏗️ Architecture
-
-```
-Match_Analysis.py
-├── SETTINGS & CONSTANTS
-│   ├── Match URL & Browser config
-│   ├── xG model parameters
-│   └── Output settings
-├── TEAM COLORS & PALETTES
-│   ├── TEAM_COLORS (100+ teams)
-│   ├── TOP5_2025_26_TEAM_PALETTES
-│   ├── TEAM_ALIASES
-│   └── choose_matchup_colors()
-├── SCRAPING LAYER
-│   ├── _try_cloudscraper()
-│   ├── _try_requests()
-│   ├── _try_chrome()
-│   └── scrape_match()
-├── DATA PARSING
-│   ├── _extract_match_data()
-│   ├── parse_all()
-│   └── Official stats extraction
-├── xG ENGINE (V7)
-│   ├── Shot geometry features
-│   ├── Context features & bonuses
-│   ├── Logistic regression model
-│   ├── Ensemble blending
-│   └── Bounded rescaling
-├── VISUALIZATIONS
-│   ├── draw_xg_flow()
-│   ├── draw_shot_map_full()
-│   ├── draw_pass_map_full()
-│   ├── draw_pass_network_full()
-│   ├── draw_xt_map_full()
-│   ├── draw_match_report()
-│   └── 40+ panel functions
-├── PDF REPORT
-│   ├── build_tactical_pdf()
-│   ├── Tactical commentary generation
-│   └── Multi-page layout
-└── main()
-    ├── Scrape → Parse → xG → Visualize → PDF
-    └── Full pipeline orchestration
+```bash
+python Match_Analysis_Dark.py
 ```
 
----
+Run the light version:
 
-## 🧮 xG Model Details
-
-The internal xG engine uses a **logistic regression model** with the following feature pipeline:
-
-1. **Shot Geometry**: Distance to goal center, angle to goal posts, zone classification (box, central box, six-yard box).
-2. **Context Qualifiers**: Big chance flag, body part (foot/head), assist type (through ball, cross, cutback, layoff), set piece type.
-3. **Logistic Model**: Three variants with different coefficient sets (Opta-like, SPADL-like, academic).
-4. **Context Bonuses**: Additional logit adjustments for specific event contexts.
-5. **Value Capping**: Individual shot xG capped at `XG_SINGLE_SHOT_CAP` (0.78).
-6. **Ensemble**: Weighted average of three model outputs (0.48 / 0.26 / 0.26).
-7. **Rescaling**: Bounded rescaling to team-level targets derived from match statistics.
-
----
-
-## 🎨 Supported Leagues
-
-The team color system covers **100+ clubs** from:
-
-| League | Country |
-|--------|---------|
-| Premier League | 🏴󠁧󠁢󠁥󠁮󠁧󠁿 England |
-| La Liga EA Sports | 🇪🇸 Spain |
-| Serie A | 🇮🇹 Italy |
-| Bundesliga | 🇩🇪 Germany |
-| Ligue 1 | 🇫🇷 France |
-
-Each team has **3 color entries**: home kit dominant, accent/stripe, and alternate (away) color for contrast on charts.
-
----
-
-## 📁 Output Structure
-
+```bash
+python Match_Analysis_Light.py
 ```
+
+Outputs are saved in:
+
+```text
 output/
-├── events_20260430_143052.csv          # All match events
-├── players_20260430_143052.csv         # Player statistics
-├── xg_20260430_143052.csv             # xG summary
-├── xg_flow_20260430_143052.png        # xG timeline
-├── shot_map_20260430_143052.png       # Shot map
-├── goals_breakdown_20260430_143052.png # Goals analysis
-├── pass_map_20260430_143052.png       # Pass map
-├── pass_network_20260430_143052.png   # Pass network
-├── xt_map_20260430_143052.png         # xT map
-├── match_report_20260430_143052.png   # Full report
-├── board_*.png                        # Category boards
-└── tactical_report_20260430_143052.pdf # PDF report
 ```
 
 ---
 
-## 🛡️ Anti-Blocking Strategy
+## Output Structure
 
-WhoScored employs aggressive anti-bot protections. This tool uses a **triple fallback** approach:
+Typical output includes:
 
-1. **cloudscraper** — Fastest, no browser needed. Handles basic Cloudflare challenges.
-2. **requests + rotating headers** — Tries different User-Agent strings and retry strategies.
-3. **undetected-chromedriver + Selenium Stealth** — Full browser automation with real Chrome profile support for the most stubborn protections.
+```text
+output/
+├── events_<timestamp>.csv
+├── players_<timestamp>.csv
+├── xg_<timestamp>.csv
+├── match_report_<timestamp>.pdf
+├── 1_xg_flow_<timestamp>.png
+├── 2_shot_map_home_<timestamp>.png
+├── 3_shot_map_away_<timestamp>.png
+├── ...
+└── visuals/
+```
 
-> **Tip**: If all three fail, try opening the match page manually in Chrome first, then re-run the script with `BROWSER_USE_REAL_PROFILE = True`.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Generated PNG files are ignored by Git through `.gitignore`.
 
 ---
 
-## 📝 License
+## Configuration
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+Important settings are available near the top of the main scripts.
+
+| Setting | Description |
+|---|---|
+| `MATCH_URL` | WhoScored match page URL |
+| `SAVE_DIR` | Output directory |
+| `OUTPUT_IMAGE_DPI` | PNG export quality |
+| `PDF_EXPORT_DPI` | Tactical PDF export quality for the main scripts |
+| `HOME_KIT_TYPE` | Home team kit colour choice |
+| `AWAY_KIT_TYPE` | Away team kit colour choice |
+| `CUSTOM_KIT_COLORS` | Optional manual team colour override |
+| `BROWSER_HEADLESS` | Run browser in headless mode |
+| `BROWSER_USE_REAL_PROFILE` | Use real Chrome profile if scraping is blocked |
+
+Example manual colour override:
+
+```python
+CUSTOM_KIT_COLORS = {
+    "home": "#C8102E",
+    "away": "#034694",
+}
+```
 
 ---
 
-## ⚠️ Disclaimer
+## GitHub Notes
 
-This tool is for **educational and analytical purposes only**. It accesses publicly available match data from WhoScored. Please respect WhoScored's Terms of Service and rate limits. The author is not responsible for any misuse of this tool.
+The repository is prepared so generated files are not committed:
+
+- `output/`
+- `*.png`
+- `*.pdf`
+- `*.csv`
+- `__pycache__/`
+- `.claude/`
+- temporary/cache files
+
+Only source code, documentation and dependency files should be committed.
 
 ---
 
-## 📧 Contact
+## Disclaimer
 
-**Mostafa Saad** — [GitHub](https://github.com/mostafasaad91)
+This project is for football analysis, research and educational use. It works with publicly available match data from WhoScored/Opta pages. Please respect the data provider's terms of service and rate limits.
 
-If you find this tool useful, please consider giving it a ⭐!
+---
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.

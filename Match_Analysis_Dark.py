@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false, reportRedeclaration=false, reportReturnType=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportCallIssue=false, reportPrivateImportUsage=false, reportOptionalMemberAccess=false, reportPossiblyUnboundVariable=false
 """
 WhoScored Post-Match Analyzer  ·  v7 internal xG engine  ·  2026-04-30
 =======================================================
-✅     Blocking  WhoScored
-   ├─  1: cloudscraper  ( browser — )
-   ├─  2: requests + rotating headers
-   └─  3: undetected_chromedriver + Real Chrome Profile + Stealth
+✅ حل جذري لمشكلة الـ Blocking من WhoScored
+   ├─ المحاولة 1: cloudscraper  (بدون browser — أسرع)
+   ├─ المحاولة 2: requests + rotating headers
+   └─ المحاولة 3: undetected_chromedriver + Real Chrome Profile + Stealth
 
-✅ Dark mode      11 figures
-✅ OwnGoal  team
+✅ Dark mode أسود قاتم على كل الـ 11 figures
+✅ OwnGoal بلون الفريق المستفيد
 ✅ xT Map + Full Match Report
 
-  :
+تثبيت المكتبات المطلوبة:
   pip install cloudscraper undetected-chromedriver selenium scipy
               beautifulsoup4 numpy pandas matplotlib rich
 """
@@ -41,8 +42,10 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from matplotlib.backends.backend_pdf import PdfPages
+os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 from match_extensions import run_analysis as _run_extended_analysis
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
+os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 try:
     from viz_v2_charts import (
         make_xg_flow_v2, make_shot_map_v2, make_shot_breakdown_v2,
@@ -57,38 +60,53 @@ console = Console()
 
 
 # ══════════════════════════════════════════════════════
-# SETTINGS ←
+#  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
 MATCH_URL = "https://www.whoscored.com/matches/1903430/live/england-premier-league-2025-2026-liverpool-chelsea"
 SAVE_DIR = "output"
-CHROMEDRIVER_PATH = ""  # = undetected_chromedriver
-                         # ( chromedriver Chrome )
 
-# Chrome ( fallback)
-# PowerShell :
+# Kit colour mode used by every visual and PDF page.
+# Options:
+#   "auto"   -> current smart choice with clash/readability protection
+#   "home"   -> first colour in the team's kit palette
+#   "accent" -> second colour/accent in the team's kit palette
+#   "away" / "third" / "alternate" -> third colour in the team's kit palette
+# You can also force exact match-day kit colours with CUSTOM_KIT_COLORS below.
+HOME_KIT_TYPE = "home"
+AWAY_KIT_TYPE = "away"
+CUSTOM_KIT_COLORS = {
+    # "home": "#C8102E",
+    # "away": "#034694",
+}
+
+CHROMEDRIVER_PATH = ""  # فارغ = اترك undetected_chromedriver ينزّل نسخة متوافقة تلقائيًا
+                         # (عدّله فقط لو عندك chromedriver مطابق لنسخة Chrome الحالية)
+
+# مسار بروفايل Chrome الحقيقي بتاعك (للـ fallback)
+# شغّل الأمر ده في PowerShell عشان تلاقيه:
 #   (Get-Item "$env:LOCALAPPDATA\Google\Chrome\User Data").FullName
 CHROME_PROFILE_DIR = os.path.join(
     os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "User Data"
 )
 if not CHROME_PROFILE_DIR or not os.path.isdir(CHROME_PROFILE_DIR):
     CHROME_PROFILE_DIR = r"C:\Users\Mostafa.saad\AppData\Local\Google\Chrome\User Data"
-CHROME_PROFILE_NAME = "Default"  # "Profile 1"
+CHROME_PROFILE_NAME = "Default"  # أو "Profile 1" إلخ
 
-# : Selenium fallback
-# DevToolsActivePort Chrome .
+# مهم: لا تستخدم البروفايل الحقيقي افتراضياً في Selenium fallback
+# لأنه غالباً سبب خطأ DevToolsActivePort عند كون Chrome مفتوحاً أو البروفايل مقفولاً.
 BROWSER_USE_REAL_PROFILE = False
 BROWSER_HEADLESS = True
-BROWSER_DOM_FALLBACK_ENABLED = True   # ← : Chrome Opta DOM
+BROWSER_DOM_FALLBACK_ENABLED = True   # ← مُفعَّل: يحاول Chrome سحب أرقام Opta الحقيقية من DOM
 
-# — WhoScored
+# آخر صفحة تم التقاطها — نستخدمها لاستخراج الإحصاءات الرسمية من WhoScored
 LAST_PAGE_HTML = ""
 LAST_PAGE_TEXT = ""
 
-# Deprecated manual override — False
+# Deprecated manual override — اتركه False للاستخدام العام على كل الماتشات
 OFFICIAL_REPORT_OVERRIDE = {"enabled": False}
 
-# True: xG . .
-# False = graceful degradation: xG Opta.
+# لو True: لا تسمح بإخراج تقرير xG غير رسمي. لو فشل الاستخراج الرسمي، أوقف التشغيل.
+# False = graceful degradation: استخدم نموذج xG المحلي المُعايَر إذا فشل جلب Opta.
 STRICT_OFFICIAL_PAGE_XG = False
 
 # xG behaviour — V7 INTERNAL ENGINE
@@ -138,10 +156,10 @@ C_GREEN = "#22c55e"
 C_GOLD = "#f59e0b"
 
 # ══════════════════════════════════════════════════════
-# TEAM COLORS —
+#  TEAM COLORS — ألوان قمصان الفرق الرسمية
 # ══════════════════════════════════════════════════════
 TEAM_COLORS = {
-    
+    # إنجلترا
     "Arsenal":          "#EF0107",
     "Manchester City":  "#6CABDD",
     "Manchester United":"#DA291C",
@@ -162,22 +180,22 @@ TEAM_COLORS = {
     "Leicester":        "#003090",
     "Ipswich":          "#0044A9",
     "Southampton":      "#D71920",
-    
+    # إسبانيا
     "Barcelona":        "#A50044",
     "Real Madrid":      "#FEBE10",
     "Atletico Madrid":  "#CB3524",
-    
+    # ألمانيا
     "Bayern Munich":    "#DC052D",
     "Borussia Dortmund":"#FDE100",
-    
+    # إيطاليا
     "Juventus":         "#000000",
     "Inter Milan":      "#010E80",
     "AC Milan":         "#FB090B",
-    
+    # فرنسا
     "PSG":              "#004170",
 }
 
-# / WhoScored/Opta
+# أسماء مختصرة/بديلة كما تظهر في بيانات WhoScored/Opta
 TEAM_ALIASES = {
     "man city":         "Manchester City",
     "man. city":        "Manchester City",
@@ -454,17 +472,17 @@ DEFAULT_AWAY = "#1e90ff"
 
 def get_team_color(team_name: str, fallback: str) -> str:
     """
-      team  TEAM_COLORS.
-      :
-      1.   (case-insensitive)
-      2. alias  TEAM_ALIASES
-      3.     team
+    إرجاع لون الفريق من TEAM_COLORS.
+    منطق البحث بالترتيب:
+      1. تطابق دقيق (case-insensitive)
+      2. alias من TEAM_ALIASES
+      3. أي مفتاح يكون اسم الفريق جزءًا منه أو العكس
     """
     if not team_name:
         return fallback
     name_lc = team_name.strip().lower()
 
-    # 1)
+    # 1) تطابق دقيق
     for key, color in TEAM_COLORS.items():
         if key.lower() == name_lc:
             return color
@@ -474,7 +492,7 @@ def get_team_color(team_name: str, fallback: str) -> str:
         alias_target = TEAM_ALIASES[name_lc]
         return TEAM_COLORS.get(alias_target, fallback)
 
-    # 3)
+    # 3) تطابق جزئي في أي اتجاه
     for key, color in TEAM_COLORS.items():
         key_lc = key.lower()
         if key_lc in name_lc or name_lc in key_lc:
@@ -710,7 +728,33 @@ def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") 
     return hex_color
 
 
-def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
+def _kit_palette_index(kit_type):
+    """Map configured kit type to a palette index."""
+    k = str(kit_type or "auto").strip().lower()
+    if k in {"", "auto", "smart"}:
+        return None
+    if k in {"home", "primary", "first"}:
+        return 0
+    if k in {"accent", "trim", "stripe", "second"}:
+        return 1
+    if k in {"away", "third", "alternate", "alt", "clash", "change", "second_kit", "third_kit"}:
+        return 2
+    return None
+
+
+def _configured_kit_colour(team_name, kit_type, fallback):
+    """Return the colour requested by HOME_KIT_TYPE / AWAY_KIT_TYPE."""
+    idx = _kit_palette_index(kit_type)
+    if idx is None:
+        return None
+    pal = _team_palette(team_name, fallback)
+    idx = min(idx, len(pal) - 1)
+    return _visible_on_dark(team_name, pal[idx], fallback)
+
+
+def choose_matchup_colors(home_name: str, away_name: str,
+                          home_kit_type=None,
+                          away_kit_type=None):
     """
     Pick kit-based colours for a match while keeping the home team's identity stable.
 
@@ -725,6 +769,14 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
       - Very light alternates are avoided when a readable non-light alternate is
         available with enough contrast.
     """
+    custom_home = (CUSTOM_KIT_COLORS or {}).get("home")
+    custom_away = (CUSTOM_KIT_COLORS or {}).get("away")
+    forced_home = custom_home or _configured_kit_colour(home_name, home_kit_type, "#B91C1C")
+    forced_away = custom_away or _configured_kit_colour(away_name, away_kit_type, "#9CA3AF")
+
+    if forced_home and forced_away:
+        return _visible_on_dark(home_name, forced_home, "#B91C1C"), _visible_on_dark(away_name, forced_away, "#9CA3AF")
+
     home_palette_raw = _team_palette(home_name, DEFAULT_HOME)
     away_palette_raw = _team_palette(away_name, DEFAULT_AWAY)
 
@@ -732,8 +784,8 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
     away_palette = [_usable_on_dark(c, "#9CA3AF") for c in away_palette_raw]
 
     # For the primary display colour, also avoid white/off-white on dark backgrounds
-    home_primary = _visible_on_dark(home_name, home_palette_raw[0], "#B91C1C")
-    away_primary = _visible_on_dark(away_name, away_palette_raw[0], "#9CA3AF")
+    home_primary = forced_home or _visible_on_dark(home_name, home_palette_raw[0], "#B91C1C")
+    away_primary = forced_away or _visible_on_dark(away_name, away_palette_raw[0], "#9CA3AF")
 
     # ── Hard filter: never allow white/near-white as away colour ─────────────
     # White lines and text are invisible on legend boxes, stat labels and light
@@ -819,7 +871,7 @@ def choose_matchup_colors(home_name: str, away_name: str) -> tuple[str, str]:
     return final_home, final_away
 
 
-# HOME_COLOR AWAY_COLOR main() team.
+# يتم تحديث HOME_COLOR و AWAY_COLOR في main() بعد معرفة أسماء الفريقين.
 HOME_COLOR = DEFAULT_HOME
 AWAY_COLOR = DEFAULT_AWAY
 
@@ -833,7 +885,7 @@ TEXT_BRIGHT = "#ffffff"
 
 COLOR_SUB_IN = C_GREEN
 COLOR_SUB_OUT = C_GOLD
-COLOR_RED_CARD = "#e63946" # —
+COLOR_RED_CARD = "#e63946"  # ثابت — لا يتأثر بألوان الفرق
 COLOR_BOTH_SUB = "#a855f7"
 
 FINAL_THIRD_X = 66.7
@@ -941,8 +993,8 @@ def get_status(md: dict) -> str:
 
 def _extract_match_data(html: str) -> dict:
     """
-     matchCentreData  HTML     .
-     brace-counting    JSON   .
+    استخراج matchCentreData من HTML سواء جاء من أي مصدر.
+    يستخدم brace-counting لضمان استخراج الـ JSON الكامل بدون قطع.
     """
     soup = BeautifulSoup(html, "html.parser")
     script = soup.select_one('script:-soup-contains("matchCentreData")')
@@ -955,12 +1007,12 @@ def _extract_match_data(html: str) -> dict:
     if idx == -1:
         raise ValueError("matchCentreData marker not found in script")
 
-    # { marker
+    # ابدأ من أول { بعد الـ marker
     start = raw.find("{", idx + len(marker))
     if start == -1:
         raise ValueError("JSON object start '{' not found")
 
-    # JSON
+    # عدّ الأقواس لإيجاد نهاية الـ JSON الصحيحة
     depth = 0
     in_str = False
     escape = False
@@ -1155,10 +1207,10 @@ def _uc_chrome_kwargs(opts, chromedriver_path: str | None = None) -> dict:
 
 
 # ══════════════════════════════════════════════════════
-# SCRAPER — 3
+#  SCRAPER  — 3 محاولات تلقائية
 # ══════════════════════════════════════════════════════
 
-# ── Headers ─────────────────────────────
+# ── الـ Headers الواقعية ─────────────────────────────
 _HEADERS_POOL = [
     {
         "User-Agent": (
@@ -1206,19 +1258,19 @@ _HEADERS_POOL = [
 
 def _try_cloudscraper(url: str) -> dict:
     """
-     1: cloudscraper —  Cloudflare   browser.
+    المحاولة 1: cloudscraper — يتجاوز Cloudflare تلقائياً بدون browser.
     pip install cloudscraper
     """
     try:
         import cloudscraper
     except ImportError:
-        raise RuntimeError("cloudscraper   — : pip install cloudscraper")
+        raise RuntimeError("cloudscraper غير مثبّت — شغّل: pip install cloudscraper")
 
     console.print("[cyan]  [1/3] Trying cloudscraper...[/cyan]")
     scraper = cloudscraper.create_scraper(
         browser={"browser": "chrome", "platform": "windows", "mobile": False}
     )
-    
+    # افتح الرئيسية أولاً عشان تحصل على الكوكيز
     scraper.get("https://www.whoscored.com/", timeout=30)
     time.sleep(random.uniform(2, 4))
 
@@ -1235,7 +1287,7 @@ def _try_cloudscraper(url: str) -> dict:
 
 def _try_requests(url: str) -> dict:
     """
-     2: requests  session + rotating headers + .
+    المحاولة 2: requests مع session + rotating headers + كوكيز.
     """
     import requests
     from requests.adapters import HTTPAdapter
@@ -1250,7 +1302,7 @@ def _try_requests(url: str) -> dict:
     headers = random.choice(_HEADERS_POOL)
     session.headers.update(headers)
 
-    
+    # زيارة الرئيسية للحصول على الكوكيز
     session.get("https://www.whoscored.com/", timeout=30)
     time.sleep(random.uniform(3, 6))
 
@@ -1272,18 +1324,18 @@ def _try_chrome(
     profile_name: str = "Default",
 ) -> dict:
     """
-     3: undetected_chromedriver :
-      ✅  Chrome  ( + )
-      ✅ selenium-stealth
-      ✅ random delays
+    المحاولة 3: undetected_chromedriver مع:
+      ✅ بروفايل Chrome الحقيقي (كوكيز + لوجين)
+      ✅ selenium-stealth لإخفاء علامات الأتمتة
+      ✅ random delays تحاكي السلوك البشري
     """
     try:
         import undetected_chromedriver as uc
         _patch_undetected_chromedriver_del(uc)
     except ImportError:
         raise RuntimeError(
-            "undetected_chromedriver   — "
-            ": pip install undetected-chromedriver"
+            "undetected_chromedriver غير مثبّت — "
+            "شغّل: pip install undetected-chromedriver"
         )
 
     from selenium.webdriver.support.ui import WebDriverWait
@@ -1303,7 +1355,7 @@ def _try_chrome(
         "Chrome/142.0.7444.176 Safari/537.36"
     )
 
-    # ── Chrome ──────
+    # ── استخدام بروفايل مؤقت افتراضيًا لتجنب قفل بروفايل Chrome الحقيقي ──────
     temp_user_data_dir = tempfile.mkdtemp(prefix="ws_uc_profile_")
     using_real_profile = bool(BROWSER_USE_REAL_PROFILE and profile_dir and os.path.isdir(profile_dir))
     if using_real_profile:
@@ -1317,8 +1369,8 @@ def _try_chrome(
             "[yellow]  Using isolated temporary Chrome profile[/yellow]"
         )
 
-    # : add_experimental_option undetected_chromedriver
-    # CDP driver
+    # ملاحظة: add_experimental_option غير متوافق مع undetected_chromedriver
+    # الإخفاء يتم عبر CDP بعد تشغيل الـ driver
 
     kw = _uc_chrome_kwargs(opts, chromedriver_path)
 
@@ -1326,7 +1378,7 @@ def _try_chrome(
     try:
         driver = uc.Chrome(**kw)
 
-        # webdriver JavaScript
+        # إخفاء webdriver عبر JavaScript
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {
@@ -1340,7 +1392,7 @@ def _try_chrome(
             },
         )
 
-        # ── selenium-stealth ──────────────
+        # ── تطبيق selenium-stealth لو متاحة ──────────────
         try:
             from selenium_stealth import stealth
 
@@ -1355,20 +1407,20 @@ def _try_chrome(
             )
             console.print("[green]  selenium-stealth applied[/green]")
         except ImportError:
-            pass  
+            pass  # مش مشكلة لو مش مثبّتة
 
-        # ── ────────────
+        # ── زيارة طبيعية قبل الصفحة المطلوبة ────────────
         console.print("[cyan]  Visiting homepage first...[/cyan]")
         driver.get("https://www.whoscored.com/")
         time.sleep(random.uniform(3, 6))
 
-        
+        # تمرير عشوائي
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.3);")
         time.sleep(random.uniform(1, 2))
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(random.uniform(1, 2))
 
-        # ── ────────────────────────────
+        # ── فتح صفحة المباراة ────────────────────────────
         console.print(f"[cyan]  Loading match page...[/cyan]")
         driver.get(url)
 
@@ -1430,11 +1482,11 @@ def scrape_match(
     profile_name: str = "Default",
 ) -> dict:
     """
-     3   —     Exception .
+    يجرب 3 طرق بالترتيب — لو فشلت كلها يرفع Exception واضحة.
     """
     errors = []
 
-    # ── 1: cloudscraper ──────────────────────
+    # ── المحاولة 1: cloudscraper ──────────────────────
     try:
         return _try_cloudscraper(url)
     except Exception as e:
@@ -1444,7 +1496,7 @@ def scrape_match(
 
     time.sleep(random.uniform(2, 4))
 
-    # ── 2: requests ──────────────────────────
+    # ── المحاولة 2: requests ──────────────────────────
     try:
         return _try_requests(url)
     except Exception as e:
@@ -1454,7 +1506,7 @@ def scrape_match(
 
     time.sleep(random.uniform(2, 4))
 
-    # ── 3: Chrome ───────────────────────────
+    # ── المحاولة 3: Chrome ───────────────────────────
     try:
         return _try_chrome(url, chromedriver_path, profile_dir, profile_name)
     except Exception as e:
@@ -1462,15 +1514,15 @@ def scrape_match(
         errors.append(msg)
         console.print(f"[red]  ✗ {msg}[/red]")
 
-    # ── ────────────────────────────
-    console.print("\n[bold red]═══    ═══[/bold red]")
-    console.print("[yellow] :[/yellow]")
-    console.print("  1.    ")
-    console.print("  2. : pip install cloudscraper selenium-stealth")
-    console.print("  3.  whoscored.com   Chrome     ")
-    console.print("  4.  VPN   ")
+    # ── كل المحاولات فشلت ────────────────────────────
+    console.print("\n[bold red]═══ كل المحاولات فشلت ═══[/bold red]")
+    console.print("[yellow]الحلول المقترحة:[/yellow]")
+    console.print("  1. تأكد من اتصال الإنترنت")
+    console.print("  2. شغّل: pip install cloudscraper selenium-stealth")
+    console.print("  3. افتح whoscored.com يدوياً في Chrome وسجّل دخول، ثم أعد التشغيل")
+    console.print("  4. استخدم VPN لو موقعك محجوب")
     raise RuntimeError(
-        " scraping  :\n" + "\n".join(f"  - {e}" for e in errors)
+        "فشل scraping بكل الطرق:\n" + "\n".join(f"  - {e}" for e in errors)
     )
 
 
@@ -2171,11 +2223,11 @@ def compute_xg(shot: dict) -> float:
 
 def summarise_shots(events: list, team_id: int) -> dict:
     """
-         WhoScored:
+    تجميع إحصاءات التسديدات بنفس منطق WhoScored:
       Goal + SavedShot           => On Target
       MissedShots + ShotOnPost   => Off Target
       BlockedShot                => Blocked
-       Woodwork   .
+    مع الاحتفاظ بـ Woodwork كرقم مستقل أيضاً.
     """
     summary = {k: 0 for k in SHOT_SUMMARY_KEYS}
     summary["xG"] = 0.0
@@ -3046,9 +3098,9 @@ def _start_browser_driver(chromedriver_path: str = None, profile_dir: str = None
             opts.add_argument(f"--user-data-dir={temp_user_data_dir}")
             opts.add_argument("--profile-directory=Default")
 
-    # ── 1: undetected_chromedriver — ──
-    # driver_executable_path version mismatch.
-    # chromedriver .
+    # ── محاولة 1: undetected_chromedriver — يُنزّل نسخة متوافقة تلقائيًا ──
+    # نتجاهل أي driver_executable_path مبدئيًا لتجنب خطأ version mismatch.
+    # لو نجحت المحاولة التلقائية فلا حاجة لـ chromedriver اليدوي إطلاقًا.
     try:
         import undetected_chromedriver as uc
         _patch_undetected_chromedriver_del(uc)
@@ -3061,7 +3113,7 @@ def _start_browser_driver(chromedriver_path: str = None, profile_dir: str = None
     except Exception as _uc_err:
         console.print(f"[dim]  uc auto-download failed: {_uc_err}[/dim]")
 
-    # ── 2: uc chromedriver ( ) ──
+    # ── محاولة 2: uc مع مسار chromedriver اليدوي (لو متوفر ومتوافق) ──
     if chromedriver_path and os.path.exists(chromedriver_path):
         try:
             import undetected_chromedriver as uc
@@ -3074,7 +3126,7 @@ def _start_browser_driver(chromedriver_path: str = None, profile_dir: str = None
         except Exception:
             pass
 
-    # ── 3: Selenium ──
+    # ── محاولة 3: Selenium العادي ──
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
@@ -3495,16 +3547,16 @@ def parse_all(md: dict):
             return v.get("displayName") if isinstance(v, dict) else v
 
         etype = dn("type")
-        # WhoScored isShot=False BlockedShot —
-        # fallback
+        # WhoScored أحيانًا تُعيد isShot=False لبعض أحداث BlockedShot —
+        # fallback على نوع الحدث لضمان التقاط كل محاولات التسديد
         is_shot = e.get("isShot", False) or (etype in SHOT_TYPES)
         is_pass = etype in ["Pass", "OffsidPass", "KeyPass"]
 
-        # :
-        # Opta/WhoScored :
-        # • type=BlockedShot
-        # • type=SavedShot/MissedShots + qualifier=Blocked ( )
-        # qualifier=Blocked .
+        # تصنيف التسديدة:
+        # في بيانات Opta/WhoScored التسديدات المعترَضة قد تُرمَز بعدة طرق:
+        #   • type=BlockedShot صريحًا
+        #   • type=SavedShot/MissedShots + qualifier=Blocked (الأكثر شيوعًا)
+        # نفحص qualifier=Blocked أولًا لضمان الدقة.
         if is_shot and has_q(quals, "Blocked"):
             shot_raw_type = "BlockedShot"
         else:
@@ -3606,6 +3658,17 @@ def parse_all(md: dict):
 
     events = pd.DataFrame(rows)
     if not events.empty:
+        def _event_role(pid):
+            if pid in red_cards:
+                return "red_card"
+            if pid in sub_in and pid in sub_out:
+                return "both_sub"
+            if pid in sub_in:
+                return "sub_in"
+            if pid in sub_out:
+                return "sub_out"
+            return ""
+        events["player_role"] = events["player_id"].map(_event_role)
         events = apply_best_open_source_xg(events, info)
     players = []
     for side in ["home", "away"]:
@@ -3643,7 +3706,7 @@ def xg_stats(events: pd.DataFrame, info: dict) -> dict:
     Own goals are excluded from the shooting team's xG
     (they count for the *conceding* team's ledger, not the attacker's model).
 
-      shot buckets    WhoScored:
+    أرقام الـ shot buckets هنا تتبع منطق WhoScored:
       On Target = Goal + SavedShot
       Off Target = MissedShots + ShotOnPost
       Blocked = BlockedShot
@@ -3882,12 +3945,12 @@ def _pass_zone(end_x, end_y):
 
 def _pass_color(zone, successful):
     tbl = {
-        ("penalty", True): (C_GREEN, 0.85, 5),
-        ("penalty", False): (C_GOLD, 0.70, 4),
-        ("final_third", True): (C_BLUE, 0.65, 3),
-        ("final_third", False): (C_RED, 0.55, 2),
-        ("other", True): ("#94a3b8", 0.22, 1),
-        ("other", False): ("#475569", 0.15, 1),
+        ("penalty", True): (C_GREEN, 0.95, 5),
+        ("penalty", False): (C_GOLD, 0.86, 4),
+        ("final_third", True): (C_BLUE, 0.84, 3),
+        ("final_third", False): (C_RED, 0.78, 2),
+        ("other", True): ("#cbd5e1", 0.38, 1),
+        ("other", False): ("#94a3b8", 0.30, 1),
     }
     return tbl.get((zone, successful), ("#888888", 0.2, 1))
 
@@ -4333,7 +4396,7 @@ def draw_breakdown_goals(fig, events, info, xg_data):
     else:
         gdf["Scorer By"] = gdf["team_id"].apply(lambda x: info["home_name"] if x == info["home_id"] else info["away_name"])
         gdf["Scored For"] = gdf["scoring_team"].apply(lambda x: info["home_name"] if x == info["home_id"] else info["away_name"])
-        # Open Play / Set Piece + ( )
+        # تصنيف Open Play / Set Piece + النوع الفرعي (من الإكستنشن)
         from match_extensions import classify_goal_type as _classify_goal_type
         def _goal_type_label(r):
             if r.get("is_own_goal", False):
@@ -4443,9 +4506,20 @@ def draw_pass_map_full(fig, events, team_id, team_name, team_color):
                 xy=(row["end_x"], row["end_y"]),
                 xytext=(row["x"], row["y"]),
                 arrowprops=dict(
-                    arrowstyle="-|>", color=color, lw=1.0, alpha=alpha, mutation_scale=5
+                    arrowstyle="-|>", color="#ffffff", lw=2.8, alpha=0.10,
+                    mutation_scale=8
                 ),
                 zorder=zord,
+            )
+            ax.annotate(
+                "",
+                xy=(row["end_x"], row["end_y"]),
+                xytext=(row["x"], row["y"]),
+                arrowprops=dict(
+                    arrowstyle="-|>", color=color, lw=1.55, alpha=alpha,
+                    mutation_scale=8
+                ),
+                zorder=zord + 1,
             )
     for _, row in passes[passes["is_key"]].iterrows():
         ax.annotate(
@@ -6534,7 +6608,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
     n = len(metrics)
     cw = 1.0 / n
 
-    # ── ───────────────────────────────────────
+    # ── عنوان مع مسافة كافية ───────────────────────────────────────
     ax.text(
         0.50,
         0.975,
@@ -6568,7 +6642,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
         fontweight="bold",
         transform=ax.transAxes,
     )
-    # separator line
+    # خط فاصل أسفل العنوان
     ax.plot([0.01, 0.99], [0.91, 0.91], color="#1f2937", lw=0.8, transform=ax.transAxes)
 
     for i, (lbl, hv, av, col) in enumerate(metrics):
@@ -6576,7 +6650,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
         tot = (float(hv) + float(av)) or 1
         hr = float(hv) / tot
 
-        # ── ─────────────────────────────────────────
+        # ── بطاقة الخلفية ─────────────────────────────────────────
         ax.add_patch(
             mpatches.FancyBboxPatch(
                 (i * cw + 0.006, 0.05),
@@ -6591,7 +6665,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
             )
         )
 
-        # ── ────────────────────────────────────────────
+        # ── شريط النسبة ────────────────────────────────────────────
         BAR_Y, BAR_H = 0.35, 0.18
         ax.add_patch(
             mpatches.FancyBboxPatch(
@@ -6616,7 +6690,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
             )
         )
 
-        # ── ( ) ─────────────────────────────────
+        # ── الأرقام (كبيرة وواضحة) ─────────────────────────────────
         hv_str = f"{hv:.2f}" if isinstance(hv, float) else str(hv)
         av_str = f"{av:.2f}" if isinstance(av, float) else str(av)
         # Home
@@ -6646,7 +6720,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
             path_effects=[pe.withStroke(linewidth=2, foreground="#000")],
         )
 
-        # ── ─────────────────────────────────────
+        # ── الفاصل بين الرقمين ─────────────────────────────────────
         ax.text(
             cx,
             0.66,
@@ -6658,7 +6732,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
             transform=ax.transAxes,
         )
 
-        # ── ( ) ────────────────
+        # ── اسم المقياس (مع مسافة كافية عن الشريط) ────────────────
         ax.text(
             cx,
             0.19,
@@ -7066,7 +7140,7 @@ def _panel_pass_thirds(ax, events, tid, tc, name):
         suc = int((sub["outcome"] == "Successful").sum())
         pct = round(len(sub) / tot * 100) if tot else 0
         cx = (x0 + x1) / 2
-        # :
+        # السطر الأول: اسم المنطقة
         ax.text(
             cx,
             -3.5,
@@ -7077,7 +7151,7 @@ def _panel_pass_thirds(ax, events, tid, tc, name):
             fontsize=7,
             fontweight="bold",
         )
-        # :
+        # السطر الثاني: الإجمالي والنسبة
         ax.text(
             cx,
             -8.5,
@@ -7087,7 +7161,7 @@ def _panel_pass_thirds(ax, events, tid, tc, name):
             color="#cbd5e1",
             fontsize=6.5,
         )
-        # :
+        # السطر الثالث: الناجحة
         ax.text(
             cx,
             -13.0,
@@ -7172,7 +7246,87 @@ DEFENSIVE_TYPES = {
 }
 
 
-def _panel_defensive_heatmap(ax, events, tid, tc, name):
+def _blocked_shots_for_team(events, info, team_id) -> int:
+    """WhoScored stores BlockedShot on the shooting team; count it for the defence."""
+    if "team_id" not in events.columns:
+        return 0
+    hid = info.get("home_id")
+    aid = info.get("away_id")
+
+    def _blocked_shots_by(shooter_id):
+        sub = events[events["team_id"] == shooter_id].copy()
+        if sub.empty:
+            return sub
+        hit = pd.Series(False, index=sub.index)
+        for col in ("type", "shot_whoscored_type", "shot_category"):
+            if col in sub.columns:
+                vals = sub[col].fillna("").astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
+                hit = hit | vals.isin({"blockedshot", "blocked"})
+        if "qualifier_names" in sub.columns:
+            hit = hit | sub["qualifier_names"].fillna("").astype(str).str.contains(r"\bBlocked\b", case=False, regex=True)
+        if "is_shot" in sub.columns:
+            shot_mask = (sub["is_shot"] == True) | hit
+            hit = hit & shot_mask
+        return sub[hit].copy()
+
+    direct = len(_blocked_shots_by(team_id))
+    opp_id = aid if team_id == hid else (hid if team_id == aid else None)
+    if opp_id is None:
+        return direct
+    opp_blocked = len(_blocked_shots_by(opp_id))
+    if not opp_blocked:
+        opp_side = "away" if team_id == hid else "home"
+        mc = (info.get("matchcentre_stats", {}) or {}).get(opp_side, {}) or {}
+        raw_blocked = mc.get("blocked", 0)
+        try:
+            opp_blocked = int(float(raw_blocked or 0))
+        except (TypeError, ValueError):
+            opp_blocked = 0
+    return opp_blocked if opp_blocked else direct
+
+
+def _defensive_events_for_team(events, info, team_id):
+    """Defensive events plus opponent blocked shots mapped onto this team."""
+    if "type" not in events.columns or "team_id" not in events.columns:
+        return pd.DataFrame()
+    own_types = [t for t in DEFENSIVE_TYPES.keys() if t != "BlockedShot"]
+    own = events[(events["team_id"] == team_id) & events["type"].isin(own_types)].copy()
+    hid = info.get("home_id")
+    aid = info.get("away_id")
+    opp_id = aid if team_id == hid else (hid if team_id == aid else None)
+    def _blocked_shots_by(shooter_id):
+        sub = events[events["team_id"] == shooter_id].copy()
+        if sub.empty:
+            return sub
+        hit = pd.Series(False, index=sub.index)
+        for col in ("type", "shot_whoscored_type", "shot_category"):
+            if col in sub.columns:
+                vals = sub[col].fillna("").astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
+                hit = hit | vals.isin({"blockedshot", "blocked"})
+        if "qualifier_names" in sub.columns:
+            hit = hit | sub["qualifier_names"].fillna("").astype(str).str.contains(r"\bBlocked\b", case=False, regex=True)
+        if "is_shot" in sub.columns:
+            shot_mask = (sub["is_shot"] == True) | hit
+            hit = hit & shot_mask
+        return sub[hit].copy()
+
+    if opp_id is not None:
+        blocks = _blocked_shots_by(opp_id)
+        if blocks.empty:
+            blocks = _blocked_shots_by(team_id)
+    else:
+        blocks = _blocked_shots_by(team_id)
+    if not blocks.empty:
+        blocks["team_id"] = team_id
+        blocks["type"] = "BlockedShot"
+    if own.empty:
+        return blocks
+    if blocks.empty:
+        return own
+    return pd.concat([own, blocks], ignore_index=True, sort=False)
+
+
+def _panel_defensive_heatmap(ax, events, tid, tc, name, info=None):
     """
     Defensive Actions Heatmap — single team.
     Each type = unique colour + marker. Legend outside pitch (right side).
@@ -7215,11 +7369,9 @@ def _panel_defensive_heatmap(ax, events, tid, tc, name):
         ),
     )
 
-    def_ev = events[
-        (events["team_id"] == tid)
-        & (events["type"].isin(DEF_STYLE.keys()))
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
+    def_ev = _defensive_events_for_team(events, info or {}, tid)
+    if "x" in def_ev.columns and "y" in def_ev.columns:
+        def_ev = def_ev[def_ev[["x", "y"]].notna().all(axis=1)].copy()
 
     if def_ev.empty:
         ax.text(
@@ -7362,18 +7514,36 @@ def _panel_pass_network(ax, events, tid, tc, name):
         (events["is_pass"] == True)
         & (events["team_id"] == tid)
         & (events["outcome"] == "Successful")
+        & events["player_id"].notna()
         & events[["x", "y"]].notna().all(axis=1)
     ].copy()
     if p.empty:
         return
-    avg = p.groupby("player")[["x", "y"]].mean()
-    cnt = p.groupby("player").size().rename("n")
+    avg = p.groupby(["player_id", "player"], dropna=True)[["x", "y"]].mean()
+    cnt = p.groupby(["player_id", "player"], dropna=True).size().rename("n")
+    roles = p.groupby(["player_id", "player"], dropna=True)["player_role"].first() if "player_role" in p.columns else None
     avg = avg.join(cnt)
+    if roles is not None:
+        avg = avg.join(roles.rename("role"))
     mx_n = avg["n"].max() if not avg.empty else 1
-    for pl, row in avg.iterrows():
+    for key, row in avg.iterrows():
+        pl = key[1] if isinstance(key, tuple) else key
         s = 18 + row["n"] / mx_n * 90
-        ax.scatter(row["x"], row["y"], c=tc, s=s, edgecolors="white", lw=0.7, zorder=5)
+        role = row.get("role", "") if hasattr(row, "get") else ""
+        c = tc
+        if role == "sub_in":
+            c = COLOR_SUB_IN
+        elif role == "sub_out":
+            c = COLOR_SUB_OUT
+        elif role == "both_sub":
+            c = COLOR_BOTH_SUB
+        elif role == "red_card":
+            c = COLOR_RED_CARD
+        badge = {"sub_in": "↑", "sub_out": "↓", "both_sub": "↕", "red_card": "RC"}.get(role, "")
+        ax.scatter(row["x"], row["y"], c=c, s=s, edgecolors="white", lw=0.7, zorder=5)
         nm = pl.split()[-1][:8] if pl else ""
+        if badge:
+            nm = f"{nm} {badge}"
         ax.text(
             row["x"],
             row["y"] + 3.5,
@@ -7397,19 +7567,32 @@ def _panel_avg_position(ax, events, tid, tc, name):
     _mini_pitch(ax)
     _lbl(ax, f"Avg Positions — {name}", tc)
     ev = events[
-        (events["team_id"] == tid) & events[["x", "y"]].notna().all(axis=1)
+        (events["team_id"] == tid) & events["player_id"].notna() & events[["x", "y"]].notna().all(axis=1)
     ].copy()
     if ev.empty:
         return
-    avg = ev.groupby("player")[["x", "y"]].mean()
-    cnt = ev.groupby("player").size()
+    avg = ev.groupby(["player_id", "player"], dropna=True)[["x", "y"]].mean()
+    cnt = ev.groupby(["player_id", "player"], dropna=True).size()
+    roles = ev.groupby(["player_id", "player"], dropna=True)["player_role"].first() if "player_role" in ev.columns else None
     mx = cnt.max() if not cnt.empty else 1
-    for pl, row in avg.iterrows():
-        n = cnt.get(pl, 1)
+    for key, row in avg.iterrows():
+        pl = key[1] if isinstance(key, tuple) else key
+        n = cnt.get(key, 1)
+        role = roles.get(key, "") if roles is not None else ""
+        c = tc
+        if role == "sub_in":
+            c = COLOR_SUB_IN
+        elif role == "sub_out":
+            c = COLOR_SUB_OUT
+        elif role == "both_sub":
+            c = COLOR_BOTH_SUB
+        elif role == "red_card":
+            c = COLOR_RED_CARD
+        badge = {"sub_in": "↑", "sub_out": "↓", "both_sub": "↕", "red_card": "RC"}.get(role, "")
         ax.scatter(
             row["x"],
             row["y"],
-            c=tc,
+            c=c,
             s=28 + n / mx * 82,
             edgecolors="white",
             lw=0.7,
@@ -7417,6 +7600,8 @@ def _panel_avg_position(ax, events, tid, tc, name):
             zorder=4,
         )
         nm = pl.split()[-1][:7] if pl else ""
+        if badge:
+            nm = f"{nm} {badge}"
         ax.text(
             row["x"],
             row["y"] + 3.2,
@@ -8556,7 +8741,7 @@ def draw_match_report_p2(fig, events, info, xg_data, status):
     # ── Row 1: Pass Map/Thirds Home | Pass Map/Thirds Away ────────────
     # ✅ Pass thirds = NEW (Figs 5-6 have no third breakdown)
     # NOTE: xT/min panel removed by request — pass thirds now span the row equally.
-    # nested GridSpec 3 .
+    # نستخدم nested GridSpec لتقسيم الصف إلى نصفين متساويين بدلاً من 3 أعمدة.
     from matplotlib.gridspec import GridSpecFromSubplotSpec
     row1_gs = GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[1, :], wspace=0.18)
     _panel_pass_thirds(fig.add_subplot(row1_gs[0, 0]), events, hid, C_RED, hn)
@@ -8570,9 +8755,9 @@ def draw_match_report_p2(fig, events, info, xg_data, status):
 
     # ── Row 3: Defensive HM Home | (legend) | Defensive HM Away ──────
     # ✅ UNIQUE
-    _panel_defensive_heatmap(fig.add_subplot(gs[3, 0]), events, hid, C_RED, hn)
+    _panel_defensive_heatmap(fig.add_subplot(gs[3, 0]), events, hid, C_RED, hn, info)
     _panel_def_legend(fig.add_subplot(gs[3, 1]))
-    _panel_defensive_heatmap(fig.add_subplot(gs[3, 2]), events, aid, C_BLUE, an)
+    _panel_defensive_heatmap(fig.add_subplot(gs[3, 2]), events, aid, C_BLUE, an, info)
 
     # ── Row 4: Avg Position Home | (separator) | Avg Position Away ────
     # ✅ UNIQUE
@@ -8720,15 +8905,19 @@ def _panel_donut_dual(ax, events, info):
             startangle=90,
             wedgeprops=dict(width=0.40, edgecolor=BG_DARK, lw=1.5),
         )
+        is_light_report = str(BG_DARK).upper() in {"#FFFFFF", "WHITE"}
+        pct_color = "#111827" if is_light_report else "white"
+        pct_stroke = "white" if is_light_report else BG_DARK
         sub.text(
             0,
             0,
             f"{pct}%",
             ha="center",
             va="center",
-            color="white",
-            fontsize=12,
+            color=pct_color,
+            fontsize=13,
             fontweight="bold",
+            path_effects=[pe.withStroke(linewidth=2.2, foreground=pct_stroke)],
         )
         sub.set_xlim(-1.3, 1.3)
         sub.set_ylim(-1.3, 1.3)
@@ -8872,14 +9061,20 @@ def _panel_def_counts(ax, events, info):
 
     y = ROW_START
     for dtype, (col, short) in DEFENSIVE_TYPES.items():
-        h_n = (
-            int(events[(events["team_id"] == hid) & (events["type"] == dtype)].shape[0])
-            if "type" in events.columns
-            else 0
-        )
-        a_n = int(
-            events[(events["team_id"] == aid) & (events["type"] == dtype)].shape[0]
-        )
+        if dtype == "BlockedShot":
+            h_n = _blocked_shots_for_team(events, info, hid)
+            a_n = _blocked_shots_for_team(events, info, aid)
+        else:
+            h_n = (
+                int(events[(events["team_id"] == hid) & (events["type"] == dtype)].shape[0])
+                if "type" in events.columns
+                else 0
+            )
+            a_n = (
+                int(events[(events["team_id"] == aid) & (events["type"] == dtype)].shape[0])
+                if "type" in events.columns
+                else 0
+            )
         tot = (h_n + a_n) or 1
         hr = h_n / tot
         bh = ROW_STEP * 0.50  # bar height in axes fraction
@@ -9716,7 +9911,7 @@ def _panel_pass_target_zones(ax, events, tid, tc, name):
                     zorder=4,
                     path_effects=[pe.withStroke(linewidth=2.5, foreground="black")],
                 )
-                
+                # عدد التمريرات تحت النسبة
                 n_passes = int(round(pct * total / 100))
                 ax.text(
                     ax_x0 + cw / 2,
@@ -9818,21 +10013,7 @@ def _collect_match_stats(info, events, xg_data):
         )
         cross_pct = round(cross_succ / len(crosses_ev) * 100) if len(crosses_ev) else 0
 
-        def_ev = (
-            ev[
-                ev["type"].isin(
-                    [
-                        "Tackle",
-                        "Interception",
-                        "BallRecovery",
-                        "Clearance",
-                        "BlockedShot",
-                    ]
-                )
-            ]
-            if "type" in ev.columns
-            else pd.DataFrame()
-        )
+        def_ev = _defensive_events_for_team(events, info, tid)
         tackles = (
             int(ev[ev["type"] == "Tackle"].shape[0]) if "type" in ev.columns else 0
         )
@@ -9844,9 +10025,7 @@ def _collect_match_stats(info, events, xg_data):
         clearance = (
             int(ev[ev["type"] == "Clearance"].shape[0]) if "type" in ev.columns else 0
         )
-        blocked = (
-            int(ev[ev["type"] == "BlockedShot"].shape[0]) if "type" in ev.columns else 0
-        )
+        blocked = _blocked_shots_for_team(events, info, tid)
         recoveries = (
             int(ev[ev["type"] == "BallRecovery"].shape[0])
             if "type" in ev.columns
@@ -10350,7 +10529,7 @@ def generate_tactical_analysis(info, events, xg_data):
         if pp_diff > 5
         else "a competitive midfield battle"
     )
-    phases_intro = "by " + winner + " " if not draw else ""
+    phases_intro = f"by {winner or 'the leading side'} " if not draw else ""
     phases_kind = "multiple" if not draw and margin >= 2 else "critical"
     verdict = (
         f"{verdict_opener} "
@@ -10394,21 +10573,21 @@ def generate_tactical_analysis(info, events, xg_data):
 # ══════════════════════════════════════════════════════════════════════
 def extract_score(events, home_id: int, away_id: int):
     """
-           OwnGoal.
+    استخراج النتيجة الصحيحة من الأحداث مع معالجة OwnGoal.
 
-       :
-      - list  dicts  (matchCentreData["events"])
-      - pandas DataFrame  parse_all (events)
+    يدعم نوعين من المدخلات:
+      - list من dicts الخام (matchCentreData["events"])
+      - pandas DataFrame من parse_all (events)
 
-    :
-      -
-      -  OwnGoal  team  (  )
+    العمل:
+      - يَعدّ أهداف الملعب لكل فريق
+      - يُحوّل OwnGoal إلى الفريق الآخر (الذي استفاد منه)
 
-    : (home_goals, away_goals)
+    المخرج: (home_goals, away_goals)
     """
     home_goals, away_goals = 0, 0
 
-    # DataFrame
+    # دعم DataFrame
     if hasattr(events, "iterrows"):
         if events.empty:
             return 0, 0
@@ -10421,7 +10600,7 @@ def extract_score(events, home_id: int, away_id: int):
             tid = ev.get("team_id")
             is_og = bool(ev.get("is_own_goal", False))
             if is_og:
-                # :
+                # هدف عكسي: يُحسب للفريق الآخر
                 if tid == home_id:
                     away_goals += 1
                 else:
@@ -10433,7 +10612,7 @@ def extract_score(events, home_id: int, away_id: int):
                     away_goals += 1
         return home_goals, away_goals
 
-    # list dicts (raw events)
+    # دعم list من dicts (raw events)
     for ev in events or []:
         ev_type = ev.get("type", {}).get("displayName", "") if isinstance(ev, dict) else ""
         if ev_type != "Goal":
@@ -10455,12 +10634,12 @@ def extract_score(events, home_id: int, away_id: int):
 
 def _parse_scoreline(info, xg_data, events=None):
     """
-        (home, away).
+    إرجاع نتيجة المباراة كنصّين (home, away).
 
-    :
-      1)  events  (extract_score)
-      2)  info["score"]
-      3)  xg_data  fallback
+    الترتيب:
+      1) من events بدقة (extract_score) إذا توفّرت
+      2) من info["score"]
+      3) من xg_data كـ fallback أخير
     """
     if events is not None:
         try:
@@ -11067,7 +11246,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
         f"On target {stats['home'].get('on_target',0)}-{stats['away'].get('on_target',0)}"
     )
 
-    # ── 4 — ──────────────────────────
+    # ── 4 بوردات — تعريف المحتوى والتخطيط ──────────────────────────
     groups = [
         {
             "n": 1,
@@ -11150,12 +11329,12 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
         },
     ]
 
-    # ── ──────────────────────────────────────
+    # ── دالة رسم البورد الموحدة ──────────────────────────────────────
     def _draw_board(group):
         items_raw = group["items"]
         cols      = group["cols"]
 
-        # metas
+        # جمع الـ metas
         metas = []
         for kind, team, label in items_raw:
             meta = _find_meta(kind, team)
@@ -11171,7 +11350,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
 
         fig = plt.figure(figsize=(fw, fh), facecolor="#000000")
 
-        # ── : visual ───────────────────
+        # ── نسب الارتفاع: هيدر ثم صفوف الفيجوالز ───────────────────
         h_header = 0.55
         gs = GridSpec(
             rows + 1, cols,
@@ -11182,18 +11361,18 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
             hspace=0.38, wspace=0.022,
         )
 
-        # ── ──────────────────────────────────────────────────
+        # ── الهيدر ──────────────────────────────────────────────────
         hdr = fig.add_subplot(gs[0, :])
         hdr.set_facecolor("#000000")
         hdr.axis("off")
 
-        # labels team
+        # labels الفريقين
         lbl_w, lbl_h = 0.195, 0.36
         lbl_y        = 0.60
 
-        # ── pill team ────────────────────
-        # / /
-        # .
+        # ── اختيار لون الـ pill من باليت الفريق ────────────────────
+        # إذا كان اللون الأساسي أبيض/فاتح جداً أو أسود/غامق جداً، نستخدم اللون البديل
+        # عشان يكون واضح على الخلفية السوداء.
         def _pill_color(team_name: str, primary: str) -> str:
             """Pick a visible pill colour for the board header.
             If the primary is too light (white) or too dark (black/near-black)
@@ -11253,7 +11432,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
                           foreground=_stroke_on_color(right_fc))],
         )
 
-        
+        # سكور
         hdr.text(
             0.50, lbl_y + lbl_h / 2, score_txt,
             color="#ffffff", fontsize=22, fontweight="bold",
@@ -11261,7 +11440,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
             path_effects=[pe.withStroke(linewidth=3, foreground="#000000")],
         )
 
-        # section title
+        # عنوان القسم
         hdr.text(
             0.50, 0.36,
             f"{group['n']}. {group['title']}",
@@ -11289,7 +11468,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
             ha="center", va="bottom", transform=hdr.transAxes,
         )
 
-        # ── visual ────────────────────────────────────────────────
+        # ── الفيجوالز ────────────────────────────────────────────────
         for idx, (meta, label) in enumerate(metas):
             r = idx // cols + 1
             c = idx  % cols
@@ -11305,14 +11484,14 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
                 spine.set_edgecolor("#1e2a38")
                 spine.set_linewidth(0.8)
 
-            # visual axes
+            # عنوان الفيجوال فوق الـ axes
             ax.set_title(
                 label, fontsize=9.5, color="#e8edf2",
                 fontweight="bold", pad=4,
                 loc="center",
             )
 
-        # ── ─────────────────────────────────────────────
+        # ── خلايا فارغة ─────────────────────────────────────────────
         for idx in range(len(metas), rows * cols):
             r = idx // cols + 1
             c = idx  % cols
@@ -11322,7 +11501,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
 
         return fig
 
-    # ── ────────────────────────────────────────────────
+    # ── حفظ البوردات ────────────────────────────────────────────────
     saved_paths  = []
     board_names  = []
 
@@ -11358,17 +11537,17 @@ def _shared_section_summary(info, stats, events):
     hxt = _fmt_num(_xt_total(events, info["home_id"]), 2)
     axt = _fmt_num(_xt_total(events, info["away_id"]), 2)
 
-    # /
+    # تحديد الفائز/التعادل
     if str(hg) == str(ag):
-        opening = f" {hn} {an} {hg}-{ag}       ."
+        opening = f"تعادل {hn} و{an} {hg}-{ag} لكن الأرقام تكشف اختلافًا واضحًا في الأداء."
     else:
         try:
             winner = hn if int(float(hg or 0)) > int(float(ag or 0)) else an
         except Exception:
             winner = hn
-        opening = f" {winner} {hg}-{ag}     ."
+        opening = f"فاز {winner} {hg}-{ag} والأرقام تفسّر طبيعة هذا الفوز."
 
-    
+    # تحديد المهيمن في كل مرحلة
     leader_xg = _leader_name(h['xG'], a['xG'], hn, an)
     leader_prog = _leader_name(h['prog_passes'], a['prog_passes'], hn, an)
     try:
@@ -11376,22 +11555,22 @@ def _shared_section_summary(info, stats, events):
     except Exception:
         leader_xt = hn
 
-    # — (8+ )
+    # السطر الأول — أرقام رئيسية (8+ أرقام)
     line1 = (
-        f" {h['shots']}-{a['shots']} | xG {h['xG']}-{a['xG']} | "
-        f"  {h['on_target']}-{a['on_target']} | "
-        f"  {h['prog_passes']}-{a['prog_passes']} | "
+        f"تسديدات {h['shots']}-{a['shots']} | xG {h['xG']}-{a['xG']} | "
+        f"على المرمى {h['on_target']}-{a['on_target']} | "
+        f"تمريرات تقدمية {h['prog_passes']}-{a['prog_passes']} | "
         f"xT {hxt}-{axt}"
     )
 
-    # 4-6
+    # 4-6 جمل تحليلية مختصرة
     return (
         f"{opening}\n\n"
         f"{line1}\n\n"
-        f" {leader_xg}  xG        .\n"
-        f" {leader_prog}         .\n"
-        f" {leader_xt}   xT      .\n"
-        f"   :       opponent."
+        f"تفوّق {leader_xg} في xG يُظهر جودة فرص أعلى لا مجرد كثرة محاولات.\n"
+        f"سيطرة {leader_prog} على التمريرات التقدمية تكشف من أدار البناء الهجومي فعليًا.\n"
+        f"تفوّق {leader_xt} في إجمالي xT يدل على وصول مستمر للمناطق الخطرة.\n"
+        f"الصفحات التالية تكشف الآلية: من أين جاء التهديد، وكيف رد الخصم."
     )
 
 
@@ -11404,7 +11583,7 @@ def _team_section_summary(side, info, stats, events):
     xt_total = _xt_total(events, info[f"{side}_id"])
     opp_xt = _xt_total(events, info[f"{other_side}_id"])
 
-    
+    # حساب نسب وكفاءات
     pass_acc = team.get('pass_pct', 0)
     shots_n = team.get('shots', 0)
     xg_v = team.get('xG', 0)
@@ -11414,24 +11593,24 @@ def _team_section_summary(side, info, stats, events):
     kp = team.get('key_passes', 0)
     def_acts = team.get('defensive_acts', 0)
 
-    # — (8+ )
+    # السطر الأول — أرقام رئيسية (8+ أرقام)
     line1 = (
-        f" {shots_n} |   {team['on_target']} |  {team['goals']} | "
-        f"xG {xg_v} ({avg_xg:.2f}/) | xT {_fmt_num(xt_total, 2)} | "
-        f"  {prog} |   {box_e}"
+        f"تسديدات {shots_n} | على المرمى {team['on_target']} | أهداف {team['goals']} | "
+        f"xG {xg_v} ({avg_xg:.2f}/تسديدة) | xT {_fmt_num(xt_total, 2)} | "
+        f"تمريرات تقدمية {prog} | دخول المنطقة {box_e}"
     )
 
-    
-    xg_compare = "" if xg_v > opp.get('xG', 0) else ""
-    xt_compare = "" if xt_total > opp_xt else ""
+    # تحديد المقارنات الأهم
+    xg_compare = "تفوّق" if xg_v > opp.get('xG', 0) else "تأخّر"
+    xt_compare = "تفوّق" if xt_total > opp_xt else "تأخّر"
 
     return (
-        f" {team_name}   {opp_name}.\n\n"
+        f"تحليل {team_name} في مواجهة {opp_name}.\n\n"
         f"{line1}\n\n"
-        f"{xg_compare} {team_name}  xG ({xg_v}  {opp.get('xG', 0)}) —   .\n"
-        f"{xt_compare}   xT ({_fmt_num(xt_total, 2)}  {_fmt_num(opp_xt, 2)})     .\n"
-        f"  {kp}   {box_e}      .\n"
-        f"  {def_acts}    —      ."
+        f"{xg_compare} {team_name} في xG ({xg_v} مقابل {opp.get('xG', 0)}) — مؤشر جودة الإنشاء.\n"
+        f"{xt_compare} في إجمالي xT ({_fmt_num(xt_total, 2)} مقابل {_fmt_num(opp_xt, 2)}) يكشف فاعلية التقدم نحو الخطر.\n"
+        f"التمريرات الحاسمة {kp} ودخول المنطقة {box_e} يحددان الكفاءة في تحويل البناء لفرص.\n"
+        f"التدخلات الدفاعية {def_acts} تكشف نمط الاستعادة — استباق منظم أم رد فعل اضطراري."
     )
 
 
@@ -12012,7 +12191,7 @@ def _render_visual_page(
 
 def build_tactical_pdf(figs, info, events, xg_data, ts):
     """Assemble the final tactical PDF with shared visuals first, then home, then away."""
-    # ── : 300 DPI ──────────────────────────
+    # ── جودة الإخراج: 300 DPI ──────────────────────────
     matplotlib.rcParams["figure.dpi"]  = 300
     matplotlib.rcParams["savefig.dpi"] = OUTPUT_IMAGE_DPI
 
@@ -12086,22 +12265,24 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
 #  Inspired by the user's sample: cover -> executive summary -> visual + text pages
 # ══════════════════════════════════════════════════════════════════════
 PDF_PAGE_SIZE = (8.27, 11.69)  # A4 portrait in inches
-# ══════════════════════════════════════════════════════════════════════
-# PDF LIGHT MODE — ( )
-# ══════════════════════════════════════════════════════════════════════
-PDF_BG       = "#FFFFFF" # ( )
-PDF_SURFACE  = "#F8F9FA" # panels ( )
-PDF_BORDER   = "#D1D5DB" #
-PDF_TEXT     = "#111827" # ()
-PDF_TEXT_DIM = "#6B7280" # ()
-PDF_ACCENT   = "#D97706" #
+PDF_EXPLANATION_STYLE = "reference"  # "reference" = sample PDF text layout; "side_panel" = legacy note card
+# ----------------------------------------------------------------------
+# PDF dark theme: keeps the dark script identity while using the new
+# reference-style explanation layout.
+# ----------------------------------------------------------------------
+PDF_BG       = "#05070A"
+PDF_SURFACE  = "#0B1118"
+PDF_BORDER   = "#233244"
+PDF_TEXT     = "#F8FAFC"
+PDF_TEXT_DIM = "#9CA3AF"
+PDF_ACCENT   = "#FFD000"
 
-# ── Aliases (40 ) ──
-PDF_WHITE     = PDF_BG       
-PDF_INK       = PDF_TEXT     
-PDF_MUTED     = PDF_TEXT_DIM 
-PDF_RULE      = PDF_BORDER   
-PDF_GOLD_LINE = PDF_ACCENT   
+# Compatibility aliases used by the existing PDF builder.
+PDF_WHITE     = PDF_BG
+PDF_INK       = PDF_TEXT
+PDF_MUTED     = PDF_TEXT_DIM
+PDF_RULE      = PDF_BORDER
+PDF_GOLD_LINE = PDF_ACCENT
 
 
 def _pdf_score_title(info, stats=None, events=None):
@@ -12119,27 +12300,27 @@ def _pdf_draw_header_footer(fig, info, page_num, total_pages, events=None):
     """Header & footer for every PDF page in white background style."""
     fig.patch.set_facecolor(PDF_BG)
 
-    # ── Header surface ──
+    # ── شريط Header علوي بخلفية surface ──
     header_ax = fig.add_axes([0.0, 0.955, 1.0, 0.045], zorder=10)
     header_ax.set_xlim(0, 1); header_ax.set_ylim(0, 1)
     header_ax.axis("off")
     header_ax.add_patch(plt.Rectangle((0, 0), 1, 1, facecolor=PDF_SURFACE, edgecolor="none"))
 
-    # : home team
+    # يسار: اسم المضيف بلون قميصه
     hn = info.get("home_name", "Home")
     header_ax.text(0.025, 0.5, hn, ha="left", va="center",
                    color=_pdf_team_text_color(HOME_COLOR), fontsize=11, fontweight="bold")
 
-    # : (header line)
+    # وسط: عنوان (header line)
     header_ax.text(0.5, 0.5, _pdf_header_line(info, events=events),
                    ha="center", va="center", color=PDF_TEXT, fontsize=10)
 
-    # : away team
+    # يمين: اسم الضيف بلون قميصه
     an = info.get("away_name", "Away")
     header_ax.text(0.975, 0.5, an, ha="right", va="center",
                    color=_pdf_team_text_color(AWAY_COLOR), fontsize=11, fontweight="bold")
 
-    # ── : HOME AWAY ──
+    # ── خط سفلي ثنائي اللون: نصف HOME، نصف AWAY ──
     fig.add_artist(plt.Line2D([0.0, 0.5], [0.954, 0.954],
                               transform=fig.transFigure, color=HOME_COLOR, lw=1.4))
     fig.add_artist(plt.Line2D([0.5, 1.0], [0.954, 0.954],
@@ -12156,9 +12337,9 @@ def _pdf_draw_header_footer(fig, info, page_num, total_pages, events=None):
 
 def _pdf_team_text_color(team_color):
     """
-        team   .
-    -   team
-    -    (/ )
+    اختيار لون النص لاسم الفريق على خلفية بيضاء.
+    - لو لون الفريق غامق بدرجة كافية، نستخدمه مباشرة
+    - لو فاتح جداً (أبيض/أصفر فاتح)، نستخدم النص الداكن للقراءة
     """
     if _is_light_color(team_color):
         return PDF_TEXT  # dark text for light team colors on white bg
@@ -12168,12 +12349,12 @@ def _pdf_team_text_color(team_color):
 def _blend_hex_with_white(color: str, amount: float = 0.82) -> str:
     """
     Return a soft tint of a team colour for PDF tables.
-      team       .
+    يخلط لون الفريق مع الأبيض لإنشاء تدرج خفيف لخلايا الجدول.
     """
     r, g, b = _hex_to_rgb01(color)
     sr, sg, sb = _hex_to_rgb01("#FFFFFF")  # blend toward white
     amount = _clamp(amount, 0.0, 1.0)
-    # amount=0 → amount=1 →
+    # amount=0 → اللون الأصلي كاملًا، amount=1 → أبيض كامل
     rr = int(round((r * (1 - amount) + sr * amount) * 255))
     gg = int(round((g * (1 - amount) + sg * amount) * 255))
     bb = int(round((b * (1 - amount) + sb * amount) * 255))
@@ -12234,20 +12415,20 @@ def _render_cover_page(pdf, info, stats, events, total_pages):
     ax.axis("off")
     ax.set_facecolor(PDF_BG)
 
-    # ── : HOME + AWAY ───────────────
+    # ── شريط علوي: نصف HOME + نصف AWAY ───────────────
     ax.add_patch(plt.Rectangle((0.0, 0.965), 0.5, 0.035, facecolor=h_color, edgecolor="none"))
     ax.add_patch(plt.Rectangle((0.5, 0.965), 0.5, 0.035, facecolor=a_color, edgecolor="none"))
 
-    # ── ──
+    # ── خط ذهبي تمييزي ──
     ax.add_patch(plt.Rectangle((0.055, 0.90), 0.89, 0.006, facecolor=PDF_ACCENT, edgecolor="none", alpha=0.95))
 
-    # ── ──
+    # ── العنوان ──
     ax.text(0.5, 0.79, "MATCH ANALYSIS REPORT", ha="center", va="center",
             color=PDF_TEXT, fontsize=22, fontweight="bold")
 
-    # ── ──
+    # ── النتيجة بألوان الفرق ──
     score_y = 0.70
-    
+    # نرسم النتيجة على شكل نصوص مستقلة لاستخدام لون كل فريق
     cover.text(0.30, score_y, hn, ha="right", va="center",
                color=_pdf_team_text_color(h_color), fontsize=22, fontweight="bold", transform=cover.transFigure)
     cover.text(0.50, score_y, f"{h_sc}  -  {a_sc}", ha="center", va="center",
@@ -12255,20 +12436,20 @@ def _render_cover_page(pdf, info, stats, events, total_pages):
     cover.text(0.70, score_y, an, ha="left", va="center",
                color=_pdf_team_text_color(a_color), fontsize=22, fontweight="bold", transform=cover.transFigure)
 
-    # ── ( ) ──
+    # ── ميتاداتا (الملعب، التاريخ، البطولة) ──
     meta = " | ".join([x for x in [info.get("competition", ""), info.get("venue", ""), info.get("date", "")] if x])
     ax.text(0.5, 0.625, meta, ha="center", va="center", color=PDF_TEXT_DIM, fontsize=12)
 
-    # ── ──
+    # ── المسجلون ──
     scorers = _pdf_scorers_line(events, info)
     if scorers:
         ax.text(0.5, 0.555, "Scorers", ha="center", va="center", color=PDF_ACCENT, fontsize=11.5, fontweight="bold")
         ax.text(0.5, 0.515, scorers, ha="center", va="center", color=PDF_TEXT, fontsize=9.4, wrap=True)
 
-    # ── separator line ──
+    # ── خط فاصل ──
     ax.add_patch(plt.Rectangle((0.20, 0.45), 0.60, 0.001, facecolor=PDF_BORDER, edgecolor="none"))
 
-    # ── ──
+    # ── المصادر والكاتب ──
     ax.text(0.5, 0.40, "Data: WhoScored | xG: Internal V7 event-context/team-stat model | xT: Karun Singh",
             ha="center", va="center", color=PDF_TEXT_DIM, fontsize=10)
     ax.text(0.5, 0.34, "Visuals & Analysis: Mostafa Saad",
@@ -12298,7 +12479,7 @@ def _pdf_metric_table(ax, rows, hn, an, h_color, a_color):
     ax.text(x0+w0+w1+w2/2, 1-row_h/2, an, va="center", ha="center", color=_text_on_color(a_color), fontsize=10, fontweight="bold", family="serif")
     for i, (metric, hv, av) in enumerate(rows):
         y = 1 - row_h * (i + 2)
-        
+        # تناوب بين أبيض ورمادي فاتح
         fill = PDF_SURFACE if i % 2 == 0 else PDF_BG
         ax.add_patch(plt.Rectangle((x0, y), w0, row_h, facecolor=fill, edgecolor=PDF_RULE, lw=0.45))
         ax.add_patch(plt.Rectangle((x0+w0, y), w1, row_h, facecolor=_blend_hex_with_white(h_color, 0.82), edgecolor=PDF_RULE, lw=0.45))
@@ -12386,7 +12567,52 @@ def _report_catalog_order(info):
     return sorted(catalog, key=lambda m: rank.get(m["idx"], 999 + m["idx"]))
 
 
-def _render_visual_page(pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=None):
+def _render_visual_page_side_panel(pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=None):
+    section_title, accent = _pdf_section_for_meta(meta, info)
+    page = plt.figure(figsize=PDF_PAGE_SIZE, facecolor=PDF_WHITE)
+    _pdf_draw_header_footer(page, info, page_num, total_pages, events=events)
+    _pdf_section_heading(page, section_title, meta["title"], accent=accent)
+
+    img = _figure_to_rgba(src_fig)
+    img_ax = page.add_axes([0.055, 0.405, 0.58, 0.445])
+    img_ax.set_facecolor(PDF_SURFACE)
+    img_ax.imshow(img, interpolation="lanczos")
+    img_ax.axis("off")
+    for spine in img_ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color(PDF_RULE)
+        spine.set_linewidth(0.6)
+
+    panel_ax = page.add_axes([0.665, 0.405, 0.28, 0.445])
+    panel_ax.set_xlim(0, 1)
+    panel_ax.set_ylim(0, 1)
+    panel_ax.axis("off")
+    panel_ax.add_patch(
+        mpatches.FancyBboxPatch(
+            (0, 0), 1, 1,
+            boxstyle="round,pad=0.018,rounding_size=0.02",
+            facecolor=PDF_SURFACE,
+            edgecolor=PDF_RULE,
+            lw=0.8,
+            alpha=0.98,
+        )
+    )
+    panel_ax.text(0.06, 0.94, "Tactical Note", ha="left", va="top",
+                  color=accent, fontsize=10.5, fontweight="bold", family="serif")
+    panel_ax.text(0.06, 0.86, _wrap_panel_text(statline, width=34), ha="left", va="top",
+                  color=PDF_MUTED, fontsize=8.6, family="serif")
+    panel_ax.plot([0.06, 0.94], [0.78, 0.78], color=PDF_GOLD_LINE, lw=0.7)
+    panel_ax.text(0.06, 0.74, _wrap_panel_text(commentary, width=34), ha="left", va="top",
+                  color=PDF_INK, fontsize=9.2, family="serif")
+
+    text_ax = page.add_axes([0.055, 0.065, 0.89, 0.285])
+    body = f"{statline}\n\n{commentary}"
+    _pdf_write_wrapped(text_ax, body, width=96, fontsize=9.4, line_spacing=1.15)
+    pdf.savefig(page, dpi=PDF_EXPORT_DPI, bbox_inches="tight", facecolor=PDF_WHITE, edgecolor="none", pad_inches=0.08)
+    plt.close(page)
+
+
+def _render_visual_page_reference(pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=None):
     section_title, accent = _pdf_section_for_meta(meta, info)
     page = plt.figure(figsize=PDF_PAGE_SIZE, facecolor=PDF_WHITE)
     _pdf_draw_header_footer(page, info, page_num, total_pages, events=events)
@@ -12409,20 +12635,27 @@ def _render_visual_page(pdf, src_fig, info, meta, statline, commentary, page_num
     plt.close(page)
 
 
+def _render_visual_page(pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=None):
+    style = str(globals().get("PDF_EXPLANATION_STYLE", "reference")).strip().lower()
+    if style in {"side_panel", "legacy", "current"}:
+        return _render_visual_page_side_panel(pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=events)
+    return _render_visual_page_reference(pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=events)
+
+
 def build_tactical_pdf(figs, info, events, xg_data, ts):
     """Assemble the final tactical PDF in Dark Mode with Cairo font and 300 DPI."""
-    # ── Cairo (Windows + Linux + macOS + auto-download) ────────
+    # ── تسجيل خط Cairo (Windows + Linux + macOS + auto-download) ────────
     from matplotlib import font_manager as fm
 
     def _ensure_cairo_font():
         """
-           Cairo:
-          1)
-          2)      Google Fonts
-          3)   matplotlib font_manager
-         True   False    (   ).
+        يضمن توفر خط Cairo:
+          1) يبحث في مسارات النظام الشائعة
+          2) إذا لم يجده، يُنزّله من Google Fonts إلى مجلد محلي
+          3) يُسجّله في matplotlib font_manager
+        يُرجع True إذا نجح، False إذا فشل التنزيل (الكود يستخدم خطًا بديلاً).
         """
-        # 1)
+        # 1) فحص المسارات الشائعة
         system_paths = [
             r"C:\Windows\Fonts\Cairo-Regular.ttf",
             r"C:\Windows\Fonts\Cairo-Bold.ttf",
@@ -12444,15 +12677,15 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
         if found_any:
             return True
 
-        # 2) Google Fonts
+        # 2) تنزيل من Google Fonts إلى مجلد محلي بجوار السكريبت
         try:
             local_fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
         except NameError:
             local_fonts_dir = os.path.join(os.getcwd(), "fonts")
         os.makedirs(local_fonts_dir, exist_ok=True)
 
-        # — .
-        # TTF static (jsdelivr / unpkg / fonts.gstatic).
+        # الروابط مرتبة بالأولوية — أول رابط يعمل يكفي.
+        # نستخدم TTF static من مصادر موثوقة (jsdelivr / unpkg / fonts.gstatic).
         cairo_sources = {
             "Cairo-Regular.ttf": [
                 "https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-arabic-400-normal.ttf",
@@ -12470,7 +12703,7 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
         for fname, urls in cairo_sources.items():
             local_path = os.path.join(local_fonts_dir, fname)
             if os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
-                # —
+                # موجود مسبقًا — استخدمه مباشرة
                 try:
                     fm.fontManager.addfont(local_path)
                     found_any = True
@@ -12478,7 +12711,7 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
                     pass
                 continue
 
-            
+            # جرّب كل المصادر بالترتيب
             for url in urls:
                 try:
                     import urllib.request
@@ -12487,7 +12720,7 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
                     with urllib.request.urlopen(req, timeout=15) as resp:
                         data = resp.read()
                         if len(data) < 1000:
-                            continue  # —
+                            continue  # ملف فاسد — جرّب الرابط التالي
                         with open(local_path, "wb") as f:
                             f.write(data)
                         downloaded = True
@@ -12503,7 +12736,7 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
                     pass
 
         if downloaded:
-            # cache
+            # إعادة بناء الـ cache مرة واحدة بعد التنزيل
             try:
                 fm._load_fontmanager(try_read_cache=False)
             except Exception:
@@ -12522,7 +12755,7 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
             "[dim]    To install Cairo: download from https://fonts.google.com/specimen/Cairo[/dim]"
         )
 
-    # ── Dark Mode rcParams PDF ────────────────────
+    # ── Dark Mode rcParams شاملة لكل صفحات الـ PDF ────────────────────
     matplotlib.rcParams.update({
         "figure.facecolor":   PDF_BG,
         "axes.facecolor":     PDF_SURFACE,
@@ -12702,7 +12935,7 @@ def print_summary(info, xg_data, events):
 def main():
     os.makedirs(SAVE_DIR, exist_ok=True)
 
-    # ── Scrape 3 ─────────────────
+    # ── Scrape بـ 3 محاولات تلقائية ─────────────────
     md = scrape_match(
         MATCH_URL,
         chromedriver_path=CHROMEDRIVER_PATH,
@@ -12712,24 +12945,30 @@ def main():
 
     info, events, players = parse_all(md)
 
-    # ── team ──
-    # : C_RED C_BLUE visual team
-    # (C_RED C_BLUE ) HOME_COLOR/AWAY_COLOR .
-    # .
+    # ── تحديث ألوان الفريقين من قمصانهما الرسمية ──
+    # ملاحظة: الكود يستخدم C_RED و C_BLUE في كل الفيجوال كألوان الفريقين
+    # (C_RED للمضيف، C_BLUE للضيف)، ولا يستخدم HOME_COLOR/AWAY_COLOR غالبًا.
+    # لذلك نحدّث كليهما معًا لضمان انعكاس اللون الصحيح في كل الرسوم.
     global HOME_COLOR, AWAY_COLOR, C_RED, C_BLUE
     home_col, away_col = choose_matchup_colors(
         info.get("home_name", ""),
         info.get("away_name", ""),
+        HOME_KIT_TYPE,
+        AWAY_KIT_TYPE,
     )
 
     HOME_COLOR = home_col
     AWAY_COLOR = away_col
-    C_RED      = home_col   # home team C_RED
-    C_BLUE     = away_col   # away team C_BLUE
+    C_RED      = home_col   # المضيف يُستخدم عبر الكود باسم C_RED
+    C_BLUE     = away_col   # الضيف  يُستخدم عبر الكود باسم C_BLUE
+    info["home_color"] = home_col
+    info["away_color"] = away_col
+    info["home_kit_type"] = HOME_KIT_TYPE
+    info["away_kit_type"] = AWAY_KIT_TYPE
 
     console.print(
-        f"[dim]  Team colors: {info.get('home_name', '?')} = {home_col}  |  "
-        f"{info.get('away_name', '?')} = {away_col}[/dim]"
+        f"[dim]  Team colors: {info.get('home_name', '?')} ({HOME_KIT_TYPE}) = {home_col}  |  "
+        f"{info.get('away_name', '?')} ({AWAY_KIT_TYPE}) = {away_col}[/dim]"
     )
 
     # First try the official team stats already embedded in matchCentreData.
@@ -13427,11 +13666,11 @@ def main():
     else:
         fq = _sf(10, 8, "Defensive Actions", team_color=C_RED, team_name=hn,
                  subtitle=f"{hn}   |   Tackles · Interceptions · Recoveries · Clearances · Aerials")
-        _panel_defensive_heatmap(_sp(fq, lp=0.02, rp=0.98), events, hid, C_RED, hn)
+        _panel_defensive_heatmap(_sp(fq, lp=0.02, rp=0.98), events, hid, C_RED, hn, info)
         _sv(fq, f"{base}/28_defensive_hm_home_{ts}.png")
         fr = _sf(10, 8, "Defensive Actions", team_color=C_BLUE, team_name=an,
                  subtitle=f"{an}   |   Tackles · Interceptions · Recoveries · Clearances · Aerials")
-        _panel_defensive_heatmap(_sp(fr, lp=0.02, rp=0.98), events, aid, C_BLUE, an)
+        _panel_defensive_heatmap(_sp(fr, lp=0.02, rp=0.98), events, aid, C_BLUE, an, info)
         _sv(fr, f"{base}/29_defensive_hm_away_{ts}.png")
 
     # ── 30: Defensive Summary (v2) ──────────────────────────────

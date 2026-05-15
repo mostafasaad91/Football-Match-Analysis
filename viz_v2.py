@@ -14,26 +14,41 @@ Strict colour discipline:
     red/blue → teams only · gold → accent/leader/chrome · grey → labels
 """
 from __future__ import annotations
+import os
 import textwrap as _tw
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 
 # ── Palette ─────────────────────────────────────────────────────────────
-BG_DARK   = "#050508"
-BG_MID    = "#0d1117"
-BG_PANEL  = "#0a0e16"
-BG_PITCH  = "#070d14"
-GRID_COL  = "#1e2836"
-GRID_SOFT = "#141b27"
+_THEME = os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower()
+if _THEME == "light":
+    BG_DARK   = "#FFFFFF"
+    BG_MID    = "#F3F4F6"
+    BG_PANEL  = "#FFFFFF"
+    BG_PITCH  = "#EEF7EE"
+    GRID_COL  = "#D1D5DB"
+    GRID_SOFT = "#E5E7EB"
 
-TEXT_BR   = "#ffffff"
-TEXT_MAIN = "#f0f4ff"
-TEXT_DIM  = "#94a3b8"
-TEXT_FAD  = "#64748b"
+    TEXT_BR   = "#111827"
+    TEXT_MAIN = "#1F2937"
+    TEXT_DIM  = "#4B5563"
+    TEXT_FAD  = "#6B7280"
+else:
+    BG_DARK   = "#050508"
+    BG_MID    = "#0d1117"
+    BG_PANEL  = "#0a0e16"
+    BG_PITCH  = "#070d14"
+    GRID_COL  = "#1e2836"
+    GRID_SOFT = "#141b27"
+
+    TEXT_BR   = "#ffffff"
+    TEXT_MAIN = "#f0f4ff"
+    TEXT_DIM  = "#94a3b8"
+    TEXT_FAD  = "#64748b"
 
 C_HOME = "#e63946"
 C_AWAY = "#1e90ff"
-C_GOLD = "#facc15"
+C_GOLD = "#D97706" if _THEME == "light" else "#facc15"
 
 
 def shadow(w: float = 2.0, fg: str = BG_DARK):
@@ -130,12 +145,15 @@ def key_insight(fig, x, y, w, h, *, text: str, wrap: int = 42):
         s.set_edgecolor(C_GOLD); s.set_linewidth(1.2)
     ax.set_xticks([]); ax.set_yticks([])
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    header_text = "#78350F" if _THEME == "light" else C_GOLD
+    header_alpha = 0.14 if _THEME == "light" else 0.18
     ax.add_patch(mpatches.Rectangle((0, 0.78), 1, 0.22,
-                  facecolor=C_GOLD, alpha=0.18, lw=0,
+                  facecolor=C_GOLD, alpha=header_alpha, lw=0,
                   transform=ax.transAxes))
     ax.text(0.04, 0.89, "KEY INSIGHT", ha="left", va="center",
-            color=C_GOLD, fontsize=10, fontweight="bold",
-            transform=ax.transAxes, path_effects=shadow(2))
+            color=header_text, fontsize=10, fontweight="bold",
+            transform=ax.transAxes,
+            path_effects=([] if _THEME == "light" else shadow(2)))
     body = "\n".join(_tw.wrap(text, width=wrap))
     ax.text(0.04, 0.62, body, ha="left", va="top",
             color=TEXT_MAIN, fontsize=11, transform=ax.transAxes,

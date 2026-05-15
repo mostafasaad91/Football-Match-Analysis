@@ -13,6 +13,7 @@ The renderers compose the design-system primitives from viz_v2.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
@@ -23,6 +24,14 @@ from viz_v2 import (
     BG_DARK, BG_MID, GRID_COL, TEXT_BR, TEXT_MAIN, TEXT_DIM,
     C_HOME, C_AWAY, C_GOLD, shadow,
 )
+
+IS_LIGHT_THEME = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
+ROW_BG = "#F8FAFC" if IS_LIGHT_THEME else "#0f1620"
+MID_BG = "#F8FAFC" if IS_LIGHT_THEME else "#0a0e16"
+PASS_ARROW = "#111827" if IS_LIGHT_THEME else "#ffffff"
+PASS_NEG = "#7F1D1D" if IS_LIGHT_THEME else "#e63946"
+GOAL_ROW_HOME = "#F8FAFC" if IS_LIGHT_THEME else "#1a0a0a"
+GOAL_ROW_AWAY = "#F1F5F9" if IS_LIGHT_THEME else "#0a1630"
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -150,7 +159,7 @@ def render_xg_flow_v2(hn, an, score, hc, ac, shots_h, shots_a):
             if i % 2 == 0:
                 ax2.add_patch(mpatches.Rectangle(
                     (0.04, cy - rh*0.42), 0.92, rh*0.84,
-                    facecolor="#0f1620", lw=0,
+                    facecolor=ROW_BG, lw=0,
                     transform=ax2.transAxes, zorder=1))
             ax2.text(0.05, cy, f"{s['minute']}'", ha="left", va="center",
                      color=TEXT_DIM, fontsize=10.5, fontweight="bold",
@@ -297,7 +306,7 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
             if i % 2 == 0:
                 ax2.add_patch(mpatches.Rectangle(
                     (0.04, cy - rh*0.42), 0.92, rh*0.84,
-                    facecolor="#0f1620", lw=0,
+                    facecolor=ROW_BG, lw=0,
                     transform=ax2.transAxes, zorder=1))
             label = (player or "—").split()[-1] if player else "—"
             ax2.text(0.05, cy, label, ha="left", va="center",
@@ -344,7 +353,9 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
 # ═════════════════════════════════════════════════════════════════════════
 #  3. SHOT BREAKDOWN v2
 # ═════════════════════════════════════════════════════════════════════════
-def render_shot_breakdown_v2(hn, an, score, home, away, goals):
+def render_shot_breakdown_v2(hn, an, score, home, away, goals, hc=None, ac=None):
+    hc = hc or C_HOME
+    ac = ac or C_AWAY
     fig = plt.figure(figsize=(16, 10), facecolor=BG_DARK)
     chrome(fig, section="SHOT BREAKDOWN",
            title=f"{hn} vs {an} — Shot Breakdown & Goals",
@@ -366,8 +377,8 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals):
     ax1.set_ylim(0, max(h_vals + a_vals + [1]) * 1.35)
     for y in np.arange(0, max(h_vals + a_vals + [1]) * 1.35, 5):
         ax1.axhline(y, color=GRID_COL, lw=0.4, alpha=0.5, zorder=0)
-    ax1.bar(pos - w/2, h_vals, w, color=C_HOME, alpha=0.9, lw=0, zorder=2)
-    ax1.bar(pos + w/2, a_vals, w, color=C_AWAY, alpha=0.9, lw=0, zorder=2)
+    ax1.bar(pos - w/2, h_vals, w, color=hc, alpha=0.9, lw=0, zorder=2)
+    ax1.bar(pos + w/2, a_vals, w, color=ac, alpha=0.9, lw=0, zorder=2)
     for i, (hv, av) in enumerate(zip(h_vals, a_vals)):
         h_col = C_GOLD if hv > av else TEXT_BR
         a_col = C_GOLD if av > hv else TEXT_BR
@@ -382,9 +393,9 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals):
     ax1.tick_params(axis="x", length=0, pad=8); ax1.set_yticks([])
     for sp in ["top", "right", "left", "bottom"]:
         ax1.spines[sp].set_visible(False)
-    ax1.text(0.02, -0.16, "● " + hn, color=C_HOME, fontsize=10,
+    ax1.text(0.02, -0.16, "● " + hn, color=hc, fontsize=10,
              fontweight="bold", transform=ax1.transAxes)
-    ax1.text(0.20, -0.16, "● " + an, color=C_AWAY, fontsize=10,
+    ax1.text(0.20, -0.16, "● " + an, color=ac, fontsize=10,
              fontweight="bold", transform=ax1.transAxes)
 
     diff_xg = home.get("xG", 0) - away.get("xG", 0)
@@ -420,9 +431,9 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals):
     for i, g in enumerate(goals):
         mn, scorer, gtype, assist, xg, side = g
         cy = 0.74 - (i + 0.5) * row_h
-        team_col = C_HOME if side == "home" else C_AWAY
+        team_col = hc if side == "home" else ac
         team_nm  = hn if side == "home" else an
-        fc = "#1a0a0a" if side == "home" else "#0a1630"
+        fc = GOAL_ROW_HOME if side == "home" else GOAL_ROW_AWAY
         ax2.add_patch(mpatches.Rectangle(
             (0.03, cy - row_h*0.42), 0.94, row_h*0.84,
             facecolor=fc, lw=0, transform=ax2.transAxes, zorder=1))
@@ -430,7 +441,8 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals):
                  color=TEXT_DIM, fontsize=10, fontweight="bold",
                  transform=ax2.transAxes, zorder=2)
         ax2.text(0.13, cy, scorer, ha="left", va="center",
-                 color=TEXT_BR, fontsize=11, fontweight="bold",
+                 color=TEXT_BR if not IS_LIGHT_THEME else "#111827",
+                 fontsize=11, fontweight="bold",
                  transform=ax2.transAxes, zorder=2)
         ax2.text(0.30, cy, team_nm, ha="left", va="center",
                  color=team_col, fontsize=10.5, fontweight="bold",
@@ -456,10 +468,10 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals):
     away_g = sum(1 for g in goals if g[5] == "away")
     cards = [
         ("Final Score",     f"{score}",                         C_GOLD),
-        (f"{hn[:14]} xG",   f"{home.get('xG', 0):.2f}",         C_HOME),
+        (f"{hn[:14]} xG",   f"{home.get('xG', 0):.2f}",         hc),
         ("xG Diff",         f"{'+' if diff_xg >= 0 else ''}{diff_xg:.2f}",
          C_GOLD),
-        (f"{an[:14]} xG",   f"{away.get('xG', 0):.2f}",         C_AWAY),
+        (f"{an[:14]} xG",   f"{away.get('xG', 0):.2f}",         ac),
         ("Goals — H/A",     f"{home_g} / {away_g}",             C_GOLD),
     ]
     metric_strip(fig, cards=cards)
@@ -469,6 +481,24 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals):
 # ═════════════════════════════════════════════════════════════════════════
 #  4. PASS NETWORK v2
 # ═════════════════════════════════════════════════════════════════════════
+def _role_color(role, team_color):
+    return {
+        "sub_in": "#15803D",
+        "sub_out": "#92400E",
+        "both_sub": "#7C3AED",
+        "red_card": "#B91C1C",
+    }.get(role or "", team_color)
+
+
+def _role_badge(role):
+    return {
+        "sub_in": "↑",
+        "sub_out": "↓",
+        "both_sub": "↕",
+        "red_card": "RC",
+    }.get(role or "", "")
+
+
 def render_pass_network_v2(team_name, opp_name, score, team_color,
                            players, edges):
     fig = plt.figure(figsize=(15, 10), facecolor=BG_DARK)
@@ -492,10 +522,10 @@ def render_pass_network_v2(team_name, opp_name, score, team_color,
             continue
         p1 = by_name[e["from"]]; p2 = by_name[e["to"]]
         ratio = e["count"] / max_e
-        lw    = 1.2 + 8.0 * ratio
-        alpha = 0.45 + 0.55 * ratio
+        lw    = 1.8 + 10.0 * ratio
+        alpha = 0.58 + 0.42 * ratio
         ax.plot([p1["x"], p2["x"]], [p1["y"], p2["y"]],
-                color="white", lw=lw + 1.4, alpha=0.10,
+                color=TEXT_BR, lw=lw + 3.2, alpha=0.20,
                 solid_capstyle="round", zorder=2)
         ax.plot([p1["x"], p2["x"]], [p1["y"], p2["y"]],
                 color=team_color, lw=lw, alpha=alpha,
@@ -515,13 +545,18 @@ def render_pass_network_v2(team_name, opp_name, score, team_color,
     max_p = max((p["passes"] for p in players), default=1)
     for p in players:
         size = 380 + 1700 * (p["passes"] / max_p)
+        role = p.get("role", "")
+        node_color = _role_color(role, team_color)
+        badge = _role_badge(role)
         ax.scatter([p["x"]], [p["y"]], s=size + 200, color=TEXT_BR,
                    alpha=0.95, zorder=5)
-        ax.scatter([p["x"]], [p["y"]], s=size, color=team_color,
+        ax.scatter([p["x"]], [p["y"]], s=size, color=node_color,
                    edgecolor=TEXT_BR, lw=1.6, alpha=0.96, zorder=6)
         short = (p["name"] or "").split()[-1][:9]
+        if badge:
+            short = f"{short} {badge}"
         ax.text(p["x"], p["y"] + 0.5, short, ha="center", va="center",
-                color=TEXT_BR, fontsize=8.5, fontweight="bold",
+                color=TEXT_BR if not badge else node_color, fontsize=8.5, fontweight="bold",
                 path_effects=shadow(2.0), zorder=7)
         ax.text(p["x"], p["y"] - 3.4, str(p["passes"]),
                 ha="center", va="center",
@@ -551,7 +586,7 @@ def render_pass_network_v2(team_name, opp_name, score, team_color,
             if i % 2 == 0:
                 ax2.add_patch(mpatches.Rectangle(
                     (0.04, cy - rh*0.42), 0.92, rh*0.84,
-                    facecolor="#0f1620", lw=0,
+                    facecolor=ROW_BG, lw=0,
                     transform=ax2.transAxes, zorder=1))
             from_short = (e["from"] or "").split()[-1]
             to_short   = (e["to"]   or "").split()[-1]
@@ -569,7 +604,7 @@ def render_pass_network_v2(team_name, opp_name, score, team_color,
         most_active = (top_player["name"] or "").split()[-1]
         avg_x = int(np.mean([p["x"] for p in players]))
         insight = (
-            f"{team_name} attempted {total_passes} passes between starters. "
+            f"{team_name} attempted {total_passes} passes across all used players. "
             f"{most_active} was the busiest hub with {top_player['passes']} "
             f"passes. The team's centre of gravity sat at x≈{avg_x} "
             f"on the pitch."
@@ -630,12 +665,13 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
             v  = grid[r, c]
             cx = (c + 0.5) * cell_w
             cy = (r + 0.5) * cell_h
-            tc = TEXT_BR if v < 0.30 else "#111111"
+            tc = "#F8FAFC" if IS_LIGHT_THEME else (TEXT_BR if v < 0.30 else "#111111")
+            stroke_col = "#0F172A" if IS_LIGHT_THEME else ("#000000" if tc == TEXT_BR else "#ffffff")
             ax.text(cx, cy, f"{v:.3f}", ha="center", va="center",
                     color=tc, fontsize=6.0, fontweight="bold",
                     path_effects=[pe.withStroke(
-                        linewidth=1.2,
-                        foreground=("#000000" if tc == TEXT_BR else "#ffffff"))],
+                        linewidth=1.1 if IS_LIGHT_THEME else 1.2,
+                        foreground=stroke_col)],
                     zorder=3)
 
     pos = [p for p in passes if p.get("successful") and p.get("xT", 0) > 0]
@@ -645,11 +681,11 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
         for p in pos:
             a = 0.18 + 0.55 * (p["xT"] / max_pos)
             ax.plot([p["x"], p["end_x"]], [p["y"], p["end_y"]],
-                    color="white", lw=0.6, alpha=a,
+                    color=PASS_ARROW, lw=0.85, alpha=a,
                     solid_capstyle="round", zorder=4)
     for p in neg:
         ax.plot([p["x"], p["end_x"]], [p["y"], p["end_y"]],
-                color=C_HOME, lw=0.5, alpha=0.18,
+                color=PASS_NEG, lw=0.65, alpha=0.18,
                 solid_capstyle="round", zorder=4)
     top5_passes = sorted(pos, key=lambda p: -p["xT"])[:5]
     for p in top5_passes:
@@ -692,7 +728,7 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
             if i % 2 == 0:
                 ax2.add_patch(mpatches.Rectangle(
                     (0.04, cy - rh*0.42), 0.92, rh*0.84,
-                    facecolor="#0f1620", lw=0,
+                    facecolor=ROW_BG, lw=0,
                     transform=ax2.transAxes, zorder=1))
             ax2.text(0.05, cy, (player or "—").split()[-1],
                      ha="left", va="center",
@@ -753,6 +789,13 @@ def _safe(v, default=0):
         return default
 
 
+def _match_colors(info):
+    return (
+        info.get("home_color") or info.get("HOME_COLOR") or C_HOME,
+        info.get("away_color") or info.get("AWAY_COLOR") or C_AWAY,
+    )
+
+
 def _shots_for_team(events, team_id):
     out = []
     sub = events[(events["is_shot"] == True) & (events["team_id"] == team_id)]
@@ -776,8 +819,9 @@ def make_xg_flow_v2(events, info, xg_data=None):
     an  = info.get("away_name") or "Away"
     hid = info.get("home_id"); aid = info.get("away_id")
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
     return render_xg_flow_v2(
-        hn, an, str(score), C_HOME, C_AWAY,
+        hn, an, str(score), hc, ac,
         _shots_for_team(events, hid),
         _shots_for_team(events, aid),
     )
@@ -798,6 +842,7 @@ def make_shot_breakdown_v2(events, info, xg_data):
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
     h = xg_data.get(hn, {}) if xg_data else {}
     a = xg_data.get(an, {}) if xg_data else {}
     home = {k: int(_safe(h.get(k), 0))
@@ -806,6 +851,47 @@ def make_shot_breakdown_v2(events, info, xg_data):
             for k in ("shots", "on_target", "off_target", "blocked", "post")}
     home["xG"] = float(_safe(h.get("xG"), 0) or 0)
     away["xG"] = float(_safe(a.get("xG"), 0) or 0)
+
+    def _assist_from_context(goal_row):
+        """Fallback assist lookup from the same-team action immediately before a goal."""
+        explicit = goal_row.get("assist_player")
+        if explicit and str(explicit).lower() != "nan":
+            return str(explicit), goal_row.get("assist_type")
+        if events is None or events.empty:
+            return "", ""
+        scoring_team = goal_row.get("scoring_team") or goal_row.get("team_id")
+        minute = _safe(goal_row.get("minute"), 0) or 0
+        second = _safe(goal_row.get("second"), 0) or 0
+        goal_time = float(minute) * 60 + float(second)
+        cand = events[events.get("team_id") == scoring_team].copy()
+        if cand.empty:
+            return "", ""
+        cand["__t"] = cand.get("minute", 0).fillna(0).astype(float) * 60 + cand.get("second", 0).fillna(0).astype(float)
+        cand = cand[(cand["__t"] < goal_time) & (cand["__t"] >= goal_time - 25)]
+        if "is_pass" in cand.columns:
+            cand = cand[cand["is_pass"] == True]
+        if "outcome" in cand.columns:
+            successful = cand[cand["outcome"].fillna("").astype(str).str.lower().eq("successful")]
+            if not successful.empty:
+                cand = successful
+        if cand.empty:
+            return "", ""
+        if "is_key_pass" in cand.columns and cand["is_key_pass"].any():
+            cand = cand[cand["is_key_pass"] == True]
+        last = cand.sort_values("__t").iloc[-1]
+        name = str(last.get("player") or "")
+        q = str(last.get("qualifier_names") or "")
+        if "Cross" in q:
+            at = "Cross"
+        elif "ThroughBall" in q:
+            at = "ThroughBall"
+        elif "Chipped" in q:
+            at = "Chipped"
+        elif "FastBreak" in q:
+            at = "FastBreak"
+        else:
+            at = last.get("assist_type") or "Assist"
+        return name, at
 
     # Goals list — same shape the renderer expects
     goals_list = []
@@ -822,8 +908,7 @@ def make_shot_breakdown_v2(events, info, xg_data):
             gtype = "SP"
         else:
             gtype = "OP"
-        ap = row.get("assist_player")
-        at = row.get("assist_type")
+        ap, at = _assist_from_context(row)
         if ap and str(ap).lower() != "nan":
             assist = f"{ap}" + (f" ({at})" if at and str(at).lower() != "nan"
                                   else "")
@@ -837,7 +922,7 @@ def make_shot_breakdown_v2(events, info, xg_data):
             float(_safe(row.get("xG"), 0) or 0),
             side,
         ))
-    return render_shot_breakdown_v2(hn, an, str(score), home, away, goals_list)
+    return render_shot_breakdown_v2(hn, an, str(score), home, away, goals_list, hc, ac)
 
 
 def make_pass_network_v2(events, info, team_id, team_color):
@@ -901,18 +986,35 @@ def make_pass_network_v2(events, info, team_id, team_color):
         key = tuple(sorted([passer_id, recv_id]))
         edges_count[key] = edges_count.get(key, 0) + 1
 
-    # Restrict to top 11 by activity (passes made + received)
+    sub_in = set(info.get("sub_in") or [])
+    sub_out = set(info.get("sub_out") or [])
+    red_cards = set(info.get("red_cards") or [])
+
+    def _pid_role(pid):
+        if pid in red_cards:
+            return "red_card"
+        if pid in sub_in and pid in sub_out:
+            return "both_sub"
+        if pid in sub_in:
+            return "sub_in"
+        if pid in sub_out:
+            return "sub_out"
+        return ""
+
+    # Keep the main structure plus every substituted player who touched/passed.
     activity = {pid: n["passes"] for pid, n in nodes.items()}
     for (a, b), c in edges_count.items():
         activity[a] = activity.get(a, 0) + c * 0.5
         activity[b] = activity.get(b, 0) + c * 0.5
     keep = set(sorted(activity, key=activity.get, reverse=True)[:11])
+    keep.update(pid for pid in activity if pid in sub_in or pid in sub_out or pid in red_cards)
 
     players_list = [
         {"name": nodes[pid]["name"],
          "x":     nodes[pid]["avg_x"],
          "y":     nodes[pid]["avg_y"],
-         "passes": nodes[pid]["passes"]}
+         "passes": nodes[pid]["passes"],
+         "role": _pid_role(pid)}
         for pid in keep if pid in nodes
         and not (np.isnan(nodes[pid]["avg_x"])
                  or np.isnan(nodes[pid]["avg_y"]))
@@ -1024,7 +1126,7 @@ def render_pitch_overlay_v2(
             if i % 2 == 0:
                 ax2.add_patch(mpatches.Rectangle(
                     (0.04, cy - rh*0.42), 0.92, rh*0.84,
-                    facecolor="#0f1620", lw=0,
+                    facecolor=ROW_BG, lw=0,
                     transform=ax2.transAxes, zorder=1))
             for j, (val, x) in enumerate(zip(row, xs)):
                 ha = "left" if j == 0 else ("right" if j == n_cols - 1
@@ -1056,6 +1158,78 @@ DEF_TYPE_COLORS = {
 }
 
 
+def _blocked_shots_for_team(events, info, team_id) -> int:
+    """Count blocked shots as defensive blocks by the opponent of the shooter."""
+    if "team_id" not in events.columns:
+        return 0
+    hid = info.get("home_id")
+    aid = info.get("away_id")
+
+    def _blocked_shots_by(shooter_id):
+        mask = events["team_id"] == shooter_id
+        hit = pd.Series(False, index=events.index)
+        for col in ("type", "shot_whoscored_type", "shot_category"):
+            if col in events.columns:
+                vals = events[col].fillna("").astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
+                hit = hit | vals.isin({"blockedshot", "blocked"})
+        if "qualifier_names" in events.columns:
+            hit = hit | events["qualifier_names"].fillna("").astype(str).str.contains(r"\bBlocked\b", case=False, regex=True)
+        if "is_shot" in events.columns:
+            mask = mask & ((events["is_shot"] == True) | hit)
+        return events[mask & hit].copy()
+
+    direct = len(_blocked_shots_by(team_id))
+    opp_id = aid if team_id == hid else (hid if team_id == aid else None)
+    if opp_id is None:
+        return direct
+    opponent_blocked_shots = len(_blocked_shots_by(opp_id))
+    if not opponent_blocked_shots:
+        opp_side = "away" if team_id == hid else "home"
+        mc = (info.get("matchcentre_stats", {}) or {}).get(opp_side, {}) or {}
+        opponent_blocked_shots = int(_safe(mc.get("blocked"), 0) or 0)
+    return opponent_blocked_shots if opponent_blocked_shots else direct
+
+
+def _defensive_events_for_team(events, info, team_id):
+    """Return defensive events, mapping opponent BlockedShot events to this team."""
+    own_types = [t for t in DEF_TYPE_COLORS.keys() if t != "BlockedShot"]
+    own = events[(events["team_id"] == team_id) & events["type"].isin(own_types)].copy()
+    hid = info.get("home_id")
+    aid = info.get("away_id")
+    opp_id = aid if team_id == hid else (hid if team_id == aid else None)
+
+    def _blocked_shots_by(shooter_id):
+        mask = events["team_id"] == shooter_id
+        hit = pd.Series(False, index=events.index)
+        for col in ("type", "shot_whoscored_type", "shot_category"):
+            if col in events.columns:
+                vals = events[col].fillna("").astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
+                hit = hit | vals.isin({"blockedshot", "blocked"})
+        if "qualifier_names" in events.columns:
+            hit = hit | events["qualifier_names"].fillna("").astype(str).str.contains(r"\bBlocked\b", case=False, regex=True)
+        if "is_shot" in events.columns:
+            mask = mask & ((events["is_shot"] == True) | hit)
+        return events[mask & hit].copy()
+
+    if opp_id is not None:
+        blocks = _blocked_shots_by(opp_id)
+        if blocks.empty:
+            blocks = _blocked_shots_by(team_id)
+    else:
+        blocks = _blocked_shots_by(team_id)
+
+    if not blocks.empty:
+        blocks["team_id"] = team_id
+        blocks["type"] = "BlockedShot"
+        blocks["player"] = blocks.get("blocked_by", "Team block")
+        blocks["player"] = blocks["player"].fillna("Team block").replace("", "Team block")
+    if own.empty:
+        return blocks
+    if blocks.empty:
+        return own
+    return pd.concat([own, blocks], ignore_index=True, sort=False)
+
+
 def make_defensive_heatmap_v2(events, info, team_id, team_color):
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
@@ -1064,8 +1238,7 @@ def make_defensive_heatmap_v2(events, info, team_id, team_color):
     opp_name  = an if is_home else hn
     score = info.get("score") or "—"
 
-    sub = events[(events["team_id"] == team_id) &
-                 events["type"].isin(list(DEF_TYPE_COLORS.keys()))]
+    sub = _defensive_events_for_team(events, info, team_id)
     by_type = {}
     by_player = {}
     points = []
@@ -1106,7 +1279,8 @@ def make_defensive_heatmap_v2(events, info, team_id, team_color):
         f"led the workload with {top_players[0][1]} actions. "
         f"Tackles: {by_type.get('Tackle', 0)} · "
         f"Interceptions: {by_type.get('Interception', 0)} · "
-        f"Clearances: {by_type.get('Clearance', 0)}."
+        f"Clearances: {by_type.get('Clearance', 0)} · "
+        f"Blocks: {by_type.get('BlockedShot', 0)}."
     ) if top_players else f"{team_name} — no defensive data."
 
     cards = [
@@ -1114,7 +1288,7 @@ def make_defensive_heatmap_v2(events, info, team_id, team_color):
         ("Tackles",       str(by_type.get("Tackle", 0)),    team_color),
         ("Interceptions", str(by_type.get("Interception", 0)), C_GOLD),
         ("Clearances",    str(by_type.get("Clearance", 0)), team_color),
-        ("Recoveries",    str(by_type.get("BallRecovery", 0)), C_GOLD),
+        ("Blocks",        str(by_type.get("BlockedShot", 0)), C_GOLD),
     ]
     return render_pitch_overlay_v2(
         section="DEFENSIVE ACTIONS",
@@ -1142,18 +1316,39 @@ def make_avg_positions_v2(events, info, team_id, team_color):
     opp_name  = an if is_home else hn
     score = info.get("score") or "—"
 
+    sub_in = set(info.get("sub_in") or [])
+    sub_out = set(info.get("sub_out") or [])
+    red_cards = set(info.get("red_cards") or [])
+
+    def _pid_role(pid):
+        if pid in red_cards:
+            return "red_card"
+        if pid in sub_in and pid in sub_out:
+            return "both_sub"
+        if pid in sub_in:
+            return "sub_in"
+        if pid in sub_out:
+            return "sub_out"
+        return ""
+
     sub = events[(events["team_id"] == team_id) &
+                 events["player_id"].notna() &
                  events["x"].notna() & events["y"].notna()]
-    grp = sub.groupby("player", dropna=True).agg(
+    grp_all = sub.groupby(["player_id", "player"], dropna=True).agg(
         x=("x", "mean"), y=("y", "mean"), touches=("event_id", "count"),
-    ).reset_index().sort_values("touches", ascending=False).head(11)
+    ).reset_index().sort_values("touches", ascending=False)
+    keep_ids = set(grp_all.head(11)["player_id"].tolist())
+    keep_ids.update(pid for pid in grp_all["player_id"].tolist()
+                    if pid in sub_in or pid in sub_out or pid in red_cards)
+    grp = grp_all[grp_all["player_id"].isin(keep_ids)]
 
     players = []
     for _, r in grp.iterrows():
         players.append({"name": str(r["player"]),
                         "x": float(r["x"]),
                         "y": float(r["y"]),
-                        "touches": int(r["touches"])})
+                        "touches": int(r["touches"]),
+                        "role": _pid_role(r["player_id"])})
     max_t = max((p["touches"] for p in players), default=1)
 
     def draw_overlay(ax):
@@ -1168,14 +1363,18 @@ def make_avg_positions_v2(events, info, team_id, team_color):
                        zorder=2)
         for p in players:
             sz = 380 + 1500 * (p["touches"] / max_t)
+            node_color = _role_color(p.get("role"), team_color)
+            badge = _role_badge(p.get("role"))
             ax.scatter([p["x"]], [p["y"]], s=sz + 220, color=TEXT_BR,
                        alpha=0.95, zorder=4)
-            ax.scatter([p["x"]], [p["y"]], s=sz, color=team_color,
+            ax.scatter([p["x"]], [p["y"]], s=sz, color=node_color,
                        edgecolor=TEXT_BR, lw=1.4, alpha=0.96, zorder=5)
+            label = p["name"].split()[-1][:9] + (f" {badge}" if badge else "")
             ax.text(p["x"], p["y"] + 0.5,
-                    p["name"].split()[-1][:9],
+                    label,
                     ha="center", va="center",
-                    color=TEXT_BR, fontsize=8.5, fontweight="bold",
+                    color=TEXT_BR if not badge else node_color,
+                    fontsize=8.5, fontweight="bold",
                     path_effects=shadow(2.0), zorder=6)
             ax.text(p["x"], p["y"] - 3.4, str(p["touches"]),
                     ha="center", va="center",
@@ -1746,16 +1945,27 @@ def make_pass_thirds_v2(events, info, team_id, team_color):
             by_player[p] = by_player.get(p, 0) + 1
 
     def draw_overlay(ax):
-        for grp, col in [(def_p, "#64748b"),
+        def_col = "#475569" if IS_LIGHT_THEME else "#64748b"
+        att_col = "#B45309" if IS_LIGHT_THEME else C_GOLD
+        for grp, col in [(def_p, def_col),
                           (mid_p, team_color),
-                          (att_p, C_GOLD)]:
+                          (att_p, att_col)]:
             for sx, sy, ex, ey, ok in grp:
-                a = 0.45 if ok else 0.18
-                ax.plot([sx, ex], [sy, ey], color=col, lw=0.6,
-                        alpha=a, solid_capstyle="round", zorder=3)
+                a = 0.68 if ok else 0.32
+                lw = 0.95 if ok else 0.65
+                ax.annotate(
+                    "", xy=(ex, ey), xytext=(sx, sy),
+                    arrowprops=dict(
+                        arrowstyle="-|>", color=col, lw=lw, alpha=a,
+                        mutation_scale=6.5 if ok else 5.0,
+                        shrinkA=0, shrinkB=0,
+                    ),
+                    zorder=3,
+                )
         # Third dividers
-        ax.axvline(33, color="white", lw=0.5, ls="--", alpha=0.18, zorder=1)
-        ax.axvline(67, color="white", lw=0.5, ls="--", alpha=0.18, zorder=1)
+        div_col = "#334155" if IS_LIGHT_THEME else "white"
+        ax.axvline(33, color=div_col, lw=0.8, ls="--", alpha=0.35, zorder=1)
+        ax.axvline(67, color=div_col, lw=0.8, ls="--", alpha=0.35, zorder=1)
         ax.text(16.5, 95, "DEF",  color=TEXT_DIM, fontsize=7,
                 fontweight="bold", ha="center")
         ax.text(50,   95, "MID",  color=TEXT_DIM, fontsize=7,
@@ -1888,6 +2098,7 @@ def make_ball_touches_v2(events, info, *,
     an = info.get("away_name") or "Away"
     hid = info.get("home_id"); aid = info.get("away_id")
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
 
     rows_n, cols_n = 6, 10
     cell_w = 100 / cols_n; cell_h = 100 / rows_n
@@ -1907,7 +2118,7 @@ def make_ball_touches_v2(events, info, *,
         # Diff grid: positive = home, negative = away
         diff = grid_h - grid_a
         from matplotlib.colors import LinearSegmentedColormap as _LCM
-        cmap = _LCM.from_list("dom", [C_AWAY, "#0a0e16", C_HOME])
+        cmap = _LCM.from_list("dom", [ac, MID_BG, hc])
         vmax = max(abs(diff).max(), 1)
         ax.imshow(diff, extent=[0, 100, 0, 100], origin="lower",
                   aspect="auto", cmap=cmap, vmin=-vmax, vmax=vmax,
@@ -1939,9 +2150,9 @@ def make_ball_touches_v2(events, info, *,
         f"colour at each cell points to the team with more touches there."
     )
     cards = [
-        (f"{hn[:14]} Touches", str(n_h),         C_HOME),
+        (f"{hn[:14]} Touches", str(n_h),         hc),
         ("Total",              str(n_h + n_a),   C_GOLD),
-        (f"{an[:14]} Touches", str(n_a),         C_AWAY),
+        (f"{an[:14]} Touches", str(n_a),         ac),
         ("Diff",               f"{'+' if diff >= 0 else ''}{diff}", C_GOLD),
         ("Leader",             leader[:10],      C_GOLD),
     ]
@@ -2053,6 +2264,7 @@ def make_shot_comparison_v2(events, info, xg_data):
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
     h = (xg_data or {}).get(hn, {})
     a = (xg_data or {}).get(an, {})
     rows = [
@@ -2073,9 +2285,9 @@ def make_shot_comparison_v2(events, info, xg_data):
         f"{'+' if diff >= 0 else ''}{diff:.2f}."
     )
     cards = [
-        (f"{hn[:14]} xG", _fmt_num(h.get("xG", 0)), C_HOME),
+        (f"{hn[:14]} xG", _fmt_num(h.get("xG", 0)), hc),
         ("xG Diff",       f"{'+' if diff >= 0 else ''}{diff:.2f}", C_GOLD),
-        (f"{an[:14]} xG", _fmt_num(a.get("xG", 0)), C_AWAY),
+        (f"{an[:14]} xG", _fmt_num(a.get("xG", 0)), ac),
         ("Total Shots",   str(h.get("shots", 0) + a.get("shots", 0)),
          C_GOLD),
         ("Total OT",      str(h.get("on_target", 0) +
@@ -2088,7 +2300,7 @@ def make_shot_comparison_v2(events, info, xg_data):
                  "label = the metric leader",
         hn=hn, an=an, score=str(score),
         footer_note="Read top-to-bottom: who created the better profile?",
-        hc=C_HOME, ac=C_AWAY, rows=rows,
+        hc=hc, ac=ac, rows=rows,
         insight_text=insight, metric_cards=cards,
     )
 
@@ -2097,6 +2309,7 @@ def make_xg_summary_v2(events, info, xg_data):
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
     h = (xg_data or {}).get(hn, {})
     a = (xg_data or {}).get(an, {})
     rows = [
@@ -2119,12 +2332,12 @@ def make_xg_summary_v2(events, info, xg_data):
         f"xGoT shows post-shot finishing quality."
     )
     cards = [
-        (f"{hn[:14]} xG",   f"{h_xg:.2f}",  C_HOME),
+        (f"{hn[:14]} xG",   f"{h_xg:.2f}",  hc),
         (f"{hn[:14]} Goals", str(h_g),       C_GOLD),
         ("Goals - xG (H/A)",
          f"{over_h:+.1f}/{over_a:+.1f}",     C_GOLD),
         (f"{an[:14]} Goals", str(a_g),       C_GOLD),
-        (f"{an[:14]} xG",   f"{a_xg:.2f}",  C_AWAY),
+        (f"{an[:14]} xG",   f"{a_xg:.2f}",  ac),
     ]
     return render_bar_compare_v2(
         section="xG / xGoT SUMMARY",
@@ -2133,7 +2346,7 @@ def make_xg_summary_v2(events, info, xg_data):
                  "placement & power · gap to goals = finishing variance",
         hn=hn, an=an, score=str(score),
         footer_note="Below xG = wasteful · above xG = clinical",
-        hc=C_HOME, ac=C_AWAY, rows=rows,
+        hc=hc, ac=ac, rows=rows,
         insight_text=insight, metric_cards=cards,
     )
 
@@ -2143,6 +2356,7 @@ def make_defensive_summary_v2(events, info):
     an = info.get("away_name") or "Away"
     hid = info.get("home_id"); aid = info.get("away_id")
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
 
     def _count(team_id, type_name):
         return int(((events["team_id"] == team_id) &
@@ -2152,7 +2366,8 @@ def make_defensive_summary_v2(events, info):
         ("Tackles",       _count(hid, "Tackle"),       _count(aid, "Tackle")),
         ("Interceptions", _count(hid, "Interception"), _count(aid, "Interception")),
         ("Clearances",    _count(hid, "Clearance"),    _count(aid, "Clearance")),
-        ("Blocks",        _count(hid, "BlockedShot"),  _count(aid, "BlockedShot")),
+        ("Blocks",        _blocked_shots_for_team(events, info, hid),
+                          _blocked_shots_for_team(events, info, aid)),
         ("Recoveries",    _count(hid, "BallRecovery"), _count(aid, "BallRecovery")),
         ("Fouls",         _count(hid, "Foul"),         _count(aid, "Foul")),
     ]
@@ -2165,11 +2380,11 @@ def make_defensive_summary_v2(events, info):
         f"duels; recoveries + clearances mark how each side escaped pressure."
     )
     cards = [
-        (f"{hn[:14]} Total", str(h_total), C_HOME),
+        (f"{hn[:14]} Total", str(h_total), hc),
         ("Diff",
          f"{'+' if h_total - a_total >= 0 else ''}{h_total - a_total}",
          C_GOLD),
-        (f"{an[:14]} Total", str(a_total), C_AWAY),
+        (f"{an[:14]} Total", str(a_total), ac),
         ("Top H Type",
          max(rows, key=lambda r: r[1])[0][:10], C_GOLD),
         ("Top A Type",
@@ -2183,7 +2398,7 @@ def make_defensive_summary_v2(events, info):
         hn=hn, an=an, score=str(score),
         footer_note="Tackle = duel · Interception = anticipation · "
                     "Recovery = loose-ball control",
-        hc=C_HOME, ac=C_AWAY, rows=rows,
+        hc=hc, ac=ac, rows=rows,
         insight_text=insight, metric_cards=cards,
     )
 
@@ -2196,6 +2411,7 @@ def make_xt_per_minute_v2(events, info):
     an = info.get("away_name") or "Away"
     hid = info.get("home_id"); aid = info.get("away_id")
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
 
     if "xT" not in events.columns:
         # Fallback empty visual
@@ -2232,15 +2448,15 @@ def make_xt_per_minute_v2(events, info):
     ax.set_facecolor(BG_MID)
     for s in ax.spines.values():
         s.set_edgecolor(GRID_COL); s.set_linewidth(0.5)
-    ax.bar(mins, h_vals, color=C_HOME, alpha=0.78, width=0.85, zorder=3)
-    ax.bar(mins, a_vals, color=C_AWAY, alpha=0.78, width=0.85, zorder=3)
+    ax.bar(mins, h_vals, color=hc, alpha=0.78, width=0.85, zorder=3)
+    ax.bar(mins, a_vals, color=ac, alpha=0.78, width=0.85, zorder=3)
     ax.axhline(0, color="#94a3b8", lw=0.9, alpha=0.6, zorder=4)
 
     import pandas as _pd
     _hv = _pd.Series(h_vals).rolling(5, center=True, min_periods=1).mean()
     _av = _pd.Series(a_vals).rolling(5, center=True, min_periods=1).mean()
-    ax.plot(mins, _hv, color=C_HOME, lw=2.0, alpha=0.92, zorder=5)
-    ax.plot(mins, _av, color=C_AWAY, lw=2.0, alpha=0.92, zorder=5)
+    ax.plot(mins, _hv, color=hc, lw=2.0, alpha=0.92, zorder=5)
+    ax.plot(mins, _av, color=ac, lw=2.0, alpha=0.92, zorder=5)
 
     ymax = max(max(h_vals + [0.001]), abs(min(a_vals + [-0.001])))
     for xv, lb in [(45, "HT"), (90, "FT")]:
@@ -2278,9 +2494,9 @@ def make_xt_per_minute_v2(events, info):
     key_insight(fig, 0.69, 0.30, 0.27, 0.52, text=insight, wrap=34)
 
     cards = [
-        (f"{hn[:14]} xT", f"{ht:.2f}",          C_HOME),
+        (f"{hn[:14]} xT", f"{ht:.2f}",          hc),
         ("Diff",          f"{'+' if ht-at >= 0 else ''}{ht-at:.2f}", C_GOLD),
-        (f"{an[:14]} xT", f"{at:.2f}",          C_AWAY),
+        (f"{an[:14]} xT", f"{at:.2f}",          ac),
         ("Hottest H 5'",  f"{bw_h[0]:.2f}",     C_GOLD),
         ("Hottest A 5'",  f"{bw_a[0]:.2f}",     C_GOLD),
     ]
@@ -2297,6 +2513,7 @@ def make_gk_saves_v2(events, info):
     an = info.get("away_name") or "Away"
     hid = info.get("home_id"); aid = info.get("away_id")
     score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
 
     fig = plt.figure(figsize=(16, 10), facecolor=BG_DARK)
     chrome(fig, section="GOALKEEPER SAVES",
@@ -2308,8 +2525,8 @@ def make_gk_saves_v2(events, info):
 
     # Two pitches side-by-side
     for i, (team_id, opp_id, team_name, team_color, x0, w) in enumerate([
-        (aid, hid, hn + "'s keeper", C_HOME, 0.04, 0.45),
-        (hid, aid, an + "'s keeper", C_AWAY, 0.51, 0.45),
+        (aid, hid, hn + "'s keeper", hc, 0.04, 0.45),
+        (hid, aid, an + "'s keeper", ac, 0.51, 0.45),
     ]):
         ax = fig.add_axes([x0, 0.20, w, 0.62])
         themed_pitch(ax, attacking_only=True)
@@ -2363,11 +2580,11 @@ def make_gk_saves_v2(events, info):
                    if "shot_whoscored_type" in a_faced.columns
                    else (a_faced["type"] == "SavedShot")).sum())
     cards = [
-        (f"{hn[:14]} xG faced", f"{h_xg_faced:.2f}", C_HOME),
+        (f"{hn[:14]} xG faced", f"{h_xg_faced:.2f}", hc),
         (f"{hn[:14]} Saves",    str(h_saves),         C_GOLD),
         ("Total Shots",         str(len(h_faced) + len(a_faced)), C_GOLD),
         (f"{an[:14]} Saves",    str(a_saves),         C_GOLD),
-        (f"{an[:14]} xG faced", f"{a_xg_faced:.2f}", C_AWAY),
+        (f"{an[:14]} xG faced", f"{a_xg_faced:.2f}", ac),
     ]
     metric_strip(fig, cards=cards)
     return fig
@@ -2432,7 +2649,7 @@ def render_legacy_chart_v2(
             if i % 2 == 0:
                 ax2.add_patch(mpatches.Rectangle(
                     (0.04, cy - rh*0.42), 0.92, rh*0.84,
-                    facecolor="#0f1620", lw=0,
+                    facecolor=ROW_BG, lw=0,
                     transform=ax2.transAxes, zorder=1))
             for j, (val, x) in enumerate(zip(row, xs)):
                 ha = "left" if j == 0 else ("right" if j == n_cols - 1
@@ -2472,3 +2689,4 @@ def make_match_stats_v2(events, info, ppda):
     finally:
         plt.close = _orig_close
     return captured[-1] if captured else plt.figure(facecolor=BG_DARK)
+
