@@ -82,13 +82,29 @@ def _series_has_data(df: pd.DataFrame, key: str) -> bool:
     if key not in df.columns:
         return False
     series = df[key]
-    if not bool(series.notna().any()):
+    return any(_value_has_signal(value) for value in series.tolist())
+
+
+def _value_has_signal(value: Any) -> bool:
+    if value is None:
         return False
-    cleaned = series.dropna()
-    if cleaned.empty:
+    try:
+        if pd.isna(value):
+            return False
+    except Exception:
+        pass
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return abs(float(value)) > 1e-12
+
+    text = str(value).strip()
+    if not text or text in {"—", "-", "nan", "None", "none", "NaN"}:
         return False
-    if cleaned.astype(str).str.strip().isin({"", "—", "-", "nan", "None"}).all():
-        return False
+
+    nums = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", text)]
+    if nums:
+        return any(abs(n) > 1e-12 for n in nums)
     return True
 
 
