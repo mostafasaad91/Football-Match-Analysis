@@ -2358,15 +2358,10 @@ def _draw_player_stats_pages(pdf, player_stats, info, visuals_dir):
     for side, color in (("home", C_HOME), ("away", C_AWAY)):
         df = player_stats.get(side, pd.DataFrame())
         team_name = info.get(f"{side}_name") or side.title()
-        figs = draw_player_stats_table(df, team_name, team_color=color,
-                                       save_path=None)
-        if not isinstance(figs, (list, tuple)):
-            figs = [figs]
-        for fig in figs:
-            if fig is None:
-                continue
-            pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
-            plt.close(fig)
+        fig = draw_player_stats_table(df, team_name, team_color=color,
+                                      save_path=None)
+        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
+        plt.close(fig)
 
 
 def _merge_pdfs(output_path: str, pdf_paths: list[str]) -> bool:

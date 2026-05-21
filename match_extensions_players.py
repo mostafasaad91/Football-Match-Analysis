@@ -26,7 +26,6 @@ _WHOSCORED_EXTRACT_PLAYER_STATS = _base.extract_player_stats
 _BASE_COMMENTARY_FOR_FILENAME = _base._commentary_for_filename
 _BASE_PROFESSIONAL_TACTICAL_COMMENTARY = _base._professional_tactical_commentary
 _CURRENT_INFO: dict[str, Any] = {}
-IDENTITY_STAT_KEYS = {"name", "position", "shirt_no", "minutesPlayed", "is_first_xi"}
 
 
 def export_player_stats_csvs(player_stats: dict, output_dir: str, ts: str) -> list[str]:
@@ -39,7 +38,7 @@ def export_player_stats_csvs(player_stats: dict, output_dir: str, ts: str) -> li
         if group_name == "Identity":
             continue
         for key, _label in cols:
-            if key not in ordered_metric_keys and key not in IDENTITY_STAT_KEYS:
+            if key not in ordered_metric_keys and key not in identity:
                 ordered_metric_keys.append(key)
 
     for side in ("home", "away"):
@@ -49,17 +48,15 @@ def export_player_stats_csvs(player_stats: dict, output_dir: str, ts: str) -> li
         identity_cols = [c for c in identity if c in df.columns]
         full_cols = identity_cols + [
             c for c in ordered_metric_keys
-            if _series_has_data(df, c) and c not in identity_cols
+            if c in df.columns and c not in identity_cols and df[c].notna().any()
         ]
-        if len(full_cols) <= len(identity_cols):
-            continue
         full_path = os.path.join(output_dir, f"player_stats_{side}_full.csv")
         _csv_view(df, full_cols).to_csv(full_path, index=False, encoding="utf-8-sig")
         paths.append(full_path)
         for group_name, cols in SOFA_STAT_GROUPS:
             if group_name == "Identity":
                 continue
-            keys = [k for k, _label in cols if _series_has_data(df, k)]
+            keys = [k for k, _label in cols if k in df.columns and df[k].notna().any()]
             export_cols = identity_cols + [k for k in keys if k not in identity_cols]
             if len(export_cols) <= len(identity_cols):
                 continue
@@ -76,43 +73,6 @@ def _csv_view(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce").round(3)
     return out
-
-
-def _series_has_data(df: pd.DataFrame, key: str) -> bool:
-    if key not in df.columns:
-        return False
-    series = df[key]
-    return any(_value_has_signal(value) for value in series.tolist())
-
-
-def _value_has_signal(value: Any) -> bool:
-    if value is None:
-        return False
-    try:
-        if pd.isna(value):
-            return False
-    except Exception:
-        pass
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return abs(float(value)) > 1e-12
-
-    text = str(value).strip()
-    if not text or text in {"—", "-", "nan", "None", "none", "NaN"}:
-        return False
-
-    nums = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", text)]
-    if nums:
-        return any(abs(n) > 1e-12 for n in nums)
-    return True
-
-
-def _available_group_metrics(df: pd.DataFrame, metric_cols) -> list[tuple[str, str]]:
-    return [
-        (k, lbl) for k, lbl in metric_cols
-        if k not in IDENTITY_STAT_KEYS and _series_has_data(df, k)
-    ]
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -172,25 +132,24 @@ def _draw_sofa_player_stats_pages(df: pd.DataFrame, team_name: str,
                                   team_color: str = _base.C_HOME,
                                   save_path: str | None = None):
     groups = [g for g in SOFA_STAT_GROUPS if g[0] != "Score"]
-    metric_groups = [
-        (group_name, metrics, _available_group_metrics(df, metrics))
-        for group_name, metrics in groups
-        if group_name != "Identity"
-    ]
-    metric_groups = [
-        (group_name, metrics, available)
-        for group_name, metrics, available in metric_groups
-        if available
-    ]
+    metric_groups = [g for g in groups if g[0] != "Identity"]
     identity_cols = [("name", "Player"), ("position", "Pos"), ("minutesPlayed", "Min")]
 
-    if df.empty or not metric_groups:
-        return []
+    if df.empty:
+        fig = _base._new_dark_fig(16, 9)
+        fig.patch.set_facecolor(_base.BG_DARK)
+        ax = fig.add_axes((0.04, 0.08, 0.92, 0.82))
+        ax.axis("off")
+        ax.text(0.5, 0.5, "No SofaScore player table available",
+                ha="center", va="center", color=_base.TEXT_DIM, fontsize=14)
+        if save_path:
+            fig.savefig(save_path, dpi=220, facecolor=_base.BG_DARK)
+        return [fig]
 
     pages = []
     is_light = str(_base.BG_DARK).upper() in {"#FFFFFF", "WHITE"}
     total_pages = len(metric_groups)
-    for page_idx, (group_name, metrics, available_metrics) in enumerate(metric_groups, start=1):
+    for page_idx, (group_name, metrics) in enumerate(metric_groups, start=1):
         fig = _base._new_dark_fig(16, 9.5)
         fig.patch.set_facecolor(_base.BG_DARK)
         fig.text(0.035, 0.965, f"SOFASCORE PLAYER STATS - {team_name.upper()}",
@@ -204,7 +163,7 @@ def _draw_sofa_player_stats_pages(df: pd.DataFrame, team_name: str,
         for s in bar_ax.spines.values():
             s.set_visible(False)
         _draw_sofa_group_table(
-            fig, df, group_name, identity_cols, available_metrics,
+            fig, df, group_name, identity_cols, metrics,
             rect=(0.035, 0.070, 0.93, 0.805),
             team_color=team_color,
             is_light=is_light,
@@ -223,7 +182,10 @@ def _draw_sofa_player_stats_pages(df: pd.DataFrame, team_name: str,
 def _draw_sofa_group_table(fig, df: pd.DataFrame, group_name: str,
                            identity_cols, metric_cols, *, rect, team_color: str,
                            is_light: bool):
-    available_metrics = list(metric_cols)
+    available_metrics = [
+        (k, lbl) for k, lbl in metric_cols
+        if k in df.columns and bool(df[k].notna().any())
+    ]
     cols = identity_cols + [
         (k, lbl) for k, lbl in available_metrics
         if k not in {identity_key for identity_key, _identity_label in identity_cols}
