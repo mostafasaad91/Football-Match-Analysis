@@ -43,6 +43,16 @@ def get_team_stats(
     display_name = (sofa_team.name if sofa_team else whoscored_team.name) if (sofa_team or whoscored_team) else team_name
     data = merge_provider_data(display_name, sofa_data, whoscored_data)
 
+    if _has_no_reportable_data(data):
+        print("\nNo permitted data was available for this team.")
+        print("SofaScore/WhoScored endpoints were blocked by robots.txt, so no visuals or PDF were generated.")
+        print("Use an allowed data source or a local CSV/export mode if you want a complete report without bypassing robots.txt.")
+        if data.warnings:
+            print("\nWarnings:")
+            for warning in data.warnings:
+                print(f"  - {warning}")
+        return data
+
     visual_paths = generate_all_visuals(data, "output/visuals")
     pdf_path = build_pdf_report(visual_paths, "output/team_report.pdf")
 
@@ -58,6 +68,12 @@ def get_team_stats(
         for warning in data.warnings:
             print(f"  - {warning}")
     return data
+
+
+def _has_no_reportable_data(data) -> bool:
+    """Return True when every merged stat is unavailable and there are no rows to visualize."""
+    has_stat = any(source != "N/A" for source in data.sources.values())
+    return not has_stat and not data.players and not data.matches
 
 
 def _clean_team_name(team_name: str) -> str:
