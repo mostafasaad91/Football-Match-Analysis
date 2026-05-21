@@ -262,6 +262,10 @@ def _fetch_json(url: str, *, verbose: bool = False) -> Any | None:
 
 
 def _fetch_json_with_browser(url: str, *, verbose: bool = False) -> Any | None:
+    payload = _fetch_json_with_selenium_manager(url, verbose=verbose)
+    if payload is not None:
+        return payload
+
     try:
         import undetected_chromedriver as uc  # type: ignore
         from selenium.webdriver.common.by import By  # type: ignore
@@ -290,6 +294,45 @@ def _fetch_json_with_browser(url: str, *, verbose: bool = False) -> Any | None:
     except Exception as exc:
         if verbose:
             print(f"[SofaScore] browser fetch failed for {url}: {exc}")
+        return None
+    finally:
+        try:
+            if driver is not None:
+                driver.quit()
+        except Exception:
+            pass
+
+
+def _fetch_json_with_selenium_manager(url: str, *, verbose: bool = False) -> Any | None:
+    try:
+        from selenium import webdriver  # type: ignore
+        from selenium.webdriver.chrome.options import Options  # type: ignore
+        from selenium.webdriver.common.by import By  # type: ignore
+    except Exception as exc:
+        if verbose:
+            print(f"[SofaScore] Selenium Manager fallback unavailable: {exc}")
+        return None
+
+    driver = None
+    try:
+        opts = Options()
+        opts.add_argument("--headless=new")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--lang=en-US")
+        opts.add_argument("--window-size=1365,900")
+        driver = webdriver.Chrome(options=opts)
+        driver.set_page_load_timeout(35)
+        driver.get(url)
+        time.sleep(1.2)
+        text = driver.find_element(By.TAG_NAME, "body").text
+        if not text:
+            return None
+        return json.loads(text)
+    except Exception as exc:
+        if verbose:
+            print(f"[SofaScore] Selenium Manager fetch failed for {url}: {exc}")
         return None
     finally:
         try:
