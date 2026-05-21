@@ -43,7 +43,16 @@ from rich.console import Console
 from rich.table import Table
 from matplotlib.backends.backend_pdf import PdfPages
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
-from match_extensions import run_analysis as _run_extended_analysis
+SOFASCORE_PLAYER_TABLES = True
+SOFASCORE_AUTO_SEARCH = True
+SOFASCORE_EVENT_ID = None
+SOFASCORE_MIN_MATCH_CONFIDENCE = 0.82
+os.environ["SOFASCORE_PLAYER_TABLES"] = "1" if SOFASCORE_PLAYER_TABLES else "0"
+os.environ["SOFASCORE_AUTO_SEARCH"] = "1" if SOFASCORE_AUTO_SEARCH else "0"
+os.environ["SOFASCORE_MIN_MATCH_CONFIDENCE"] = str(SOFASCORE_MIN_MATCH_CONFIDENCE)
+if SOFASCORE_EVENT_ID is not None:
+    os.environ["SOFASCORE_EVENT_ID"] = str(SOFASCORE_EVENT_ID)
+from match_extensions_players import run_analysis as _run_extended_analysis
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 try:
@@ -62,8 +71,27 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1903430/live/england-premier-league-2025-2026-liverpool-chelsea"
+MATCH_URL = "https://www.whoscored.com/matches/1903444/live/england-premier-league-2025-2026-arsenal-burnley"
 SAVE_DIR = "output"
+
+
+def _safe_output_name(value: str, max_len: int = 90) -> str:
+    value = re.sub(r"[^\w\s.-]+", "", str(value or ""), flags=re.UNICODE)
+    value = re.sub(r"\s+", "_", value.strip())
+    value = value.strip("._-")
+    return (value or "match")[:max_len]
+
+
+def _match_output_folder(info: dict, root: str = SAVE_DIR) -> str:
+    home = info.get("home_name") or "Home"
+    away = info.get("away_name") or "Away"
+    score = ""
+    score_text = str(info.get("score") or "").strip()
+    if score_text:
+        score = "_" + re.sub(r"\s+", "", score_text.replace(":", "-"))
+    elif info.get("home_score") is not None and info.get("away_score") is not None:
+        score = f"_{info.get('home_score')}-{info.get('away_score')}"
+    return os.path.join(root, _safe_output_name(f"{home}_vs_{away}{score}"))
 
 # Kit colour mode used by every visual and PDF page.
 # Options:
@@ -4397,17 +4425,17 @@ def draw_breakdown_goals(fig, events, info, xg_data):
         gdf["Scorer By"] = gdf["team_id"].apply(lambda x: info["home_name"] if x == info["home_id"] else info["away_name"])
         gdf["Scored For"] = gdf["scoring_team"].apply(lambda x: info["home_name"] if x == info["home_id"] else info["away_name"])
         # تصنيف Open Play / Set Piece + النوع الفرعي (من الإكستنشن)
-        from match_extensions import classify_goal_type as _classify_goal_type
+        from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
         def _goal_type_label(r):
             if r.get("is_own_goal", False):
                 return "🔄 OG (Own Goal)"
-            cat, sub = _classify_goal_type(r)
-            icon = "🟢" if cat == "Open Play" else "🟡"
-            if cat == "Open Play":
-                if r.get("is_header"):
-                    return f"{icon} Open Play (Header)"
-                return f"{icon} Open Play"
-            return f"{icon} Set Piece — {sub}"
+            cat, sub = _classify_goal_type(r, events)
+            body = _goal_body_part_label(r)
+            if cat == "Penalty":
+                return f"Penalty - {body}"
+            if cat == "Set Piece":
+                return f"Set Piece - {sub} - {body}"
+            return f"Open Play - {body}"
         gdf["Type"] = gdf.apply(_goal_type_label, axis=1)
         gdf["Assist"] = gdf.apply(lambda r: (_short(str(r["assist_player"])) + (f" ({r['assist_type']})" if r["assist_type"] else "") if r["assist_player"] else "—"), axis=1)
         gdf["Scorer"] = gdf["player"].apply(_short)
@@ -6876,11 +6904,13 @@ def _panel_goals_table(ax, events, info):
         is_og = bool(r.get("is_own_goal", False))
         ben_id = r.get("scoring_team", r["team_id"])
         col = OG_COLOR if is_og else (C_RED if ben_id == info["home_id"] else C_BLUE)
-        gtype = (
-            "🔄OG"
-            if is_og
-            else ("🟡Pen" if r["is_penalty"] else ("🔵Hdr" if r["is_header"] else "⚽"))
-        )
+        from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+        if is_og:
+            gtype = "OG"
+        else:
+            cat, sub = _classify_goal_type(r, events)
+            body = _goal_body_part_label(r)
+            gtype = f"{cat} - {body}" if cat != "Set Piece" else f"Set Piece - {sub} - {body}"
         rows.append(
             (r["minute"], r["player"], r["assist_player"], gtype, r["xG"], col, is_og)
         )
@@ -12900,7 +12930,7 @@ def print_summary(info, xg_data, events):
         gt.add_column("Min", justify="center", width=5)
         gt.add_column("Scorer", style="bold white", min_width=18)
         gt.add_column("Scored For", style="cyan", min_width=14)
-        gt.add_column("Type", justify="center", width=12)
+        gt.add_column("Type", justify="center", width=24)
         gt.add_column("Assist", style="green", min_width=18)
         gt.add_column("xG", justify="center", style="yellow", width=6)
         for _, row in gdf.iterrows():
@@ -12909,15 +12939,13 @@ def print_summary(info, xg_data, events):
                 if row["scoring_team"] == info["home_id"]
                 else info["away_name"]
             )
-            goal_type = (
-                "[bold magenta]🔄 OWN GOAL[/bold magenta]"
-                if row.get("is_own_goal", False)
-                else (
-                    "🟡 Penalty"
-                    if row["is_penalty"]
-                    else ("🔵 Header" if row["is_header"] else "⚽ Open Play")
-                )
-            )
+            from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+            if row.get("is_own_goal", False):
+                goal_type = "[bold magenta]OWN GOAL[/bold magenta]"
+            else:
+                cat, sub = _classify_goal_type(row, events)
+                body = _goal_body_part_label(row)
+                goal_type = f"{cat} - {body}" if cat != "Set Piece" else f"Set Piece - {sub} - {body}"
             gt.add_row(
                 f"{row['minute']}'",
                 _short(str(row["player"])),
@@ -12933,6 +12961,7 @@ def print_summary(info, xg_data, events):
 #  MAIN
 # ══════════════════════════════════════════════════════
 def main():
+    global SAVE_DIR
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     # ── Scrape بـ 3 محاولات تلقائية ─────────────────
@@ -12944,6 +12973,10 @@ def main():
     )
 
     info, events, players = parse_all(md)
+    SAVE_DIR = _match_output_folder(info)
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    os.environ["MATCH_ANALYSIS_OUTPUT_DIR"] = SAVE_DIR
+    console.print(f"[cyan]  Output folder -> {SAVE_DIR}[/cyan]")
 
     # ── تحديث ألوان الفريقين من قمصانهما الرسمية ──
     # ملاحظة: الكود يستخدم C_RED و C_BLUE في كل الفيجوال كألوان الفريقين
@@ -13027,10 +13060,10 @@ def main():
     red_cards = info["red_cards"]
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    events.to_csv(f"{SAVE_DIR}/events_{ts}.csv", index=False, encoding="utf-8-sig")
-    players.to_csv(f"{SAVE_DIR}/players_{ts}.csv", index=False, encoding="utf-8-sig")
+    events.to_csv(f"{SAVE_DIR}/events.csv", index=False, encoding="utf-8-sig")
+    players.to_csv(f"{SAVE_DIR}/players.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(xg_data).T.reset_index().rename(columns={"index": "team"}).to_csv(
-        f"{SAVE_DIR}/xg_{ts}.csv", index=False, encoding="utf-8-sig"
+        f"{SAVE_DIR}/xg.csv", index=False, encoding="utf-8-sig"
     )
 
     print_summary(info, xg_data, events)
@@ -13147,6 +13180,7 @@ def main():
         """Save the v2 figure (its chrome already includes the unified
         identity, so we DON'T add the legacy _watermark on top — it would
         duplicate the yellow bars + footer)."""
+        fname = _clean_output_filename(fname)
         fig.savefig(
             f"{SAVE_DIR}/{fname}",
             dpi=OUTPUT_IMAGE_DPI,
@@ -13155,6 +13189,11 @@ def main():
         )
         figs.append(fig)
         figs_filenames.append(fname)
+
+    def _clean_output_filename(fname):
+        root, ext = os.path.splitext(str(fname))
+        root = re.sub(r"_\d{8}_\d{6}(?=$|_)", "", root)
+        return f"{root}{ext}"
 
     if _V2_AVAILABLE:
         # 1. xG Flow
@@ -13397,6 +13436,7 @@ def main():
 
     def _sv(fig, fname):
         """Watermark + save."""
+        fname = os.path.join(os.path.dirname(fname), _clean_output_filename(os.path.basename(fname)))
         _watermark(fig)
         fig.savefig(
             fname,
@@ -13437,7 +13477,7 @@ def main():
         )
         # Compute PPDA on the fly (match_stats_v2 needs it)
         try:
-            from match_extensions import compute_ppda_both
+            from match_extensions_players import compute_ppda_both
             _ppda = compute_ppda_both(info, events)
         except Exception:
             _ppda = {"home": {}, "away": {}}
@@ -13886,9 +13926,9 @@ def main():
     #  separate folder, no duplication) and feed into the boards + PDF.
     # ══════════════════════════════════════════════════════
     try:
-        from match_extensions import (
+        from match_extensions_players import (
             draw_ppda_gauge, draw_player_stats_table,
-            compute_ppda_both, extract_player_stats,
+            compute_ppda_both, extract_player_stats, export_player_stats_csvs,
         )
         # 40 — PPDA gauge
         try:
@@ -13904,6 +13944,9 @@ def main():
         # 41 / 42 — Player stats Home + Away
         try:
             _player_stats = extract_player_stats(md)
+            _csv_paths = export_player_stats_csvs(_player_stats, SAVE_DIR, ts)
+            if _csv_paths:
+                console.print(f"[green]  Saved {len(_csv_paths)} player stats CSV files.[/green]")
         except Exception:
             _player_stats = {"home": None, "away": None}
         for _side, _color, _idx, _suffix, _team_name in [
@@ -13914,11 +13957,17 @@ def main():
                 _df = _player_stats.get(_side)
                 if _df is None:
                     continue
-                _fpl = draw_player_stats_table(_df, _team_name,
-                                                team_color=_color,
-                                                save_path=None)
-                _save_and_append(_fpl,
-                                 f"{_idx}_player_stats_{_suffix}_{ts}.png")
+                _fpl_pages = draw_player_stats_table(_df, _team_name,
+                                                      team_color=_color,
+                                                      save_path=None)
+                if not isinstance(_fpl_pages, (list, tuple)):
+                    _fpl_pages = [_fpl_pages]
+                for _page_no, _fpl in enumerate(_fpl_pages, start=1):
+                    _group = getattr(_fpl, "_sofa_group_name", f"page_{_page_no:02d}")
+                    _save_and_append(
+                        _fpl,
+                        f"{_idx}_player_stats_{_suffix}_{_group}_{_page_no:02d}_{ts}.png",
+                    )
             except Exception as _ep:
                 console.print(f"[yellow]  ⚠ Player stats {_side} ({_idx}) failed: {_ep}[/yellow]")
     except Exception as _ext_inline_err:

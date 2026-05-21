@@ -16,6 +16,7 @@ The tool reads a WhoScored match page, extracts the embedded match event data, c
 - CSV event/player/xG outputs
 - Full `match_report_<timestamp>.pdf`
 - Detailed tactical commentary for every visual inside the PDF
+- Advanced multi-page player tables, exported as PNG and CSV files
 
 The current version includes both:
 
@@ -124,7 +125,21 @@ CUSTOM_KIT_COLORS = {}
 
 - Goals table now includes assist names where available.
 - If the direct assist field is missing, the code tries to infer the assister from the previous successful same-team pass/key pass before the goal.
+- Goal type now distinguishes `Open Play`, `Set Piece`, `Penalty`, and the finishing body part where available.
+- Set pieces are detected from corners, free kicks and throw-ins in the action sequence before the goal.
 - The light version no longer uses dark rows in the goals table.
+
+### Advanced Player Tables
+
+- Player tables are now split into readable category pages:
+  - General
+  - Attacking
+  - Defending
+  - Passing
+  - Duels
+  - Goalkeeping
+- Category tables are exported as both visuals and CSV files.
+- The report keeps player tables as the first PDF section, followed by shared, home-team and away-team analysis.
 
 ### PDF Report Redesign
 
@@ -178,6 +193,8 @@ This improves clarity for:
 | `Match_Analysis_Dark.py` | Main dark-theme analysis script |
 | `Match_Analysis_Light.py` | Main light-theme analysis script |
 | `match_extensions.py` | Unified PDF report, PPDA, player tables, team stats and extended report pages |
+| `match_extensions_players.py` | Advanced player-table integration and PDF player-table commentary |
+| `advanced_player_stats.py` | Fetching and normalising advanced player statistics |
 | `viz_v2.py` | Shared visual helpers |
 | `viz_v2_charts.py` | Main V2 tactical visual functions |
 | `viz_design_system.py` | Shared design system helpers |
@@ -233,15 +250,26 @@ Typical output includes:
 
 ```text
 output/
-├── events_<timestamp>.csv
-├── players_<timestamp>.csv
-├── xg_<timestamp>.csv
+└── Team_A_vs_Team_B_score/
+    ├── events.csv
+    ├── players.csv
+    ├── xg.csv
+    ├── match_report_<timestamp>.pdf
+    ├── 1_xg_flow.png
+    ├── 2_shot_map_home.png
+    ├── 3_shot_map_away.png
+    ├── player_stats_home_attacking.csv
+    ├── player_stats_away_passing.csv
+    ├── ...
+    └── visuals/
+```
+
+Extended report files may also include:
+
+```text
+output/
 ├── match_report_<timestamp>.pdf
-├── 1_xg_flow_<timestamp>.png
-├── 2_shot_map_home_<timestamp>.png
-├── 3_shot_map_away_<timestamp>.png
-├── ...
-└── visuals/
+└── goals_log_<timestamp>.csv
 ```
 
 Generated PNG files are ignored by Git through `.gitignore`.

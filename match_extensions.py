@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import re
+import ast
 from datetime import datetime
 from typing import Any
 
@@ -416,25 +417,126 @@ def draw_ppda_gauge(ppda_data: dict, info: dict,
 # ═════════════════════════════════════════════════════════════════════════════
 # UPGRADE 2 — Goals classification
 # ═════════════════════════════════════════════════════════════════════════════
-def classify_goal_type(row: pd.Series) -> tuple[str, str]:
-    """يصنّف الهدف لـ Open Play أو Set Piece + النوع الفرعي."""
+def _goal_qualifiers(row: pd.Series) -> set[str]:
     quals = row.get("qualifier_names") or []
-    if not isinstance(quals, (list, tuple, set)):
+    if isinstance(quals, str):
+        text = quals.strip()
+        try:
+            parsed = ast.literal_eval(text)
+            if isinstance(parsed, (list, tuple, set)):
+                quals = parsed
+            else:
+                quals = re.split(r"[,|;]", text)
+        except Exception:
+            quals = re.split(r"[,|;\\[\\]'\\\"]+", text)
+    elif not isinstance(quals, (list, tuple, set)):
         quals = []
-    qset = set(quals)
+    return {str(q) for q in quals if q is not None}
 
-    if bool(row.get("is_own_goal", False)):
+
+def _truthy_flag(value: Any) -> bool:
+    if value is None:
+        return False
+    try:
+        if pd.isna(value):
+            return False
+    except Exception:
+        pass
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
+def _event_type_text(row: pd.Series) -> str:
+    parts = []
+    for key in ("event_type", "type", "type_display", "displayName", "outcome"):
+        val = row.get(key)
+        if val is not None:
+            parts.append(str(val))
+    parts.extend(_goal_qualifiers(row))
+    return " ".join(parts).lower()
+
+
+def _set_piece_subtype_from_event(row: pd.Series) -> str | None:
+    text = _event_type_text(row)
+    if "corner" in text:
+        return "Corner"
+    if "throw" in text:
+        return "Throw-In"
+    if "directfreekick" in text or "direct free" in text:
+        return "Direct Free Kick"
+    if "freekick" in text or "free kick" in text or "foul" in text:
+        return "Free Kick"
+    return None
+
+
+def _previous_restart_subtype(row: pd.Series, events: pd.DataFrame | None = None) -> str | None:
+    if events is None or getattr(events, "empty", True):
+        return None
+    try:
+        idx = row.name
+        if idx in events.index:
+            pos = events.index.get_loc(idx)
+            if isinstance(pos, slice):
+                pos = pos.start
+            prior = events.iloc[:int(pos)]
+        else:
+            minute = row.get("minute")
+            if minute is None:
+                prior = events
+            else:
+                prior = events[events.get("minute", -1) <= minute]
+    except Exception:
+        prior = events
+
+    if prior is None or prior.empty:
+        return None
+    team_id = row.get("team_id")
+    same_team = prior[prior.get("team_id") == team_id] if "team_id" in prior.columns else prior
+    if same_team.empty:
+        same_team = prior
+
+    for _, prev in same_team.tail(4).iloc[::-1].iterrows():
+        subtype = _set_piece_subtype_from_event(prev)
+        if subtype:
+            return subtype
+        # Stop after the immediately preceding non-empty action by the scoring side.
+        return None
+    return None
+
+
+def goal_body_part_label(row: pd.Series) -> str:
+    body = row.get("body_part")
+    body_txt = "" if body is None else str(body).strip()
+    low = body_txt.lower().replace("_", " ")
+    if _truthy_flag(row.get("is_header", False)) or "head" in low:
+        return "Header"
+    if "right" in low and "foot" in low:
+        return "Right Foot"
+    if "left" in low and "foot" in low:
+        return "Left Foot"
+    if "foot" in low:
+        return "Foot"
+    if low:
+        return body_txt.replace("_", " ").title()
+    return "Unknown Body Part"
+
+
+def classify_goal_type(row: pd.Series, events: pd.DataFrame | None = None) -> tuple[str, str]:
+    """Classify a goal as Penalty, Set Piece or Open Play."""
+    qset = _goal_qualifiers(row)
+    if _truthy_flag(row.get("is_own_goal", False)):
         return "Open Play", "Own Goal"
-    if bool(row.get("is_penalty", False)) or "Penalty" in qset:
-        return "Set Piece", "Penalty"
-    if bool(row.get("is_direct_fk", False)) or "DirectFreekick" in qset:
+    if _truthy_flag(row.get("is_penalty", False)) or "Penalty" in qset:
+        return "Penalty", "Penalty"
+    if _truthy_flag(row.get("is_direct_fk", False)) or "DirectFreekick" in qset:
         return "Set Piece", "Direct Free Kick"
-    if "FromCorner" in qset or "CornerTaken" in qset:
-        return "Set Piece", "Corner"
-    if "FreekickTaken" in qset or "IndirectFreekickTaken" in qset:
-        return "Set Piece", "Indirect Free Kick"
-    if "ThrowIn" in qset:
-        return "Set Piece", "Throw-In"
+    direct_subtype = _set_piece_subtype_from_event(row)
+    if direct_subtype:
+        return "Set Piece", direct_subtype
+    previous_subtype = _previous_restart_subtype(row, events)
+    if previous_subtype:
+        return "Set Piece", previous_subtype
     return "Open Play", "Open Play"
 
 
@@ -451,7 +553,7 @@ def build_goals_log(events: pd.DataFrame, info: dict) -> pd.DataFrame:
 
     rows = []
     for _, r in gdf.sort_values("minute").iterrows():
-        category, subtype = classify_goal_type(r)
+        category, subtype = classify_goal_type(r, events)
         scoring_team_id = r.get("scoring_team", r.get("team_id"))
         team_name = (info.get("home_name") if scoring_team_id == info.get("home_id")
                      else info.get("away_name"))
@@ -463,6 +565,7 @@ def build_goals_log(events: pd.DataFrame, info: dict) -> pd.DataFrame:
             "assist": assist if assist else "N/A",
             "category": category,
             "subtype": subtype,
+            "body_part": goal_body_part_label(r),
             "xG": r.get("xG"),
             "is_own_goal": bool(r.get("is_own_goal", False)),
             "scoring_team_id": scoring_team_id,
@@ -854,7 +957,7 @@ def _draw_section_divider(pdf, num: str, title: str, subtitle: str,
     fig.text(0.10, 0.20, "M A T C H   A N A L Y S I S   R E P O R T",
              color=TEXT_FADED, fontsize=8, fontweight="bold")
 
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
 
 
@@ -871,7 +974,7 @@ def _draw_closing_page(pdf, info):
         family="serif",
     )
 
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
 
 
@@ -947,7 +1050,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda):
              f"   ·   04 Shared Insights",
              ha="center", color=TEXT_FADED, fontsize=9, style="italic")
 
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
 
 
@@ -978,17 +1081,18 @@ def _draw_goals_log_page(pdf, goals_df, info):
     if goals_df.empty:
         fig.text(0.5, 0.5, "No goals recorded.",
                  ha="center", color=TEXT_DIM, fontsize=14, style="italic")
-        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
         plt.close(fig)
         return
 
     headers = [("MIN", 0.05, "center"),
-               ("TEAM", 0.14, "left"),
-               ("SCORER", 0.32, "left"),
-               ("ASSIST", 0.55, "left"),
-               ("CATEGORY", 0.74, "left"),
-               ("SUBTYPE", 0.86, "left"),
-               ("xG", 0.97, "right")]
+               ("TEAM", 0.13, "left"),
+               ("SCORER", 0.29, "left"),
+               ("ASSIST", 0.49, "left"),
+               ("CATEGORY", 0.68, "left"),
+               ("DETAIL", 0.80, "left"),
+               ("BODY", 0.91, "left"),
+               ("xG", 0.98, "right")]
     ax = fig.add_axes([0.0, 0.05, 1.0, 0.83])
     ax.set_facecolor(BG_DARK); ax.axis("off")
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
@@ -1029,45 +1133,58 @@ def _draw_goals_log_page(pdf, goals_df, info):
                 bbox=dict(boxstyle="round,pad=0.30",
                           facecolor=col, edgecolor="none"))
 
-        ax.text(0.14, cy, _short_name(str(r["team"]), 18),
+        ax.text(0.13, cy, _short_name(str(r["team"]), 16),
                 ha="left", va="center",
                 color=col, fontsize=10, fontweight="bold",
                 transform=ax.transAxes)
-        scorer_label = _short_name(str(r["scorer"]), 24)
+        scorer_label = _short_name(str(r["scorer"]), 20)
         if is_og:
             scorer_label += "  (OG)"
-        ax.text(0.32, cy, scorer_label,
+        ax.text(0.29, cy, scorer_label,
                 ha="left", va="center",
                 color=TEXT_BRIGHT, fontsize=10, fontweight="bold",
                 transform=ax.transAxes)
-        ax.text(0.55, cy, _short_name(str(r["assist"]), 22),
+        ax.text(0.49, cy, _short_name(str(r["assist"]), 18),
                 ha="left", va="center",
                 color=TEXT_DIM, fontsize=9.5, transform=ax.transAxes)
 
         cat_col = C_GREEN if r["category"] == "Open Play" else C_GOLD
-        ax.text(0.74, cy, r["category"],
+        ax.text(0.68, cy, r["category"],
                 ha="left", va="center",
                 color=cat_col, fontsize=9.5, fontweight="bold",
                 transform=ax.transAxes)
-        ax.text(0.86, cy, r["subtype"],
+        ax.text(0.80, cy, _short_name(str(r["subtype"]), 14),
+                ha="left", va="center",
+                color=TEXT_MAIN, fontsize=9.5, transform=ax.transAxes)
+        ax.text(0.91, cy, _short_name(str(r.get("body_part", "Unknown")), 12),
                 ha="left", va="center",
                 color=TEXT_MAIN, fontsize=9.5, transform=ax.transAxes)
         xg_txt = f"{r['xG']:.2f}" if isinstance(r["xG"], (int, float)) and r["xG"] else "—"
-        ax.text(0.97, cy, xg_txt,
+        ax.text(0.98, cy, xg_txt,
                 ha="right", va="center",
                 color=C_GOLD, fontsize=9.5, transform=ax.transAxes)
 
         y -= row_h
 
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
 
 
 def _draw_ppda_page(pdf, ppda, info, visuals_dir):
     """صفحة PPDA — لا تحفظ PNG (الفيجوال بيتولّد كـ fig 40 من Dark.py)."""
     fig = draw_ppda_gauge(ppda, info, save_path=None)
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
+
+
+def _filename_team_side(fname: str) -> str | None:
+    """Return home/away from visual filenames such as *_home.png or *_away_01.png."""
+    base = os.path.basename(str(fname or "")).lower()
+    if re.search(r"(^|_)home($|[_.-])", base):
+        return "home"
+    if re.search(r"(^|_)away($|[_.-])", base):
+        return "away"
+    return None
 
 
 def _commentary_for_filename(fname: str, hn: str, an: str):
@@ -1081,9 +1198,10 @@ def _commentary_for_filename(fname: str, hn: str, an: str):
         return hn if side == "home" else an
 
     # Identify side ("home"/"away"/"shared") from filename
-    if "_home_" in f:
+    detected_side = _filename_team_side(fname)
+    if detected_side == "home":
         side = "home"; team = hn
-    elif "_away_" in f:
+    elif detected_side == "away":
         side = "away"; team = an
     else:
         side, team = "shared", None
@@ -1328,10 +1446,11 @@ def _professional_tactical_commentary(fname: str, heading: str, body: str,
                                       hn: str, an: str) -> str:
     """Turn a chart description into a fuller human tactical read."""
     f = (fname or "").lower()
-    if "_home_" in f:
+    detected_side = _filename_team_side(fname)
+    if detected_side == "home":
         team = hn
         opponent = an
-    elif "_away_" in f:
+    elif detected_side == "away":
         team = an
         opponent = hn
     else:
@@ -1576,7 +1695,7 @@ def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
         fontsize=8.5, family="sans-serif",
     )
 
-    pdf.savefig(new_fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(new_fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(new_fig)
     plt.close(fig)
 
@@ -1622,7 +1741,7 @@ def _draw_visual_commentary(pdf, heading: str, body: str):
     ax.text(0.04, 0.88, wrapped, ha="left", va="top",
             color=TEXT_MAIN, fontsize=11, transform=ax.transAxes,
             linespacing=1.55, wrap=True)
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
 
 
@@ -2229,7 +2348,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
                     wrap=True, linespacing=1.55)
         cy -= 0.27
 
-    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(fig)
 
 
@@ -2241,7 +2360,7 @@ def _draw_player_stats_pages(pdf, player_stats, info, visuals_dir):
         team_name = info.get(f"{side}_name") or side.title()
         fig = draw_player_stats_table(df, team_name, team_color=color,
                                       save_path=None)
-        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+        pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
         plt.close(fig)
 
 
@@ -2344,9 +2463,9 @@ def run_analysis(match_data: dict,
             f = (fname or "").lower()
             if "player_stats" in f:
                 grouped["player_table"].append((fig, fname))
-            elif "_home_" in f:
+            elif _filename_team_side(fname) == "home":
                 grouped["home"].append((fig, fname))
-            elif "_away_" in f:
+            elif _filename_team_side(fname) == "away":
                 grouped["away"].append((fig, fname))
             else:
                 grouped["shared"].append((fig, fname))
@@ -2366,7 +2485,7 @@ def run_analysis(match_data: dict,
             _pdf_page_with_commentary(pdf, fig, heading, body)
         except Exception:
             try:
-                pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK, bbox_inches="tight")
+                pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
             except Exception:
                 pass
 

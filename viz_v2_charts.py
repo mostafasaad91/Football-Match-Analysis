@@ -32,6 +32,7 @@ PASS_ARROW = "#111827" if IS_LIGHT_THEME else "#ffffff"
 PASS_NEG = "#7F1D1D" if IS_LIGHT_THEME else "#e63946"
 GOAL_ROW_HOME = "#F8FAFC" if IS_LIGHT_THEME else "#1a0a0a"
 GOAL_ROW_AWAY = "#F1F5F9" if IS_LIGHT_THEME else "#0a1630"
+C_GREEN = "#16a34a"
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -412,20 +413,14 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals, hc=None, ac=None)
     ax2 = panel_card(fig, 0.04, 0.16, 0.92, 0.27,
                      title="Goals & Assists", accent=C_GOLD)
     ax2.set_xlim(0, 1); ax2.set_ylim(0, 1)
-    cols = [("Min", 0.04), ("Scorer", 0.13), ("Team", 0.30),
-            ("Type", 0.46), ("Assist", 0.62), ("xG", 0.92)]
+    cols = [("Min", 0.04), ("Scorer", 0.14), ("Team", 0.34),
+            ("Type", 0.49), ("Assist", 0.64), ("xG", 0.92)]
     for c, x in cols:
         ax2.text(x, 0.83, c, ha="left" if c != "xG" else "right",
                  va="center", color=TEXT_DIM, fontsize=9.5, fontweight="bold",
                  transform=ax2.transAxes)
     ax2.plot([0.03, 0.97], [0.79, 0.79], color=GRID_COL, lw=0.6,
              transform=ax2.transAxes)
-    type_styles = {
-        "OP": ("OPEN PLAY",  "#22c55e"),
-        "SP": ("SET PIECE",  "#f59e0b"),
-        "PK": ("PENALTY",    "#a855f7"),
-        "OG": ("OWN GOAL",   "#ec4899"),
-    }
     n_g = max(len(goals), 1)
     row_h = 0.65 / n_g
     for i, g in enumerate(goals):
@@ -440,24 +435,35 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals, hc=None, ac=None)
         ax2.text(0.04, cy, mn, ha="left", va="center",
                  color=TEXT_DIM, fontsize=10, fontweight="bold",
                  transform=ax2.transAxes, zorder=2)
-        ax2.text(0.13, cy, scorer, ha="left", va="center",
+        ax2.text(0.14, cy, scorer, ha="left", va="center",
                  color=TEXT_BR if not IS_LIGHT_THEME else "#111827",
                  fontsize=11, fontweight="bold",
                  transform=ax2.transAxes, zorder=2)
-        ax2.text(0.30, cy, team_nm, ha="left", va="center",
+        ax2.text(0.34, cy, team_nm, ha="left", va="center",
                  color=team_col, fontsize=10.5, fontweight="bold",
                  transform=ax2.transAxes, zorder=2)
-        badge_lbl, badge_col = type_styles.get(gtype, ("OPEN PLAY", "#22c55e"))
-        bw = 0.13
-        ax2.add_patch(mpatches.FancyBboxPatch(
-            (0.46, cy - 0.022), bw, 0.044,
-            boxstyle="round,pad=0.015,rounding_size=0.022",
-            facecolor=badge_col, alpha=0.22, edgecolor=badge_col, lw=0.8,
-            transform=ax2.transAxes, zorder=2))
-        ax2.text(0.46 + bw/2, cy, badge_lbl, ha="center", va="center",
-                 color=badge_col, fontsize=8.5, fontweight="bold",
-                 transform=ax2.transAxes, zorder=3)
-        ax2.text(0.62, cy, assist, ha="left", va="center",
+        type_text = str(gtype or "").replace("Set Piece - ", "").upper()
+        if type_text in {"OP", "OPEN PLAY"}:
+            type_text = "OPEN PLAY"
+            type_fc = "#12451f"
+            type_col = C_GREEN
+        elif type_text in {"PK", "PENALTY"}:
+            type_text = "PENALTY"
+            type_fc = "#4a160f"
+            type_col = "#ff8a65"
+        elif type_text in {"SP", "SET PIECE"}:
+            type_text = "SET PIECE"
+            type_fc = "#4a3f10"
+            type_col = C_GOLD
+        else:
+            type_fc = "#4a3f10"
+            type_col = C_GOLD
+        ax2.text(0.49, cy, type_text[:18], ha="left", va="center",
+                 color=type_col, fontsize=8.7, fontweight="bold",
+                 transform=ax2.transAxes, zorder=3,
+                 bbox=dict(boxstyle="round,pad=0.28", facecolor=type_fc,
+                           edgecolor=type_col, alpha=0.72))
+        ax2.text(0.64, cy, assist, ha="left", va="center",
                  color=TEXT_MAIN, fontsize=10,
                  transform=ax2.transAxes, zorder=2)
         ax2.text(0.92, cy, f"{xg:.2f}", ha="right", va="center",
@@ -893,21 +899,69 @@ def make_shot_breakdown_v2(events, info, xg_data):
             at = last.get("assist_type") or "Assist"
         return name, at
 
+    def _goal_qualifiers(row):
+        q = row.get("qualifier_names") or []
+        if isinstance(q, str):
+            return q.lower()
+        if isinstance(q, (list, tuple, set)):
+            return " ".join(str(x) for x in q).lower()
+        return ""
+
+    def _body_label(row):
+        q = _goal_qualifiers(row)
+        body = str(row.get("body_part") or "").lower()
+        if bool(row.get("is_header")) or "head" in q or "head" in body:
+            return "HEADER"
+        if "right" in body and "foot" in body:
+            return "RIGHT FOOT"
+        if "left" in body and "foot" in body:
+            return "LEFT FOOT"
+        if "foot" in body:
+            return "FOOT"
+        return ""
+
+    def _goal_type_from_context(goal_row):
+        if bool(goal_row.get("is_own_goal")):
+            return "OWN GOAL"
+        if bool(goal_row.get("is_penalty")) or "penalty" in _goal_qualifiers(goal_row):
+            base = "PENALTY"
+        else:
+            q = _goal_qualifiers(goal_row)
+            if "fromcorner" in q or "cornertaken" in q or "corner" in q:
+                base = "CORNER"
+            elif "throwin" in q or "throw in" in q:
+                base = "THROW-IN"
+            elif "freekick" in q or "free kick" in q or bool(goal_row.get("is_direct_fk")):
+                base = "FREE KICK"
+            else:
+                base = "OPEN PLAY"
+                if events is not None and not events.empty:
+                    scoring_team = goal_row.get("scoring_team") or goal_row.get("team_id")
+                    minute = _safe(goal_row.get("minute"), 0) or 0
+                    second = _safe(goal_row.get("second"), 0) or 0
+                    goal_time = float(minute) * 60 + float(second)
+                    cand = events[events.get("team_id") == scoring_team].copy()
+                    if not cand.empty:
+                        cand["__t"] = cand.get("minute", 0).fillna(0).astype(float) * 60 + cand.get("second", 0).fillna(0).astype(float)
+                        cand = cand[(cand["__t"] < goal_time) & (cand["__t"] >= goal_time - 70)]
+                        for _, prev in cand.sort_values("__t", ascending=False).head(8).iterrows():
+                            pq = _goal_qualifiers(prev)
+                            if "cornertaken" in pq or "fromcorner" in pq or "corner" in pq:
+                                base = "CORNER"; break
+                            if "throwin" in pq or "throw in" in pq:
+                                base = "THROW-IN"; break
+                            if "freekick" in pq or "free kick" in pq:
+                                base = "FREE KICK"; break
+        body = _body_label(goal_row)
+        return f"{base} - {body}" if body and base not in {"OWN GOAL"} else base
+
     # Goals list — same shape the renderer expects
     goals_list = []
     gdf = events[events["is_goal"] == True].sort_values("minute")
     for _, row in gdf.iterrows():
         side = "home" if row.get("scoring_team") == info.get("home_id") \
                else "away"
-        if row.get("is_own_goal"):
-            gtype = "OG"
-        elif row.get("is_penalty"):
-            gtype = "PK"
-        elif (row.get("is_direct_fk") or row.get("is_header") is False
-              and "Set Piece" in str(row.get("qualifier_names", ""))):
-            gtype = "SP"
-        else:
-            gtype = "OP"
+        gtype = _goal_type_from_context(row)
         ap, at = _assist_from_context(row)
         if ap and str(ap).lower() != "nan":
             assist = f"{ap}" + (f" ({at})" if at and str(at).lower() != "nan"
