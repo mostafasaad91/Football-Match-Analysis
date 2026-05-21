@@ -242,6 +242,41 @@ Outputs are saved in:
 output/
 ```
 
+### Season Team Dashboard
+
+The repository also includes an experimental current-season dashboard tool that resolves a team on SofaScore and WhoScored, merges the available statistics, then exports separate visuals and one PDF report.
+
+Run it from the command line:
+
+```bash
+python team_season_dashboard.py "Arsenal"
+```
+
+Or call it from Python:
+
+```python
+from team_dashboard import get_team_stats
+
+get_team_stats("Arsenal")
+```
+
+Season dashboard outputs are saved in:
+
+```text
+output/
+├── team_report.pdf
+└── visuals/
+    ├── overview.png
+    ├── attack.png
+    ├── defense.png
+    ├── possession.png
+    ├── form.png
+    ├── squad_stats.png
+    └── discipline.png
+```
+
+The scraper checks `robots.txt`, waits randomly between requests, logs the source of each stat, and writes `N/A` when a metric is unavailable instead of stopping the report.
+
 ---
 
 ## Output Structure
