@@ -45,7 +45,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 SOFASCORE_PLAYER_TABLES = True
 SOFASCORE_AUTO_SEARCH = True
-SOFASCORE_EVENT_ID = None
+SOFASCORE_EVENT_ID = 15632626
 SOFASCORE_MIN_MATCH_CONFIDENCE = 0.82
 os.environ["SOFASCORE_PLAYER_TABLES"] = "1" if SOFASCORE_PLAYER_TABLES else "0"
 os.environ["SOFASCORE_AUTO_SEARCH"] = "1" if SOFASCORE_AUTO_SEARCH else "0"
@@ -71,7 +71,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1903444/live/england-premier-league-2025-2026-arsenal-burnley"
+MATCH_URL = "https://www.whoscored.com/matches/1979616/live/europe-europa-league-2025-2026-freiburg-aston-villa"
 SAVE_DIR = "output"
 
 
