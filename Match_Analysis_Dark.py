@@ -45,7 +45,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 SOFASCORE_PLAYER_TABLES = True
 SOFASCORE_AUTO_SEARCH = True
-SOFASCORE_EVENT_ID = 15632626
+SOFASCORE_EVENT_ID = 15632636
 SOFASCORE_MIN_MATCH_CONFIDENCE = 0.82
 os.environ["SOFASCORE_PLAYER_TABLES"] = "1" if SOFASCORE_PLAYER_TABLES else "0"
 os.environ["SOFASCORE_AUTO_SEARCH"] = "1" if SOFASCORE_AUTO_SEARCH else "0"
@@ -71,7 +71,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1979616/live/europe-europa-league-2025-2026-freiburg-aston-villa"
+MATCH_URL = "https://www.whoscored.com/matches/1979569/live/europe-champions-league-2025-2026-paris-saint-germain-arsenal"
 SAVE_DIR = "output"
 
 
@@ -802,7 +802,7 @@ def choose_matchup_colors(home_name: str, away_name: str,
     forced_home = custom_home or _configured_kit_colour(home_name, home_kit_type, "#B91C1C")
     forced_away = custom_away or _configured_kit_colour(away_name, away_kit_type, "#9CA3AF")
 
-    if forced_home and forced_away:
+    if custom_home and custom_away:
         return _visible_on_dark(home_name, forced_home, "#B91C1C"), _visible_on_dark(away_name, forced_away, "#9CA3AF")
 
     home_palette_raw = _team_palette(home_name, DEFAULT_HOME)
@@ -869,9 +869,18 @@ def choose_matchup_colors(home_name: str, away_name: str,
         away_candidates.append(away_palette[2])  # alternate/away kit
     if len(away_palette) >= 2:
         away_candidates.append(away_palette[1])  # accent/stripe
-    away_candidates += ["#9CA3AF", "#00A3E0", "#FDE100"]
+    away_candidates += away_palette
 
     for ac in away_candidates:
+        ac = _usable_on_dark(ac, "#9CA3AF")
+        score = _color_distance(home_primary, ac) - _light_penalty(ac)
+        if score > best_score:
+            best_away, best_score = ac, score
+
+    if _color_distance(home_primary, best_away) >= 0.28:
+        return home_primary, best_away
+
+    for ac in ["#9CA3AF", "#00A3E0", "#FDE100"]:
         ac = _usable_on_dark(ac, "#9CA3AF")
         score = _color_distance(home_primary, ac) - _light_penalty(ac)
         if score > best_score:
@@ -982,6 +991,29 @@ PERIOD_SPANS = [
     (120, 145, "pso", "Penalties", "#150707", C_RED),
 ]
 STOPPAGE_PERIODS = {"1h": 45, "2h": 90, "et1": 105, "et2": 120}
+
+def _is_penalty_shootout_period(period_raw=None, period_code=None) -> bool:
+    """Return True for post-extra-time penalty shootout periods."""
+    raw = str(period_raw or "").strip().lower().replace(" ", "")
+    code = str(period_code or "").strip().lower().replace(" ", "")
+    return code in {"pso", "penaltyshootout", "shootout", "penalties"} or raw in {
+        "pso",
+        "penaltyshootout",
+        "shootout",
+        "penalties",
+    }
+
+
+def _is_penalty_shootout_row(row) -> bool:
+    """Identify shootout rows from parsed event fields or raw qualifier names."""
+    if _is_penalty_shootout_period(row.get("period"), row.get("period_code")):
+        return True
+    qnames = row.get("qualifier_names", [])
+    if isinstance(qnames, str):
+        qnames = [qnames]
+    joined = " ".join(str(q) for q in qnames).lower().replace(" ", "")
+    return "penaltyshootout" in joined or "shootout" in joined
+
 STATUS_BADGE = {
     "ft": ("■ Full Time", "#64748b"),
     "pso": ("■ Penalties FT", C_RED),
@@ -2226,6 +2258,8 @@ def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
     shot_mask = (out["is_shot"] == True)
     if "is_own_goal" in out.columns:
         shot_mask &= (~out["is_own_goal"].fillna(False))
+    if "is_penalty_shootout" in out.columns:
+        shot_mask &= (~out["is_penalty_shootout"].fillna(False))
     if not shot_mask.any():
         return out
 
@@ -3289,6 +3323,8 @@ def _event_stat_count(events: pd.DataFrame, team_id: int, stat: str) -> int:
     shots = events[(events.get("is_shot") == True) & (events.get("team_id") == team_id)].copy()
     if "is_own_goal" in shots.columns:
         shots = shots[~shots["is_own_goal"].fillna(False)]
+    if "is_penalty_shootout" in shots.columns:
+        shots = shots[~shots["is_penalty_shootout"].fillna(False)]
     if stat == "shots":
         return int(len(shots))
     if stat == "big_chances":
@@ -3312,6 +3348,8 @@ def _side_event_shots(events: pd.DataFrame, team_id: int) -> pd.DataFrame:
     s = events[(events.get("is_shot") == True) & (events.get("team_id") == team_id)].copy()
     if "is_own_goal" in s.columns:
         s = s[~s["is_own_goal"].fillna(False)]
+    if "is_penalty_shootout" in s.columns:
+        s = s[~s["is_penalty_shootout"].fillna(False)]
     return s
 
 
@@ -3535,6 +3573,8 @@ def _apply_official_stats_calibration(info: dict, events: pd.DataFrame) -> pd.Da
         mask = (out["is_shot"] == True) & (out["team_id"] == tid)
         if "is_own_goal" in out.columns:
             mask &= (~out["is_own_goal"].fillna(False))
+        if "is_penalty_shootout" in out.columns:
+            mask &= (~out["is_penalty_shootout"].fillna(False))
         idx = list(out.index[mask])
         if not idx:
             continue
@@ -3575,9 +3615,16 @@ def parse_all(md: dict):
             return v.get("displayName") if isinstance(v, dict) else v
 
         etype = dn("type")
+        period_raw = dn("period") or ""
+        period_code = PERIOD_CODES.get(period_raw, period_raw.lower())
+        qual_names = [q.get("type", {}).get("displayName", "") for q in quals]
+        is_penalty_shootout = _is_penalty_shootout_period(period_raw, period_code)
+        if not is_penalty_shootout:
+            joined_quals = " ".join(str(q) for q in qual_names).lower().replace(" ", "")
+            is_penalty_shootout = "penaltyshootout" in joined_quals or "shootout" in joined_quals
         # WhoScored أحيانًا تُعيد isShot=False لبعض أحداث BlockedShot —
         # fallback على نوع الحدث لضمان التقاط كل محاولات التسديد
-        is_shot = e.get("isShot", False) or (etype in SHOT_TYPES)
+        is_shot = (e.get("isShot", False) or (etype in SHOT_TYPES)) and not is_penalty_shootout
         is_pass = etype in ["Pass", "OffsidPass", "KeyPass"]
 
         # تصنيف التسديدة:
@@ -3600,8 +3647,6 @@ def parse_all(md: dict):
             ),
             None,
         )
-        period_raw = dn("period") or ""
-        period_code = PERIOD_CODES.get(period_raw, period_raw.lower())
         pid = e.get("playerId")
         event_team = e.get("teamId")
 
@@ -3614,9 +3659,8 @@ def parse_all(md: dict):
                 if q.get("type", {}).get("displayName") == "Red":
                     red_cards.add(pid)
 
-        qual_names = [q.get("type", {}).get("displayName", "") for q in quals]
         is_own_goal = (etype == "OwnGoal") or ("OwnGoal" in qual_names)
-        is_goal_flag = e.get("isGoal", False) or is_own_goal
+        is_goal_flag = (e.get("isGoal", False) or is_own_goal) and not is_penalty_shootout
         scoring_team = (
             (info["away_id"] if event_team == info["home_id"] else info["home_id"])
             if is_own_goal
@@ -3652,6 +3696,7 @@ def parse_all(md: dict):
                 "scoring_team": scoring_team,
                 "is_header": has_q(quals, "Head"),
                 "is_penalty": has_q(quals, "Penalty"),
+                "is_penalty_shootout": is_penalty_shootout,
                 "big_chance": has_q(quals, "BigChance"),
                 "body_part": next(
                     (
@@ -3740,6 +3785,8 @@ def xg_stats(events: pd.DataFrame, info: dict) -> dict:
       Blocked = BlockedShot
     """
     shots_all = events[events["is_shot"] == True].copy()
+    if "is_penalty_shootout" in shots_all.columns:
+        shots_all = shots_all[~shots_all["is_penalty_shootout"].fillna(False)]
     out = {}
 
     for side in ["home", "away"]:
@@ -3757,7 +3804,9 @@ def xg_stats(events: pd.DataFrame, info: dict) -> dict:
         goals_scored = (
             int(
                 events[
-                    (events["is_goal"] == True) & (events["scoring_team"] == tid)
+                    (events["is_goal"] == True)
+                    & (events["scoring_team"] == tid)
+                    & (~events.get("is_penalty_shootout", pd.Series(False, index=events.index)).fillna(False))
                 ].shape[0]
             )
             if "scoring_team" in events.columns
