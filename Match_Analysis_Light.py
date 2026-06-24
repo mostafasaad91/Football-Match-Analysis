@@ -7271,7 +7271,7 @@ def _panel_goals_table(ax, events, info):
         is_og = bool(r.get("is_own_goal", False))
         ben_id = r.get("scoring_team", r["team_id"])
         col = OG_COLOR if is_og else (C_RED if ben_id == info["home_id"] else C_BLUE)
-        from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+        from match_extensions import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
         if is_og:
             gtype = "OG"
         else:
@@ -13313,7 +13313,7 @@ def print_summary(info, xg_data, events):
                 if row["scoring_team"] == info["home_id"]
                 else info["away_name"]
             )
-            from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+            from match_extensions import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
             if row.get("is_own_goal", False):
                 goal_type = "[bold magenta]OWN GOAL[/bold magenta]"
             else:
