@@ -1,6 +1,6 @@
 # Football Match Analysis
 
-A Python post-match football analysis toolkit for WhoScored/Opta match data. The project produces high-resolution tactical visuals, light and dark report versions, player tables, defensive summaries, xG/xT analysis, pass networks, and a full tactical PDF report with written analysis for every visual.
+A Python post-match football analysis toolkit for WhoScored/Opta match data. The project produces high-resolution tactical visuals on a dark AMOLED theme, defensive summaries, xG/xT analysis, pass networks, and a full tactical PDF report with written analysis for every visual.
 
 Created by Mostafa Saad.
 
@@ -11,19 +11,15 @@ Created by Mostafa Saad.
 The tool reads a WhoScored match page, extracts the embedded match event data, calculates internal metrics such as xG and xT, then exports a complete analysis package:
 
 - Dark-theme visual report
-- Light-theme visual report
 - High-resolution PNG visuals
 - CSV event/player/xG outputs
 - Full `match_report_<timestamp>.pdf`
 - Detailed tactical commentary for every visual inside the PDF
 - Advanced multi-page player tables, exported as PNG and CSV files
 
-The current version includes both:
+The main analysis script is:
 
 - `Match_Analysis_Dark.py`
-- `Match_Analysis_Light.py`
-
-Both scripts use the same core analysis logic, with theme-specific styling.
 
 ---
 
@@ -114,13 +110,6 @@ A full pass over the pitch visuals, team colours and PDF report:
 - New **Glossary & Methodology** page defining xG, xGoT, xT, PPDA, Big Chance, Zone 14 and the pitch markers.
 - Section dividers (Shared / Home / Away), and **each visual's commentary now links to the next page**, so the report reads as one connected tactical argument.
 
-### Light and Dark Versions
-
-- Added consistent support for both light and dark visual identities.
-- The light version now uses a clean white PDF/report style.
-- Dark visuals keep the original dark tactical look.
-- Text contrast has been improved across light visuals, especially on tables, maps, arrows and donut charts.
-
 ### Dynamic Team Kit Colours
 
 - Team colours are now dynamic and based on the selected kit type.
@@ -163,7 +152,6 @@ CUSTOM_KIT_COLORS = {}
 - If the direct assist field is missing, the code tries to infer the assister from the previous successful same-team pass/key pass before the goal.
 - Goal type now distinguishes `Open Play`, `Set Piece`, `Penalty`, and the finishing body part where available.
 - Set pieces are detected from corners, free kicks and throw-ins in the action sequence before the goal.
-- The light version no longer uses dark rows in the goals table.
 
 ### PDF Report Redesign
 
@@ -214,8 +202,7 @@ This improves clarity for:
 
 | File | Purpose |
 |---|---|
-| `Match_Analysis_Dark.py` | Main dark-theme analysis script |
-| `Match_Analysis_Light.py` | Main light-theme analysis script |
+| `Match_Analysis_Dark.py` | Main analysis script (dark AMOLED theme) |
 | `match_extensions.py` | Unified PDF report, PPDA, team stats and extended report pages |
 | `viz_v2.py` | Shared visual helpers |
 | `viz_v2_charts.py` | Main V2 tactical visual functions |
@@ -246,16 +233,10 @@ Edit the match URL in the settings section of the script you want to run:
 MATCH_URL = "https://www.whoscored.com/matches/XXXXXXX/live/..."
 ```
 
-Run the dark version:
+Run the analysis:
 
 ```bash
 python Match_Analysis_Dark.py
-```
-
-Run the light version:
-
-```bash
-python Match_Analysis_Light.py
 ```
 
 Outputs are saved in:
