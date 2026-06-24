@@ -78,6 +78,42 @@ The report now produces a large visual package, including:
 
 ## Recent Updates
 
+### Visual & Report Overhaul (Latest)
+
+A full pass over the pitch visuals, team colours and PDF report:
+
+**Portrait pitches + AMOLED theme**
+
+- All pitch visuals (pass network, average positions, shot map, xT map) are now drawn on **vertical/portrait pitches with the attack pointing up**, on a true-black AMOLED background.
+
+**Pass network**
+
+- Single **team-shirt colour** for every node; **substitutes are shown as squares**, starters as circles — decided by the **starting XI** (read from match flow), so a starter who is subbed *off* stays a circle and only genuine bench players become squares.
+- **Connected-core pruning** (StatsBomb/Opta-style) removes stray, link-less nodes from late cameos.
+- Neutral **grey → white** link ramp (independent of team colour), distinct **goalkeeper** and busiest-**hub** markers, shirt numbers inside nodes, and de-overlapped player labels with leader lines.
+
+**Shot map**
+
+- Four-way outcome encoding — **goal · saved · blocked · off-target** — plus a **big-chance halo** and a **penalty ring**.
+- Six-card metric strip (xG, Goals, Shots, On-Target %, Big Chances, xG/Shot), penalty-area shading, average shot-distance line, and an attacking-half zoom so shots no longer pile up.
+
+**xT map & average positions**
+
+- xT map uses **white positive-pass arrows** for contrast over the heatmap (gold reserved for the top xT actions).
+- Average positions use smaller nodes with node-aware label placement and leader lines to stop names overlapping circles.
+
+**Accurate team & national-team colours**
+
+- Home-kit colours reviewed and corrected, with **all 2026 World Cup national teams** covered, plus many clubs from the Primeira Liga, Eredivisie, Scottish Premiership, Süper Lig, Saudi Pro League, Belgian Pro League, Brazil, Argentina, MLS and Egypt.
+- A contrast guard guarantees the two teams in a match never render in clashing/identical colours.
+
+**PDF report navigation & analysis**
+
+- New **Match at a Glance** dashboard page (score + home/away split bars for xG, shots, on-target and possession).
+- New **Contents page** with page numbers and **clickable PDF bookmarks** for fast navigation.
+- New **Glossary & Methodology** page defining xG, xGoT, xT, PPDA, Big Chance, Zone 14 and the pitch markers.
+- Section dividers (Shared / Home / Away), and **each visual's commentary now links to the next page**, so the report reads as one connected tactical argument.
+
 ### Light and Dark Versions
 
 - Added consistent support for both light and dark visual identities.
