@@ -20,7 +20,7 @@ WhoScored Post-Match Analyzer  ·  v7 internal xG engine  ·  2026-04-30
 # ══════════════════════════════════════════════════════
 #  IMPORTS
 # ══════════════════════════════════════════════════════
-import ast, json, math, os, re, sys, time, random, warnings, shutil, tempfile
+import ast, json, math, os, re, sys, time, random, warnings, shutil, tempfile, hashlib
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -43,16 +43,16 @@ from rich.console import Console
 from rich.table import Table
 from matplotlib.backends.backend_pdf import PdfPages
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
-SOFASCORE_PLAYER_TABLES = True
-SOFASCORE_AUTO_SEARCH = True
-SOFASCORE_EVENT_ID = 15632636
+SOFASCORE_PLAYER_TABLES = False
+SOFASCORE_AUTO_SEARCH = False
+SOFASCORE_EVENT_ID = 15186710
 SOFASCORE_MIN_MATCH_CONFIDENCE = 0.82
 os.environ["SOFASCORE_PLAYER_TABLES"] = "1" if SOFASCORE_PLAYER_TABLES else "0"
 os.environ["SOFASCORE_AUTO_SEARCH"] = "1" if SOFASCORE_AUTO_SEARCH else "0"
 os.environ["SOFASCORE_MIN_MATCH_CONFIDENCE"] = str(SOFASCORE_MIN_MATCH_CONFIDENCE)
 if SOFASCORE_EVENT_ID is not None:
     os.environ["SOFASCORE_EVENT_ID"] = str(SOFASCORE_EVENT_ID)
-from match_extensions_players import run_analysis as _run_extended_analysis
+from match_extensions import run_analysis as _run_extended_analysis
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 try:
@@ -64,6 +64,66 @@ try:
 except Exception:
     _V2_AVAILABLE = False
 
+if _V2_AVAILABLE:
+    import viz_v2_charts as _vc_runtime
+
+    # ── Runtime self-check + hard override for the gk/def/mid/att colour
+    # logic used by Pass Network and Average Positions. ────────────────
+    # Background: this function must classify a player's role from the
+    # ORIGINAL event coordinate system, where `x` is pitch depth
+    # (0 = own goal line, 100 = opponent's goal line) and `y` is pitch
+    # width. A previous version of this codebase read `y` instead of `x`,
+    # which silently scrambled every node colour. We force the correct
+    # implementation here, at the call site, so this report's colours are
+    # correct even if some other copy of viz_v2_charts.py — e.g. one
+    # picked up from a stale install, a different virtualenv, or any
+    # other entry earlier on sys.path — would otherwise shadow the fixed
+    # version on disk. This removes any dependency on cache state,
+    # sys.path ordering, or which file a given Python environment resolves
+    # the `viz_v2_charts` import to.
+    def _infer_position_bucket_FORCED(p: dict, depth_axis: str = "x",
+                                       direction: int = 1) -> str:
+        explicit = str(p.get("position") or p.get("pos") or "").strip().upper()
+        if explicit:
+            if explicit in {"GK", "GOALKEEPER"}:
+                return "gk"
+            if explicit.startswith(("D", "CB", "LB", "RB", "WB")):
+                return "def"
+            if explicit.startswith(("M", "DM", "CM", "AM")):
+                return "mid"
+            if explicit.startswith(("F", "FW", "ST", "CF", "W", "LW", "RW")):
+                return "att"
+        raw = p.get(depth_axis, 50)
+        depth = raw if direction >= 0 else (100 - raw)
+        if depth <= 8:
+            return "gk"
+        if depth <= 38:
+            return "def"
+        if depth <= 68:
+            return "mid"
+        return "att"
+
+    _existing_src = ""
+    try:
+        import inspect as _inspect_check
+        _existing_src = _inspect_check.getsource(_vc_runtime._infer_position_bucket)
+    except Exception:
+        pass
+
+    _is_stale = ("p.get(\"y\"" in _existing_src) or ("p.get('y'" in _existing_src)
+    if _is_stale:
+        print("⚠️  WARNING: viz_v2_charts._infer_position_bucket was loaded from "
+              f"{getattr(_vc_runtime, '__file__', '?')} using the OLD (y-as-depth) "
+              "logic. Forcing the corrected (x-as-depth) version for this run. "
+              "You should find and remove/update the stale copy of "
+              "viz_v2_charts.py at that path so this override isn't needed.")
+    else:
+        print(f"✅ viz_v2_charts loaded from {getattr(_vc_runtime, '__file__', '?')} "
+              "— bucket logic already correct (x-as-depth); applying override "
+              "anyway as a guarantee.")
+
+    _vc_runtime._infer_position_bucket = _infer_position_bucket_FORCED
+
 warnings.filterwarnings("ignore")
 console = Console()
 
@@ -71,8 +131,11 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1979569/live/europe-champions-league-2025-2026-paris-saint-germain-arsenal"
+MATCH_URL = "https://www.whoscored.com/matches/1953889/live/international-fifa-world-cup-2026-norway-senegal"
 SAVE_DIR = "output"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if not os.path.isabs(SAVE_DIR):
+    SAVE_DIR = os.path.join(SCRIPT_DIR, SAVE_DIR)
 
 
 def _safe_output_name(value: str, max_len: int = 90) -> str:
@@ -101,7 +164,7 @@ def _match_output_folder(info: dict, root: str = SAVE_DIR) -> str:
 #   "away" / "third" / "alternate" -> third colour in the team's kit palette
 # You can also force exact match-day kit colours with CUSTOM_KIT_COLORS below.
 HOME_KIT_TYPE = "home"
-AWAY_KIT_TYPE = "away"
+AWAY_KIT_TYPE = "auto"
 CUSTOM_KIT_COLORS = {
     # "home": "#C8102E",
     # "away": "#034694",
@@ -178,10 +241,10 @@ GROUP_BOARD_MAX_VISUALS = 6
 # ══════════════════════════════════════════════════════
 #  COLORS & CONSTANTS
 # ══════════════════════════════════════════════════════
-C_BLUE = "#1e90ff"
-C_RED = "#e63946"
+C_BLUE = "#4D8DFF"
+C_RED = "#FF4D4D"
 C_GREEN = "#22c55e"
-C_GOLD = "#f59e0b"
+C_GOLD = "#FFC23C"
 
 # ══════════════════════════════════════════════════════
 #  TEAM COLORS — ألوان قمصان الفرق الرسمية
@@ -254,6 +317,22 @@ TEAM_ALIASES = {
     "milan":            "AC Milan",
     "paris saint-germain": "PSG",
     "paris sg":         "PSG",
+    # International team name variants (WhoScored/Opta sometimes use the
+    # endonym or a different romanization than the palette key below).
+    "turkiye":          "Turkey",
+    "türkiye":          "Turkey",
+    "republic of turkiye": "Turkey",
+    "south korea":      "Korea Republic",
+    "korea republic":   "Korea Republic",
+    "ivory coast":      "Côte d'Ivoire",
+    "cote d'ivoire":    "Côte d'Ivoire",
+    "côte d’ivoire":    "Côte d'Ivoire",
+    "dr congo":         "DR Congo",
+    "congo dr":         "DR Congo",
+    "democratic republic of congo": "DR Congo",
+    "democratic republic of the congo": "DR Congo",
+    "usa":              "United States",
+    "us soccer":        "United States",
 }
 
 # ══════════════════════════════════════════════════════
@@ -271,22 +350,22 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Brighton": ["#0057B8", "#FFFFFF", "#FFCD00"],            # Home: Blue | Away: Yellow
     "Burnley": ["#6C1D45", "#99D6EA", "#FADADD"],            # Home: Claret | Away: Sky Blue
     "Chelsea": ["#034694", "#FFFFFF", "#D1D3D4"],             # Home: Blue | Away: Silver/Grey
-    "Crystal Palace": ["#1B458F", "#C4122E", "#A7D8FF"],      # Home: Blue/Red | Away: Light Blue
+    "Crystal Palace": ["#1B458F", "#C4122E", "#E5E7EB"],      # Home: Blue/Red | Away: Light Blue
     "Everton": ["#003399", "#FFFFFF", "#FFD100"],             # Home: Blue | Away: Yellow
     "Fulham": ["#F4F4F4", "#111111", "#CC0000"],             # Home: White | Away: Black/Red
     "Leeds United": ["#FFFFFF", "#1D428A", "#FFCD00"],        # Home: White | Away: Blue
-    "Liverpool": ["#C8102E", "#00B2A9", "#F6EB61"],           # Home: Red | Away: Teal/Yellow
+    "Liverpool": ["#C8102E", "#22C55E", "#F6EB61"],           # Home: Red | Away: Teal/Yellow
     "Manchester City": ["#6CABDD", "#FFFFFF", "#1C2C5B"],      # Home: Sky Blue | Away: Navy
     "Manchester United": ["#DA291C", "#FBE122", "#000000"],    # Home: Red | Away: Black
-    "Newcastle": ["#2D2D2D", "#FFFFFF", "#5B8DBE"],           # Home: Black/White | Away: Blue
-    "Newcastle United": ["#2D2D2D", "#FFFFFF", "#5B8DBE"],     # Home: Black/White | Away: Blue
+    "Newcastle": ["#2D2D2D", "#FFFFFF", "#A3A3A3"],           # Home: Black/White | Away: Blue
+    "Newcastle United": ["#2D2D2D", "#FFFFFF", "#A3A3A3"],     # Home: Black/White | Away: Blue
     "Nottm Forest": ["#DD0000", "#FFFFFF", "#FDB913"],        # Home: Red | Away: Yellow
     "Nottingham Forest": ["#DD0000", "#FFFFFF", "#FDB913"],    # Home: Red | Away: Yellow
     "Sunderland": ["#EB172B", "#FFFFFF", "#000000"],          # Home: Red/White | Away: Black
     "Tottenham": ["#FFFFFF", "#132257", "#C0C0C0"],           # Home: White | Away: Navy
     "Tottenham Hotspur": ["#FFFFFF", "#132257", "#C0C0C0"],    # Home: White | Away: Navy
-    "West Ham": ["#7A263A", "#1BB1E7", "#F3D459"],            # Home: Claret/Blue | Away: Yellow
-    "West Ham United": ["#7A263A", "#1BB1E7", "#F3D459"],      # Home: Claret/Blue | Away: Yellow
+    "West Ham": ["#7A263A", "#F5C542", "#F3D459"],            # Home: Claret/Blue | Away: Yellow
+    "West Ham United": ["#7A263A", "#F5C542", "#F3D459"],      # Home: Claret/Blue | Away: Yellow
     "Wolves": ["#FDB913", "#231F20", "#FFFFFF"],              # Home: Gold/Black | Away: White
     "Wolverhampton Wanderers": ["#FDB913", "#231F20", "#FFFFFF"],
 
@@ -426,6 +505,253 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Toulouse FC": ["#5B2C83", "#FFFFFF", "#D71920"],             # Home: Purple | Away: Red
 }
 
+INTERNATIONAL_TEAM_PALETTES = {
+    "Mexico": ["#006847", "#CE1126", "#FFFFFF"],
+    "South Africa": ["#FFB81C", "#007A4D", "#003B5C"],
+    "Egypt": ["#CE1126", "#FFFFFF", "#000000"],
+    "Argentina": ["#75AADB", "#FFFFFF", "#F6B40E"],
+    "Brazil": ["#FFDF00", "#009C3B", "#002776"],
+    "France": ["#0055A4", "#FFFFFF", "#EF4135"],
+    "England": ["#FFFFFF", "#C8102E", "#00247D"],
+    "Spain": ["#AA151B", "#F1BF00", "#002B7F"],
+    "Germany": ["#FFFFFF", "#000000", "#DD0000"],
+    "Italy": ["#0066B3", "#FFFFFF", "#008C45"],
+    "Portugal": ["#C8102E", "#006600", "#FFCC00"],
+    "Netherlands": ["#F36C21", "#21468B", "#FFFFFF"],
+    "Belgium": ["#ED2939", "#FAE042", "#000000"],
+    "Morocco": ["#C1272D", "#006233", "#FFFFFF"],
+    "United States": ["#3C3B6E", "#B22234", "#FFFFFF"],
+    "USA": ["#3C3B6E", "#B22234", "#FFFFFF"],
+    "Canada": ["#FF0000", "#FFFFFF", "#111111"],
+    "Japan": ["#1B365D", "#BC002D", "#FFFFFF"],
+    "Saudi Arabia": ["#006C35", "#FFFFFF", "#111111"],
+    "Qatar": ["#8A1538", "#FFFFFF", "#111111"],
+    "Nigeria": ["#008751", "#FFFFFF", "#111111"],
+    "Ghana": ["#FFFFFF", "#CE1126", "#006B3F"],
+    "Senegal": ["#00853F", "#FDEF42", "#E31B23"],
+    "Uruguay": ["#6CABDD", "#FFFFFF", "#FCD116"],
+    "Colombia": ["#FCD116", "#003893", "#CE1126"],
+    "Croatia": ["#FF0000", "#FFFFFF", "#171796"],
+    "Switzerland": ["#D52B1E", "#FFFFFF", "#111111"],
+    "Denmark": ["#C60C30", "#FFFFFF", "#111111"],
+    "Poland": ["#FFFFFF", "#DC143C", "#111111"],
+    "Australia": ["#FFCD00", "#00843D", "#012169"],
+    "Korea Republic": ["#C60C30", "#003478", "#FFFFFF"],
+    "South Korea": ["#C60C30", "#003478", "#FFFFFF"],
+    "Ivory Coast": ["#F77F00", "#009E60", "#FFFFFF"],
+    "Côte d'Ivoire": ["#F77F00", "#009E60", "#FFFFFF"],
+    "Cameroon": ["#007A5E", "#CE1126", "#FCD116"],
+    "Tunisia": ["#E70013", "#FFFFFF", "#000000"],
+    "Sweden": ["#FECB00", "#006AA7", "#1D3557"],
+    "Algeria": ["#006233", "#FFFFFF", "#D21034"],
+    "Turkey": ["#E30A17", "#FFFFFF", "#111111"],
+    "Chile": ["#D52B1E", "#0039A6", "#FFFFFF"],
+    "Peru": ["#D91023", "#FFFFFF", "#111111"],
+    "Serbia": ["#C6363C", "#0C4076", "#FFFFFF"],
+    "Scotland": ["#005EB8", "#FFFFFF", "#111111"],
+    "Wales": ["#D30731", "#00AD36", "#FFFFFF"],
+    "Norway": ["#BA0C2F", "#00205B", "#FFFFFF"],
+    "DR Congo": ["#007FFF", "#F7D618", "#CE1021"],
+    "Congo DR": ["#007FFF", "#F7D618", "#CE1021"],
+    "Democratic Republic of the Congo": ["#007FFF", "#F7D618", "#CE1021"],
+    "Congo": ["#009543", "#FBDE4A", "#DC241F"],
+    "Angola": ["#CC092F", "#F7D618", "#111111"],
+    "Cape Verde": ["#003893", "#FFFFFF", "#CF2027"],
+    "Mali": ["#14B53A", "#FCD116", "#CE1126"],
+    "Burkina Faso": ["#EF2B2D", "#009E49", "#FCD116"],
+    "Jamaica": ["#009B3A", "#FED100", "#111111"],
+    "Paraguay": ["#DA121A", "#FFFFFF", "#0038A8"],
+    "Bolivia": ["#007A33", "#FFD100", "#D52B1E"],
+    "Ecuador": ["#FFDD00", "#0072CE", "#ED1C24"],
+    "Venezuela": ["#7A1E3C", "#FFFFFF", "#A50021"],
+    "Costa Rica": ["#CE1126", "#FFFFFF", "#002B7F"],
+    "Panama": ["#D21034", "#0072CE", "#FFFFFF"],
+    "Honduras": ["#0073CF", "#FFFFFF", "#111111"],
+    "Jordan": ["#CE1126", "#000000", "#FFFFFF"],
+    "Iraq": ["#CE1126", "#FFFFFF", "#000000"],
+    "Iran": ["#239F40", "#FFFFFF", "#DA0000"],
+    "UAE": ["#FF0000", "#FFFFFF", "#000000"],
+    "United Arab Emirates": ["#FF0000", "#FFFFFF", "#000000"],
+    "Oman": ["#C8102E", "#FFFFFF", "#007A3D"],
+    "Bahrain": ["#CE1126", "#FFFFFF", "#111111"],
+    "Kuwait": ["#007A3D", "#CE1126", "#FFFFFF"],
+    "Syria": ["#CE1126", "#FFFFFF", "#000000"],
+    "Uzbekistan": ["#1EB53A", "#0099B5", "#FFFFFF"],
+    "China": ["#DE2910", "#FFDE00", "#FFFFFF"],
+    "China PR": ["#DE2910", "#FFDE00", "#FFFFFF"],
+    "India": ["#FF671F", "#06038D", "#FFFFFF"],
+    "New Zealand": ["#FFFFFF", "#111111", "#CE1126"],
+    "Iceland": ["#02529C", "#FFFFFF", "#DC1E35"],
+    "Finland": ["#003580", "#FFFFFF", "#111111"],
+    "Austria": ["#ED2939", "#FFFFFF", "#111111"],
+    "Czech Republic": ["#D7141A", "#11457E", "#FFFFFF"],
+    "Czechia": ["#D7141A", "#11457E", "#FFFFFF"],
+    "Slovakia": ["#0B4EA2", "#EE1C25", "#FFFFFF"],
+    "Slovenia": ["#FFFFFF", "#005DA4", "#ED1C24"],
+    "Romania": ["#FCD116", "#002B7F", "#CE1126"],
+    "Hungary": ["#CE1126", "#FFFFFF", "#007A3D"],
+    "Ukraine": ["#FFD500", "#005BBB", "#111111"],
+    "Greece": ["#0D5EAF", "#FFFFFF", "#111111"],
+    "Israel": ["#0038B8", "#FFFFFF", "#111111"],
+    "Albania": ["#E41E20", "#000000", "#FFFFFF"],
+    "Georgia": ["#FFFFFF", "#E4002B", "#111111"],
+    "Kosovo": ["#3B5BA5", "#FFFFFF", "#FFD700"],
+    "Northern Ireland": ["#FFFFFF", "#005EB8", "#111111"],
+    "Republic of Ireland": ["#169B62", "#FFFFFF", "#FF883E"],
+    "Ireland": ["#169B62", "#FFFFFF", "#FF883E"],
+    "Finland women": ["#003580", "#FFFFFF", "#111111"],
+    "Gabon": ["#009E60", "#FCD116", "#3A75C4"],
+    "Zambia": ["#198A00", "#EF3340", "#000000"],
+    "Guinea": ["#CE1126", "#FCD116", "#009460"],
+    "Equatorial Guinea": ["#3E9A00", "#E32118", "#0073CF"],
+    "Benin": ["#008751", "#FCD116", "#E8112D"],
+    "Namibia": ["#003580", "#D21034", "#009543"],
+    "Mauritania": ["#00A95C", "#FFC400", "#D01C1F"],
+}
+
+TOP5_2025_26_TEAM_PALETTES.update(INTERNATIONAL_TEAM_PALETTES)
+
+# ── Extra clubs & national teams (real home-kit colours) ─────────────────
+# Beyond the big-5 leagues: Primeira Liga, Eredivisie, Scottish PL, Süper Lig,
+# Saudi Pro League, Belgian PL, Brazil, Argentina, MLS, Egypt, plus other UEFA
+# regulars — and additional national teams. First colour = home shirt.
+EXTRA_TEAM_PALETTES = {
+    # Primeira Liga (Portugal)
+    "Benfica": ["#E50914", "#FFFFFF", "#000000"],
+    "SL Benfica": ["#E50914", "#FFFFFF", "#000000"],
+    "Porto": ["#003F87", "#FFFFFF", "#000000"],
+    "FC Porto": ["#003F87", "#FFFFFF", "#000000"],
+    "Sporting CP": ["#008057", "#FFFFFF", "#000000"],
+    "Sporting": ["#008057", "#FFFFFF", "#000000"],
+    "Sporting Lisbon": ["#008057", "#FFFFFF", "#000000"],
+    "Braga": ["#C8102E", "#FFFFFF", "#000000"],
+    "SC Braga": ["#C8102E", "#FFFFFF", "#000000"],
+    "Vitoria Guimaraes": ["#FFFFFF", "#000000", "#D4AF37"],
+    # Eredivisie (Netherlands)
+    "Ajax": ["#D2122E", "#FFFFFF", "#000000"],
+    "PSV": ["#ED1C24", "#FFFFFF", "#000000"],
+    "PSV Eindhoven": ["#ED1C24", "#FFFFFF", "#000000"],
+    "Feyenoord": ["#C8102E", "#FFFFFF", "#000000"],
+    "AZ": ["#E2001A", "#FFFFFF", "#000000"],
+    "AZ Alkmaar": ["#E2001A", "#FFFFFF", "#000000"],
+    "Twente": ["#E2001A", "#FFFFFF", "#000000"],
+    # Scottish Premiership
+    "Celtic": ["#018749", "#FFFFFF", "#000000"],
+    "Rangers": ["#1B458F", "#FFFFFF", "#E4002B"],
+    "Aberdeen": ["#E2001A", "#FFFFFF", "#000000"],
+    "Heart of Midlothian": ["#7A1F3D", "#F4D03F", "#FFFFFF"],
+    "Hibernian": ["#00843D", "#FFFFFF", "#000000"],
+    # Süper Lig (Turkey)
+    "Galatasaray": ["#A90432", "#FDB912", "#000000"],
+    "Fenerbahce": ["#15326B", "#FFED00", "#FFFFFF"],
+    "Fenerbahçe": ["#15326B", "#FFED00", "#FFFFFF"],
+    "Besiktas": ["#000000", "#FFFFFF", "#E30613"],
+    "Beşiktaş": ["#000000", "#FFFFFF", "#E30613"],
+    "Trabzonspor": ["#7A1632", "#1E9BD7", "#FFFFFF"],
+    # Saudi Pro League
+    "Al Hilal": ["#0A4DA2", "#FFFFFF", "#000000"],
+    "Al Nassr": ["#FEDD00", "#1A3E8B", "#FFFFFF"],
+    "Al Ittihad": ["#F4C400", "#000000", "#FFFFFF"],
+    "Al Ahli Saudi": ["#007A33", "#FFFFFF", "#000000"],
+    "Al Shabab": ["#FFFFFF", "#000000", "#D4AF37"],
+    "Al Ettifaq": ["#C8102E", "#FFFFFF", "#000000"],
+    # Belgian Pro League
+    "Club Brugge": ["#0E63B0", "#000000", "#FFFFFF"],
+    "Anderlecht": ["#52247F", "#FFFFFF", "#000000"],
+    "Genk": ["#0050A0", "#FFFFFF", "#000000"],
+    "Gent": ["#005CA9", "#FFFFFF", "#000000"],
+    "Standard Liege": ["#E2001A", "#FFFFFF", "#000000"],
+    "Royal Antwerp": ["#D2122E", "#FFFFFF", "#000000"],
+    "Union SG": ["#FFD200", "#0A2342", "#FFFFFF"],
+    # Brazil (Série A)
+    "Flamengo": ["#C52613", "#000000", "#FFFFFF"],
+    "Palmeiras": ["#006437", "#FFFFFF", "#000000"],
+    "Corinthians": ["#FFFFFF", "#000000", "#CCCCCC"],
+    "Sao Paulo": ["#FFFFFF", "#E30613", "#000000"],
+    "São Paulo": ["#FFFFFF", "#E30613", "#000000"],
+    "Santos": ["#FFFFFF", "#000000", "#CCCCCC"],
+    "Fluminense": ["#7A1631", "#1B5E20", "#FFFFFF"],
+    "Botafogo": ["#000000", "#FFFFFF", "#C0C0C0"],
+    "Gremio": ["#0D80BF", "#000000", "#FFFFFF"],
+    "Grêmio": ["#0D80BF", "#000000", "#FFFFFF"],
+    "Internacional": ["#E5050F", "#FFFFFF", "#000000"],
+    "Vasco da Gama": ["#000000", "#FFFFFF", "#E30613"],
+    "Atletico Mineiro": ["#000000", "#FFFFFF", "#C0C0C0"],
+    "Atlético Mineiro": ["#000000", "#FFFFFF", "#C0C0C0"],
+    "Cruzeiro": ["#0033A0", "#FFFFFF", "#000000"],
+    # Argentina (Primera División)
+    "Boca Juniors": ["#0A3E7E", "#F2C300", "#FFFFFF"],
+    "River Plate": ["#FFFFFF", "#E1122B", "#000000"],
+    "Racing Club": ["#6CACE4", "#FFFFFF", "#000000"],
+    "Independiente": ["#E2001A", "#FFFFFF", "#000000"],
+    "San Lorenzo": ["#0A2342", "#E2001A", "#FFFFFF"],
+    "Velez Sarsfield": ["#FFFFFF", "#003DA5", "#000000"],
+    # MLS
+    "Inter Miami": ["#F4B5CB", "#000000", "#231F20"],
+    "Inter Miami CF": ["#F4B5CB", "#000000", "#231F20"],
+    "LAFC": ["#000000", "#C39E6D", "#FFFFFF"],
+    "Los Angeles FC": ["#000000", "#C39E6D", "#FFFFFF"],
+    "LA Galaxy": ["#00245D", "#FFFFFF", "#FCD303"],
+    "Seattle Sounders": ["#5D9741", "#1E1E5C", "#FFFFFF"],
+    "Atlanta United": ["#A6192E", "#000000", "#C39E6D"],
+    # Egypt
+    "Al Ahly": ["#E30613", "#FFFFFF", "#000000"],
+    "Al Ahly SC": ["#E30613", "#FFFFFF", "#000000"],
+    "Zamalek": ["#FFFFFF", "#D2122E", "#000000"],
+    "Zamalek SC": ["#FFFFFF", "#D2122E", "#000000"],
+    "Pyramids FC": ["#1B3A8C", "#FFFFFF", "#000000"],
+    # Other UEFA regulars
+    "Shakhtar Donetsk": ["#F58220", "#000000", "#FFFFFF"],
+    "Dynamo Kyiv": ["#FFFFFF", "#005BBB", "#000000"],
+    "Red Bull Salzburg": ["#D3041E", "#FFFFFF", "#000000"],
+    "RB Salzburg": ["#D3041E", "#FFFFFF", "#000000"],
+    "Salzburg": ["#D3041E", "#FFFFFF", "#000000"],
+    "Olympiacos": ["#E30613", "#FFFFFF", "#000000"],
+    "Panathinaikos": ["#007A33", "#FFFFFF", "#000000"],
+    "PAOK": ["#000000", "#FFFFFF", "#C0C0C0"],
+    "Slavia Prague": ["#D7141A", "#FFFFFF", "#000000"],
+    "Sparta Prague": ["#9B1B30", "#FFFFFF", "#000000"],
+    "Young Boys": ["#FFE500", "#000000", "#FFFFFF"],
+    "FC Copenhagen": ["#FFFFFF", "#163C6E", "#000000"],
+    "Sturm Graz": ["#000000", "#FFFFFF", "#C0C0C0"],
+    "Bodo/Glimt": ["#FFE500", "#000000", "#FFFFFF"],
+    # Additional national teams
+    "North Macedonia": ["#D20000", "#FFE600", "#FFFFFF"],
+    "Montenegro": ["#C40308", "#D4AF37", "#FFFFFF"],
+    "Bosnia and Herzegovina": ["#002395", "#FCD116", "#FFFFFF"],
+    "Bosnia": ["#002395", "#FCD116", "#FFFFFF"],
+    "Bulgaria": ["#FFFFFF", "#00966E", "#D62612"],
+    "Armenia": ["#D90012", "#0033A0", "#F2A800"],
+    "Azerbaijan": ["#00B5E2", "#EF3340", "#509E2F"],
+    "Luxembourg": ["#ED2939", "#FFFFFF", "#00A1DE"],
+    "Cyprus": ["#005CBF", "#FFFFFF", "#D57800"],
+    "Estonia": ["#0072CE", "#000000", "#FFFFFF"],
+    "Latvia": ["#9E3039", "#FFFFFF", "#000000"],
+    "Lithuania": ["#FDB913", "#006A44", "#C1272D"],
+    "Belarus": ["#D22730", "#00843D", "#FFFFFF"],
+    "Moldova": ["#0046AE", "#FFD200", "#CC092F"],
+    "Malta": ["#CF142B", "#FFFFFF", "#000000"],
+    "Faroe Islands": ["#FFFFFF", "#0065BD", "#ED2939"],
+    "Lebanon": ["#ED1C24", "#FFFFFF", "#00A651"],
+    "Palestine": ["#000000", "#FFFFFF", "#CE1126"],
+    "Libya": ["#239E46", "#000000", "#E70013"],
+    "Sudan": ["#D21034", "#FFFFFF", "#007229"],
+    "Vietnam": ["#DA251D", "#FFFF00", "#FFFFFF"],
+    "Thailand": ["#241D4F", "#A51931", "#FFFFFF"],
+    "Indonesia": ["#CE1126", "#FFFFFF", "#000000"],
+    "Malaysia": ["#FCD116", "#000000", "#CC0001"],
+    "El Salvador": ["#0F47AF", "#FFFFFF", "#000000"],
+    "Guatemala": ["#4997D0", "#FFFFFF", "#000000"],
+    "Haiti": ["#00209F", "#D21034", "#FFFFFF"],
+    "Trinidad and Tobago": ["#E00000", "#000000", "#FFFFFF"],
+    "Curacao": ["#002B7F", "#F9D616", "#FFFFFF"],
+    "Curaçao": ["#002B7F", "#F9D616", "#FFFFFF"],
+    "Suriname": ["#377E3F", "#FFFFFF", "#B40A2D"],
+    "New Caledonia": ["#00A1DE", "#FFFFFF", "#ED2939"],
+    "Tahiti": ["#FFFFFF", "#E30613", "#000000"],
+}
+TOP5_2025_26_TEAM_PALETTES.update(EXTRA_TEAM_PALETTES)
+
 # Make the primary colour table cover all new teams while preserving earlier explicit values.
 for _club_name, _palette in TOP5_2025_26_TEAM_PALETTES.items():
     if _palette:
@@ -433,6 +759,28 @@ for _club_name, _palette in TOP5_2025_26_TEAM_PALETTES.items():
 
 # Aliases used by WhoScored / Opta / common spellings.
 TEAM_ALIASES.update({
+    "mexico": "Mexico",
+    "méxico": "Mexico",
+    "south africa": "South Africa",
+    "bafana bafana": "South Africa",
+    "egypt": "Egypt",
+    "morocco": "Morocco",
+    "sweden": "Sweden",
+    "tunisia": "Tunisia",
+    "united states of america": "United States",
+    "united states": "United States",
+    "usa": "USA",
+    "usmnt": "USA",
+    "korea republic": "Korea Republic",
+    "south korea": "South Korea",
+    "cote d'ivoire": "Ivory Coast",
+    "côte d'ivoire": "Côte d'Ivoire",
+    "ivory coast": "Ivory Coast",
+    "dr congo": "DR Congo",
+    "d r congo": "DR Congo",
+    "congo dr": "Congo DR",
+    "democratic republic of congo": "Democratic Republic of the Congo",
+    "democratic republic of the congo": "Democratic Republic of the Congo",
     "newcastle united": "Newcastle",
     "nottingham forest": "Nottm Forest",
     "nottm forest": "Nottm Forest",
@@ -494,8 +842,8 @@ TEAM_ALIASES.update({
 })
 
 
-DEFAULT_HOME = "#e63946"
-DEFAULT_AWAY = "#1e90ff"
+DEFAULT_HOME = "#4D8DFF"
+DEFAULT_AWAY = "#FF4D4D"
 
 
 def get_team_color(team_name: str, fallback: str) -> str:
@@ -659,13 +1007,59 @@ def _team_palette(team_name: str, fallback: str) -> list[str]:
                 pal = vals
                 break
     if not pal:
-        pal = [get_team_color(canonical or team_name, fallback)]
+        looked_up = get_team_color(canonical or team_name, fallback)
+        if looked_up == fallback:
+            # Team is genuinely unrecognized (not in TEAM_COLORS,
+            # TOP5_2025_26_TEAM_PALETTES, or INTERNATIONAL_TEAM_PALETTES).
+            # Rather than collapsing every unknown side onto the same fixed
+            # DEFAULT_HOME/DEFAULT_AWAY constant — which makes any two
+            # unmapped teams (e.g. lower-profile national sides) render
+            # with identical or near-identical colours — derive a stable,
+            # name-specific colour so each unknown team still gets its own
+            # consistent, visually distinct identity across the report.
+            pal = [_deterministic_unknown_team_color(canonical or team_name)]
+        else:
+            pal = [looked_up]
     # Remove duplicates while preserving order.
     out = []
     for c in pal:
         if c and c not in out:
             out.append(c)
     return out or [fallback]
+
+
+# Visually well-separated colours (in hue) used as a deterministic fallback
+# pool for teams that have no entry anywhere in TEAM_COLORS,
+# TOP5_2025_26_TEAM_PALETTES, or INTERNATIONAL_TEAM_PALETTES. Picking from a
+# spread pool (instead of one fixed constant) means two unrecognized teams
+# in the same fixture are very unlikely to land on the same or a visually
+# similar colour.
+_UNKNOWN_TEAM_COLOR_POOL = [
+    "#4D8DFF",  # blue
+    "#FF4D4D",  # red
+    "#3DDC84",  # green
+    "#FFC23C",  # gold
+    "#E879F9",  # magenta
+    "#38BDF8",  # cyan
+    "#F97316",  # orange
+    "#A78BFA",  # violet
+    "#FACC15",  # yellow
+    "#22D3EE",  # turquoise
+    "#FB7185",  # rose
+    "#84CC16",  # lime
+]
+
+
+def _deterministic_unknown_team_color(team_name: str) -> str:
+    """Pick a stable colour for an unrecognized team name from a spread pool.
+
+    Uses a hash of the (normalized) team name so the same team always gets
+    the same colour across runs/reports, without every unmapped team
+    collapsing onto one shared default.
+    """
+    key = (team_name or "").strip().lower()
+    idx = int(hashlib.md5(key.encode("utf-8")).hexdigest(), 16) % len(_UNKNOWN_TEAM_COLOR_POOL)
+    return _UNKNOWN_TEAM_COLOR_POOL[idx]
 
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -697,6 +1091,35 @@ def _relative_luminance(hex_color: str) -> float:
     return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 
 
+def _contrast_ratio_hex(fg: str, bg: str = "#000000") -> float:
+    l1 = _relative_luminance(fg)
+    l2 = _relative_luminance(bg)
+    hi, lo = max(l1, l2), min(l1, l2)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _readable_kit_candidate(team_name: str, palette: list[str],
+                            fallback: str = "#9CA3AF",
+                            *, allow_light: bool = False) -> str:
+    """Choose a shirt/trim colour that is visible on the navy report background."""
+    best = fallback
+    best_score = -999.0
+    for raw in palette or []:
+        c = _usable_on_dark(raw, fallback)
+        lum = _relative_luminance(c)
+        contrast = _contrast_ratio_hex(c, BG_DARK)
+        if lum >= 0.82 and not allow_light:
+            score = -10.0
+        else:
+            # Prefer true kit identity, but require enough contrast on navy.
+            score = contrast - (0.35 if lum >= 0.76 else 0.0)
+        if score > best_score:
+            best, best_score = c, score
+    if best_score < 2.05:
+        return fallback
+    return best
+
+
 def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
     """
     Avoid invisible black/near-black on the dark visual background.
@@ -709,7 +1132,7 @@ def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
     # no channel is bright enough to create visual contrast.
     # Navy #132257 has low luminance (0.020) but blue=0.34 → visible.
     # Pure black #000000 has luminance 0 and max channel 0 → invisible.
-    if _relative_luminance(hex_color) < 0.03 and max(r, g, b) < 0.15:
+    if _relative_luminance(hex_color) < 0.035 and max(r, g, b) < 0.18:
         return fallback
     return hex_color
 
@@ -732,26 +1155,16 @@ def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") 
     max_ch = max(r, g, b)
     is_too_dark = (lum < 0.04 and max_ch < 0.18) or (lum < 0.10 and max_ch < 0.22)
 
-    if is_too_dark:
+    if is_too_dark or _contrast_ratio_hex(hex_color, BG_DARK) < 1.65:
         pal = _team_palette(team_name, fallback)
-        for c in pal[1:]:
-            c = _usable_on_dark(c, fallback)
-            c_lum = _relative_luminance(c) if c else 0
-            c_r, c_g, c_b = _hex_to_rgb01(c) if c else (0, 0, 0)
-            if c and 0.10 <= c_lum < 0.80:
-                return c
-            if c and c_lum < 0.10 and max(c_r, c_g, c_b) >= 0.25:
-                return c
-        return fallback
+        return _readable_kit_candidate(team_name, pal[1:] + pal[:1],
+                                       fallback, allow_light=False)
 
     # Pure white / off-white kits only (keep yellows/golds as visible bar colours)
     if lum >= 0.80:
         pal = _team_palette(team_name, fallback)
-        for c in pal[1:]:
-            c = _usable_on_dark(c, fallback)
-            if c and _relative_luminance(c) < 0.80:
-                return c
-        return fallback
+        return _readable_kit_candidate(team_name, pal[1:] + pal[:1],
+                                       fallback, allow_light=False)
 
     return hex_color
 
@@ -849,8 +1262,10 @@ def choose_matchup_colors(home_name: str, away_name: str,
             return 0.25   # off-white: strong penalty
         return 0.0
 
-    # ── Step 1: Home primary + Away alternate (away kit) ───────────
-    if away_alternate != away_primary:
+    explicit_away_kit = _kit_palette_index(away_kit_type) == 2
+
+    # ── Step 1: Home primary + Away alternate (explicit away kit only) ───────
+    if explicit_away_kit and away_alternate != away_primary:
         alt_score = _color_distance(home_primary, away_alternate) - _light_penalty(away_alternate)
         pri_score = _color_distance(home_primary, away_primary) - _light_penalty(away_primary)
         if _color_distance(home_primary, away_alternate) >= 0.28 and alt_score >= pri_score * 0.85:
@@ -912,13 +1327,88 @@ def choose_matchup_colors(home_name: str, away_name: str,
 HOME_COLOR = DEFAULT_HOME
 AWAY_COLOR = DEFAULT_AWAY
 
-BG_DARK = "#050508"
-BG_MID = "#0d1117"
-PITCH_COL = "#040c04"
-GRID_COL = "#1e2836"
-TEXT_MAIN = "#f0f4ff"
-TEXT_DIM = "#94a3b8"
-TEXT_BRIGHT = "#ffffff"
+BG_DARK = "#000000"
+BG_MID = "#020202"
+PITCH_COL = "#030303"
+GRID_COL = "#2A2A2A"
+TEXT_MAIN = "#F4F8FF"
+TEXT_DIM = "#D6DEE8"
+TEXT_BRIGHT = "#FFFFFF"
+
+
+def _relative_luminance_hex(color: str) -> float:
+    try:
+        import matplotlib.colors as _mcolors
+        r, g, b = _mcolors.to_rgb(color)
+    except Exception:
+        r, g, b = (1.0, 1.0, 1.0)
+    vals = []
+    for c in (r, g, b):
+        vals.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * vals[0] + 0.7152 * vals[1] + 0.0722 * vals[2]
+
+
+def _contrast_ratio(fg: str, bg: str = BG_MID) -> float:
+    l1, l2 = _relative_luminance_hex(fg), _relative_luminance_hex(bg)
+    hi, lo = max(l1, l2), min(l1, l2)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def readable_text_color(color: str, bg: str = BG_MID, fallback: str = TEXT_BRIGHT, min_ratio: float = 5.0) -> str:
+    try:
+        return color if _contrast_ratio(color, bg) >= min_ratio else fallback
+    except Exception:
+        return fallback
+
+
+def readable_team_text_color(color: str, bg: str = BG_MID) -> str:
+    return readable_text_color(color, bg, fallback=TEXT_BRIGHT, min_ratio=5.0)
+
+ACCENT_TEXT = readable_text_color(C_GOLD, BG_MID, fallback=TEXT_BRIGHT)
+
+
+# Global AMOLED defaults: every legacy figure/axis starts from a near-black
+# surface and high-contrast text, even if an individual visual forgets to set it.
+def _apply_amoled_matplotlib_defaults() -> None:
+    try:
+        plt.rcParams.update({
+            "figure.facecolor": BG_DARK,
+            "axes.facecolor": BG_MID,
+            "savefig.facecolor": BG_DARK,
+            "savefig.edgecolor": BG_DARK,
+            "text.color": TEXT_MAIN,
+            "axes.labelcolor": TEXT_DIM,
+            "xtick.color": TEXT_DIM,
+            "ytick.color": TEXT_DIM,
+            "axes.edgecolor": GRID_COL,
+            "grid.color": GRID_COL,
+            "legend.facecolor": BG_MID,
+            "legend.edgecolor": GRID_COL,
+            "patch.force_edgecolor": False,
+        })
+    except Exception:
+        pass
+
+
+_apply_amoled_matplotlib_defaults()
+
+
+TEXT_SHADOW = [pe.withStroke(linewidth=2.6, foreground="#000000")]
+TEXT_SHADOW_STRONG = [pe.withStroke(linewidth=3.4, foreground="#000000")]
+
+
+def text_shadow(strong: bool = False) -> list:
+    """Reusable black outline for labels placed over charts, maps, or team colours."""
+    return TEXT_SHADOW_STRONG if strong else TEXT_SHADOW
+
+
+def _apply_neon_backdrop(fig):
+    """Apply the shared teal/purple neon backdrop when available."""
+    try:
+        from viz_design_system import _neon_backdrop
+        _neon_backdrop(fig)
+    except Exception:
+        pass
 
 COLOR_SUB_IN = C_GREEN
 COLOR_SUB_OUT = C_GOLD
@@ -3588,6 +4078,52 @@ def _apply_official_stats_calibration(info: dict, events: pd.DataFrame) -> pd.Da
 
     return out
 
+
+def _build_player_meta(players, events, sub_in, sub_out):
+    """Per-player metadata (position, shirt, is_sub) keyed by player_id.
+
+    `is_sub` (was this player a substitute, i.e. came off the bench) is read
+    from match flow, not a single flag, so it stays correct even for 1st-half
+    substitutions and feeds with an unreliable isFirstEleven field. Priority:
+        1. Explicit sub events — a player who came ON is a sub; a starter who
+           was subbed OFF is NOT a sub (he started).
+        2. A sane isFirstEleven lineup (7–11 flagged starters) → trust it.
+        3. Fallback: the 11 players with the earliest first-touch minute are
+           the starters; everyone else came on later → substitute.
+    """
+    sub_in = set(sub_in or [])
+    sub_out = set(sub_out or [])
+    try:
+        first_min = events.groupby("player_id")["minute"].min().to_dict()
+    except Exception:
+        first_min = {}
+    meta = {}
+    team_ids = {p.get("team_id") for p in players}
+    for tid in team_ids:
+        tps = [p for p in players
+               if p.get("team_id") == tid and p.get("player_id") is not None]
+        flagged = [p for p in tps if p.get("is_first_xi")]
+        use_flag = 7 <= len(flagged) <= 11
+        starter_ids = set()
+        if not use_flag and tps:
+            ranked = sorted(tps, key=lambda p: first_min.get(p["player_id"], 9999))
+            starter_ids = {p["player_id"] for p in ranked[:11]}
+        for p in tps:
+            pid = p["player_id"]
+            if pid in sub_in:
+                is_sub = True
+            elif pid in sub_out:
+                is_sub = False
+            elif use_flag:
+                is_sub = not bool(p.get("is_first_xi"))
+            else:
+                is_sub = pid not in starter_ids
+            meta[pid] = {"position": p.get("position"),
+                         "shirt": p.get("shirt_no"),
+                         "is_sub": is_sub}
+    return meta
+
+
 def parse_all(md: dict):
 
     home = md.get("home", {})
@@ -3767,6 +4303,10 @@ def parse_all(md: dict):
     info["sub_in"] = sub_in
     info["sub_out"] = sub_out
     info["red_cards"] = red_cards
+    # Per-player metadata (real position + shirt number) keyed by player_id.
+    # The pass-network renderer uses this to colour nodes by actual unit
+    # (not geometric depth) and to print real shirt numbers inside nodes.
+    info["player_meta"] = _build_player_meta(players, events, sub_in, sub_out)
     return info, events, pd.DataFrame(players)
 
 
@@ -4352,7 +4892,7 @@ def draw_shot_map_full(fig, events, team_id, team_name, team_color):
             xg_str = f"xG {xg:.2f}"
             if raw_type == "Goal":
                 is_og = row.get("is_own_goal", False)
-                lbl_color = OG_COLOR if is_og else C_GOLD
+                lbl_color = OG_COLOR if is_og else ACCENT_TEXT
                 ax.text(
                     row["x"], row["y"] - 7.5, xg_str + (f"  {OG_LABEL}" if is_og else ""),
                     ha="center", va="top", color=lbl_color, fontsize=9, fontweight="bold",
@@ -4474,7 +5014,7 @@ def draw_breakdown_goals(fig, events, info, xg_data):
         gdf["Scorer By"] = gdf["team_id"].apply(lambda x: info["home_name"] if x == info["home_id"] else info["away_name"])
         gdf["Scored For"] = gdf["scoring_team"].apply(lambda x: info["home_name"] if x == info["home_id"] else info["away_name"])
         # تصنيف Open Play / Set Piece + النوع الفرعي (من الإكستنشن)
-        from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+        from match_extensions import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
         def _goal_type_label(r):
             if r.get("is_own_goal", False):
                 return "🔄 OG (Own Goal)"
@@ -4499,7 +5039,7 @@ def draw_breakdown_goals(fig, events, info, xg_data):
             cell.set_edgecolor(GRID_COL)
             cell.set_linewidth(0.6)
             if r == 0:
-                cell.set_facecolor("#1a2840")
+                cell.set_facecolor("#0A0A0A")
                 cell.set_text_props(color=TEXT_BRIGHT, fontweight="bold", fontsize=11)
             else:
                 row_data = disp.iloc[r - 1]
@@ -4516,7 +5056,7 @@ def draw_breakdown_goals(fig, events, info, xg_data):
                     cell.set_facecolor("#1a0a0a")
                     cell.set_text_props(color=TEXT_MAIN)
                 else:
-                    cell.set_facecolor("#0a1630")
+                    cell.set_facecolor("#050505")
                     cell.set_text_props(color=TEXT_MAIN)
 
 # ══════════════════════════════════════════════════════
@@ -4910,7 +5450,7 @@ def draw_pass_network_full(
         )
         label_text = _short(node["name"]) + (f" {badge}" if badge else "")
         border_col = node_color if is_special else "#444444"
-        name_color = node_color if is_special else TEXT_BRIGHT
+        name_color = readable_team_text_color(node_color, BG_DARK) if is_special else TEXT_BRIGHT
         ax_pitch.text(
             node["avg_x"],
             node["avg_y"] + 9,
@@ -5083,7 +5623,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
     axs.axis("off")
 
     cmap = LinearSegmentedColormap.from_list(
-        "xt", ["#0a1628", "#0d3b6e", "#1a6b3c", "#f59e0b", "#e63946", "#ff0044"]
+        "xt", ["#050505", "#0A0A0A", "#1a6b3c", "#f59e0b", "#e63946", "#ff0044"]
     )
 
     grid_display = XT_GRID.T
@@ -5129,7 +5669,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
     cbar = fig.colorbar(im, ax=ax, orientation="vertical", fraction=0.022, pad=0.015)
     cbar.set_label("xT Value", color="white", fontsize=10, labelpad=8)
     cbar.ax.tick_params(colors="white", labelsize=9)
-    cbar.outline.set_edgecolor("#334155")
+    cbar.outline.set_edgecolor("#3A3A3A")
 
     def pline(xs, ys, lw=1.5, alpha=0.75, ls="-"):
         ax.plot(
@@ -5234,7 +5774,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
                 xytext=(row["x"], row["y"]),
                 arrowprops=dict(
                     arrowstyle="-|>",
-                    color="#facc15",
+                    color="#7DD3FC",
                     lw=5.5,
                     alpha=0.15,
                     mutation_scale=14,
@@ -5247,7 +5787,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
                 xytext=(row["x"], row["y"]),
                 arrowprops=dict(
                     arrowstyle="-|>",
-                    color="#facc15",
+                    color="#7DD3FC",
                     lw=2.8,
                     alpha=0.96,
                     mutation_scale=12,
@@ -5257,7 +5797,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
             ax.scatter(
                 row["x"],
                 row["y"],
-                c="#facc15",
+                c="#7DD3FC",
                 s=45,
                 edgecolors="black",
                 lw=0.8,
@@ -5266,7 +5806,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
             ax.scatter(
                 row["end_x"],
                 row["end_y"],
-                c="#facc15",
+                c="#7DD3FC",
                 s=180,
                 marker="*",
                 edgecolors="white",
@@ -5284,7 +5824,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
                 f"#{rank} {_short(row.get('player',''))}  +{row['xT']:.3f}",
                 ha="center",
                 va="bottom",
-                color="#facc15",
+                color="#7DD3FC",
                 fontsize=8.2,
                 fontweight="bold",
                 zorder=10,
@@ -5292,7 +5832,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
                     boxstyle="round,pad=0.30",
                     facecolor="#050508",
                     alpha=0.85,
-                    edgecolor="#facc15",
+                    edgecolor="#7DD3FC",
                     lw=1.0,
                 ),
             )
@@ -5379,14 +5919,14 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
         mx = top_p.max() if not top_p.empty else 1.0
         for rank, (player, xval) in enumerate(top_p.items(), 1):
             bw = max(min(xval / mx * 0.78, 0.78), 0.04)
-            bar_col = team_color if rank > 1 else "#facc15"
+            bar_col = team_color if rank > 1 else "#7DD3FC"
             axs.add_patch(
                 mpatches.FancyBboxPatch(
                     (0.08, yq - 0.018),
                     0.84,
                     0.036,
                     boxstyle="round,pad=0.005",
-                    facecolor="#1e2836",
+                    facecolor="#0A0A0A",
                     edgecolor="none",
                     transform=axs.transAxes,
                     zorder=2,
@@ -5405,7 +5945,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
                     zorder=3,
                 )
             )
-            name_col = "#facc15" if rank == 1 else TEXT_BRIGHT
+            name_col = "#7DD3FC" if rank == 1 else TEXT_BRIGHT
             lbl(
                 f"{rank}. {_short(player)}",
                 0.10,
@@ -5418,7 +5958,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
                 f"+{xval:.3f}",
                 0.90,
                 yq,
-                "#facc15" if rank == 1 else TEXT_DIM,
+                "#7DD3FC" if rank == 1 else TEXT_DIM,
                 size=8.2,
                 bold=(rank == 1),
                 ha="right",
@@ -5430,7 +5970,7 @@ def draw_xt_map_full(fig, events, team_id, team_name, team_color):
             mpatches.Patch(facecolor="white", alpha=0.80, label="Positive xT pass"),
             mpatches.Patch(facecolor="#ff6b6b", alpha=0.80, label="Negative xT pass"),
             mpatches.Patch(
-                facecolor="#facc15", edgecolor="white", lw=1, label="⭐ Top-5 xT passes"
+                facecolor="#7DD3FC", edgecolor="white", lw=1, label="Top-5 xT passes"
             ),
         ],
         fontsize=9.5,
@@ -5653,7 +6193,7 @@ def _rpt_shot_table(ax, events, info, xg_data):
     rows_ = [
         ("Goals", hd.get("goals", 0), ad.get("goals", 0), C_GOLD),
         ("xG", hd.get("xG", 0), ad.get("xG", 0), "#a855f7"),
-        ("xGoT", hxgot, axgot, "#1e90ff"),
+        ("xGoT", hxgot, axgot, "#F5C542"),
         ("Shots", hd.get("shots", 0), ad.get("shots", 0), "#94a3b8"),
         ("On Tgt", hd.get("on_target", 0), ad.get("on_target", 0), C_GREEN),
         ("Blocked", hd.get("blocked", 0), ad.get("blocked", 0), C_GOLD),
@@ -5961,7 +6501,7 @@ def _rpt_xt_minute(ax, events, info):
     ax.axhline(0, color="white", lw=0.8, alpha=0.5)
     for xp, lb in [(45, "HT"), (90, "FT")]:
         ax.axvline(xp, color=C_GOLD, lw=1.0, ls="--", alpha=0.60)
-        ax.text(xp + 0.5, ax.get_ylim()[1] * 0.85, lb, color=C_GOLD, fontsize=6)
+        ax.text(xp + 0.5, ax.get_ylim()[1] * 0.85, lb, color=TEXT_BRIGHT, fontsize=6)
     ht = round(xt[xt["team_id"] == info["home_id"]]["xT"].sum(), 3)
     at = round(xt[xt["team_id"] == info["away_id"]]["xT"].sum(), 3)
     for pos, name, col, ha_ in [
@@ -6144,7 +6684,7 @@ def _rpt_stats_table(ax, events, info, xg_data):
             "#a855f7",
         ),
         ("xT", str(hxt), str(axt), hxt / ((hxt + axt) or 1), "#22c55e"),
-        ("Key Passes", str(hkp), str(akp), hkp / ((hkp + akp) or 1), "#1e90ff"),
+        ("Key Passes", str(hkp), str(akp), hkp / ((hkp + akp) or 1), "#F5C542"),
         (
             "Big Chances",
             str(hd.get("big_chances", 0)),
@@ -6514,7 +7054,7 @@ def _watermark(fig):
             [0.03, 0.97],
             [0.026, 0.026],
             transform=fig.transFigure,
-            color="#1e3a5f",
+            color="#7DD3FC",
             lw=0.8,
             alpha=0.85,
         )
@@ -6735,7 +7275,7 @@ def _panel_shot_comparison(ax, events, info, xg_data):
                 0.84,
                 boxstyle="round,pad=0.006",
                 transform=ax.transAxes,
-                facecolor="#060d1a",
+                facecolor="#050505",
                 edgecolor=col,
                 lw=1.3,
                 alpha=0.90,
@@ -6953,7 +7493,7 @@ def _panel_goals_table(ax, events, info):
         is_og = bool(r.get("is_own_goal", False))
         ben_id = r.get("scoring_team", r["team_id"])
         col = OG_COLOR if is_og else (C_RED if ben_id == info["home_id"] else C_BLUE)
-        from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+        from match_extensions import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
         if is_og:
             gtype = "OG"
         else:
@@ -6987,7 +7527,7 @@ def _panel_goals_table(ax, events, info):
     ax.plot([0.01, 0.99], [y, y], color=GRID_COL, lw=0.8, transform=ax.transAxes)
     y -= 0.008
     for min_, scorer, assist, gtype, xg, col, is_og in rows:
-        bg = "#1e0a2e" if is_og else ("#1a0a0a" if col == C_RED else "#060f1e")
+        bg = "#1e0a2e" if is_og else ("#1a0a0a" if col == C_RED else "#090909")
         ax.add_patch(
             plt.Rectangle(
                 (0.01, y - row_h * 0.85),
@@ -7117,9 +7657,9 @@ def _panel_xg_tiles(ax, events, info, xg_data):
     axgot = round(as_[(as_.get("shot_whoscored_type", as_["shot_category"]).isin(["Goal", "SavedShot", "On Target"]))]["xG"].sum(), 2)
     tiles = [
         (hn[:12], hd.get("xG", 0), C_RED, "xG"),
-        (hn[:12], hxgot, "#1e90ff", "xGoT"),
+        (hn[:12], hxgot, "#F5C542", "xGoT"),
         (hn[:12], hd.get("on_target", 0), C_GREEN, "On Target"),
-        (an[:12], axgot, "#1e90ff", "xGoT"),
+        (an[:12], axgot, "#F5C542", "xGoT"),
         (an[:12], ad.get("xG", 0), C_BLUE, "xG"),
         (an[:12], ad.get("on_target", 0), C_GREEN, "On Target"),
     ]
@@ -7470,7 +8010,7 @@ def _panel_defensive_heatmap(ax, events, tid, tc, name, info=None):
 
     hm_cmap = LSC.from_list(
         "dhm",
-        ["#000000", "#071020", "#0d2a4a", "#0f4c2a", "#a16207", "#dc2626", "#ff0a47"],
+        ["#000000", "#050505", "#0A0A0A", "#0f4c2a", "#a16207", "#dc2626", "#ff0a47"],
         N=256,
     )
     xs, ys = def_ev["x"].values, def_ev["y"].values
@@ -7512,7 +8052,7 @@ def _panel_defensive_heatmap(ax, events, tid, tc, name, info=None):
             104,
             facecolor="#080f08",
             alpha=0.85,
-            edgecolor="#334155",
+            edgecolor="#3A3A3A",
             lw=0.8,
             zorder=6,
         )
@@ -7772,7 +8312,7 @@ def _panel_match_stats(ax, events, info, xg_data):
             "#a855f7",
         ),
         ("xT", str(hxt), str(axt), hxt / ((hxt + axt) or 1), "#22c55e"),
-        ("Key Passes", str(hkp), str(akp), hkp / ((hkp + akp) or 1), "#1e90ff"),
+        ("Key Passes", str(hkp), str(akp), hkp / ((hkp + akp) or 1), "#F5C542"),
         (
             "Big Chances",
             str(hd.get("big_chances", 0)),
@@ -7964,7 +8504,7 @@ def _panel_xt_minute(ax, events, info):
             xp + 0.8,
             ymax * 0.90,
             lb,
-            color=C_GOLD,
+            color=ACCENT_TEXT,
             fontsize=7.5,
             fontweight="bold",
             va="top",
@@ -8364,7 +8904,7 @@ def _panel_possession_donut(ax, events, tid, tc, name):
     pct = round(team / total * 100, 1) if total else 0
     ax.pie(
         [pct, 100 - pct],
-        colors=[tc, "#1e2836"],
+        colors=[tc, "#0A0A0A"],
         startangle=90,
         wedgeprops=dict(width=0.42, edgecolor=BG_DARK, lw=1.5),
     )
@@ -8980,7 +9520,7 @@ def _panel_donut_dual(ax, events, info):
         sub = ax.inset_axes([cx - 0.20, 0.12, 0.40, 0.72])
         sub.pie(
             [pct, 100 - pct],
-            colors=[tc, "#1e2836"],
+            colors=[tc, "#0A0A0A"],
             startangle=90,
             wedgeprops=dict(width=0.40, edgecolor=BG_DARK, lw=1.5),
         )
@@ -9248,6 +9788,8 @@ def _vert_pitch(ax, bg=PITCH_COL, half=False):
     half=True → draw only the attacking half (y 50..100 in pitch coords).
     """
     ax.set_facecolor(bg)
+    # Let the narrow figure slot stretch the 100x100 legacy pitch vertically.
+    ax.set_aspect("auto")
     # subtle box fills
     ax.add_patch(
         plt.Rectangle(
@@ -11560,7 +12102,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
 
             for spine in ax.spines.values():
                 spine.set_visible(True)
-                spine.set_edgecolor("#1e2a38")
+                spine.set_edgecolor("#2A2A2A")
                 spine.set_linewidth(0.8)
 
             # عنوان الفيجوال فوق الـ axes
@@ -12349,10 +12891,10 @@ PDF_EXPLANATION_STYLE = "reference"  # "reference" = sample PDF text layout; "si
 # PDF dark theme: keeps the dark script identity while using the new
 # reference-style explanation layout.
 # ----------------------------------------------------------------------
-PDF_BG       = "#05070A"
-PDF_SURFACE  = "#0B1118"
+PDF_BG       = "#000000"
+PDF_SURFACE  = "#050505"
 PDF_BORDER   = "#233244"
-PDF_TEXT     = "#F8FAFC"
+PDF_TEXT     = "#FFFFFF"
 PDF_TEXT_DIM = "#9CA3AF"
 PDF_ACCENT   = "#FFD000"
 
@@ -12459,7 +13001,7 @@ def _pdf_write_wrapped(ax, text, x=0.0, y=1.0, width=96, fontsize=10.5, line_spa
     return cursor
 
 
-def _pdf_section_heading(fig, section_title, subsection_title, accent="#0f4c81"):
+def _pdf_section_heading(fig, section_title, subsection_title, accent="#38BDF8"):
     fig.text(0.055, 0.925, section_title, ha="left", va="top", color=PDF_INK, fontsize=16, fontweight="bold", family="serif")
     fig.add_artist(plt.Line2D([0.055, 0.945], [0.900, 0.900], transform=fig.transFigure, color=PDF_GOLD_LINE, lw=0.75))
     fig.text(0.055, 0.875, subsection_title, ha="left", va="top", color=accent, fontsize=13.5, fontweight="bold", family="serif")
@@ -12615,7 +13157,7 @@ def _pdf_section_for_meta(meta, info):
     hn, an = info["home_name"], info["away_name"]
     kind = meta.get("kind", "")
     if kind in {"shared_match_stats", "shared_xg_flow", "shared_shot_breakdown", "shared_shot_comparison", "shared_xg_tiles", "shared_gk_saves"}:
-        return "1. Match Overview", "#0f4c81"
+        return "1. Match Overview", "#38BDF8"
     if meta.get("team") == "home" and kind in {"team_shot_map", "team_danger_creation", "team_zone14", "team_box_entries", "team_crosses"}:
         return f"2. {hn} - Attacking Analysis", _pdf_team_text_color(C_RED)
     if meta.get("team") == "away" and kind in {"team_shot_map", "team_danger_creation", "team_zone14", "team_box_entries", "team_crosses"}:
@@ -12625,10 +13167,10 @@ def _pdf_section_for_meta(meta, info):
     if meta.get("team") == "away" and kind in {"team_pass_network", "team_pass_thirds", "team_progressive_passes", "team_xt_map", "team_pass_target_zones"}:
         return f"5. {an} - Build-up & Passing", _pdf_team_text_color(C_BLUE)
     if kind in {"shared_territorial", "shared_touches", "shared_dominating_zone", "team_average_positions"}:
-        return "6. Territorial Control & Shape", "#0f4c81"
+        return "6. Territorial Control & Shape", "#38BDF8"
     if kind in {"team_high_turnovers", "team_def_heatmap", "shared_def_summary", "shared_xt_per_minute"}:
-        return "7. Pressing & Defensive Work", "#0f4c81"
-    return "8. Additional Match Visuals", "#0f4c81"
+        return "7. Pressing & Defensive Work", "#38BDF8"
+    return "8. Additional Match Visuals", "#38BDF8"
 
 
 def _report_catalog_order(info):
@@ -12988,7 +13530,7 @@ def print_summary(info, xg_data, events):
                 if row["scoring_team"] == info["home_id"]
                 else info["away_name"]
             )
-            from match_extensions_players import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
+            from match_extensions import classify_goal_type as _classify_goal_type, goal_body_part_label as _goal_body_part_label
             if row.get("is_own_goal", False):
                 goal_type = "[bold magenta]OWN GOAL[/bold magenta]"
             else:
@@ -13109,10 +13651,11 @@ def main():
     red_cards = info["red_cards"]
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    events.to_csv(f"{SAVE_DIR}/events.csv", index=False, encoding="utf-8-sig")
-    players.to_csv(f"{SAVE_DIR}/players.csv", index=False, encoding="utf-8-sig")
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    events.to_csv(os.path.join(SAVE_DIR, "events.csv"), index=False, encoding="utf-8-sig")
+    players.to_csv(os.path.join(SAVE_DIR, "players.csv"), index=False, encoding="utf-8-sig")
     pd.DataFrame(xg_data).T.reset_index().rename(columns={"index": "team"}).to_csv(
-        f"{SAVE_DIR}/xg.csv", index=False, encoding="utf-8-sig"
+        os.path.join(SAVE_DIR, "xg.csv"), index=False, encoding="utf-8-sig"
     )
 
     print_summary(info, xg_data, events)
@@ -13230,6 +13773,7 @@ def main():
         identity, so we DON'T add the legacy _watermark on top — it would
         duplicate the yellow bars + footer)."""
         fname = _clean_output_filename(fname)
+        _apply_neon_backdrop(fig)
         fig.savefig(
             f"{SAVE_DIR}/{fname}",
             dpi=OUTPUT_IMAGE_DPI,
@@ -13526,7 +14070,7 @@ def main():
         )
         # Compute PPDA on the fly (match_stats_v2 needs it)
         try:
-            from match_extensions_players import compute_ppda_both
+            from match_extensions import compute_ppda_both
             _ppda = compute_ppda_both(info, events)
         except Exception:
             _ppda = {"home": {}, "away": {}}
@@ -13825,7 +14369,7 @@ def main():
                            events, aid, C_BLUE, an)
         _sv(f35, f"{base}/35_box_entries_away_{ts}.png")
 
-    # ── 36/37: High Turnovers — Home + Away (legacy + v2 chrome) ─
+    # ── 36/37: High Turnovers — Home + Away (legacy identity, narrow pitch) ─
     if _V2_AVAILABLE:
         from viz_v2_charts import render_legacy_chart_v2 as _legacy_v2_ht
         from viz_v2 import C_GOLD as _GOLD_HT
@@ -13878,6 +14422,7 @@ def main():
                      str(_types.get("BallRecovery", 0)),            _tc),
                     ("Top Player",   _leader,                       _GOLD_HT),
                 ],
+                legacy_box=[0.165, 0.145, 0.245, 0.705],
             )
             _save_and_append(_fig_ht, f"{_idx}_high_turnovers_{_suffix}_{ts}.png")
     else:
@@ -13892,7 +14437,7 @@ def main():
                                events, aid, C_BLUE, an)
         _sv(f37, f"{base}/37_high_turnovers_away_{ts}.png")
 
-    # ── 38/39: Pass Target Zones — Home + Away (legacy + v2 chrome) ─
+    # ── 38/39: Pass Target Zones — Home + Away (legacy identity, narrow pitch) ─
     if _V2_AVAILABLE:
         from viz_v2_charts import render_legacy_chart_v2 as _legacy_v2_pt
         from viz_v2 import C_GOLD as _GOLD_PT
@@ -13950,6 +14495,7 @@ def main():
                      f"{(_n_att / _n_total * 100 if _n_total else 0):.0f}%",
                      _GOLD_PT),
                 ],
+                legacy_box=[0.165, 0.145, 0.245, 0.705],
             )
             _save_and_append(_fig_pt, f"{_idx}_pass_target_{_suffix}_{ts}.png")
     else:
@@ -13970,15 +14516,10 @@ def main():
     # not included in the PDF report.
 
     # ══════════════════════════════════════════════════════
-    #  Figs 40-42 — PPDA gauge + Player stats Home + Away (inline)
-    #  Generated here so they sit alongside figs 1-39 in SAVE_DIR (no
-    #  separate folder, no duplication) and feed into the boards + PDF.
+    #  Fig 40 — PPDA gauge (player-stat tables removed by request)
     # ══════════════════════════════════════════════════════
     try:
-        from match_extensions_players import (
-            draw_ppda_gauge, draw_player_stats_table,
-            compute_ppda_both, extract_player_stats, export_player_stats_csvs,
-        )
+        from match_extensions import draw_ppda_gauge, compute_ppda_both
         # 40 — PPDA gauge
         try:
             _ppda_data = compute_ppda_both(info, events)
@@ -13989,38 +14530,8 @@ def main():
             _save_and_append(_f40, f"40_ppda_gauge_{ts}.png")
         except Exception as _e40:
             console.print(f"[yellow]  ⚠ PPDA fig (40) failed: {_e40}[/yellow]")
-
-        # 41 / 42 — Player stats Home + Away
-        try:
-            _player_stats = extract_player_stats(md)
-            _csv_paths = export_player_stats_csvs(_player_stats, SAVE_DIR, ts)
-            if _csv_paths:
-                console.print(f"[green]  Saved {len(_csv_paths)} player stats CSV files.[/green]")
-        except Exception:
-            _player_stats = {"home": None, "away": None}
-        for _side, _color, _idx, _suffix, _team_name in [
-            ("home", C_RED,  41, "home", info.get("home_name") or "Home"),
-            ("away", C_BLUE, 42, "away", info.get("away_name") or "Away"),
-        ]:
-            try:
-                _df = _player_stats.get(_side)
-                if _df is None:
-                    continue
-                _fpl_pages = draw_player_stats_table(_df, _team_name,
-                                                      team_color=_color,
-                                                      save_path=None)
-                if not isinstance(_fpl_pages, (list, tuple)):
-                    _fpl_pages = [_fpl_pages]
-                for _page_no, _fpl in enumerate(_fpl_pages, start=1):
-                    _group = getattr(_fpl, "_sofa_group_name", f"page_{_page_no:02d}")
-                    _save_and_append(
-                        _fpl,
-                        f"{_idx}_player_stats_{_suffix}_{_group}_{_page_no:02d}_{ts}.png",
-                    )
-            except Exception as _ep:
-                console.print(f"[yellow]  ⚠ Player stats {_side} ({_idx}) failed: {_ep}[/yellow]")
     except Exception as _ext_inline_err:
-        console.print(f"[yellow]  ⚠ Inline PPDA/player stats failed: {_ext_inline_err}[/yellow]")
+        console.print(f"[yellow]  ⚠ Inline PPDA failed: {_ext_inline_err}[/yellow]")
 
     # ══════════════════════════════════════════════════════
     #  CATEGORY SUMMARY BOARDS (4 grouped collages)
@@ -14043,18 +14554,18 @@ def main():
     #  'Reading this visual' commentary page).
     # ══════════════════════════════════════════════════════
 
-    total_figs = 37  # Shot Summary Tiles removed by request
+    total_figs = 40  # Includes PPDA; player-stat tables removed by request
     extra_boards = 5
     console.print(
         f"\n[bold green]  ✅ {total_figs} figures saved → {SAVE_DIR}/[/bold green]\n"
         f"  [dim]Figs  1-8  : individual analytics[/dim]\n"
         f"  [dim]Figs  9-32 : standalone visuals[/dim]\n"
-        f"  [dim]Figs 33-39 : Dominating Zone · Box Entries · High Turnovers · Pass Target Zones[/dim]\n"
+        f"  [dim]Figs 33-40 : Dominating Zone · Box Entries · High Turnovers · Pass Target Zones · PPDA[/dim]\n"
         f"  [dim]{extra_boards} grouped summary boards added: Overview · Chance Creation · Build-up · Wide/Receiving · Defensive/Pressing[/dim]\n"
-        f"  [dim]Shot Summary Tiles removed by request[/dim]"
+        f"  [dim]Shot Summary Tiles and player-stat tables removed by request[/dim]"
     )
 
-    # ── Extended pipeline (PPDA, goals log, full player stats, unified PDF) ──
+    # ── Extended pipeline (PPDA, goals log, unified PDF) ──
     try:
         # The unified report now embeds the 39 tactical figs directly via
         # extra_figs and adds a 'Reading this visual' commentary page after
@@ -14068,13 +14579,12 @@ def main():
             merge_with_pdfs=None,
         )
         console.print(f"[green]  ✓ Final unified PDF → {ext_result['pdf']}[/green]")
-        # PPDA (40) + player tables (41/42) are already produced inline as
-        # numbered figs in SAVE_DIR — no copy step needed any more.
+        # PPDA (40) is already produced inline as a numbered fig in SAVE_DIR.
     except Exception as _ext_err:
         import traceback as _tb
         console.print(
             f"[red]  ✗ Extended analysis FAILED — these outputs were NOT "
-            f"generated: PPDA gauge, player tables, team-stats compare, "
+            f"generated: PPDA gauge, team-stats compare, "
             f"unified PDF.[/red]"
         )
         console.print(f"[red]    Error: {_ext_err}[/red]")
@@ -14130,7 +14640,44 @@ def _team_section_summary(side, info, stats, events):
     )
 
 
-def _visual_tactical_note(meta, info, events, xg_data, stats):
+def _next_visual_bridge(next_meta, info):
+    """One linking sentence that hands the reader off to the next page, so the
+    report reads as a connected tactical argument rather than isolated charts."""
+    if not next_meta:
+        return ("This is the final analytical page — read it back against the whole "
+                "sequence above: chance quality, field position, ball progression and "
+                "pressure after loss should all tell the same story.")
+    nt = str(next_meta.get("title", "the next page"))
+    nk = next_meta.get("kind", "")
+    reason = {
+        "shared_xg_flow":          "to see exactly when these patterns moved the scoreline",
+        "shared_shot_breakdown":   "to separate this from raw shot volume and finishing variance",
+        "shared_shot_comparison":  "to weigh quantity against genuine chance quality",
+        "shared_xg_tiles":         "to compare chance quality before the shot with quality after contact",
+        "shared_gk_saves":         "to see how much real danger the goalkeeper actually faced",
+        "shared_territorial":      "to see where on the pitch this control was happening",
+        "shared_touches":          "to see whether possession was safe, central or threatening",
+        "shared_dominating_zone":  "to turn this control into pitch geography",
+        "shared_xt_per_minute":    "to follow the momentum of ball progression minute by minute",
+        "shared_def_summary":      "to see how the defensive workload was distributed",
+        "team_shot_map":           "to check whether this turned into clean shooting positions",
+        "team_pass_network":       "to see the passing structure underneath it",
+        "team_xt_map":             "to see which progression routes carried the threat",
+        "team_box_entries":        "to see how often the attack reached the penalty area",
+        "team_zone14":             "to see how the central connection zones were used",
+        "team_danger_creation":    "to see how build-up converted into end product",
+        "team_crosses":            "to judge the wide-delivery plan against box occupation",
+        "team_progressive_passes": "to see how the ball was driven up the pitch",
+        "team_pass_thirds":        "to see where possession actually settled",
+        "team_pass_target_zones":  "to see where the next receiver was wanted",
+        "team_average_positions":  "to see the shape that underpinned all of this",
+        "team_def_heatmap":        "to see how the same side defended without the ball",
+        "team_high_turnovers":     "to see whether the press created attacking value",
+    }.get(nk, "to add the next layer of the tactical picture")
+    return f"Read next alongside “{nt}” {reason}."
+
+
+def _visual_tactical_note(meta, info, events, xg_data, stats, next_meta=None):
     """English-only notes for every PDF visual."""
     hn, an = info["home_name"], info["away_name"]
     h, a = stats["home"], stats["away"]
@@ -14210,6 +14757,7 @@ def _visual_tactical_note(meta, info, events, xg_data, stats):
         side_key=side_key, other_key=other_key, team=team if side_key else None,
         opp=opp if side_key else None, team_xt=team_xt, opp_xt=opp_xt
     )
+    commentary = commentary + "\n\n" + _next_visual_bridge(next_meta, info)
     return statline, commentary
 
 
@@ -14261,9 +14809,10 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
         page_num += 1
         _render_executive_summary_page(pdf, info, stats, events, xg_data, page_num, total_pages)
         page_num += 1
-        for meta in ordered_catalog:
+        for _i, meta in enumerate(ordered_catalog):
             idx = int(meta.get("idx", 0))
-            statline, commentary = _visual_tactical_note(meta, info, events, xg_data, stats)
+            next_meta = ordered_catalog[_i + 1] if _i + 1 < len(ordered_catalog) else None
+            statline, commentary = _visual_tactical_note(meta, info, events, xg_data, stats, next_meta=next_meta)
             _render_visual_page(pdf, figs[idx - 1], info, meta, statline, commentary, page_num, total_pages, events=events)
             page_num += 1
         for board_path in board_paths:
