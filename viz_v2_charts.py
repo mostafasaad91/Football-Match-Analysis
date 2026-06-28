@@ -44,7 +44,7 @@ C_GREEN = "#3DDC84"
 # ─────────────────────────────────────────────────────────────────────────────
 # FINAL VISUAL PATCH: safe vertical pitch helpers for v2 pitch visuals only
 # ─────────────────────────────────────────────────────────────────────────────
-VP_W = 60.0
+VP_W = 54.0
 VP_L = 105.0
 XT_ARROW = C_GOLD if not IS_LIGHT_THEME else "#111827"      # neutral accent attack arrow
 XT_NEG_ARROW = C_AWAY if not IS_LIGHT_THEME else "#7F1D1D"  # negative-xT accent
@@ -116,8 +116,9 @@ def _draw_vertical_pitch(ax, *, attacking_only: bool = False,
         ax.plot([0, VP_W], [VP_L/2, VP_L/2], **lc)
         ax.add_patch(mpatches.Circle((VP_W/2, VP_L/2), 9.15, fill=False, **lc))
         ax.scatter([VP_W/2], [VP_L/2], s=6, color=line_color, alpha=line_alpha, zorder=2)
-    # Boxes + spots + goal lines
-    pa_w, ga_w = 40.32, 18.32
+    # Boxes + spots + goal lines — widths kept proportional to the pitch width
+    # (real ratios on a 68 m pitch) so a narrower VP_W still looks correct.
+    pa_w, ga_w, goal_w = 0.593 * VP_W, 0.269 * VP_W, 0.108 * VP_W
     for gy, sign in [(0.0, 1), (VP_L, -1)]:
         if attacking_only and gy == 0.0:
             continue
@@ -126,7 +127,7 @@ def _draw_vertical_pitch(ax, *, attacking_only: bool = False,
         ax.plot([(VP_W-ga_w)/2, (VP_W-ga_w)/2, (VP_W+ga_w)/2, (VP_W+ga_w)/2],
                 [gy, gy + sign*5.5, gy + sign*5.5, gy], **lc)
         ax.scatter([VP_W/2], [gy + sign*11], color=line_color, s=5, alpha=line_alpha, zorder=2)
-        ax.plot([(VP_W-12)/2, (VP_W+12)/2], [gy, gy], color=line_color, lw=1.45,
+        ax.plot([(VP_W-goal_w)/2, (VP_W+goal_w)/2], [gy, gy], color=line_color, lw=1.45,
                 alpha=line_alpha, zorder=2)
     if not attacking_only:
         ax.add_patch(mpatches.Arc((VP_W/2, 16.5), 18, 18, angle=0,
@@ -727,8 +728,9 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
     fig = plt.figure(figsize=(15, 10), facecolor=BG_DARK)
     chrome(fig, section="SHOT MAP",
            title=f"{team_name} — Shot Map",
-           subtitle="Size = xG · ★ goal · ● saved · ● blocked · ○ off · "
-                    "gold halo = big chance · blue ring = penalty",
+           subtitle="Each shot is an arrow to goal · colour = outcome "
+                    "(goal · saved · blocked · off) · width & label = xG · "
+                    "blue ring = penalty",
            hn=team_name, an=opp_name, score=score,
            footer_note="Direction of attack →")
 
@@ -764,7 +766,7 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
     on_t    = [s for s in shots if (not s["is_goal"]) and s["is_on_target"]]
     blocked = [s for s in shots if (not s["is_goal"]) and (not s["is_on_target"]) and s.get("is_blocked")]
     off     = [s for s in shots if (not s["is_goal"]) and (not s["is_on_target"]) and (not s.get("is_blocked"))]
-    BLOCK_COL = "#6B7280"
+    GOAL_RING = "#FFC23C"; SAVE_RING = "#3DDC84"; BLOCK_COL = "#6B7280"; OFF_RING = "#FF4D4D"
     PEN_RING  = "#38BDF8"
 
     # Penalty-area depth shading + average shot-distance line (under the shots).
@@ -776,27 +778,38 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
                 va="bottom", color=TEXT_DIM, fontsize=6.0, fontweight="bold",
                 family=FONT_MONO, alpha=0.7, zorder=2)
 
-    dense = len(shots) > 14
-    base_alpha = 0.78 if dense else 0.92
+    def _ring(s):
+        if s["is_goal"]:        return GOAL_RING
+        if s["is_on_target"]:   return SAVE_RING
+        if s.get("is_blocked"): return BLOCK_COL
+        return OFF_RING
 
-    def _draw_shot(s, marker, fc, ec, lw, z, star=False):
-        sz = (60 + s["xG"] * 1050) * (1.3 if star else 1.0)
-        if s["xG"] >= 0.30:                       # big-chance halo
-            pax.scatter([s["x"]], [s["y"]], s=sz + 380, marker="o", facecolor="none",
-                        edgecolor=C_GOLD, linewidth=0.8, alpha=0.28, zorder=z - 1)
-        if s.get("is_penalty"):                   # penalty ring
-            pax.scatter([s["x"]], [s["y"]], s=sz + 210, marker="o", facecolor="none",
-                        edgecolor=PEN_RING, linewidth=1.2, alpha=0.85, zorder=z - 1)
-        pax.scatter([s["x"]], [s["y"]], s=sz, marker=marker, facecolor=fc,
-                    edgecolor=ec, linewidth=lw, alpha=1.0 if star else base_alpha, zorder=z)
-        pax.text(s["x"], min(100, s["y"] + 3.0), f"{s['xG']:.2f}", ha="center",
-                 va="bottom", color=TEXT_DIM, fontsize=6.2, fontweight="bold",
-                 family=FONT_MONO, zorder=z + 1)
+    # Each shot is an arrow from where it was taken toward the goal mouth.
+    # Arrow colour encodes the outcome, width scales with xG, and every shot
+    # carries its xG value at the origin so individual shots stay readable.
+    def _shot_target(s):
+        # Aim each shot at the goal line (x = 100) near its own lateral
+        # position, so arrows point toward goal and fan into the goal mouth
+        # instead of all piling onto a single point. Coords are (x=length,
+        # y=width); the goal mouth sits at x=100, width ≈ 44–56.
+        return 100.0, float(np.clip(s["y"], 42.0, 58.0))
 
-    for s in off:     _draw_shot(s, "o", "none",     team_color, 1.2, 3)
-    for s in blocked: _draw_shot(s, "o", BLOCK_COL,  "#9CA3AF",  0.8, 3)
-    for s in on_t:    _draw_shot(s, "o", team_color, TEXT_BR,    1.4, 4)
-    for s in goals:   _draw_shot(s, "*", C_GOLD,     team_color, 1.6, 6, star=True)
+    for s in sorted(shots, key=lambda d: d["xG"]):
+        ring = _ring(s)
+        xgn = min(s["xG"] / 0.40, 1.0)
+        tx, ty = _shot_target(s)
+        _draw_vertical_arrow(ax, (s["x"], s["y"]), (tx, ty),
+                             color=ring, lw=1.3 + 3.0 * xgn, alpha=0.85,
+                             mutation_scale=8 + 7 * xgn, rad=0.04, zorder=5)
+        if s.get("is_penalty"):
+            pax.scatter([s["x"]], [s["y"]], s=180, marker="o", facecolor="none",
+                        edgecolor=PEN_RING, linewidth=1.3, alpha=0.9, zorder=6)
+        pax.scatter([s["x"]], [s["y"]], s=46 + s["xG"] * 240, marker="o",
+                    facecolor=ring, edgecolor=BG_DARK, linewidth=0.8,
+                    alpha=0.95, zorder=6)
+        pax.text(s["x"] - 1.3, s["y"] - 1.4, f"{s['xG']:.2f}", ha="right", va="top",
+                 color=ring, fontsize=6.0, fontweight="bold", family=FONT_MONO,
+                 zorder=7)
 
     if goals:
         gsorted = sorted(goals, key=lambda s: s["y"])
@@ -819,12 +832,11 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
 
     _draw_vertical_attack_arrow(ax, x=-1.3, y0=58.0, y1=70.0)
 
-    chips = [("Goal", C_GOLD, "★"),
-             ("Saved", team_color, "●"),
-             ("Blocked", BLOCK_COL, "●"),
-             ("Off", team_color, "○"),
-             ("Big xG", C_GOLD, "◌"),
-             ("Pen", PEN_RING, "◌")]
+    chips = [("Goal", GOAL_RING, "→"),
+             ("Saved", SAVE_RING, "→"),
+             ("Blocked", BLOCK_COL, "→"),
+             ("Off", OFF_RING, "→"),
+             ("Penalty", PEN_RING, "◌")]
     cx = PX + 0.010
     for lbl, col, mk in chips:
         fig.text(cx, PY - 0.018, mk, ha="left", va="center", color=col,
@@ -1362,7 +1374,7 @@ def _pass_half_accent(team_color: str, half: int) -> str:
     return _clean_dark_navy(team_color)
 
 
-PASS_PITCH_W = 60.0
+PASS_PITCH_W = 54.0
 PASS_PITCH_L = 100.0
 
 
@@ -1409,8 +1421,8 @@ def _themed_pass_pitch_vertical(ax, *, line_alpha: float = 0.52):
     ax.add_patch(plt.Circle((w / 2, 50), 9.15, fill=False, **lc))
     ax.scatter([w / 2], [50], color=line_grey, s=8, alpha=line_alpha, zorder=2)
 
-    pa_w = 40.3
-    ga_w = 18.3
+    pa_w = 0.593 * w
+    ga_w = 0.269 * w
     for y0, sign in [(0, 1), (l, -1)]:
         ax.plot([(w - pa_w) / 2, (w - pa_w) / 2, (w + pa_w) / 2, (w + pa_w) / 2],
                 [y0, y0 + sign * 16.5, y0 + sign * 16.5, y0], **lc)
@@ -1851,7 +1863,7 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
     fig = plt.figure(figsize=(16, 10), facecolor=BG_DARK)
     chrome(fig, section="XT MAP",
            title=f"{team_name} — Expected Threat (xT)",
-           subtitle="Heatmap = pitch xT value · white arrows = positive-xT passes · red = negative · gold = top xT actions",
+           subtitle="Heatmap = pitch xT value (cell numbers) · gold arrows = the top-15 threat-creating passes",
            hn=team_name, an=opp_name, score=score,
            footer_note="Direction of attack ↑")
 
@@ -1886,37 +1898,31 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
             grid[r, c] = ((c / cols_n) ** 1.6) * 0.6 + \
                          (1 - abs(r - rows_n / 2 + 0.5) / (rows_n / 2)) * 0.18
 
+    # Perceptual navy -> teal -> green -> gold ramp with a VISIBLE floor, so
+    # even low-xT cells (own half) stay coloured — no black voids in the grid.
     cmap = LinearSegmentedColormap.from_list(
-        "xt", ["#000000", "#0a0a0a", "#3DDC84", "#FFC23C", "#FF4D4D"]
+        "xt", ["#14233f", "#175a6b", "#2f9e7d", "#d9a400", "#ffe08a"]
     )
     pax.imshow(grid, extent=[0, 100, 0, 100], origin="lower", aspect="auto",
-               cmap=cmap, vmin=0, vmax=0.7, alpha=0.70, zorder=1)
+               cmap=cmap, vmin=0, vmax=0.7, alpha=0.88, zorder=1)
 
     for r in range(rows_n):
         for c in range(cols_n):
             v = grid[r, c]
             cx = (c + 0.5) * cell_w
             cy = (r + 0.5) * cell_h
+            # Dark ink on hot (light gold) cells, light ink on cold cells.
+            num_col = "#0a0a0a" if v >= 0.42 else TEXT_BR
             pax.text(cx, cy, f"{v:.3f}", ha="center", va="center",
-                     color=TEXT_BR, fontsize=5.8, fontweight="bold",
-                     family=FONT_MONO, alpha=0.92, zorder=3)
+                     color=num_col, fontsize=5.8, fontweight="bold",
+                     family=FONT_MONO, alpha=0.95, zorder=3)
 
     pos = [p for p in passes if p.get("successful") and p.get("xT", 0) > 0]
-    neg = [p for p in passes if p.get("xT", 0) < 0]
-    if pos:
-        max_pos = max(p["xT"] for p in pos) or 1
-        for p in pos:
-            a = 0.30 + 0.50 * (p["xT"] / max_pos)
-            pax.plot([p["x"], p["end_x"]], [p["y"], p["end_y"]],
-                     color=PASS_ARROW, lw=0.95, alpha=a,
-                     solid_capstyle="round", zorder=4)
-    for p in neg:
-        pax.plot([p["x"], p["end_x"]], [p["y"], p["end_y"]],
-                 color=XT_NEG_ARROW, lw=0.85, alpha=0.40,
-                 solid_capstyle="round", zorder=4)
+    # Only the highest-threat passes are drawn as arrows — the mass of small
+    # positive/negative passes is left to the heatmap, which keeps the map clean.
 
-    # Top xT actions: outlined gold arrows.
-    top5_passes = sorted(pos, key=lambda p: -p["xT"])[:5]
+    # Top 15 threat passes: outlined gold arrows.
+    top5_passes = sorted(pos, key=lambda p: -p["xT"])[:15]
     for p in top5_passes:
         _draw_vertical_arrow(ax, (p["x"], p["y"]), (p["end_x"], p["end_y"]),
                              color=XT_ARROW, lw=2.2, alpha=0.95,
@@ -2044,6 +2050,8 @@ def _shots_for_team(events, team_id):
             "is_penalty":   is_pen,
             "player":       str(_safe(row.get("player"), "")),
             "minute":       int(_safe(row.get("minute"), 0) or 0),
+            "end_x":        _safe(row.get("end_x"), None),
+            "end_y":        _safe(row.get("end_y"), None),
         })
     return out
 
@@ -3249,14 +3257,22 @@ def make_crosses_v2(events, info, team_id, team_color):
     opp_name  = an if is_home else hn
     score = info.get("score") or "—"
 
-    # Heuristic: cross = pass from x≥60 with end inside box and y near touchline
-    sub = events[(events["team_id"] == team_id) &
-                 (events["is_pass"] == True) &
-                 events["x"].notna() & events["y"].notna() &
-                 events["end_x"].notna() & events["end_y"].notna() &
-                 (events["x"] >= 60) &
-                 ((events["y"] <= 22) | (events["y"] >= 78)) &
-                 (events["end_x"] >= 80)]
+    # Real crosses only — use the provider's cross flag / "Cross" qualifier
+    # instead of treating any wide ball as a cross.
+    base = events[(events["team_id"] == team_id) &
+                  (events["is_pass"] == True) &
+                  events["x"].notna() & events["y"].notna() &
+                  events["end_x"].notna() & events["end_y"].notna()]
+    if "is_cross" in events.columns:
+        sub = base[base["is_cross"] == True]
+    elif "qualifier_names" in events.columns:
+        sub = base[base["qualifier_names"].fillna("").astype(str)
+                   .str.contains(r"\bcross\b", case=False, regex=True)]
+    else:
+        # Fallback only when no cross flag exists in the feed.
+        sub = base[(base["x"] >= 60) &
+                   ((base["y"] <= 22) | (base["y"] >= 78)) &
+                   (base["end_x"] >= 80)]
 
     crosses = []; by_player = {}
     for _, r in sub.iterrows():
