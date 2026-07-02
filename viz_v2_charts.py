@@ -1379,7 +1379,11 @@ PASS_PITCH_L = 100.0
 
 
 def _pass_vxy(x: float, y: float) -> tuple[float, float]:
-    return float(y) * (PASS_PITCH_W / 100.0), float(x)
+    # y=0 is the right flank and y=100 is the left flank in this feed, so the
+    # width axis must be mirrored (100 - y) — otherwise right-sided players
+    # (e.g. a right-back or right winger) are drawn on the left of the
+    # attack-up pitch instead of the right.
+    return (100.0 - float(y)) * (PASS_PITCH_W / 100.0), float(x)
 
 
 def _pass_vplayer(p: dict, depth_axis: str = "x", direction: int = 1) -> dict:
@@ -2803,67 +2807,151 @@ def make_avg_positions_v2(events, info, team_id, team_color):
 
     players = []
     for idx, (_, r) in enumerate(grp.iterrows(), start=1):
+        pid = r["player_id"]
         players.append({"name": str(r["player"]),
                         "x": float(r["x"]),
-                        "y": float(r["y"]),
+                        # Mirror the width axis (y=0 is the right flank, y=100
+                        # the left flank in this feed) so a right-sided player
+                        # renders on the right of the attack-up pitch — the
+                        # same fix already applied to the pass network.
+                        "y": 100.0 - float(r["y"]),
                         "touches": int(r["touches"]),
-                        "role": _pid_role(r["player_id"]),
-                        "is_sub": bool((meta.get(r["player_id"]) or {}).get("is_sub")),
+                        "role": _pid_role(pid),
+                        "is_sub": bool((meta.get(pid) or {}).get("is_sub")),
+                        "position": (meta.get(pid) or {}).get("position"),
                         "display_id": idx})
     max_t = max((p["touches"] for p in players), default=1)
     # Guard: if the starter flag is unreliable (everyone flagged a sub), draw
     # all as circles rather than all squares.
     _all_sub = bool(players) and all(p.get("is_sub") for p in players)
+    n_players = len(players)
+    label_fontsize = 6.2 if n_players <= 12 else (5.8 if n_players <= 14 else 5.4)
+
+    # Identify the goalkeeper (positional GK, else the deepest node) so it can
+    # carry the same distinct gold edge used on the pass network.
+    gk_player = None
+    for p in players:
+        if _infer_position_bucket({"x": p["x"], "position": p.get("position")}) == "gk":
+            gk_player = p
+            break
+    if gk_player is None and players:
+        gk_player = min(players, key=lambda p: p["x"])
+    hub_player = max(players, key=lambda p: p["touches"]) if players else None
 
     def draw_overlay(ax):
-        # Team shape: connect each player to the centroid with a faint hairline
-        # so the formation reads as a shape without competing with the labels.
+        # Team shape: a convex hull over the outfield starters (matching the
+        # pass network's "block footprint" treatment) instead of a plain
+        # centroid spider-web, which reads far better at a glance.
+        core = [p for p in players if not (p.get("is_sub") and not _all_sub)]
+        if len(core) >= 3:
+            hull = _convex_hull([(p["x"], p["y"]) for p in core])
+            if len(hull) >= 3:
+                # add_patch does NOT go through the proxy's coordinate
+                # conversion (only scatter/text/plot do) — every hull vertex
+                # must be converted through _vp_xy by hand, or the polygon
+                # is drawn using raw 0-100 values on axes whose native units
+                # are the narrower VP_W/VP_L scale, producing a skewed shape.
+                hull_vp = [_vp_xy(hx, hy) for hx, hy in hull]
+                ax.add_patch(mpatches.Polygon(
+                    hull_vp, closed=True, facecolor=team_color, edgecolor=team_color,
+                    alpha=0.07, lw=1.0, joinstyle="round", zorder=1))
+                ax.add_patch(mpatches.Polygon(
+                    hull_vp, closed=True, facecolor="none", edgecolor=team_color,
+                    alpha=0.30, lw=1.0, joinstyle="round", zorder=1))
         if players:
             cx = float(np.mean([p["x"] for p in players]))
             cy = float(np.mean([p["y"] for p in players]))
-            for p in players:
-                ax.plot([p["x"], cx], [p["y"], cy],
-                        color="#3A3A3A", lw=0.7, alpha=0.40, zorder=2,
-                        solid_capstyle="round")
-            ax.scatter([cx], [cy], s=55, marker="+", color=C_GOLD,
-                       linewidth=1.4, alpha=0.80, zorder=3)
+            ax.scatter([cx], [cy], s=45, marker="+", color=C_GOLD,
+                       linewidth=1.3, alpha=0.70, zorder=3)
 
         # Smaller nodes + per-node label no-go radii (in 0-100 pitch units) so
         # names never get drawn across a circle — the main overlap fix.
         sizes = {id(p): 150 + 520 * (p["touches"] / max_t) for p in players}
         base_sz = 150 + 520 * 0.5
-        node_radii = {pid: 3.6 * (sz / base_sz) ** 0.5 for pid, sz in sizes.items()}
+        node_radii = {id(p): 3.6 * (sizes[id(p)] / base_sz) ** 0.5 for p in players}
+
+        # Declutter: when two players' TRUE average positions sit almost on
+        # top of each other (e.g. several substitutes occupying a similar
+        # tactical slot in a short cameo), the markers themselves overlap —
+        # no amount of label routing fixes that. Nudge the display position
+        # apart just enough for the markers to separate; the analytical
+        # figures (avg depth, spreads, insight text) still use the real,
+        # un-nudged p["x"]/p["y"]. A thin connector line is drawn when a node
+        # actually moved, so the true spot stays traceable.
+        disp = {id(p): [p["x"], p["y"]] for p in players}
+        for _ in range(40):
+            moved = False
+            for a in players:
+                for b in players:
+                    if a is b:
+                        continue
+                    ax_, ay_ = disp[id(a)]; bx_, by_ = disp[id(b)]
+                    dx, dy = bx_ - ax_, by_ - ay_
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    min_dist = (node_radii[id(a)] + node_radii[id(b)]) * 0.92
+                    if dist < min_dist:
+                        moved = True
+                        if dist < 0.05:
+                            ang = (hash((id(a), id(b))) % 360) * np.pi / 180.0
+                            dx, dy, dist = np.cos(ang), np.sin(ang), 1.0
+                        push = (min_dist - dist) / 2.0
+                        ux, uy = dx / dist, dy / dist
+                        disp[id(a)][0] -= ux * push; disp[id(a)][1] -= uy * push
+                        disp[id(b)][0] += ux * push; disp[id(b)][1] += uy * push
+            if not moved:
+                break
+        for pid, (dx_, dy_) in disp.items():
+            disp[pid] = [float(np.clip(dx_, 2, 98)), float(np.clip(dy_, 2, 98))]
+        # Nodes at their (possibly nudged) DISPLAY position — used for every
+        # marker/label/collision check below, so labels route against where
+        # the dots actually are, not the stale true position.
+        disp_nodes = [{"x": disp[id(p)][0], "y": disp[id(p)][1], "name": p["name"]}
+                      for p in players]
+        disp_radii = {id(dn): node_radii[id(p)] for p, dn in zip(players, disp_nodes)}
 
         taken_labels = []
         for idx, p in enumerate(players):
             sz = sizes[id(p)]
+            dpx, dpy = disp[id(p)]
+            if (dpx - p["x"]) ** 2 + (dpy - p["y"]) ** 2 > 0.7 ** 2:
+                ax.plot([p["x"], dpx], [p["y"], dpy], color="#6A6A6A",
+                        lw=0.5, alpha=0.55, zorder=3, solid_capstyle="round")
             role = p.get("role") or ""
             # Single team colour for every node; bench players (not in the
             # starting XI) set apart by a square marker, not a colour.
             is_sub = bool(p.get("is_sub")) and not _all_sub
+            is_gk = gk_player is not None and p is gk_player
+            is_hub = hub_player is not None and p is hub_player
             marker = "s" if is_sub else "o"
             node_color = team_color
             rc_ring = "#F87171" if role == "red_card" else None
-            ax.scatter([p["x"]], [p["y"]], s=sz + 150, color=BG_DARK,
-                       marker=marker, alpha=0.90, zorder=4)
+            ax.scatter([dpx], [dpy], s=sz + 90, color=BG_DARK,
+                       marker=marker, alpha=0.88, zorder=4)
+            if is_hub:
+                # Gold halo marks the team's most-involved player at a glance.
+                ax.scatter([dpx], [dpy], s=sz + 220, facecolor="none",
+                           marker=marker, edgecolor=C_GOLD, lw=1.4, alpha=0.75, zorder=4)
             if rc_ring:
-                ax.scatter([p["x"]], [p["y"]], s=sz + 90, color=rc_ring,
+                ax.scatter([dpx], [dpy], s=sz + 90, color=rc_ring,
                            marker=marker, alpha=0.45, zorder=4)
-            ax.scatter([p["x"]], [p["y"]], s=sz, color=node_color,
-                       marker=marker, edgecolor=TEXT_BR, lw=1.2, alpha=0.95, zorder=5)
-            ax.text(p["x"], p["y"], str(p["display_id"]),
+            # GK → thick gold edge; sub → white edge; outfield starter →
+            # soft team-tint edge, matching the pass network's node identity.
+            edge_c = C_GOLD if is_gk else (TEXT_BR if is_sub else _blend_hex(team_color, "#ffffff", 0.45))
+            edge_w = 2.2 if is_gk else (1.5 if is_sub else 1.1)
+            ax.scatter([dpx], [dpy], s=sz, color=node_color,
+                       marker=marker, edgecolor=edge_c, lw=edge_w, alpha=0.92, zorder=5)
+            ax.text(dpx, dpy, str(p["display_id"]),
                     ha="center", va="center",
                     color="#ffffff", fontsize=6.6, fontweight="bold",
                     family=FONT_MONO, zorder=6,
                     path_effects=[pe.withStroke(linewidth=1.4, foreground=BG_DARK)])
-            # Build a temporary node dict in the 0-100/0-100 coordinate space
-            # _draw_player_label_vertical expects; pass the real node radii so
-            # labels avoid every circle (shared with the pass-network labeller).
+            # Labels route against the DISPLAY positions of every node (incl.
+            # itself), sharing the same anti-overlap logic as the pass network.
             _draw_player_label_vertical(
-                ax, {"x": p["x"], "y": p["y"], "name": p["name"]},
-                idx, fontsize=6.2, zorder=7, taken=taken_labels,
-                all_nodes=players, pitch_w=100.0, pitch_l=100.0,
-                node_radii=node_radii)
+                ax, disp_nodes[idx],
+                idx, fontsize=label_fontsize, zorder=7, taken=taken_labels,
+                all_nodes=disp_nodes, pitch_w=100.0, pitch_l=100.0,
+                node_radii=disp_radii)
 
     rows = [(f"#{p['display_id']}",
              p["name"].split()[-1] if p["name"] else "—",
@@ -3189,33 +3277,85 @@ def make_zone14_v2(events, info, team_id, team_color):
             hs_pts.append((x, y, p))
             by_player[p] = by_player.get(p, 0) + 0.5
 
+    # Grid-cell heatmap over the Zone14/half-space corridor: every cell
+    # value is a REAL touch count from the event data (not a smoothed/
+    # interpolated density estimate), matching the xT map's grid identity.
+    # The bin edges are the ZONE BOUNDARIES THEMSELVES (not an arbitrary
+    # column/row count), so the Zone14/half-space dashed outlines always run
+    # exactly along a cell border — they can never slice through a number.
+    xedges = np.array([60.0, 70.0, 83.0, 95.0])   # depth: HS-only | Zone14 | HS-only
+    yedges = np.array([22.0, 37.0, 63.0, 78.0])   # width: HS-L | Zone14 band | HS-R
+    GRID_COLS, GRID_ROWS = len(xedges) - 1, len(yedges) - 1
+    corridor = sub[(sub["x"] >= xedges[0]) & (sub["x"] <= xedges[-1]) &
+                   (sub["y"] >= yedges[0]) & (sub["y"] <= yedges[-1])]
+    cell_counts = np.zeros((GRID_COLS, GRID_ROWS))
+    if not corridor.empty:
+        cell_counts, _, _ = np.histogram2d(
+            corridor["x"].to_numpy(dtype=float),
+            corridor["y"].to_numpy(dtype=float),
+            bins=[xedges, yedges])
+    grid_vmax = cell_counts.max() if cell_counts.size else 0
+
     def draw_overlay(ax):
-        # Zone 14 highlight — filled tint + visible dashed border so the
-        # rectangle actually reads as a zone, not just a faint tinge.
-        ax.add_patch(mpatches.Rectangle((70, 37), 13, 26,
-                      facecolor=C_GOLD, alpha=0.16, lw=1.4,
-                      edgecolor=C_GOLD, linestyle=(0, (3, 2)), zorder=1))
-        ax.text(76.5, 65.0, "ZONE 14", ha="center", color=C_GOLD,
+        # `ax` here is the vertical-pitch proxy: scatter/text/annotate auto-
+        # convert raw 0-100 pitch coordinates, but add_patch does NOT (it
+        # forwards straight to the real axes, whose native units are
+        # VP_W-wide / VP_L-tall, not 0-100). Every Rectangle must therefore
+        # have its corners converted through _vp_xy by hand, or it lands
+        # off-canvas — this was already silently true for the old Zone14/
+        # half-space outline boxes below, just unnoticed since the scatter
+        # dots and labels (which ARE converted) still read fine on their own.
+        def _grid_rect(x0, y0, x1, y1, **kw):
+            px0, py0 = _vp_xy(x0, y0)
+            px1, py1 = _vp_xy(x1, y1)
+            return mpatches.Rectangle((px0, py0), px1 - px0, py1 - py0, **kw)
+
+        cmap = LinearSegmentedColormap.from_list(
+            "z14grid", ["#0a0a0a", "#123524", "#1f6b3a", "#3bb35f",
+                       "#a8e063", "#FFC23C"])
+        for i in range(GRID_COLS):
+            for j in range(GRID_ROWS):
+                v = cell_counts[i, j]
+                ratio = (v / grid_vmax) if grid_vmax else 0.0
+                ax.add_patch(_grid_rect(
+                    xedges[i], yedges[j], xedges[i + 1], yedges[j + 1],
+                    facecolor=cmap(ratio), edgecolor=BG_DARK, lw=0.9,
+                    alpha=0.92, zorder=1))
+                if v > 0:
+                    ccx = (xedges[i] + xedges[i + 1]) / 2
+                    ccy = (yedges[j] + yedges[j + 1]) / 2
+                    txt_col = "#0a0a0a" if ratio > 0.55 else "#e8e8e8"
+                    ax.text(ccx, ccy, str(int(v)), ha="center", va="center",
+                            color=txt_col, fontsize=9.5, fontweight="bold",
+                            family=FONT_MONO, zorder=2)
+
+        # Zone 14 outline == exactly the middle cell's own border (never
+        # crosses a number). Label sits past the grid's depth range (outside
+        # x:[60,95]) so it never lands on a numbered cell either.
+        ax.add_patch(_grid_rect(70, 37, 83, 63,
+                      facecolor="none", lw=2.0,
+                      edgecolor=C_GOLD, linestyle=(0, (3, 2)), zorder=4))
+        ax.text(50.0, 97.0, "ZONE 14", ha="center", color=C_GOLD,
                 fontsize=8, fontweight="bold", alpha=1.0, family=FONT_MONO,
                 zorder=5, bbox=dict(boxstyle="round,pad=0.25",
-                facecolor=BG_DARK, edgecolor="none", alpha=0.72))
-        # Half-spaces
-        for y0 in (22, 63):
-            ax.add_patch(mpatches.Rectangle((60, y0), 35, 15,
-                          facecolor="#22c55e", alpha=0.13, lw=1.2,
-                          edgecolor="#22c55e", linestyle=(0, (3, 2)), zorder=1))
-        ax.text(77.5, 16.5, "HALF-SPACE (L)", ha="center", color="#22c55e",
-                fontsize=7, fontweight="bold", alpha=0.95, family=FONT_MONO,
-                zorder=4)
-        ax.text(77.5, 80.5, "HALF-SPACE (R)", ha="center", color="#22c55e",
-                fontsize=7, fontweight="bold", alpha=0.95, family=FONT_MONO,
-                zorder=4)
-        for x, y, _ in hs_pts:
-            ax.scatter([x], [y], s=40, color="#22c55e",
-                       edgecolor=TEXT_BR, lw=0.6, alpha=0.85, zorder=3)
-        for x, y, _ in z14_pts:
-            ax.scatter([x], [y], s=70, color=C_GOLD,
-                       edgecolor=TEXT_BR, lw=0.9, alpha=0.95, zorder=4)
+                facecolor=BG_DARK, edgecolor=C_GOLD, lw=0.6, alpha=0.85))
+        # Half-spaces == exactly the left/right column borders. Labels sit
+        # past the grid's width range (outside y:[22,78], i.e. near the
+        # touchlines) so they never land on a numbered cell either.
+        ax.add_patch(_grid_rect(60, 22, 95, 37,
+                      facecolor="none", lw=1.5,
+                      edgecolor="#22c55e", linestyle=(0, (3, 2)), zorder=4))
+        ax.add_patch(_grid_rect(60, 63, 95, 78,
+                      facecolor="none", lw=1.5,
+                      edgecolor="#22c55e", linestyle=(0, (3, 2)), zorder=4))
+        ax.text(77.5, 12.0, "HALF-SPACE (L)", ha="center", color="#22c55e",
+                fontsize=7, fontweight="bold", alpha=1.0, family=FONT_MONO,
+                zorder=5, bbox=dict(boxstyle="round,pad=0.2",
+                facecolor=BG_DARK, edgecolor="none", alpha=0.75))
+        ax.text(77.5, 88.0, "HALF-SPACE (R)", ha="center", color="#22c55e",
+                fontsize=7, fontweight="bold", alpha=1.0, family=FONT_MONO,
+                zorder=5, bbox=dict(boxstyle="round,pad=0.2",
+                facecolor=BG_DARK, edgecolor="none", alpha=0.75))
 
     top = sorted(by_player.items(), key=lambda kv: -kv[1])[:6]
     rows = [(p.split()[-1] if p else "—", str(int(c))) for p, c in top]
@@ -3234,8 +3374,8 @@ def make_zone14_v2(events, info, team_id, team_color):
     return render_pitch_overlay_v2(
         section="ZONE 14 + HALF-SPACES",
         title=f"{team_name} — Zone 14 & Half-Spaces",
-        subtitle="Zone 14 is the gold rectangle (central pocket outside "
-                 "the box) · green = the half-spaces flanking it",
+        subtitle="Grid cells show real touch counts · gold rectangle = "
+                 "Zone 14 (central pocket) · green = the flanking half-spaces",
         hn=team_name, an=opp_name, score=str(score),
         footer_note="More central-pocket touches → more chance creation",
         team_color=team_color, draw_overlay=draw_overlay,
