@@ -26,3 +26,6 @@ scipy>=1.11.0
 
 # PDF merging (for unified report)
 pypdf>=4.0.0
+
+# PDF page rendering (export each report page to PNG for social posting)
+pymupdf>=1.23.0
