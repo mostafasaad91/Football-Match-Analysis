@@ -1,331 +1,95 @@
 # Football Match Analysis
 
-A Python post-match football analysis toolkit for WhoScored/Opta match data. The project produces high-resolution tactical visuals on a dark AMOLED theme, defensive summaries, xG/xT analysis, pass networks, and a full tactical PDF report with written analysis for every visual.
+A Python post-match analysis toolkit for WhoScored/Opta event data. From a single match link it builds a full **dark-theme tactical package**: high-resolution visuals, per-player radar profiles, curated dashboard boards, and a multi-page **PDF report with written, data-driven tactical analysis under every visual** — plus each report page exported as a separate image, ready to post.
 
-Created by Mostafa Saad.
-
----
-
-## What This Project Does
-
-The tool reads a WhoScored match page, extracts the embedded match event data, calculates internal metrics such as xG and xT, then exports a complete analysis package:
-
-- Dark-theme visual report
-- High-resolution PNG visuals
-- CSV event/player/xG outputs
-- Full `match_report_<timestamp>.pdf`
-- Detailed tactical commentary for every visual inside the PDF
-- Advanced multi-page player tables, exported as PNG and CSV files
-
-The main analysis script is:
-
-- `Match_Analysis_Dark.py`
+Created by **Mostafa Saad**.
 
 ---
 
-## Main Features
+## What it produces
 
-### Match Data Pipeline
+For every match the pipeline outputs, under `output/<Home>_vs_<Away>_<score>/`:
 
-- Scrapes WhoScored match pages.
-- Extracts `matchCentreData`.
-- Parses events, players, teams, formations, substitutions, shots, passes, defensive actions and match metadata.
-- Uses fallback scraping approaches for difficult pages.
-
-### Internal xG Engine
-
-- Shot-level xG model using distance, angle, body part, shot type and contextual qualifiers.
-- Support for penalties, set pieces, big chances, cut-backs, rebounds, crosses and through balls.
-- Team-level calibration from available match statistics.
-- xG flow, xG summary, xGoT-style finishing context and shot breakdown visuals.
-
-### Tactical Visuals
-
-The report now produces a large visual package, including:
-
-- xG Flow
-- Shot Maps
-- Shot Breakdown and Goals
-- Pass Networks
-- xT Maps
-- Shot Comparison
-- Danger Creation
-- Goalkeeper Saves
-- xG/xGoT Summary
-- Zone 14 and Half-Space Maps
-- Match Statistics Comparison
-- Territorial Control
-- Ball Touches
-- Pass Map by Third
-- xT per Minute
-- Progressive Passes
-- Cross Maps
-- Defensive Heatmaps
-- Defensive Summary
-- Average Positions
-- Dominating Zones
-- Box Entries
-- High Turnovers
-- Pass Target Zones
-- Player Ratings and player stat tables
-- Grouped summary boards
+- **`match_report_<timestamp>.pdf`** — the full tactical report (cover → executive summary → glance → contents → phase sections → **player radars** → glossary → verdict → closing).
+- **`report_pages/page_01.png … `** — every PDF page as a standalone image for social posting.
+- **`player_radars/<Team>/<Player>.png`** — a radar pizza for every player who took part, sorted into team folders.
+- **8 curated dashboard boards** (`board_01…08`) — 2-up summary panels for The Story, Chance Creation, Danger Zones, Build-up, Progression & Threat, Defence & Pressing, Territory & Control, Pressing & Regains.
+- **~40 individual tactical visuals** (shot maps, xG flow, pass networks, xT maps, defensive heatmaps, high-turnovers, …).
+- **CSV outputs** — events, players, xG, goals log.
 
 ---
 
-## Recent Updates
+## Highlights
 
-### Visual & Report Overhaul (Latest)
+### Written tactical analysis (not just charts)
+Every visual in the PDF carries a **connected, data-driven commentary in an analyst voice** — computed from that match's own numbers, not a generic template:
+- Names the key players (top distributor, creator, shooter, defender) with their figures.
+- Reads a **qualitative team shape** from average positions and the pass network (how high, how compact, how wide, which channel the play leaned through).
+- Cross-references the metrics into one argument (e.g. possession vs. penetration, chance quality vs. volume, press as suppression vs. creation).
 
-A full pass over the pitch visuals, team colours and PDF report:
+### Player radar profiles
+A 28-metric **pizza chart per player**, grouped and colour-coded:
+- **Attack** · **Passing** · **Threat (expected)** · **Defence** · **Duels**
+- Bar length = percentile vs. every player in the match; chip = raw value (passes/long-balls as completed/total, shots as on-target/total, duels as won/contested).
+- Minutes shown under the player's name; a **tactical read** is written beneath each radar in the report.
 
-**Portrait pitches + AMOLED theme**
+### From-scratch analytics
+- **Expected Threat (xT):** a transparent, from-scratch grid value model (Karun-Singh style) with documented probabilities, transition matrix and value iteration. An open-family approximation — **not** a reproduction of proprietary Opta/StatsBomb possession-value.
+- **Participation & minutes:** starter / substitute / unused reconstructed from substitution and red-card events; minutes on the official clock (regulation 90 / 120, stoppage excluded).
+- **Creation model:** xA, assists, big-chances-created and shot-creating actions reconstructed by linking each shot back to the key pass that made it.
+- **Duels** reported as absolute won/total for ground, aerial and overall; **xGOT** as a placement-based post-shot proxy.
 
-- All pitch visuals (pass network, average positions, shot map, xT map) are now drawn on **vertical/portrait pitches with the attack pointing up**, on a true-black AMOLED background.
-
-**Pass network**
-
-- Single **team-shirt colour** for every node; **substitutes are shown as squares**, starters as circles — decided by the **starting XI** (read from match flow), so a starter who is subbed *off* stays a circle and only genuine bench players become squares.
-- **Connected-core pruning** (StatsBomb/Opta-style) removes stray, link-less nodes from late cameos.
-- Neutral **grey → white** link ramp (independent of team colour), distinct **goalkeeper** and busiest-**hub** markers, shirt numbers inside nodes, and de-overlapped player labels with leader lines.
-
-**Shot map**
-
-- Four-way outcome encoding — **goal · saved · blocked · off-target** — plus a **big-chance halo** and a **penalty ring**.
-- Six-card metric strip (xG, Goals, Shots, On-Target %, Big Chances, xG/Shot), penalty-area shading, average shot-distance line, and an attacking-half zoom so shots no longer pile up.
-
-**xT map & average positions**
-
-- xT map uses **white positive-pass arrows** for contrast over the heatmap (gold reserved for the top xT actions).
-- Average positions use smaller nodes with node-aware label placement and leader lines to stop names overlapping circles.
-
-**Accurate team & national-team colours**
-
-- Home-kit colours reviewed and corrected, with **all 2026 World Cup national teams** covered, plus many clubs from the Primeira Liga, Eredivisie, Scottish Premiership, Süper Lig, Saudi Pro League, Belgian Pro League, Brazil, Argentina, MLS and Egypt.
-- A contrast guard guarantees the two teams in a match never render in clashing/identical colours.
-
-**PDF report navigation & analysis**
-
-- New **Match at a Glance** dashboard page (score + home/away split bars for xG, shots, on-target and possession).
-- New **Contents page** with page numbers and **clickable PDF bookmarks** for fast navigation.
-- New **Glossary & Methodology** page defining xG, xGoT, xT, PPDA, Big Chance, Zone 14 and the pitch markers.
-- Section dividers (Shared / Home / Away), and **each visual's commentary now links to the next page**, so the report reads as one connected tactical argument.
-
-### Dynamic Team Kit Colours
-
-- Team colours are now dynamic and based on the selected kit type.
-- Configurable kit options:
-
-```python
-HOME_KIT_TYPE = "home"
-AWAY_KIT_TYPE = "away"
-CUSTOM_KIT_COLORS = {}
-```
-
-- The same team colours are applied consistently across visuals:
-  - xG charts
-  - xT maps
-  - pass maps
-  - pass networks
-  - defensive visuals
-  - player tables
-  - PDF pages
-
-### Substitutes in Visuals
-
-- Substituted players are now included in pass-network and average-position visuals where data exists.
-- Player tables distinguish starters, substitutes and unused players more clearly.
-
-### Better Defensive Metrics
-
-- Blocks are now calculated properly instead of always showing zero.
-- Defensive summary and match statistics now include:
-  - Tackles
-  - Interceptions
-  - Blocks
-  - Clearances
-  - Recoveries
-  - Fouls
-
-### Shot Breakdown Improvements
-
-- Goals table now includes assist names where available.
-- If the direct assist field is missing, the code tries to infer the assister from the previous successful same-team pass/key pass before the goal.
-- Goal type now distinguishes `Open Play`, `Set Piece`, `Penalty`, and the finishing body part where available.
-- Set pieces are detected from corners, free kicks and throw-ins in the action sequence before the goal.
-
-### PDF Report Redesign
-
-The unified PDF report is generated through `match_extensions.py` as:
-
-```text
-output/match_report_<timestamp>.pdf
-```
-
-The PDF now includes:
-
-- A cleaner portrait page layout.
-- The visual placed at the top of each analysis page.
-- Detailed tactical commentary underneath each visual.
-- Human-style football analysis rather than short generic notes.
-- Higher-quality embedded visuals inside the PDF.
-- Player tables first.
-- Shared analysis section immediately after player tables.
-- Then home-team analysis.
-- Then away-team analysis.
-- A minimal final page:
-
-```text
-End of report by Mostafa Saad
-```
-
-### PDF Quality
-
-PDF visual quality has been increased:
-
-```python
-PDF_VISUAL_DPI = 320
-PDF_PAGE_DPI = 240
-```
-
-This improves clarity for:
-
-- Pitch maps
-- Arrows
-- Small labels
-- Player tables
-- xT grids
-- Pass networks
+### Robust rendering
+- Pass networks keep participating **substitutes** on the map.
+- Dashboard boards retry saving at lower DPI so all eight always persist under memory pressure.
 
 ---
 
-## Project Files
+## Requirements
 
-| File | Purpose |
-|---|---|
-| `Match_Analysis_Dark.py` | Main analysis script (dark AMOLED theme) |
-| `match_extensions.py` | Unified PDF report, PPDA, team stats and extended report pages |
-| `viz_v2.py` | Shared visual helpers |
-| `viz_v2_charts.py` | Main V2 tactical visual functions |
-| `viz_design_system.py` | Shared design system helpers |
-| `requirements.txt` | Python dependencies |
-
----
-
-## Installation
-
-Use Python 3.10 or newer.
+- Python 3.10+
+- Install dependencies:
 
 ```bash
-git clone https://github.com/mostafasaad91/Football-Match-Analysis.git
-cd Football-Match-Analysis
 pip install -r requirements.txt
 ```
 
-Google Chrome is recommended for Selenium/undetected-chromedriver fallback scraping.
+Key libraries: `numpy`, `pandas`, `matplotlib`, `scipy`, `cloudscraper` / `requests` / `beautifulsoup4` (scraping), `undetected-chromedriver` / `selenium` (browser fallback), `pypdf` (merge), `pymupdf` (per-page image export).
+
+A Chrome/Chromium install is used for the Selenium fallback when the HTTP scrape can't reach the match data.
 
 ---
 
 ## Usage
 
-Edit the match URL in the settings section of the script you want to run:
-
-```python
-MATCH_URL = "https://www.whoscored.com/matches/XXXXXXX/live/..."
-```
-
-Run the analysis:
+Run the main script and follow the prompt for the WhoScored match URL:
 
 ```bash
 python Match_Analysis_Dark.py
 ```
 
-Outputs are saved in:
-
-```text
-output/
-```
-
-## Output Structure
-
-Typical output includes:
-
-```text
-output/
-└── Team_A_vs_Team_B_score/
-    ├── events.csv
-    ├── players.csv
-    ├── xg.csv
-    ├── match_report_<timestamp>.pdf
-    ├── 1_xg_flow.png
-    ├── 2_shot_map_home.png
-    ├── 3_shot_map_away.png
-    ├── player_stats_home_attacking.csv
-    ├── player_stats_away_passing.csv
-    ├── ...
-    └── visuals/
-```
-
-Extended report files may also include:
-
-```text
-output/
-├── match_report_<timestamp>.pdf
-└── goals_log_<timestamp>.csv
-```
-
-Generated PNG files are ignored by Git through `.gitignore`.
+The tool scrapes the match page, extracts the embedded event data, computes the internal metrics, and writes the full package to `output/<match folder>/`.
 
 ---
 
-## Configuration
+## Project layout
 
-Important settings are available near the top of the main scripts.
-
-| Setting | Description |
-|---|---|
-| `MATCH_URL` | WhoScored match page URL |
-| `SAVE_DIR` | Output directory |
-| `OUTPUT_IMAGE_DPI` | PNG export quality |
-| `PDF_EXPORT_DPI` | Tactical PDF export quality for the main scripts |
-| `HOME_KIT_TYPE` | Home team kit colour choice |
-| `AWAY_KIT_TYPE` | Away team kit colour choice |
-| `CUSTOM_KIT_COLORS` | Optional manual team colour override |
-| `BROWSER_HEADLESS` | Run browser in headless mode |
-| `BROWSER_USE_REAL_PROFILE` | Use real Chrome profile if scraping is blocked |
-
-Example manual colour override:
-
-```python
-CUSTOM_KIT_COLORS = {
-    "home": "#C8102E",
-    "away": "#034694",
-}
-```
+| File | Role |
+|------|------|
+| `Match_Analysis_Dark.py` | Main entry point — scraping, metrics, ~40 visuals, dashboard boards, orchestration |
+| `match_extensions.py` | PDF report assembly, analyst commentary, team-shape read, verdict/executive pages, player-radar report section, per-page export |
+| `player_radar.py` | Per-player radar pizzas, grid-xT model, participation/minutes, duels and creation models |
+| `viz_v2_charts.py` | Individual v2 tactical charts (shot maps, pass networks, xT maps, heatmaps, …) |
+| `viz_v2.py`, `viz_design_system.py` | Shared v2 chart chrome and design system |
 
 ---
 
-## GitHub Notes
+## Method & limitations
 
-The repository is prepared so generated files are not committed:
-
-- `output/`
-- `*.png`
-- `*.pdf`
-- `*.csv`
-- `__pycache__/`
-- `.claude/`
-- temporary/cache files
-
-Only source code, documentation and dependency files should be committed.
+All figures are computed directly from a **single match's event stream** and are best read as description, not verdict. The xT surface and the xGOT proxy are open, transparent approximations from the same family as public models — they do **not** reproduce proprietary Opta possession-value or StatsBomb OBV outputs. Team-shape and any positional inference come from **average touch positions** and are approximate by nature.
 
 ---
 
-## Disclaimer
+## Attribution
 
-This project is for football analysis, research and educational use. It works with publicly available match data from WhoScored/Opta pages. Please respect the data provider's terms of service and rate limits.
-
----
-
-## License
-
-This project is licensed under the MIT License. See `LICENSE` for details.
+Personal analysis project by Mostafa Saad. WhoScored/Opta are the underlying data source; this toolkit only reads and visualises publicly rendered match data.
