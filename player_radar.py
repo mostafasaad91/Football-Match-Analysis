@@ -1,0 +1,986 @@
+"""
+Player radar / pizza charts.
+
+One vertical-bar "pizza" per player, with the 20 metrics grouped and
+colour-coded by category (attacking / passing / defence). Bar length is the
+player's percentile among all match players; the chip shows the raw match value.
+
+Public API
+----------
+compute_metrics_pool(events)            -> (allm, elig)
+player_metrics(events, player)          -> dict
+make_player_pizza(events, player, team_name, role, allm, elig, kit=None) -> Figure
+export_player_radars(events, info, out_dir, dpi=115) -> dict
+    saves every participating player's PNG under
+    <out_dir>/player_radars/<TeamName>/<Player>.png and returns a ranking dict
+    {"home": [(player, rating), ...], "away": [...]} sorted best-first.
+top_players_per_team(events, info, n=5) -> {"home":[...], "away":[...]}
+"""
+from __future__ import annotations
+
+import os
+import re
+
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
+import matplotlib.patches as mpatches
+
+try:
+    from match_extensions import BG_DARK, TEXT_BRIGHT, TEXT_DIM
+except Exception:  # pragma: no cover - fallback colours
+    BG_DARK, TEXT_BRIGHT, TEXT_DIM = "#000000", "#F5F5F5", "#9aa4b2"
+
+# ── Metric layout: (group name, colour, [metric labels]) ──────────────────────
+# A full tactical + numerical match profile, grouped by role of the action.
+# (Minutes are shown under the player name in the header, not as a slice.)
+GROUPS = [
+    ("ATTACK", "#F2B233",
+     ["Goals", "Assists", "Big ch.\ncreated", "Shots", "xT\ncontrib", "Dribbles"]),
+    ("PASSING", "#4E8FF0",
+     ["Passes", "Pass %", "Prog\npasses", "Final 3rd\npasses", "Long\nballs", "Key\npasses"]),
+    ("THREAT", "#A78BFA",
+     ["xG", "npxG", "xA", "xGOT", "xG/\nShot", "G\N{MINUS SIGN}xG",
+      "Shot-cr.\nactions", "Deep\ncompl."]),
+    ("DEFENCE", "#E4483D",
+     ["Tackles\nwon", "Intercep\ntions", "Recov\neries", "Blocks", "Clear\nances"]),
+    ("DUELS", "#22D3EE",
+     ["Grd duels\nwon", "Aerials\nwon", "Duels\nwon"]),
+]
+# metrics whose chip shows "numerator / denominator" instead of a single number.
+# Value is (numerator_key, denominator_key); the bar still uses the label's own
+# value. Passes/Shots/Long balls -> completed·on-target / total; duels -> won / contested.
+_RATIO_DISPLAY = {
+    "Passes": ("Passes_comp", "Passes"),
+    "Shots": ("Shots_ot", "Shots"),
+    "Long\nballs": ("Longballs_comp", "Long\nballs"),
+    "Grd duels\nwon": ("Grd duels\nwon", "Grd_duels_att"),
+    "Aerials\nwon": ("Aerials\nwon", "Aer_att"),
+    "Duels\nwon": ("Duels\nwon", "Duels_att"),
+}
+MIN_POOL_TOUCHES = 12  # players below this don't seed the percentile pool
+
+
+def _safe(name: str) -> str:
+    return re.sub(r"[^\w.\-]+", "_", str(name)).strip("_") or "player"
+
+
+def _valid_name(x) -> bool:
+    """True for a real player name (not NaN / blank / team-level placeholder)."""
+    if x is None:
+        return False
+    try:
+        if pd.isna(x):
+            return False
+    except Exception:
+        pass
+    s = str(x).strip()
+    return len(s) >= 2 and s.lower() != "nan"
+
+
+def _creation_credits(events: pd.DataFrame) -> dict:
+    """Link each shot back to the key pass that created it and credit the passer.
+
+    WhoScored/Opta feeds here leave ``assist_player`` empty, so xA / assists /
+    big-chances-created / shot-creating-actions must be reconstructed from the
+    event order: the shot's expected-goals value is attributed to the most
+    recent key pass by a team-mate immediately before it.
+
+    Returns {player: {"xA": float, "assists": int, "bcc": int, "sca": int}}.
+    """
+    from collections import defaultdict
+    credits = defaultdict(lambda: {"xA": 0.0, "assists": 0, "bcc": 0, "sca": 0})
+    if "is_shot" not in events.columns:
+        return credits
+
+    ev = events.reset_index(drop=True)
+    is_shot = ev["is_shot"].fillna(False) == True
+    is_kp = ev.get("is_key_pass", pd.Series(False, index=ev.index)).fillna(False) == True
+    typ = ev["type"].astype(str) if "type" in ev else pd.Series("", index=ev.index)
+    team = ev["team_id"] if "team_id" in ev else pd.Series(0, index=ev.index)
+    minute = ev["minute"] if "minute" in ev else pd.Series(0, index=ev.index)
+    xg = ev["xG"].fillna(0) if "xG" in ev else pd.Series(0.0, index=ev.index)
+    goal = ev["is_goal"].fillna(False) == True if "is_goal" in ev else pd.Series(False, index=ev.index)
+    own = ev["is_own_goal"].fillna(False) == True if "is_own_goal" in ev else pd.Series(False, index=ev.index)
+    big = ev["big_chance"].fillna(False) == True if "big_chance" in ev else pd.Series(False, index=ev.index)
+
+    shot_idx = list(ev.index[is_shot])
+    for i in shot_idx:
+        t = team.iloc[i]
+        shooter = ev["player"].iloc[i]
+        creator = None
+        j = i - 1
+        while j >= 0 and (i - j) <= 6 and abs(minute.iloc[i] - minute.iloc[j]) <= 1:
+            if is_kp.iloc[j] and typ.iloc[j] == "Pass" and team.iloc[j] == t \
+                    and _valid_name(ev["player"].iloc[j]) and ev["player"].iloc[j] != shooter:
+                creator = ev["player"].iloc[j]
+                break
+            j -= 1
+        if creator is None or not _valid_name(creator):
+            continue
+        c = credits[str(creator)]
+        c["xA"] += float(xg.iloc[i])
+        c["sca"] += 1
+        if bool(goal.iloc[i]) and not bool(own.iloc[i]):
+            c["assists"] += 1
+        if bool(big.iloc[i]):
+            c["bcc"] += 1
+    return credits
+
+
+def _get_credits(events: pd.DataFrame) -> dict:
+    """Memoise creation credits on the DataFrame so it is computed once per run."""
+    try:
+        cached = events.attrs.get("_radar_credits")
+    except Exception:
+        cached = None
+    if cached is None:
+        cached = _creation_credits(events)
+        try:
+            events.attrs["_radar_credits"] = cached
+        except Exception:
+            pass
+    return cached
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Participation & minutes played (WhoScored event-stream reconstruction)
+# ─────────────────────────────────────────────────────────────────────────────
+# WhoScored does not expose isFirstEleven / subbedInExpandedMinute as event
+# columns here, so participation is reconstructed from the event stream:
+#   • SubstitutionOn  event  -> player entered at that (expanded) minute
+#   • SubstitutionOff event  -> player left at that (expanded) minute
+#   • a player with on-ball/defensive events but no SubstitutionOn started
+#   • match end = the maximum expanded minute observed (includes stoppage/ET)
+# Every player is classified starter / sub / unused, and real minutes are the
+# span they were actually on the pitch — the basis for any per-90 normalisation.
+_MARKER_TYPES = {"SubstitutionOn", "SubstitutionOff", "Card", "FormationSet",
+                 "FormationChange", "Start", "End", "OffsideProvoked"}
+
+
+def _regulation_minutes(events) -> int:
+    """Official match length on the clock: 120 if the game reached extra time,
+    otherwise 90. Stoppage/added time is NOT counted (a full match = 90)."""
+    try:
+        pc = events.get("period_code", pd.Series([], dtype=str)).astype(str).str.lower()
+        if pc.str.contains("extratime").any() or pc.str.contains("et").any():
+            return 120
+    except Exception:
+        pass
+    return 90
+
+
+def _match_end_minute(events) -> int:
+    """End of the match on the OFFICIAL clock (regulation, no stoppage)."""
+    reg = _regulation_minutes(events)
+    try:
+        raw = int(pd.to_numeric(events["minute"], errors="coerce").max())
+    except Exception:
+        return reg
+    return min(raw, reg)
+
+
+def player_participation(events: pd.DataFrame) -> dict:
+    """Return {player: {"status": starter|sub|unused, "minutes": int,
+    "start": int, "end": int}} reconstructed from substitution events.
+
+    Minutes are on the official clock (regulation 90 / 120), excluding stoppage
+    time, so a player who plays the whole game is credited 90, not 90+added."""
+    reg = _regulation_minutes(events)
+    end_min = _match_end_minute(events)
+    ty = events["type"].astype(str)
+    subs_on, subs_off, sent_off = {}, {}, {}
+    for _, r in events[ty == "SubstitutionOn"].iterrows():
+        if _valid_name(r.get("player")):
+            subs_on[str(r["player"])] = int(r.get("minute") or 0)
+    for _, r in events[ty == "SubstitutionOff"].iterrows():
+        if _valid_name(r.get("player")):
+            subs_off[str(r["player"])] = int(r.get("minute") or end_min)
+    # a red card (straight or second yellow) ends the player's match too, even
+    # though WhoScored logs no SubstitutionOff for a dismissal
+    for _, r in events[ty == "Card"].iterrows():
+        q = str(r.get("qualifier_names", "")).lower()
+        if _valid_name(r.get("player")) and ("red" in q or "secondyellow" in q):
+            p = str(r["player"])
+            sent_off[p] = min(sent_off.get(p, 999), int(r.get("minute") or end_min))
+
+    real = events[~ty.isin(_MARKER_TYPES)]
+    real_counts = real[real["player"].map(_valid_name)].groupby("player").size()
+
+    out = {}
+    players = set(str(p) for p in events["player"].tolist() if _valid_name(p))
+    for p in players:
+        has_actions = int(real_counts.get(p, 0)) > 0
+        if p in subs_on:
+            start = subs_on[p]
+            end = subs_off.get(p, end_min)
+            status = "sub"
+        else:
+            start = 0
+            end = subs_off.get(p, end_min)
+            status = "starter"
+        # a dismissal ends the match earlier than any sub-off / full time
+        if p in sent_off:
+            end = min(end, sent_off[p])
+            status = "sent_off"
+        # clamp to the official clock so stoppage time is never counted
+        start = min(start, reg)
+        end = min(end, reg)
+        minutes = max(end - start, 0)
+        if minutes <= 0 or not has_actions:
+            status = "unused"
+            minutes = 0
+        out[p] = {"status": status, "minutes": int(minutes),
+                  "start": int(start), "end": int(end)}
+    return out
+
+
+def _get_participation(events) -> dict:
+    try:
+        cached = events.attrs.get("_radar_participation")
+    except Exception:
+        cached = None
+    if cached is None:
+        cached = player_participation(events)
+        try:
+            events.attrs["_radar_participation"] = cached
+        except Exception:
+            pass
+    return cached
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Expected Threat (xT) — grid value model, Karun-Singh style
+# ─────────────────────────────────────────────────────────────────────────────
+# A transparent, from-scratch implementation of the open grid xT model. NOTE:
+# this is an approximation from the same family as — but NOT a reproduction of —
+# proprietary Opta possession-value or StatsBomb OBV outputs, and is trained
+# only on the events available (a single match here, so the surface is coarse;
+# feed a larger event corpus for a smoother model).
+#
+# Pitch is split into an nx (length, x∈[0,100]) × ny (width, y∈[0,100]) grid.
+# For every cell z we estimate from the events:
+#     shot_prob   s(z) = shots(z) / (shots(z) + moves(z))
+#     move_prob   m(z) = 1 − s(z)
+#     goal_prob   g(z) = goals(z) / shots(z)              (finish | shot in z)
+#     transition  T(z→z') = moves z→z' / all moves from z
+# The value of holding possession in z solves, by iteration to convergence:
+#     V(z) = s(z)·g(z) + m(z)·Σ_z' T(z→z')·V(z')
+# The xT added by a move is V(end cell) − V(start cell); summed per player this
+# is their ball-progression threat contribution.
+def compute_xt_grid(events, nx=16, ny=12, n_iter=500, eps=1e-7):
+    ncell = nx * ny
+
+    def cell(x, y):
+        xi = min(max(int(x / 100.0 * nx), 0), nx - 1)
+        yi = min(max(int(y / 100.0 * ny), 0), ny - 1)
+        return yi * nx + xi
+
+    move_from = np.zeros(ncell)
+    shot_from = np.zeros(ncell)
+    goal_from = np.zeros(ncell)
+    Tcount = np.zeros((ncell, ncell))
+
+    isp = events.get("is_pass", pd.Series(False, index=events.index)).fillna(False) == True
+    succ = events.get("outcome", pd.Series("", index=events.index)).astype(str) == "Successful"
+    have_xy = events["x"].notna() & events["y"].notna() & events["end_x"].notna() & events["end_y"].notna()
+    mv = events[isp & succ & have_xy]
+    for x, y, ex, ey in zip(mv["x"], mv["y"], mv["end_x"], mv["end_y"]):
+        z, z2 = cell(x, y), cell(ex, ey)
+        move_from[z] += 1
+        Tcount[z, z2] += 1
+
+    issh = events.get("is_shot", pd.Series(False, index=events.index)).fillna(False) == True
+    sh = events[issh & events["x"].notna() & events["y"].notna()]
+    isg = sh.get("is_goal", pd.Series(False, index=sh.index)).fillna(False) == True
+    isog = sh.get("is_own_goal", pd.Series(False, index=sh.index)).fillna(False) == True
+    for x, y, g in zip(sh["x"], sh["y"], (isg & ~isog)):
+        z = cell(x, y)
+        shot_from[z] += 1
+        if bool(g):
+            goal_from[z] += 1
+
+    total = move_from + shot_from
+    s = np.divide(shot_from, np.maximum(total, 1.0))
+    m = 1.0 - s
+    # Bayesian shrinkage of goal-per-shot toward the global rate so that a single
+    # scored shot in a cell does not push g(z) to 1.0 on this small sample.
+    g_global = (goal_from.sum() / shot_from.sum()) if shot_from.sum() else 0.10
+    alpha = 4.0
+    g = (goal_from + alpha * g_global) / (shot_from + alpha)
+    Trow = Tcount.sum(axis=1, keepdims=True)
+    T = np.divide(Tcount, np.maximum(Trow, 1.0))
+
+    V = np.zeros(ncell)
+    for _ in range(n_iter):
+        V_new = s * g + m * (T @ V)
+        if np.max(np.abs(V_new - V)) < eps:
+            V = V_new
+            break
+        V = V_new
+    return {"V": V, "nx": nx, "ny": ny}
+
+
+def _get_xt_grid(events):
+    try:
+        cached = events.attrs.get("_radar_xtgrid")
+    except Exception:
+        cached = None
+    if cached is None:
+        cached = compute_xt_grid(events)
+        try:
+            events.attrs["_radar_xtgrid"] = cached
+        except Exception:
+            pass
+    return cached
+
+
+def _player_xt(events, player, grid=None):
+    """Sum of V(end)-V(start) over the player's successful ball-moving actions."""
+    grid = grid or _get_xt_grid(events)
+    V, nx, ny = grid["V"], grid["nx"], grid["ny"]
+
+    def cell(x, y):
+        xi = min(max(int(x / 100.0 * nx), 0), nx - 1)
+        yi = min(max(int(y / 100.0 * ny), 0), ny - 1)
+        return yi * nx + xi
+
+    d = events[events["player"].astype(str) == str(player)]
+    isp = d.get("is_pass", pd.Series(False, index=d.index)).fillna(False) == True
+    succ = d.get("outcome", pd.Series("", index=d.index)).astype(str) == "Successful"
+    have = d["x"].notna() & d["y"].notna() & d["end_x"].notna() & d["end_y"].notna()
+    mv = d[isp & succ & have]
+    tot = 0.0
+    for x, y, ex, ey in zip(mv["x"], mv["y"], mv["end_x"], mv["end_y"]):
+        tot += float(V[cell(ex, ey)] - V[cell(x, y)])
+    return tot
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Carries (approximate) — WhoScored does not log carries directly.
+# ─────────────────────────────────────────────────────────────────────────────
+# APPROXIMATION: a carry is inferred when the same player has two consecutive
+# on-ball events in the same possession and the ball location moved between the
+# end of one and the start of the next. A "progressive" carry advances the ball
+# at least PROG_CARRY (in 0–100 pitch units) towards the opponent goal. This is
+# a coarse proxy, not an Opta/StatsBomb carry model.
+_ONBALL_TYPES = {"Pass", "TakeOn", "BallTouch", "BallRecovery", "Clearance",
+                 "Interception", "Tackle"}
+PROG_CARRY = 5.0        # pitch units of forward progress for a progressive carry
+MIN_CARRY = 3.0         # minimum displacement to count as a carry
+
+
+def _compute_carries(events) -> dict:
+    from collections import defaultdict
+    out = defaultdict(lambda: {"carries": 0, "prog": 0})
+    ev = events.reset_index(drop=True)
+    ty = ev["type"].astype(str)
+    prev = None
+    for i in range(len(ev)):
+        t = ty.iloc[i]
+        if t not in _ONBALL_TYPES:
+            prev = None
+            continue
+        x, y = ev["x"].iloc[i], ev["y"].iloc[i]
+        pl, tm = ev["player"].iloc[i], ev["team_id"].iloc[i]
+        if prev is not None and _valid_name(pl) and prev["player"] == pl and prev["team"] == tm \
+                and pd.notna(x) and pd.notna(y) and pd.notna(prev["ex"]) and pd.notna(prev["ey"]):
+            dist = ((x - prev["ex"]) ** 2 + (y - prev["ey"]) ** 2) ** 0.5
+            if dist >= MIN_CARRY:
+                c = out[str(pl)]
+                c["carries"] += 1
+                if (x - prev["ex"]) >= PROG_CARRY:
+                    c["prog"] += 1
+        ex = ev["end_x"].iloc[i] if pd.notna(ev["end_x"].iloc[i]) else x
+        ey = ev["end_y"].iloc[i] if pd.notna(ev["end_y"].iloc[i]) else y
+        prev = {"player": pl, "team": tm, "ex": ex, "ey": ey}
+    return dict(out)
+
+
+def _get_carries(events) -> dict:
+    try:
+        cached = events.attrs.get("_radar_carries")
+    except Exception:
+        cached = None
+    if cached is None:
+        cached = _compute_carries(events)
+        try:
+            events.attrs["_radar_carries"] = cached
+        except Exception:
+            pass
+    return cached
+
+
+def player_metrics(events: pd.DataFrame, player: str) -> dict:
+    """Raw per-match stats for one player from the event stream."""
+    ev = events
+    d = ev[ev["player"].astype(str) == str(player)]
+    ty = d["type"].astype(str) if "type" in d else pd.Series([], dtype=str)
+    o = d["outcome"].astype(str) if "outcome" in d else pd.Series(index=d.index, dtype=str)
+    isp = d.get("is_pass", False)
+    isp = (isp.fillna(False) == True) if hasattr(isp, "fillna") else pd.Series(False, index=d.index)
+    pc = d[isp & (o == "Successful")]
+
+    prog = ptobox = tib = 0
+    if {"end_x", "x"}.issubset(d.columns):
+        pp = d[isp & (o == "Successful")]
+        prog = int((pp["end_x"] - pp["x"] >= 15).sum())
+        if "end_y" in d.columns:
+            in_box_end = (pp["end_x"] >= 83) & (pp["end_y"].between(21, 79))
+            from_box = (pp["x"] >= 83) & (pp["y"].between(21, 79))
+            ptobox = int((in_box_end & ~from_box).sum())
+    if {"x", "y"}.issubset(d.columns):
+        tib = int(((d["x"] >= 83) & (d["y"].between(21, 79))).sum())
+
+    xt_pos = 0.0
+    if "xT" in d.columns:
+        xt = d["xT"].fillna(0)
+        xt_pos = float(xt[isp & (o == "Successful") & (xt > 0)].sum())
+
+    cr = _get_credits(ev).get(str(player), {"xA": 0.0, "assists": 0, "bcc": 0, "sca": 0})
+    asst = int(cr["assists"])
+    xa = round(float(cr["xA"]), 2)
+    bcc = int(cr["bcc"])
+
+    def cnt(t):
+        return int((ty == t).sum())
+
+    def cnt_ok(t):
+        return int(((ty == t) & (o == "Successful")).sum())
+
+    is_cross = d.get("is_cross", pd.Series(False, index=d.index)).fillna(False) == True
+    cross_tot = int(is_cross.sum())
+    cross_comp = int((is_cross & (o == "Successful")).sum())
+    pass_tot = int(isp.sum())
+    pass_comp = int(len(pc))
+    shots_tot = int((d.get("is_shot", pd.Series(False, index=d.index)).fillna(False) == True).sum())
+    shots_ot = int(d.get("shot_whoscored_type", pd.Series(index=d.index, dtype=object)).isin(["Goal", "SavedShot"]).sum())
+
+    goals = int((d["is_goal"].fillna(False) == True).sum()) if "is_goal" in d else 0
+    xg_tot = float(d["xG"].fillna(0).sum()) if "xG" in d else 0.0
+    pen = d.get("is_penalty", pd.Series(False, index=d.index)).fillna(False) == True
+    pso = d.get("is_penalty_shootout", pd.Series(False, index=d.index)).fillna(False) == True
+    npxg = float(d.loc[~(pen | pso), "xG"].fillna(0).sum()) if "xG" in d else 0.0
+    deep = 0
+    if "end_x" in d.columns:
+        dp = d[isp & (o == "Successful") & ~is_cross]
+        deep = int((dp["end_x"] >= 81).sum())
+    sca = int(cr["sca"])
+
+    # ── advanced defence: quality + aggression ──
+    tkl_won = cnt_ok("Tackle")
+    tkl_att = cnt("Tackle") + cnt("Challenge")     # Challenge = dribbled past
+    tackle_pct = round(100 * tkl_won / tkl_att) if tkl_att else 0
+    aer_won = cnt_ok("Aerial")
+    duel_won = aer_won + tkl_won
+    duel_att = cnt("Aerial") + tkl_att
+    duel_pct = round(100 * duel_won / duel_att) if duel_att else 0
+    high_reg = 0
+    if "x" in d.columns:
+        high_reg = int((ty.isin(["Tackle", "Interception", "BallRecovery"]) & (d["x"] > 50)).sum())
+
+    # ── advanced passing ──
+    prog_pct = round(100 * prog / pass_tot) if pass_tot else 0
+    f3 = 0
+    if {"x", "end_x"}.issubset(d.columns):
+        f3 = int((isp & (o == "Successful") & (d["x"] < 66.67) & (d["end_x"] >= 66.67)).sum())
+    qn = d.get("qualifier_names", pd.Series("", index=d.index)).astype(str)
+    lb_mask = isp & qn.str.contains("Longball")
+    lb_tot = int(lb_mask.sum())
+    lb_comp = int((lb_mask & (o == "Successful")).sum())
+
+    # ── xGOT (post-shot proxy): xG scaled by finish placement in the goal ──
+    xgot = 0.0
+    sot_rows = d[d.get("shot_whoscored_type", pd.Series(index=d.index, dtype=object)).isin(["Goal", "SavedShot"])]
+    for _, r in sot_rows.iterrows():
+        q = str(r.get("qualifier_names", ""))
+        xgv = float(r.get("xG", 0) or 0)
+        if any(z in q for z in ("LowLeft", "LowRight", "HighLeft", "HighRight")):
+            mlt = 1.45          # corners — hardest to save
+        elif "HighCentre" in q:
+            mlt = 1.05
+        elif "LowCentre" in q or "Centre" in q:
+            mlt = 0.65          # central — comfortable for the keeper
+        else:
+            mlt = 1.0
+        xgot += min(xgv * mlt, 0.99)
+    xgot = round(xgot, 2)
+
+    key_passes = int((d.get("is_key_pass", pd.Series(False, index=d.index)).fillna(False) == True).sum())
+
+    # ── grid-model xT contribution (see compute_xt_grid) ──
+    xt_contrib = round(_player_xt(ev, player), 3)
+
+    # ── duels as absolute counts + win% (never percentage-only) ──
+    # ground = tackle contests (as tackler) + take-on contests (as dribbler)
+    g_won = tkl_won + cnt_ok("TakeOn")
+    g_att = tkl_att + cnt("TakeOn")               # tackles+challenges + take-ons
+    g_lost = max(g_att - g_won, 0)
+    g_pct = round(100 * g_won / g_att) if g_att else 0
+    a_att = cnt("Aerial")
+    a_won = aer_won
+    a_lost = max(a_att - a_won, 0)
+    a_pct = round(100 * a_won / a_att) if a_att else 0
+    t_att = g_att + a_att
+    t_won = g_won + a_won
+    t_lost = max(t_att - t_won, 0)
+    t_pct = round(100 * t_won / t_att) if t_att else 0
+
+    # ── defence: blocks / clearances ──
+    blocks = cnt("BlockedPass")
+    clearances = cnt("Clearance")
+    tackles_won = tkl_won
+
+    # ── discipline / reliability ──
+    fouls_comm = int(((ty == "Foul") & (o == "Unsuccessful")).sum())   # committer
+    cards = cnt("Card")
+    dispossessed = cnt("Dispossessed")
+    miscontrol = int(((ty == "BallTouch") & (o == "Unsuccessful")).sum())
+
+    # ── carrying / dribbling ──
+    carr = _get_carries(ev).get(str(player), {"carries": 0, "prog": 0})
+    carries = int(carr["carries"])
+    prog_carries = int(carr["prog"])
+    dribbles = cnt_ok("TakeOn")
+
+    # ── positional / tactical ──
+    part = _get_participation(ev).get(str(player), {"minutes": 0})
+    minutes = int(part.get("minutes", 0))
+    onball = d[d["x"].notna()]
+    avg_x = round(float(onball["x"].mean()), 1) if len(onball) else 0.0
+    n_t = max(len(onball), 1)
+    tch_def = int((onball["x"] < 33.33).sum())
+    tch_mid = int(((onball["x"] >= 33.33) & (onball["x"] < 66.67)).sum())
+    tch_att = int((onball["x"] >= 66.67).sum())
+    tch_att_pct = round(100 * tch_att / n_t)
+
+    return {
+        # ── threat / attack ──
+        "Goals": goals,
+        "Shots": shots_tot,
+        "Shots_ot": shots_ot,               # on-target, "ot/total" chip
+        "xG": round(xg_tot, 2),
+        "xGOT": xgot,
+        "xT\ncontrib": xt_contrib,
+        # ── creation ──
+        "Key\npasses": key_passes,
+        "Assists": asst,
+        "xA": xa,
+        "Big ch.\ncreated": bcc,
+        # ── passing / progression ──
+        "Touches": int(len(d)),
+        "Passes": pass_tot,
+        "Passes_comp": pass_comp,           # "comp/total" chip
+        "Pass %": round(100 * pass_comp / max(pass_tot, 1)),
+        "Prog\npasses": prog,
+        "Final 3rd\npasses": f3,
+        "Passes\nto box": ptobox,
+        "Long\nballs": lb_tot,
+        "Longballs_comp": lb_comp,          # "comp/total" chip
+        # ── carrying / dribbling ──
+        "Carries": carries,
+        "Prog\ncarries": prog_carries,
+        "Dribbles": dribbles,
+        # ── defence ──
+        "Tackles\nwon": tackles_won,
+        "Intercep\ntions": cnt("Interception"),
+        "Recov\neries": cnt("BallRecovery"),
+        "Blocks": blocks,
+        "Clear\nances": clearances,
+        # ── duels (absolute counts, shown won/total) ──
+        "Grd duels\nwon": g_won,
+        "Grd_duels_att": g_att, "Grd_duels_lost": g_lost, "Grd_duels_pct": g_pct,
+        "Aerials\nwon": a_won,
+        "Aer_att": a_att, "Aer_lost": a_lost, "Aer_pct": a_pct,
+        "Duels\nwon": t_won,
+        "Duels_att": t_att, "Duels_lost": t_lost, "Duels_pct": t_pct,
+        # ── discipline / reliability ──
+        "Fouls": fouls_comm,
+        "Cards": cards,
+        "Dispos\nsessed": dispossessed,
+        "Mis\ncontrol": miscontrol,
+        # ── positional / tactical ──
+        "Minutes": minutes,
+        "Avg\nheight": avg_x,
+        "Att 3rd\ntouch %": tch_att_pct,
+        "Touch_def": tch_def, "Touch_mid": tch_mid, "Touch_att": tch_att,
+        # ── retained extras (not plotted, used by commentary/rating) ──
+        "npxG": round(npxg, 2),
+        "xG/\nShot": round(xg_tot / shots_tot, 2) if shots_tot else 0.0,
+        "G\N{MINUS SIGN}xG": round(goals - xg_tot, 2),
+        "Shot-cr.\nactions": sca,
+        "Deep\ncompl.": deep,
+        "Box\ntouches": tib,
+    }
+
+
+def compute_metrics_pool(events: pd.DataFrame):
+    """Return (allm: {player: metrics}, elig: [players in percentile pool])."""
+    part = _get_participation(events)
+    tc = events.groupby("player").size()
+    elig = [p for p in tc.index
+            if tc[p] >= MIN_POOL_TOUCHES and _valid_name(p)
+            and part.get(str(p), {}).get("status") != "unused"]
+    allm = {p: player_metrics(events, p) for p in elig}
+    return allm, elig
+
+
+def _percentile(allm, elig, metric, val):
+    vs = [allm[p][metric] for p in elig]
+    n = len(vs) or 1
+    below = sum(1 for v in vs if v < val)
+    equal = sum(1 for v in vs if v == val)
+    return (below + 0.5 * equal) / n * 100
+
+
+def _player_role(events: pd.DataFrame, player: str, default="Player") -> str:
+    if "player_role" not in events.columns:
+        return default
+    s = events[events["player"].astype(str) == str(player)]["player_role"].dropna()
+    return str(s.iloc[0]) if len(s) else default
+
+
+def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extra=""):
+    """Build and return the pizza Figure for one player."""
+    me_m = player_metrics(events, player)
+
+    labels, colors, vals, disps, pcts, gidx = [], [], [], [], [], []
+    for gi, (_gn, gc, ms) in enumerate(GROUPS):
+        for m in ms:
+            v = me_m.get(m, 0)
+            labels.append(m)
+            colors.append(gc)
+            vals.append(v)
+            if m in _RATIO_DISPLAY:                     # "numerator / denominator"
+                num_k, den_k = _RATIO_DISPLAY[m]
+                disps.append(f"{me_m.get(num_k, 0)}/{me_m.get(den_k, 0)}")
+            else:
+                disps.append(f"{v}")
+            pcts.append(_percentile(allm, elig, m, v) if elig else 0)
+            gidx.append(gi)
+
+    N = len(labels)
+    n_groups = len(GROUPS)
+    GAP_DEG = 6.0
+    # one equal gap per group boundary (internal boundaries + the wrap gap)
+    per = (360 - GAP_DEG * n_groups) / N
+    angs, cur, prev = [], 0.0, None
+    for i in range(N):
+        if prev is not None and gidx[i] != prev:
+            cur += GAP_DEG
+        angs.append(np.radians(cur + per / 2))
+        cur += per
+        prev = gidx[i]
+    angs = np.array(angs)
+    width = np.radians(per) * 0.90
+    gap_mid = np.radians((cur + 360) / 2)
+
+    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 113, 130, 140, 154
+
+    fig = plt.figure(figsize=(12, 12.6), facecolor=BG_DARK)
+    ax = fig.add_axes([0.06, 0.045, 0.88, 0.80], projection="polar")
+    ax.set_facecolor(BG_DARK)
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_ylim(0, OUT_LIM)
+    ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
+
+    def rmap(p):
+        return R0 + (p / 100) * (RMAX - R0)
+
+    for pv in (25, 50, 75, 100):
+        ax.plot(np.linspace(0, 2 * np.pi, 200), [rmap(pv)] * 200,
+                color="#232323", lw=0.8, zorder=1)
+
+    # faint per-category background zones
+    for gi, (_gn, gc, _ms) in enumerate(GROUPS):
+        ids = [i for i in range(N) if gidx[i] == gi]
+        a0 = angs[ids[0]] - width / 2 - np.radians(1.2)
+        a1 = angs[ids[-1]] + width / 2 + np.radians(1.2)
+        ax.bar([(a0 + a1) / 2], [RMAX - R0], width=(a1 - a0), bottom=R0,
+               color=gc, alpha=0.07, edgecolor="none", zorder=0.5)
+
+    ax.bar(angs, [rmap(p) - R0 for p in pcts], width=width, bottom=R0,
+           color=colors, edgecolor=BG_DARK, lw=2.5, alpha=0.95, zorder=3)
+
+    # category arcs
+    for gi, (_gn, gc, _ms) in enumerate(GROUPS):
+        ids = [i for i in range(N) if gidx[i] == gi]
+        a0 = angs[ids[0]] - width / 2 - np.radians(1.5)
+        a1 = angs[ids[-1]] + width / 2 + np.radians(1.5)
+        ax.plot(np.linspace(a0, a1, 60), [RARC] * 60, color=gc, lw=6,
+                solid_capstyle="round", zorder=4, clip_on=False)
+
+    # metric labels + value chips (all horizontal)
+    for a, lab, dv, p, c in zip(angs, labels, disps, pcts, colors):
+        ax.text(a, RLAB, lab.upper(), color=TEXT_BRIGHT, fontsize=8.6,
+                fontweight="bold", family="monospace", ha="center", va="center",
+                zorder=5, linespacing=0.9, clip_on=False)
+        ax.text(a, RVAL, dv, color=BG_DARK, fontsize=9, fontweight="bold",
+                family="monospace", ha="center", va="center", zorder=7,
+                clip_on=False,
+                bbox=dict(boxstyle="round,pad=0.24", fc=c, ec=BG_DARK, lw=1.2))
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+
+    # clean centre ring
+    ax.plot(np.linspace(0, 2 * np.pi, 120), [R0] * 120, color="#2e2e2e", lw=1.2, zorder=6)
+
+    fig.text(0.5, 0.958, str(player).upper(), ha="center", color=TEXT_BRIGHT,
+             fontsize=30, fontweight="bold",
+             path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)])
+    mins = _get_participation(events).get(str(player), {}).get("minutes", 0)
+    sub = f"{str(team_name).upper()}  ·  {role}  ·  {mins}′ played"
+    if subtitle_extra:
+        sub += f"  ·  {subtitle_extra}"
+    fig.text(0.5, 0.923, sub, ha="center", color=TEXT_DIM, fontsize=13, style="italic")
+
+    ng = len(GROUPS)
+    step = min(0.135, 0.90 / max(ng - 1, 1))
+    lfs = 11 if ng <= 5 else 9
+    lx = 0.5 - (ng - 1) * step / 2 - 0.02       # centre the legend row
+    for gn, gc, _ms in GROUPS:
+        fig.add_artist(mpatches.Circle((lx, 0.892), 0.006, transform=fig.transFigure,
+                                       facecolor=gc, ec="none"))
+        fig.text(lx + 0.012, 0.892, gn, color=gc, fontsize=lfs, fontweight="bold",
+                 family="monospace", va="center")
+        lx += step
+    fig.text(0.5, 0.022,
+             "bar length = percentile vs all match players   ·   chip = match value "
+             "(passes/long balls = completed/total · shots = on-target/total · duels = won/contested)",
+             ha="center", color="#555", fontsize=9, style="italic")
+    return fig
+
+
+def player_commentary(events, player, team_name, opp_name, allm, elig, role="Player"):
+    """Professional, data-driven tactical read of one player's match, built from
+    raw output and where each number ranks among all players on the pitch.
+    Returns two paragraphs separated by a blank line."""
+    m = allm.get(player) or player_metrics(events, player)
+
+    def pc(label):
+        return _percentile(allm, elig, label, m.get(label, 0)) if elig else 0.0
+
+    def lvl(p):
+        return ("elite" if p >= 85 else "strong" if p >= 70 else
+                "solid" if p >= 50 else "modest" if p >= 30 else "limited")
+
+    goals = m.get("Goals", 0)
+    shots = m.get("Shots", 0)
+    ot = m.get("Shots_ot", 0)
+    xg = m.get("xG", 0.0)
+    gmx = m.get("G\N{MINUS SIGN}xG", 0.0)
+    xa = m.get("xA", 0.0)
+    sca = m.get("Shot-cr.\nactions", 0)
+    assists = m.get("Assists", 0)
+    kp = m.get("Key\npasses", 0)
+    bcc = m.get("Big ch.\ncreated", 0)
+    passes = m.get("Passes", 0)
+    pcomp = m.get("Passes_comp", 0)
+    ppct = m.get("Pass %", 0)
+    prog = m.get("Prog\npasses", 0)
+    ptb = m.get("Passes\nto box", 0)
+    touches = m.get("Touches", 0)
+    box_t = m.get("Box\ntouches", 0)
+    drib = m.get("Dribbles", 0)
+    carries = m.get("Carries", 0)
+    prog_car = m.get("Prog\ncarries", 0)
+    tkl = m.get("Tackles\nwon", 0)
+    intc = m.get("Intercep\ntions", 0)
+    rec = m.get("Recov\neries", 0)
+    clr = m.get("Clear\nances", 0)
+    blocks = m.get("Blocks", 0)
+    duels = m.get("Duels\nwon", 0)
+    duels_att = m.get("Duels_att", 0)
+    minutes = m.get("Minutes", 0)
+    xt = m.get("xT\ncontrib", 0.0)
+
+    # ── Paragraph 1: headline role + attacking / creation ──
+    s1 = []
+    # standout strengths: top percentile metrics (skip zero raw & non-achievement)
+    _skip = {"Minutes", "Fouls", "Dispos\nsessed", "Pass %"}
+    ranked = sorted(
+        ((lab, pc(lab)) for _gn, _gc, ms in GROUPS for lab in ms
+         if m.get(lab, 0) and lab not in _skip),
+        key=lambda x: x[1], reverse=True)
+    tops = [lab.replace("\n", " ").lower() for lab, p in ranked[:3] if p >= 60]
+    mins_txt = f" across {minutes} minutes" if minutes else ""
+    lead = (f"Operating as {('a ' + role.lower()) if role and role.lower() not in ('player','') else 'an outfield option'} "
+            f"for {team_name} against {opp_name}{mins_txt}, ")
+    if tops:
+        lead += f"{player.split()[-1]} ranked among the match's best for {', '.join(tops)}."
+    else:
+        lead += f"{player.split()[-1]} operated in a supporting role by the underlying numbers."
+    s1.append(lead)
+
+    if shots:
+        fin = ("clinical, beating his expected return" if gmx > 0.15 else
+               "wasteful relative to the chances" if gmx < -0.25 else "in line with the chance quality")
+        s1.append(f"He took {shots} shot{'s' if shots != 1 else ''} ({ot} on target) worth {xg:.2f} xG"
+                  + (f" and scored {goals}" if goals else " without scoring")
+                  + f" — finishing that reads as {fin} (G−xG {gmx:+.2f}).")
+    if xa > 0 or sca or assists or bcc:
+        parts = []
+        if sca:
+            parts.append(f"{sca} shot-creating action{'s' if sca != 1 else ''}")
+        if xa > 0:
+            parts.append(f"{xa:.2f} xA")
+        if bcc:
+            parts.append(f"{bcc} big chance{'s' if bcc != 1 else ''} created")
+        line = "As a creator he generated " + ", ".join(parts) + "."
+        if assists:
+            line += f" That converted into {assists} assist{'s' if assists != 1 else ''}."
+        s1.append(line)
+
+    # ── Paragraph 2: possession involvement + defence + verdict ──
+    s2 = []
+    pp = pc("Passes")
+    if passes:
+        s2.append(f"On the ball he had {touches} touches and completed {pcomp}/{passes} passes ({ppct}%), "
+                  f"a {lvl(pp)} volume for the game, moving it forward with {prog} progressive pass{'es' if prog != 1 else ''} "
+                  f"and {ptb} into the box.")
+    if box_t or drib or carries:
+        s2.append(f"He arrived in the penalty area {box_t} time{'s' if box_t != 1 else ''}, "
+                  f"carried the ball {carries} time{'s' if carries != 1 else ''} ({prog_car} progressively)"
+                  + (f" and completed {drib} dribble{'s' if drib != 1 else ''}" if drib else "") + ".")
+    defw = tkl + intc + rec + clr + blocks
+    dp = (pc("Tackles\nwon") + pc("Intercep\ntions") + pc("Recov\neries")) / 3
+    if defw:
+        s2.append(f"Without the ball he won {tkl} tackle{'s' if tkl != 1 else ''}, {intc} interception"
+                  f"{'s' if intc != 1 else ''}, {rec} recover{'ies' if rec != 1 else 'y'}, {blocks} block"
+                  f"{'s' if blocks != 1 else ''} and {clr} clearance{'s' if clr != 1 else ''} "
+                  f"({duels}/{duels_att} duels won) — a {lvl(dp)} defensive shift.")
+    # closing verdict tied to threat
+    threat_p = (pc("xA") + pc("npxG") + pc("xT\ncontrib")) / 3
+    if threat_p >= 70:
+        s2.append(f"Overall, one of {team_name}'s primary threat carriers on the day (xT {xt:.2f}).")
+    elif threat_p >= 40:
+        s2.append(f"A useful contributor to {team_name}'s attacking phases without being the focal point.")
+    else:
+        s2.append(f"His influence was felt more in structure and workload than in direct threat generation.")
+
+    return " ".join(s1) + "\n\n" + " ".join(s2)
+
+
+def _team_split(events, info):
+    """Return {'home': (name, [players]), 'away': (name, [players])}."""
+    hid = info.get("home_id")
+    aid = info.get("away_id")
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    # dominant team_id per player (real player names, participants only)
+    part = _get_participation(events)
+    ev = events[events["player"].map(_valid_name)]
+    pt = ev.groupby("player")["team_id"].agg(lambda s: s.value_counts().index[0])
+    def _played(p):
+        return part.get(str(p), {}).get("status") != "unused"
+    home_players = [p for p, t in pt.items() if t == hid and _played(p)]
+    away_players = [p for p, t in pt.items() if t == aid and _played(p)]
+    return {"home": (hn, home_players), "away": (an, away_players)}
+
+
+# positional / negative metrics that must not reward a player in the ranking
+_RATING_SKIP = {"Minutes", "Fouls", "Dispos\nsessed"}
+
+
+def _rating(allm, elig, events, player):
+    """Mean percentile across performance metrics — used to rank players."""
+    m = allm.get(player) or player_metrics(events, player)
+    if not elig:
+        return 0.0
+    ps = [_percentile(allm, elig, lab, m.get(lab, 0))
+          for _gn, _gc, ms in GROUPS for lab in ms if lab not in _RATING_SKIP]
+    return float(np.mean(ps)) if ps else 0.0
+
+
+def export_player_radars(events, info, out_dir, dpi=115):
+    """Save one pizza PNG per participating player into per-team folders.
+
+    Returns {"home": [(player, rating), ...], "away": [...]} best-first.
+    """
+    allm, elig = compute_metrics_pool(events)
+    split = _team_split(events, info)
+    base = os.path.join(out_dir, "player_radars")
+    ranking = {"home": [], "away": []}
+
+    for side in ("home", "away"):
+        team_name, players = split[side]
+        team_dir = os.path.join(base, _safe(team_name))
+        os.makedirs(team_dir, exist_ok=True)
+        scored = []
+        for p in players:
+            role = _player_role(events, p)
+            try:
+                fig = make_player_pizza(events, p, team_name, role, allm, elig)
+                fig.savefig(os.path.join(team_dir, f"{_safe(p)}.png"),
+                            dpi=dpi, facecolor=BG_DARK)
+                plt.close(fig)
+            except Exception:
+                plt.close("all")
+            scored.append((p, _rating(allm, elig, events, p)))
+        ranking[side] = sorted(scored, key=lambda x: x[1], reverse=True)
+    return ranking
+
+
+def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
+    """Save every player's PNG into per-team folders AND return open figures
+    for the top-N players of each team, for embedding in the PDF report.
+
+    Returns {"home": {"name": str, "figs": [(player, fig, role, commentary), ...]},
+             "away": {...}}  with figs best-first.
+    Caller owns the returned figures and must close them.
+    """
+    allm, elig = compute_metrics_pool(events)
+    split = _team_split(events, info)
+    opp = {"home": info.get("away_name") or "the opponent",
+           "away": info.get("home_name") or "the opponent"}
+    base = os.path.join(out_dir, "player_radars")
+    result = {}
+
+    for side in ("home", "away"):
+        team_name, players = split[side]
+        team_dir = os.path.join(base, _safe(team_name))
+        os.makedirs(team_dir, exist_ok=True)
+        scored = []
+        for p in players:
+            role = _player_role(events, p)
+            try:
+                fig = make_player_pizza(events, p, team_name, role, allm, elig)
+                fig.savefig(os.path.join(team_dir, f"{_safe(p)}.png"),
+                            dpi=dpi, facecolor=BG_DARK)
+                plt.close(fig)
+            except Exception:
+                plt.close("all")
+            scored.append((p, _rating(allm, elig, events, p)))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        figs = []
+        for rank, (p, rt) in enumerate(scored[:top_n], start=1):
+            role = _player_role(events, p)
+            try:
+                f = make_player_pizza(events, p, team_name, role, allm, elig,
+                                      subtitle_extra=f"Team rank #{rank}")
+                try:
+                    note = player_commentary(events, p, team_name, opp[side],
+                                             allm, elig, role)
+                except Exception:
+                    note = ""
+                figs.append((p, f, role, note))
+            except Exception:
+                plt.close("all")
+        result[side] = {"name": team_name, "figs": figs}
+    return result
+
+
+def top_players_per_team(events, info, n=5):
+    allm, elig = compute_metrics_pool(events)
+    split = _team_split(events, info)
+    out = {}
+    for side in ("home", "away"):
+        _name, players = split[side]
+        scored = sorted(((p, _rating(allm, elig, events, p)) for p in players),
+                        key=lambda x: x[1], reverse=True)
+        out[side] = [p for p, _r in scored[:n]]
+    return out

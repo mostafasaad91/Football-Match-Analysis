@@ -131,7 +131,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 #  SETTINGS  ← غيّر هنا فقط
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1953889/live/international-fifa-world-cup-2026-norway-senegal"
+MATCH_URL = "https://www.whoscored.com/matches/1998571/live/international-fifa-world-cup-2026-argentina-egypt"
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -232,7 +232,11 @@ XG_INTERNAL_WOODWORK_BONUS = 0.038
 # higher internal DPI before saving.
 OUTPUT_IMAGE_DPI = 420
 PDF_EXPORT_DPI = 400
-BOARD_RENDER_DPI = 300
+# Boards re-render every source figure into an RGBA buffer at this DPI, then
+# tile 10 of them onto one large canvas. With ~40 figures already held open,
+# 300 DPI here exhausts RAM on the biggest boards (MemoryError). 170 keeps the
+# collages sharp while cutting the peak buffer memory to roughly a third.
+BOARD_RENDER_DPI = 170
 BOARD_SAVE_DPI = 360
 GROUP_BOARD_MAX_VISUALS = 6
 
@@ -4124,6 +4128,28 @@ def _build_player_meta(players, events, sub_in, sub_out):
     return meta
 
 
+def _extract_match_date(md: dict) -> str:
+    """The KICK-OFF date of the match (not the report date), pulled from
+    WhoScored's matchCentreData. Tries the several keys the feed uses and
+    returns a clean YYYY-MM-DD string, or '' if none is present."""
+    import re as _re
+    for key in ("startDate", "startTime", "matchStartDate", "startDateStr",
+                "kickoffTime", "date"):
+        raw = md.get(key)
+        if not raw:
+            continue
+        s = str(raw).strip()
+        # ISO-ish "2026-06-22T18:00:00" / "2026-06-22 18:00:00"
+        m = _re.search(r"(\d{4})-(\d{2})-(\d{2})", s)
+        if m:
+            return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        # "22/06/2026" or "22-06-2026"
+        m = _re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})", s)
+        if m:
+            return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    return ""
+
+
 def parse_all(md: dict):
 
     home = md.get("home", {})
@@ -4135,6 +4161,7 @@ def parse_all(md: dict):
         "away_id": away.get("teamId"),
         "score": md.get("score", "? - ?"),
         "venue": md.get("venueName", ""),
+        "date": _extract_match_date(md),
         "home_form": (home.get("formations") or [{}])[0].get("formationName", "N/A"),
         "away_form": (away.get("formations") or [{}])[0].get("formationName", "N/A"),
         "matchcentre_stats": _extract_matchcentre_stats(md),
@@ -11836,9 +11863,49 @@ def _fig_to_rgb_array(fig):
         except Exception:
             pass
 
-def build_visual_category_boards(figs, info, events, xg_data, ts):
-    """Build 4 summary boards matching the reference image layout."""
+def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames=None):
+    """Build phase-based dashboard summary boards. Visuals are matched to the
+    figs list by FILENAME (not the visual catalog's idx, which can drift out of
+    sync with the actual save order), so each tile always shows the right chart."""
     os.makedirs(SAVE_DIR, exist_ok=True)
+
+    # (kind, team) → filename keyword. Robust against catalog idx drift.
+    _KW = {
+        ("shared_xg_flow", None): "xg_flow",
+        ("shared_shot_breakdown", None): "breakdown_goals",
+        ("shared_shot_comparison", None): "shot_comparison",
+        ("shared_xg_tiles", None): "xg_tiles",
+        ("shared_gk_saves", None): "gk_saves",
+        ("shared_match_stats", None): "match_stats",
+        ("shared_xt_per_minute", None): "xt_per_minute",
+        ("shared_territorial", None): "possession",
+        ("shared_touches", None): "possession",
+        ("shared_dominating_zone", None): "dominating",
+        ("shared_def_summary", None): "defensive_summary",
+        ("team_shot_map", "home"): "shot_map_home", ("team_shot_map", "away"): "shot_map_away",
+        ("team_danger_creation", "home"): "danger_home", ("team_danger_creation", "away"): "danger_away",
+        ("team_zone14", "home"): "zone14_home", ("team_zone14", "away"): "zone14_away",
+        ("team_box_entries", "home"): "box_entries_home", ("team_box_entries", "away"): "box_entries_away",
+        ("team_crosses", "home"): "crosses_home", ("team_crosses", "away"): "crosses_away",
+        ("team_pass_network", "home"): "pass_network_home", ("team_pass_network", "away"): "pass_network_away",
+        ("team_xt_map", "home"): "xt_map_home", ("team_xt_map", "away"): "xt_map_away",
+        ("team_pass_thirds", "home"): "pass_thirds_home", ("team_pass_thirds", "away"): "pass_thirds_away",
+        ("team_progressive_passes", "home"): "progressive_home", ("team_progressive_passes", "away"): "progressive_away",
+        ("team_pass_target_zones", "home"): "pass_target_home", ("team_pass_target_zones", "away"): "pass_target_away",
+        ("team_def_heatmap", "home"): "defensive_hm_home", ("team_def_heatmap", "away"): "defensive_hm_away",
+        ("team_average_positions", "home"): "avg_position_home", ("team_average_positions", "away"): "avg_position_away",
+        ("team_high_turnovers", "home"): "high_turnovers_home", ("team_high_turnovers", "away"): "high_turnovers_away",
+    }
+    _fnames = [str(x or "").lower() for x in (figs_filenames or [])]
+
+    def _fig_index(kind, team):
+        kw = _KW.get((kind, team))
+        if not kw:
+            return None
+        for i, nm in enumerate(_fnames):
+            if kw in nm:
+                return i
+        return None
 
     stats   = _ensure_match_stats_defaults(_collect_match_stats(info, events, xg_data))
     catalog = [m for m in _build_visual_catalog(info) if m.get("idx", 0) <= len(figs)]
@@ -11867,281 +11934,286 @@ def build_visual_category_boards(figs, info, events, xg_data, ts):
         f"On target {stats['home'].get('on_target',0)}-{stats['away'].get('on_target',0)}"
     )
 
-    # ── 4 بوردات — تعريف المحتوى والتخطيط ──────────────────────────
-    groups = [
-        {
-            "n": 1,
-            "slug": "board_01_match_overview",
-            "title": "Match Overview",
-            "subtitle": "Shared visuals that explain the overall story of the game, chance quality and match control.",
-            "figsize": (27, 20),
-            "cols": 3,
-            "items": [
-                ("shared_xg_flow",        None, "xG Flow"),
-                ("shared_shot_breakdown", None, "Shot Breakdown and Goals"),
-                ("shared_shot_comparison",None, "Shot Comparison"),
-                ("shared_gk_saves",       None, "Goalkeeper Saves"),
-                ("shared_xg_tiles",       None, "xG and xGoT Summary"),
-                ("shared_match_stats",    None, "Match Statistics"),
-                ("shared_territorial",    None, "Territorial Control"),
-                ("shared_touches",        None, "Ball Touches"),
-                ("shared_xt_per_minute",  None, "xT per Minute"),
-            ],
-        },
-        {
-            "n": 2,
-            "slug": "board_02_attacking_analysis",
-            "title": "Attacking Analysis",
-            "subtitle": "How both teams progressed into dangerous zones, reached the box and turned attacks into shots.",
-            "figsize": (33, 15),
-            "cols": 5,
-            "items": [
-                ("team_shot_map",      "home", f"{hn} Shot Map"),
-                ("team_shot_map",      "away", f"{an} Shot Map"),
-                ("team_danger_creation","home",f"{hn} Danger Creation"),
-                ("team_danger_creation","away",f"{an} Danger Creation"),
-                ("team_zone14",        "home", f"{hn} Zone 14 and Half-Spaces"),
-                ("team_zone14",        "away", f"{an} Zone 14 and Half-Spaces"),
-                ("team_box_entries",   "home", f"{hn} Box Entries"),
-                ("team_box_entries",   "away", f"{an} Box Entries"),
-                ("team_crosses",       "home", f"{hn} Crosses"),
-                ("team_crosses",       "away", f"{an} Crosses"),
-            ],
-        },
-        {
-            "n": 3,
-            "slug": "board_03_buildup_passing",
-            "title": "Build-up & Passing Structure",
-            "subtitle": "Passing networks, progression maps and receiving zones that describe each team's circulation pattern.",
-            "figsize": (33, 15),
-            "cols": 5,
-            "items": [
-                ("team_pass_network",       "home", f"{hn} Pass Network"),
-                ("team_pass_network",       "away", f"{an} Pass Network"),
-                ("team_xt_map",             "home", f"{hn} xT Map"),
-                ("team_xt_map",             "away", f"{an} xT Map"),
-                ("team_pass_thirds",        "home", f"{hn} Pass Map by Third"),
-                ("team_pass_thirds",        "away", f"{an} Pass Map by Third"),
-                ("team_progressive_passes", "home", f"{hn} Progressive Passes"),
-                ("team_progressive_passes", "away", f"{an} Progressive Passes"),
-                ("team_pass_target_zones",  "home", f"{hn} Pass Target Zones"),
-                ("team_pass_target_zones",  "away", f"{an} Pass Target Zones"),
-            ],
-        },
-        {
-            "n": 4,
-            "slug": "board_04_defensive_territory",
-            "title": "Defensive Shape, Territory & Pressing",
-            "subtitle": "Where the game was played, how each side defended space and how often they regained the ball high up the pitch.",
-            "figsize": (30, 22),
-            "cols": 4,
-            "items": [
-                ("shared_territorial",     None,   "Territorial Control"),
-                ("team_def_heatmap",       "home",  f"{hn} Defensive Actions"),
-                ("team_def_heatmap",       "away",  f"{an} Defensive Actions"),
-                ("shared_def_summary",     None,   "Defensive Summary"),
-                ("team_average_positions", "home",  f"{hn} Average Positions"),
-                ("team_average_positions", "away",  f"{an} Average Positions"),
-                ("shared_dominating_zone", None,   "Dominating Zone"),
-                ("team_high_turnovers",    "home",  f"{hn} High Turnovers"),
-                ("team_high_turnovers",    "away",  f"{an} High Turnovers"),
-                ("shared_touches",         None,   "Ball Touches"),
-            ],
-        },
+    # ── Per-team stats used by the board stat panels ──────────────────
+    hid, aid = info.get("home_id"), info.get("away_id")
+    try:
+        from match_extensions import calculate_ppda as _calc_ppda
+    except Exception:
+        _calc_ppda = None
+
+    def _metrics(tid):
+        o = {"goals": 0, "shots": 0, "xg": 0.0, "xt": 0.0, "ot": 0, "big": 0,
+             "passes": 0, "pass_pct": 0, "key": 0, "box": 0, "tackles": 0,
+             "intercept": 0, "recoveries": 0, "clearances": 0, "ppda": None}
+        if events is None or events.empty:
+            return o
+        d = events[events["team_id"] == tid]
+        ty = d["type"].astype(str) if "type" in d.columns else pd.Series([], dtype=str)
+        if "is_shot" in d.columns:
+            sh = d[d["is_shot"].fillna(False) == True]  # noqa: E712
+            if "is_goal" in sh.columns and "scoring_team" in sh.columns:
+                sh = sh[~(sh["is_goal"].fillna(False) & (sh["scoring_team"] != tid))]
+        else:
+            sh = d.iloc[:0]
+        o["shots"] = int(len(sh))
+        o["xg"] = round(float(d["xG"].fillna(0).sum()), 2) if "xG" in d.columns else 0.0
+        if "xT" in d.columns:
+            _xd = d
+            if "is_pass" in d.columns:
+                _xd = d[d["is_pass"].fillna(False) == True]  # noqa: E712
+                if "outcome" in _xd.columns:
+                    _xd = _xd[_xd["outcome"] == "Successful"]
+            _xv = _xd["xT"].fillna(0)
+            o["xt"] = round(float(_xv[_xv > 0].sum()), 2)
+        else:
+            o["xt"] = 0.0
+        o["ot"] = int(sh["shot_whoscored_type"].isin(["Goal", "SavedShot"]).sum()) if "shot_whoscored_type" in sh.columns else 0
+        o["big"] = int(sh["big_chance"].fillna(False).astype(bool).sum()) if "big_chance" in sh.columns else 0
+        if "is_pass" in d.columns:
+            ispass = d["is_pass"].fillna(False) == True  # noqa: E712
+            o["passes"] = int(ispass.sum())
+            pc = int((ispass & (d.get("outcome", "") == "Successful")).sum())
+            o["pass_pct"] = round(100 * pc / max(o["passes"], 1))
+        if "is_key_pass" in d.columns:
+            o["key"] = int((d["is_key_pass"].fillna(False) == True).sum())  # noqa: E712
+        o["tackles"] = int((ty == "Tackle").sum())
+        o["intercept"] = int((ty == "Interception").sum())
+        o["recoveries"] = int((ty == "BallRecovery").sum())
+        o["clearances"] = int((ty == "Clearance").sum())
+        if {"is_pass", "end_x", "end_y", "x", "y"}.issubset(d.columns):
+            pp = d[(d["is_pass"].fillna(False) == True) & (d["outcome"] == "Successful")]  # noqa: E712
+            o["box"] = int(((pp["end_x"] >= 83) & (pp["end_y"].between(21, 79)) &
+                            ~((pp["x"] >= 83) & (pp["y"].between(21, 79)))).sum())
+        return o
+
+    TS = {"home": _metrics(hid), "away": _metrics(aid)}
+    if events is not None and "is_goal" in events.columns and "scoring_team" in events.columns:
+        g = events[events["is_goal"].fillna(False)]
+        if "is_penalty_shootout" in g.columns:
+            g = g[~g["is_penalty_shootout"].fillna(False)]
+        TS["home"]["goals"] = int((g["scoring_team"] == hid).sum())
+        TS["away"]["goals"] = int((g["scoring_team"] == aid).sum())
+    else:
+        TS["home"]["goals"], TS["away"]["goals"] = hg, ag
+    _pt = TS["home"]["passes"] + TS["away"]["passes"] or 1
+    TS["home"]["poss"] = round(100 * TS["home"]["passes"] / _pt)
+    TS["away"]["poss"] = round(100 * TS["away"]["passes"] / _pt)
+    # Use the own-goal-aware goal counts for the board score header.
+    score_txt = f"{TS['home']['goals']} : {TS['away']['goals']}"
+    if _calc_ppda is not None:
+        try:
+            TS["home"]["ppda"] = round(float(_calc_ppda(events, hid, aid).get("ppda") or 0), 2)
+            TS["away"]["ppda"] = round(float(_calc_ppda(events, aid, hid).get("ppda") or 0), 2)
+        except Exception:
+            pass
+
+    # ── Phase definitions: title · theme · visuals · stat-panel rows ──
+    for _s in ("home", "away"):
+        TS[_s]["otp"] = round(100 * TS[_s]["ot"] / max(TS[_s]["shots"], 1))
+
+    # Curated tactical dashboard: 8 boards, each two big readable visuals + a
+    # KPI strip. Together they tell the whole story — rhythm, chance creation,
+    # danger, build-up, progression, defence, territory and pressing.
+    board_defs = [
+        ("story", "THE STORY", "Match rhythm and the head-to-head numbers.", "#FFC23C",
+         [("shared_xg_flow", None, "xG Flow"), ("shared_match_stats", None, "Match Statistics")],
+         [("Goals", "goals", 0, False), ("xG", "xg", 2, False), ("Shots", "shots", 0, False),
+          ("On-target", "ot", 0, False), ("Possession %", "poss", 0, False)]),
+        ("creation", "CHANCE CREATION", "Where each side created its shots.", "#34D399",
+         [("team_shot_map", "home", f"{hn} Shot Map"), ("team_shot_map", "away", f"{an} Shot Map")],
+         [("Shots", "shots", 0, False), ("xG", "xg", 2, False), ("On-target %", "otp", 0, False),
+          ("Big chances", "big", 0, False)]),
+        ("danger", "DANGER ZONES", "How each side built its dangerous chances.", "#34D399",
+         [("team_danger_creation", "home", f"{hn} Danger Creation"),
+          ("team_danger_creation", "away", f"{an} Danger Creation")],
+         [("Shots", "shots", 0, False), ("Big chances", "big", 0, False),
+          ("Box entries", "box", 0, False), ("xG", "xg", 2, False)]),
+        ("buildup", "BUILD-UP", "Passing structure and circulation.", "#60A5FA",
+         [("team_pass_network", "home", f"{hn} Pass Network"),
+          ("team_pass_network", "away", f"{an} Pass Network")],
+         [("Passes", "passes", 0, False), ("Pass %", "pass_pct", 0, False),
+          ("Key passes", "key", 0, False), ("Possession %", "poss", 0, False)]),
+        ("progression", "PROGRESSION & THREAT", "Who moved the ball into danger.", "#60A5FA",
+         [("team_xt_map", "home", f"{hn} xT Map"), ("team_xt_map", "away", f"{an} xT Map")],
+         [("xT", "xt", 2, False), ("Passes", "passes", 0, False),
+          ("Key passes", "key", 0, False), ("Possession %", "poss", 0, False)]),
+        ("defence", "DEFENCE & PRESSING", "How each side defended its goal.", "#F87171",
+         [("team_def_heatmap", "home", f"{hn} Defensive Actions"),
+          ("team_def_heatmap", "away", f"{an} Defensive Actions")],
+         [("Tackles", "tackles", 0, False), ("Interceptions", "intercept", 0, False),
+          ("Recoveries", "recoveries", 0, False), ("PPDA", "ppda", 2, True)]),
+        ("territory", "TERRITORY & CONTROL", "Who owned the ball and the space.", "#A78BFA",
+         [("shared_dominating_zone", None, "Dominating Zone"),
+          ("shared_territorial", None, "Territorial Control")],
+         [("Possession %", "poss", 0, False), ("Passes", "passes", 0, False),
+          ("Pass %", "pass_pct", 0, False), ("xT", "xt", 2, False)]),
+        ("pressing", "PRESSING & REGAINS", "Where each side won the ball high.", "#F87171",
+         [("team_high_turnovers", "home", f"{hn} High Turnovers"),
+          ("team_high_turnovers", "away", f"{an} High Turnovers")],
+         [("Recoveries", "recoveries", 0, False), ("Tackles", "tackles", 0, False),
+          ("Interceptions", "intercept", 0, False), ("PPDA", "ppda", 2, True)]),
     ]
 
-    # ── دالة رسم البورد الموحدة ──────────────────────────────────────
-    def _draw_board(group):
-        items_raw = group["items"]
-        cols      = group["cols"]
+    boards = []
+    for pkey, ptitle, psub, ptheme, specs, prows in board_defs:
+        tiles = []; _seen = set()
+        for kind, team, label in specs:
+            fi = _fig_index(kind, team)
+            if fi is not None and fi < len(figs) and fi not in _seen:
+                _seen.add(fi)
+                tiles.append((fi, label))
+        if not tiles:
+            continue
+        boards.append({
+            "slug": f"board_{len(boards)+1:02d}_{pkey}",
+            "title": ptitle, "subtitle": psub, "theme": ptheme,
+            "rows": prows, "tiles": tiles,
+        })
+    n_boards_total = len(boards)
 
-        # جمع الـ metas
-        metas = []
-        for kind, team, label in items_raw:
-            meta = _find_meta(kind, team)
-            if meta is not None:
-                metas.append((meta, label))
-
-        if not metas:
+    # ── Board renderer: header + horizontal KPI strip + two BIG tiles ──
+    def _draw_board(board):
+        tiles = board["tiles"]
+        if not tiles:
             return None
+        theme = board["theme"]
+        W, H = 18.0, 8.6
+        fig = plt.figure(figsize=(W, H), facecolor="#000000")
 
-        n_items = len(metas)
-        rows    = int(math.ceil(n_items / cols))
-        fw, fh  = group["figsize"]
+        # header band
+        fig.add_artist(mpatches.Rectangle((0, 0.90), 1, 0.10, facecolor="#0d1117",
+                       edgecolor="none", transform=fig.transFigure, zorder=1))
+        fig.add_artist(mpatches.Rectangle((0, 0.90), 0.006, 0.10, facecolor=theme,
+                       transform=fig.transFigure, zorder=2))
+        fig.text(0.02, 0.955, board["title"], color=theme, fontsize=16,
+                 fontweight="bold", family="monospace", zorder=3)
+        fig.text(0.02, 0.918, f"{hn}  {score_txt}  {an}   ·   {board['subtitle']}",
+                 color="#9fb3c8", fontsize=12.5, style="italic", zorder=3)
+        fig.text(0.985, 0.94, f"BOARD {boards.index(board)+1} / {n_boards_total}",
+                 ha="right", color="#708090", fontsize=10.5, fontweight="bold",
+                 family="monospace", zorder=3)
 
-        fig = plt.figure(figsize=(fw, fh), facecolor="#000000")
+        # ── horizontal KPI strip ───────────────────────────────────────
+        prows = board["rows"]
+        nkp = len(prows); m = 0.02; gap = 0.014
+        cw = (1 - 2 * m - (nkp - 1) * gap) / nkp
+        ky, kh = 0.795, 0.075
+        for i, (lbl, key, dec, low) in enumerate(prows):
+            cx = m + i * (cw + gap)
+            ax = fig.add_axes([cx, ky, cw, kh]); ax.set_axis_off()
+            ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+            ax.add_patch(mpatches.FancyBboxPatch((0.01, 0.05), 0.98, 0.9,
+                         boxstyle="round,pad=0.0,rounding_size=0.06",
+                         facecolor="#0d1117", edgecolor="#2A2A2A", lw=1.0))
+            ax.text(0.5, 0.80, lbl.upper(), ha="center", color="#9fb3c8",
+                    fontsize=9, fontweight="bold", family="monospace")
+            hv = TS["home"].get(key); av = TS["away"].get(key)
+            hv = 0 if hv is None else hv; av = 0 if av is None else av
+            _sfx = "%" if "%" in lbl else ""
+            hs = (f"{hv:.2f}" if dec else str(int(hv))) + _sfx
+            as_ = (f"{av:.2f}" if dec else str(int(av))) + _sfx
+            hw = None if hv == av else ((hv < av) if low else (hv > av))
+            ax.text(0.30, 0.40, hs, ha="center", color=(C_GOLD if hw is True else "#e8edf2"),
+                    fontsize=19, fontweight="bold", family="monospace")
+            ax.text(0.70, 0.40, as_, ha="center", color=(C_GOLD if hw is False else "#e8edf2"),
+                    fontsize=19, fontweight="bold", family="monospace")
+            tot = (hv + av) or 1; frac = max(0.0, min(1.0, hv / tot))
+            b = ax.inset_axes([0.12, 0.12, 0.76, 0.09]); b.set_axis_off()
+            b.set_xlim(0, 1); b.set_ylim(0, 1)
+            b.barh(0.5, frac, height=1, color=hc)
+            b.barh(0.5, 1 - frac, left=frac, height=1, color=ac)
+        # team labels on the strip ends
+        fig.text(m + 0.004, 0.878, hn.upper()[:16], color=hc, fontsize=8.5,
+                 fontweight="bold", family="monospace")
+        fig.text(1 - m - 0.004, 0.878, an.upper()[:16], ha="right", color=ac,
+                 fontsize=8.5, fontweight="bold", family="monospace")
 
-        # ── نسب الارتفاع: هيدر ثم صفوف الفيجوالز ───────────────────
-        h_header = 0.55
-        gs = GridSpec(
-            rows + 1, cols,
-            figure=fig,
-            height_ratios=[h_header] + [1.0] * rows,
-            left=0.012, right=0.988,
-            top=0.975,  bottom=0.018,
-            hspace=0.38, wspace=0.022,
-        )
-
-        # ── الهيدر ──────────────────────────────────────────────────
-        hdr = fig.add_subplot(gs[0, :])
-        hdr.set_facecolor("#000000")
-        hdr.axis("off")
-
-        # labels الفريقين
-        lbl_w, lbl_h = 0.195, 0.36
-        lbl_y        = 0.60
-
-        # ── اختيار لون الـ pill من باليت الفريق ────────────────────
-        # إذا كان اللون الأساسي أبيض/فاتح جداً أو أسود/غامق جداً، نستخدم اللون البديل
-        # عشان يكون واضح على الخلفية السوداء.
-        def _pill_color(team_name: str, primary: str) -> str:
-            """Pick a visible pill colour for the board header.
-            If the primary is too light (white) or too dark (black/near-black)
-            on a dark header, fall back to a better colour from the team palette."""
-            lum = _relative_luminance(primary)
-            r, g, b = _hex_to_rgb01(primary)
-            # Too dark: invisible on black background (only pure near-blacks)
-            if lum < 0.03 and max(r, g, b) < 0.15:
-                pal = _team_palette(team_name, primary)
-                for c in pal[1:]:
-                    if c:
-                        cr, cg, cb = _hex_to_rgb01(c)
-                        if _relative_luminance(c) >= 0.03 or max(cr, cg, cb) >= 0.15:
-                            return c
-                return "#9CA3AF"  # last-resort visible grey
-            # Too light: harsh white pill on dark header
-            if _relative_luminance(primary) >= 0.80:
-                pal = _team_palette(team_name, primary)
-                for c in pal[1:]:
-                    if c and _relative_luminance(c) < 0.80:
-                        return c
-                return "#333333"  # last-resort dark grey
-            return primary
-
-        left_fc  = _pill_color(hn, hc)
-        right_fc = _pill_color(an, ac)
-
-        left_pill = mpatches.FancyBboxPatch(
-            (0.010, lbl_y), lbl_w, lbl_h,
-            boxstyle="round,pad=0.01,rounding_size=0.04",
-            facecolor=left_fc, edgecolor="none",
-            transform=hdr.transAxes, zorder=3,
-        )
-        right_pill = mpatches.FancyBboxPatch(
-            (1.0 - 0.010 - lbl_w, lbl_y), lbl_w, lbl_h,
-            boxstyle="round,pad=0.01,rounding_size=0.04",
-            facecolor=right_fc, edgecolor="none",
-            transform=hdr.transAxes, zorder=3,
-        )
-        hdr.add_patch(left_pill)
-        hdr.add_patch(right_pill)
-
-        hdr.text(
-            0.010 + lbl_w / 2, lbl_y + lbl_h / 2,
-            f"● {hn}",
-            color=_text_on_color(left_fc), fontsize=13.5, fontweight="bold",
-            va="center", ha="center", transform=hdr.transAxes, zorder=4,
-            path_effects=[pe.withStroke(linewidth=1.8,
-                          foreground=_stroke_on_color(left_fc))],
-        )
-        hdr.text(
-            1.0 - 0.010 - lbl_w / 2, lbl_y + lbl_h / 2,
-            f"{an} ●",
-            color=_text_on_color(right_fc), fontsize=13.5, fontweight="bold",
-            va="center", ha="center", transform=hdr.transAxes, zorder=4,
-            path_effects=[pe.withStroke(linewidth=1.8,
-                          foreground=_stroke_on_color(right_fc))],
-        )
-
-        # سكور
-        hdr.text(
-            0.50, lbl_y + lbl_h / 2, score_txt,
-            color="#ffffff", fontsize=22, fontweight="bold",
-            va="center", ha="center", transform=hdr.transAxes,
-            path_effects=[pe.withStroke(linewidth=3, foreground="#000000")],
-        )
-
-        # عنوان القسم
-        hdr.text(
-            0.50, 0.36,
-            f"{group['n']}. {group['title']}",
-            color="#ffffff", fontsize=20, fontweight="bold",
-            ha="center", va="center", transform=hdr.transAxes,
-        )
-
-        # subtitle
-        hdr.text(
-            0.50, 0.20, group["subtitle"],
-            color="#9fb3c8", fontsize=10,
-            ha="center", va="center", transform=hdr.transAxes,
-        )
-
-        # venue + stats
-        if venue_line:
-            hdr.text(
-                0.50, 0.09, venue_line,
-                color="#708090", fontsize=9,
-                ha="center", va="center", transform=hdr.transAxes,
-            )
-        hdr.text(
-            0.50, 0.01, stat_line,
-            color="#708090", fontsize=9,
-            ha="center", va="bottom", transform=hdr.transAxes,
-        )
-
-        # ── الفيجوالز ────────────────────────────────────────────────
-        for idx, (meta, label) in enumerate(metas):
-            r = idx // cols + 1
-            c = idx  % cols
-            ax = fig.add_subplot(gs[r, c])
-            ax.set_facecolor("#0d1117")
-
-            img = _fig_to_rgb_array(figs[meta["idx"] - 1])
-            ax.imshow(img, interpolation="lanczos", aspect="auto")
+        # ── two BIG tiles side by side, aspect PRESERVED (no stretch) ──
+        GX, GY, GW, GH = 0.02, 0.03, 0.96, 0.72
+        cols = min(2, len(tiles))
+        sw = (GW - (cols - 1) * 0.02) / cols
+        for idx, (fi, label) in enumerate(tiles[:2]):
+            slot_x = GX + idx * (sw + 0.02); slot_y = GY
+            img = _fig_to_rgb_array(figs[fi])
+            ih, iw = img.shape[0], img.shape[1]
+            ar = (iw / ih) if ih else 1.6
+            w = sw; h = (w * W) / (ar * H)
+            if h > GH:
+                h = GH; w = (h * H * ar) / W
+            ax_x = slot_x + (sw - w) / 2; ax_y = slot_y + (GH - h) / 2
+            ax = fig.add_axes([ax_x, ax_y, w, h], zorder=2)
+            ax.imshow(img, aspect="auto"); del img
             ax.set_xticks([]); ax.set_yticks([])
+            for s in ax.spines.values():
+                s.set_edgecolor("#2A2A2A"); s.set_linewidth(1.0)
+            fig.add_artist(mpatches.FancyBboxPatch((ax_x, ax_y + h - 0.001),
+                           min(0.24, w * 0.5), 0.032,
+                           boxstyle="round,pad=0.0,rounding_size=0.004",
+                           transform=fig.transFigure, facecolor="#0d1117",
+                           edgecolor="#2A2A2A", lw=0.8, zorder=4))
+            fig.add_artist(mpatches.Rectangle((ax_x, ax_y + h - 0.001), 0.004, 0.032,
+                           facecolor=theme, transform=fig.transFigure, zorder=5))
+            fig.text(ax_x + 0.013, ax_y + h + 0.015, label.upper(), color=theme,
+                     fontsize=10, fontweight="bold", family="monospace", va="center", zorder=6)
 
-            for spine in ax.spines.values():
-                spine.set_visible(True)
-                spine.set_edgecolor("#2A2A2A")
-                spine.set_linewidth(0.8)
-
-            # عنوان الفيجوال فوق الـ axes
-            ax.set_title(
-                label, fontsize=9.5, color="#e8edf2",
-                fontweight="bold", pad=4,
-                loc="center",
-            )
-
-        # ── خلايا فارغة ─────────────────────────────────────────────
-        for idx in range(len(metas), rows * cols):
-            r = idx // cols + 1
-            c = idx  % cols
-            ax = fig.add_subplot(gs[r, c])
-            ax.set_facecolor("#000000")
-            ax.axis("off")
-
+        if venue_line:
+            fig.text(0.5, 0.012, venue_line, ha="center", color="#708090",
+                     fontsize=8.5, family="monospace", zorder=3)
         return fig
 
     # ── حفظ البوردات ────────────────────────────────────────────────
     saved_paths  = []
     board_names  = []
 
-    for group in groups:
-        fig = _draw_board(group)
-        if fig is None:
-            continue
-        out_path = os.path.join(SAVE_DIR, f"{group['slug']}_{ts}.png")
-        fig.savefig(
-            out_path, dpi=200,
-            bbox_inches="tight",
-            facecolor="#000000",
-            edgecolor="none",
-        )
-        saved_paths.append(out_path)
-        board_names.append(group["title"])
-        plt.close(fig)
+    # Each board is built + saved under its own guard so a single board's
+    # failure (e.g. an oversized canvas or a missing source fig) can't abort
+    # the whole loop and silently drop every later board — the bug that left
+    # only board_01 on disk. On failure we print the exact slug + error and
+    # keep going.
+    for group in boards:
+        try:
+            fig = _draw_board(group)
+            if fig is None:
+                console.print(
+                    f"[yellow]  ⚠ Board '{group['slug']}' skipped — no matching "
+                    f"source visuals.[/yellow]")
+                continue
+            out_path = os.path.join(SAVE_DIR, f"{group['slug']}_{ts}.png")
+            # Retry the save at progressively lower DPI so a single board never
+            # drops out under memory pressure (the cause of "only N of 8 boards").
+            _saved = False
+            for _bdpi in (180, 150, 120, 100):
+                try:
+                    fig.savefig(out_path, dpi=_bdpi, bbox_inches="tight",
+                                facecolor="#000000", edgecolor="none")
+                    _saved = True
+                    break
+                except Exception as _sv_err:
+                    import gc as _g
+                    _g.collect()
+                    if _bdpi == 100:
+                        console.print(
+                            f"[yellow]  ⚠ Board '{group['slug']}' save failed "
+                            f"even at low DPI: {_sv_err}[/yellow]")
+            if _saved:
+                saved_paths.append(out_path)
+                board_names.append(group["title"])
+        except Exception as _bd_err:
+            import traceback as _bd_tb
+            console.print(
+                f"[red]  ✗ Board '{group['slug']}' failed: {_bd_err}[/red]")
+            console.print(f"[dim]{_bd_tb.format_exc()}[/dim]")
+        finally:
+            try:
+                plt.close(fig)
+            except Exception:
+                pass
+            # Reclaim the board canvas + tiled buffers before building the next
+            # (memory-heavy) board, so peak RAM stays bounded across the loop.
+            import gc
+            gc.collect()
 
-    console.print("[bold green]✅ 4 Summary Visuals saved:[/bold green]")
+    console.print(f"[bold green]✅ {len(saved_paths)} Summary Visuals saved:[/bold green]")
     for n, name in enumerate(board_names, 1):
         console.print(f"  {n:02d} — {name}")
 
@@ -13774,12 +13846,29 @@ def main():
         duplicate the yellow bars + footer)."""
         fname = _clean_output_filename(fname)
         _apply_neon_backdrop(fig)
-        fig.savefig(
-            f"{SAVE_DIR}/{fname}",
-            dpi=OUTPUT_IMAGE_DPI,
-            bbox_inches="tight",
-            facecolor=BG_DARK,
-        )
+        # On a RAM-tight machine the Agg renderer for a 420-DPI save can fail
+        # with MemoryError. Rather than abort the whole run (losing the PDF and
+        # every later fig), free memory and retry the save at progressively
+        # lower DPI so the fig still lands — just a touch softer.
+        for _dpi in (OUTPUT_IMAGE_DPI, 300, 200):
+            try:
+                fig.savefig(
+                    f"{SAVE_DIR}/{fname}",
+                    dpi=_dpi,
+                    bbox_inches="tight",
+                    facecolor=BG_DARK,
+                )
+                break
+            except Exception as _sv_err:
+                import gc as _gc
+                _gc.collect()
+                if _dpi == 200:
+                    console.print(
+                        f"[yellow]  ⚠ Could not save {fname}: {_sv_err}[/yellow]")
+                elif _dpi == OUTPUT_IMAGE_DPI:
+                    console.print(
+                        f"[yellow]  ⚠ {fname} save hit memory pressure — "
+                        f"retrying at lower DPI[/yellow]")
         figs.append(fig)
         figs_filenames.append(fname)
 
@@ -14536,8 +14625,10 @@ def main():
     # ══════════════════════════════════════════════════════
     #  CATEGORY SUMMARY BOARDS (4 grouped collages)
     # ══════════════════════════════════════════════════════
+    board_paths = []
     try:
-        board_paths = build_visual_category_boards(figs, info, events, xg_data, ts)
+        board_paths = build_visual_category_boards(figs, info, events, xg_data, ts,
+                                                    figs_filenames=figs_filenames)
         if board_paths:
             console.print(f"[green]  Built {len(board_paths)} grouped summary boards.[/green]")
     except Exception as _board_err:
@@ -14555,13 +14646,13 @@ def main():
     # ══════════════════════════════════════════════════════
 
     total_figs = 40  # Includes PPDA; player-stat tables removed by request
-    extra_boards = 5
+    extra_boards = len(board_paths)
     console.print(
         f"\n[bold green]  ✅ {total_figs} figures saved → {SAVE_DIR}/[/bold green]\n"
         f"  [dim]Figs  1-8  : individual analytics[/dim]\n"
         f"  [dim]Figs  9-32 : standalone visuals[/dim]\n"
         f"  [dim]Figs 33-40 : Dominating Zone · Box Entries · High Turnovers · Pass Target Zones · PPDA[/dim]\n"
-        f"  [dim]{extra_boards} grouped summary boards added: Overview · Chance Creation · Build-up · Wide/Receiving · Defensive/Pressing[/dim]\n"
+        f"  [dim]{extra_boards} grouped summary boards added[/dim]\n"
         f"  [dim]Shot Summary Tiles and player-stat tables removed by request[/dim]"
     )
 
