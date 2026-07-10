@@ -1,95 +1,132 @@
 # Football Match Analysis
 
-A Python post-match analysis toolkit for WhoScored/Opta event data. From a single match link it builds a full **dark-theme tactical package**: high-resolution visuals, per-player radar profiles, curated dashboard boards, and a multi-page **PDF report with written, data-driven tactical analysis under every visual** — plus each report page exported as a separate image, ready to post.
+A Python toolkit that turns WhoScored/Opta match-event data into a complete
+post-match analysis package. It collects the match data, calculates tactical
+metrics, renders publication-ready visualizations, and builds a multi-page PDF
+report.
 
 Created by **Mostafa Saad**.
 
----
+## Features
 
-## What it produces
-
-For every match the pipeline outputs, under `output/<Home>_vs_<Away>_<score>/`:
-
-- **`match_report_<timestamp>.pdf`** — the full tactical report (cover → executive summary → glance → contents → phase sections → **player radars** → glossary → verdict → closing).
-- **`report_pages/page_01.png … `** — every PDF page as a standalone image for social posting.
-- **`player_radars/<Team>/<Player>.png`** — a radar pizza for every player who took part, sorted into team folders.
-- **8 curated dashboard boards** (`board_01…08`) — 2-up summary panels for The Story, Chance Creation, Danger Zones, Build-up, Progression & Threat, Defence & Pressing, Territory & Control, Pressing & Regains.
-- **~40 individual tactical visuals** (shot maps, xG flow, pass networks, xT maps, defensive heatmaps, high-turnovers, …).
-- **CSV outputs** — events, players, xG, goals log.
-
----
-
-## Highlights
-
-### Written tactical analysis (not just charts)
-Every visual in the PDF carries a **connected, data-driven commentary in an analyst voice** — computed from that match's own numbers, not a generic template:
-- Names the key players (top distributor, creator, shooter, defender) with their figures.
-- Reads a **qualitative team shape** from average positions and the pass network (how high, how compact, how wide, which channel the play leaned through).
-- Cross-references the metrics into one argument (e.g. possession vs. penetration, chance quality vs. volume, press as suppression vs. creation).
-
-### Player radar profiles
-A 28-metric **pizza chart per player**, grouped and colour-coded:
-- **Attack** · **Passing** · **Threat (expected)** · **Defence** · **Duels**
-- Bar length = percentile vs. every player in the match; chip = raw value (passes/long-balls as completed/total, shots as on-target/total, duels as won/contested).
-- Minutes shown under the player's name; a **tactical read** is written beneath each radar in the report.
-
-### From-scratch analytics
-- **Expected Threat (xT):** a transparent, from-scratch grid value model (Karun-Singh style) with documented probabilities, transition matrix and value iteration. An open-family approximation — **not** a reproduction of proprietary Opta/StatsBomb possession-value.
-- **Participation & minutes:** starter / substitute / unused reconstructed from substitution and red-card events; minutes on the official clock (regulation 90 / 120, stoppage excluded).
-- **Creation model:** xA, assists, big-chances-created and shot-creating actions reconstructed by linking each shot back to the key pass that made it.
-- **Duels** reported as absolute won/total for ground, aerial and overall; **xGOT** as a placement-based post-shot proxy.
-
-### Robust rendering
-- Pass networks keep participating **substitutes** on the map.
-- Dashboard boards retry saving at lower DPI so all eight always persist under memory pressure.
-
----
+- Multiple data-collection fallbacks: cloudscraper, requests, and Selenium.
+- Match, team, and player analysis from a single event stream.
+- Expected Goals (xG) and Expected Threat (xT) models implemented locally.
+- Shot maps, xG flow, pass networks, heatmaps, territory charts, PPDA, box
+  entries, progressive actions, defensive actions, and other tactical views.
+- Player radar charts with participation, passing, attacking, threat,
+  defensive, and duel metrics.
+- Team-specific colors with contrast and kit-clash protection.
+- Grouped summary boards for presentation and social publishing.
+- A structured PDF report with English, data-driven commentary.
+- CSV and PNG exports for further analysis or reuse.
 
 ## Requirements
 
-- Python 3.10+
-- Install dependencies:
+- Python 3.10 or later.
+- Google Chrome or Chromium for the Selenium fallback.
+- Internet access to retrieve the configured WhoScored match.
+
+Install the Python dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Key libraries: `numpy`, `pandas`, `matplotlib`, `scipy`, `cloudscraper` / `requests` / `beautifulsoup4` (scraping), `undetected-chromedriver` / `selenium` (browser fallback), `pypdf` (merge), `pymupdf` (per-page image export).
+The main dependencies include NumPy, pandas, Matplotlib, SciPy, Rich,
+cloudscraper, Beautiful Soup, Selenium, pypdf, and PyMuPDF.
 
-A Chrome/Chromium install is used for the Selenium fallback when the HTTP scrape can't reach the match data.
+## Configuration
 
----
+Open `football_match_analysis.py` and update `MATCH_URL` with the required
+WhoScored match URL:
+
+```python
+MATCH_URL = "https://www.whoscored.com/matches/..."
+```
+
+The same settings section also contains the output directory, home and away kit
+selection, optional custom kit colors, Chrome profile settings, browser mode,
+and official-stat fallback behavior.
+
+For most matches, only `MATCH_URL` needs to change.
 
 ## Usage
 
-Run the main script and follow the prompt for the WhoScored match URL:
+Run the main entry point from the project directory:
 
 ```bash
-python Match_Analysis_Dark.py
+python football_match_analysis.py
 ```
 
-The tool scrapes the match page, extracts the embedded event data, computes the internal metrics, and writes the full package to `output/<match folder>/`.
+The application collects the match data, calculates the metrics, creates the
+visualizations, and assembles the report. Network restrictions or changes to
+the WhoScored page may cause the application to move through its HTTP and
+browser fallback methods.
 
----
+## Output
 
-## Project layout
+Generated artifacts are written to:
 
-| File | Role |
-|------|------|
-| `Match_Analysis_Dark.py` | Main entry point — scraping, metrics, ~40 visuals, dashboard boards, orchestration |
-| `match_extensions.py` | PDF report assembly, analyst commentary, team-shape read, verdict/executive pages, player-radar report section, per-page export |
-| `player_radar.py` | Per-player radar pizzas, grid-xT model, participation/minutes, duels and creation models |
-| `viz_v2_charts.py` | Individual v2 tactical charts (shot maps, pass networks, xT maps, heatmaps, …) |
-| `viz_v2.py`, `viz_design_system.py` | Shared v2 chart chrome and design system |
+```text
+output/<home>_vs_<away>_<score>/
+```
 
----
+Depending on the available match data, the directory can contain:
 
-## Method & limitations
+- A full PDF match-analysis report.
+- Individual tactical visualization images.
+- Grouped dashboard boards.
+- Player radar images organized by team.
+- Report pages exported as individual images.
+- CSV files for events, players, goals, and calculated metrics.
 
-All figures are computed directly from a **single match's event stream** and are best read as description, not verdict. The xT surface and the xGOT proxy are open, transparent approximations from the same family as public models — they do **not** reproduce proprietary Opta possession-value or StatsBomb OBV outputs. Team-shape and any positional inference come from **average touch positions** and are approximate by nature.
+The `output/` directory and generated PDF, PNG, and CSV files are excluded from
+Git by default.
 
----
+## Project Structure
 
-## Attribution
+| File | Purpose |
+| --- | --- |
+| `football_match_analysis.py` | Main entry point, data collection, metric calculation, visualization orchestration, and report generation. |
+| `match_report.py` | Report pages, commentary, PPDA analysis, player-stat tables, PDF assembly, and exports. |
+| `player_radar.py` | Player participation, player metrics, xT calculations, and radar-chart exports. |
+| `tactical_visualizations.py` | Tactical chart renderers and DataFrame adapters. |
+| `visualization_components.py` | Reusable plotting components and visualization primitives. |
+| `visualization_design.py` | Shared colors, typography, frames, and readability helpers. |
+| `requirements.txt` | Runtime Python dependencies. |
 
-Personal analysis project by Mostafa Saad. WhoScored/Opta are the underlying data source; this toolkit only reads and visualises publicly rendered match data.
+## Validation and Code Style
+
+The Python source is formatted with Black using its standard 88-character line
+length. Useful local checks are:
+
+```bash
+python -m black --check *.py
+python -m ruff check *.py --select E9,F63,F7,F82
+python -m compileall -q .
+```
+
+On PowerShell, pass an expanded file list to Black if the wildcard is not
+expanded automatically.
+
+## Method and Limitations
+
+The analysis describes one match and should not be treated as a long-term team
+or player evaluation. Positional conclusions are inferred from event locations
+and average positions. The xG, xT, and post-shot estimates are transparent local
+approximations and do not reproduce proprietary Opta or StatsBomb models.
+
+WhoScored page structure and access controls can change. The fallback collectors
+improve resilience, but no scraper can guarantee permanent compatibility with
+an external website.
+
+## Data Attribution
+
+WhoScored/Opta is the underlying match-data source. This project independently
+processes and visualizes the retrieved event data and is not affiliated with or
+endorsed by WhoScored or Opta.
+
+## License
+
+See [LICENSE](LICENSE) for the project license.

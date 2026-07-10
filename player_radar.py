@@ -32,7 +32,7 @@ import matplotlib.patheffects as pe
 import matplotlib.patches as mpatches
 
 try:
-    from match_extensions import BG_DARK, TEXT_BRIGHT, TEXT_DIM
+    from match_report import BG_DARK, TEXT_BRIGHT, TEXT_DIM
 except Exception:  # pragma: no cover - fallback colours
     BG_DARK, TEXT_BRIGHT, TEXT_DIM = "#000000", "#F5F5F5", "#9aa4b2"
 

@@ -1,8 +1,8 @@
 # pyright: reportMissingImports=false, reportRedeclaration=false, reportReturnType=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportCallIssue=false, reportPrivateImportUsage=false, reportOptionalMemberAccess=false, reportPossiblyUnboundVariable=false
 """
-match_extensions.py
+match_report.py
 ═════════════════════════════════════════════════════════════════════════════
-Additive upgrades — styled to match the original Match_Analysis_Dark theme.
+Additive upgrades — styled to match the original football_match_analysis theme.
 
   Upgrade 1 — PPDA (Passes per Defensive Action) per team
   Upgrade 2 — Assist names + Open Play / Set Piece goal classification
@@ -30,7 +30,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 # Unified design system (AMOLED pure-black frame, fonts, palette)
 try:
-    from viz_design_system import apply_unified_frame, rebrand_figure, _neon_backdrop, readable_on, readable_team_text, ACCENT_TEXT  # type: ignore
+    from visualization_design import apply_unified_frame, rebrand_figure, _neon_backdrop, readable_on, readable_team_text, ACCENT_TEXT  # type: ignore
 except Exception:  # pragma: no cover
     apply_unified_frame = None  # graceful fallback
     rebrand_figure = None
@@ -4225,7 +4225,7 @@ def _draw_visual_commentary(pdf, heading: str, body: str):
 
 
 # ── Commentary catalogue: position-keyed text for the 39 tactical visuals ──
-# Order must match Match_Analysis_Dark._build_visual_catalog (idx 1..N).
+# Order must match football_match_analysis._build_visual_catalog (idx 1..N).
 _VISUAL_COMMENTARY = [
     # 1. xG Flow
     (

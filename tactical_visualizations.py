@@ -1,5 +1,5 @@
 """
-viz_v2_charts.py — production v2 chart renderers + DataFrame adapters.
+tactical_visualizations.py — production v2 chart renderers + DataFrame adapters.
 
 Each visual exposes two functions:
     • render_<name>_v2(...)  — pure renderer; takes simple data structures,
@@ -8,7 +8,7 @@ Each visual exposes two functions:
                               project's events DataFrame to the renderer's
                               expected shape and calls render_*.
 
-The renderers compose the design-system primitives from viz_v2.
+The renderers compose the design-system primitives from visualization_components.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import textwrap as _tw
 import re
 from matplotlib.colors import LinearSegmentedColormap, to_rgba
 
-from viz_v2 import (
+from visualization_components import (
     chrome,
     panel_card,
     metric_strip,
@@ -51,7 +51,7 @@ from viz_v2 import (
     FONT_MONO,
     panel_header_geom,
 )
-from viz_v2 import _panel_rect
+from visualization_components import _panel_rect
 
 IS_LIGHT_THEME = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
 ROW_BG = "#FFFFFF" if IS_LIGHT_THEME else "#101010"
@@ -140,7 +140,7 @@ def _draw_vertical_pitch(
     line_color: str = "#3A3A3A",
     line_alpha: float = 0.56,
 ):
-    """Draw a narrow vertical pitch without touching viz_v2.themed_pitch."""
+    """Draw a narrow vertical pitch without touching visualization_components.themed_pitch."""
     ax.set_facecolor(BG_PITCH)
     ax.set_aspect("equal")
     ax.set_xlim(-2, VP_W + 2)
@@ -790,7 +790,7 @@ def _compute_duels(events, team_id):
 # ═════════════════════════════════════════════════════════════════════════
 def _match_extra_time_pens(events, info):
     """Detect extra time and a penalty-shootout score from event periods.
-    Local twin of match_extensions._extra_time_and_pens (kept separate to
+    Local twin of match_report._extra_time_and_pens (kept separate to
     avoid a cross-module import) — same logic, used by chart-level visuals."""
     if events is None or events.empty or "period_code" not in events.columns:
         return False, None
@@ -7454,12 +7454,12 @@ def render_legacy_chart_v2(
 
 def make_match_stats_v2(events, info, ppda):
     """
-    Reuses the polished _draw_team_stats_compare_page from match_extensions
+    Reuses the polished _draw_team_stats_compare_page from match_report
     (which already uses the unified identity + 'Reading this page' panel).
     Captures the figure it builds via a tiny Pdf-like shim and prevents the
     inner plt.close from disposing it before we can save it later.
     """
-    from match_extensions import _draw_team_stats_compare_page
+    from match_report import _draw_team_stats_compare_page
 
     captured = []
 

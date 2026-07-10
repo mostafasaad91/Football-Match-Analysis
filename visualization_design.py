@@ -1,5 +1,5 @@
 """
-viz_design_system.py
+visualization_design.py
 ═════════════════════════════════════════════════════════════════════════════
 Unified visual identity for the WhoScored Match Analyzer.
 
@@ -183,7 +183,7 @@ def _raised_panel_backdrop(
 ):
     """No-op in the Pure-Black identity: panels are flat with a single
     1px hairline border, no drop shadow / glow ring. Kept for API
-    compatibility with existing call sites in match_extensions.py."""
+    compatibility with existing call sites in match_report.py."""
     return
 
 
@@ -218,7 +218,7 @@ def apply_unified_frame(
     """
     Adds to a figure: eyebrow + title + subtitle header, and a footer rule
     with score / report tag / methodology note — matching chrome() in
-    viz_v2.py (flat true-black background, no glow frame around the page).
+    visualization_components.py (flat true-black background, no glow frame around the page).
 
     Args:
         section: small mono eyebrow label (e.g. "SHOT MAP").
@@ -321,7 +321,7 @@ def rebrand_figure(
 ):
     """
     Re-brand any pre-built figure (eg. one of the 47+ legacy visuals in
-    Match_Analysis_Dark.py) so it carries the unified visual identity
+    football_match_analysis.py) so it carries the unified visual identity
     WITHOUT touching the original drawing code.
 
     Adds:

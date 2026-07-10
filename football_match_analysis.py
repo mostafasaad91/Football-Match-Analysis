@@ -53,12 +53,12 @@ os.environ["SOFASCORE_AUTO_SEARCH"] = "1" if SOFASCORE_AUTO_SEARCH else "0"
 os.environ["SOFASCORE_MIN_MATCH_CONFIDENCE"] = str(SOFASCORE_MIN_MATCH_CONFIDENCE)
 if SOFASCORE_EVENT_ID is not None:
     os.environ["SOFASCORE_EVENT_ID"] = str(SOFASCORE_EVENT_ID)
-from match_extensions import run_analysis as _run_extended_analysis
+from match_report import run_analysis as _run_extended_analysis
 
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 try:
-    from viz_v2_charts import (
+    from tactical_visualizations import (
         make_xg_flow_v2,
         make_shot_map_v2,
         make_shot_breakdown_v2,
@@ -71,7 +71,7 @@ except Exception:
     _V2_AVAILABLE = False
 
 if _V2_AVAILABLE:
-    import viz_v2_charts as _vc_runtime
+    import tactical_visualizations as _vc_runtime
 
     # ── Runtime self-check + hard override for the gk/def/mid/att colour
     # logic used by Pass Network and Average Positions. ────────────────
@@ -81,12 +81,12 @@ if _V2_AVAILABLE:
     # width. A previous version of this codebase read `y` instead of `x`,
     # which silently scrambled every node colour. We force the correct
     # implementation here, at the call site, so this report's colours are
-    # correct even if some other copy of viz_v2_charts.py — e.g. one
+    # correct even if some other copy of tactical_visualizations.py — e.g. one
     # picked up from a stale install, a different virtualenv, or any
     # other entry earlier on sys.path — would otherwise shadow the fixed
     # version on disk. This removes any dependency on cache state,
     # sys.path ordering, or which file a given Python environment resolves
-    # the `viz_v2_charts` import to.
+    # the `tactical_visualizations` import to.
     def _infer_position_bucket_FORCED(
         p: dict, depth_axis: str = "x", direction: int = 1
     ) -> str:
@@ -121,15 +121,15 @@ if _V2_AVAILABLE:
     _is_stale = ('p.get("y"' in _existing_src) or ("p.get('y'" in _existing_src)
     if _is_stale:
         print(
-            "⚠️  WARNING: viz_v2_charts._infer_position_bucket was loaded from "
+            "⚠️  WARNING: tactical_visualizations._infer_position_bucket was loaded from "
             f"{getattr(_vc_runtime, '__file__', '?')} using the OLD (y-as-depth) "
             "logic. Forcing the corrected (x-as-depth) version for this run. "
             "You should find and remove/update the stale copy of "
-            "viz_v2_charts.py at that path so this override isn't needed."
+            "tactical_visualizations.py at that path so this override isn't needed."
         )
     else:
         print(
-            f"✅ viz_v2_charts loaded from {getattr(_vc_runtime, '__file__', '?')} "
+            f"✅ tactical_visualizations loaded from {getattr(_vc_runtime, '__file__', '?')} "
             "— bucket logic already correct (x-as-depth); applying override "
             "anyway as a guarantee."
         )
@@ -1530,7 +1530,7 @@ def text_shadow(strong: bool = False) -> list:
 def _apply_neon_backdrop(fig):
     """Apply the shared teal/purple neon backdrop when available."""
     try:
-        from viz_design_system import _neon_backdrop
+        from visualization_design import _neon_backdrop
 
         _neon_backdrop(fig)
     except Exception:
@@ -5655,7 +5655,7 @@ def draw_breakdown_goals(fig, events, info, xg_data):
             lambda x: info["home_name"] if x == info["home_id"] else info["away_name"]
         )
 
-        from match_extensions import (
+        from match_report import (
             classify_goal_type as _classify_goal_type,
             goal_body_part_label as _goal_body_part_label,
         )
@@ -8179,7 +8179,7 @@ def _panel_goals_table(ax, events, info):
         is_og = bool(r.get("is_own_goal", False))
         ben_id = r.get("scoring_team", r["team_id"])
         col = OG_COLOR if is_og else (C_RED if ben_id == info["home_id"] else C_BLUE)
-        from match_extensions import (
+        from match_report import (
             classify_goal_type as _classify_goal_type,
             goal_body_part_label as _goal_body_part_label,
         )
@@ -12681,7 +12681,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
     # ── Per-team stats used by the board stat panels ──────────────────
     hid, aid = info.get("home_id"), info.get("away_id")
     try:
-        from match_extensions import calculate_ppda as _calc_ppda
+        from match_report import calculate_ppda as _calc_ppda
     except Exception:
         _calc_ppda = None
 
@@ -15254,7 +15254,7 @@ def print_summary(info, xg_data, events):
                 if row["scoring_team"] == info["home_id"]
                 else info["away_name"]
             )
-            from match_extensions import (
+            from match_report import (
                 classify_goal_type as _classify_goal_type,
                 goal_body_part_label as _goal_body_part_label,
             )
@@ -15508,7 +15508,7 @@ def main():
     #  Visuals 1..8 — REDESIGNED v2 (xG flow, shot maps, shot breakdown,
     #  pass networks, xT maps). All built from the unified design system
     #  (chrome + panel cards + key insight + bottom metric strip).
-    #  Falls back to the legacy renderers if viz_v2_charts is unavailable.
+    #  Falls back to the legacy renderers if tactical_visualizations is unavailable.
     # ══════════════════════════════════════════════════════
     def _save_and_append(fig, fname):
         """Save the v2 figure (its chrome already includes the unified
@@ -15576,7 +15576,7 @@ def main():
         fig8 = make_xt_map_v2(events, info, info["away_id"], C_BLUE)
         _save_and_append(fig8, f"8_xt_map_away_{ts}.png")
     else:
-        # ── Legacy fallback (only runs if viz_v2_charts failed to import) ──
+        # ── Legacy fallback (only runs if tactical_visualizations failed to import) ──
         fig1 = _fig(15, 7, "Fig 1 — xG Flow")
         ax1 = fig1.add_subplot(
             GridSpec(1, 1, figure=fig1, left=0.07, right=0.97, top=0.88, bottom=0.11)[
@@ -15843,7 +15843,7 @@ def main():
 
     # ── 11–22: figs A→L wired to v2 redesigns ───────────────────
     if _V2_AVAILABLE:
-        from viz_v2_charts import (
+        from tactical_visualizations import (
             make_shot_comparison_v2,
             make_danger_creation_v2,
             make_gk_saves_v2,
@@ -15857,7 +15857,7 @@ def main():
 
         # Compute PPDA on the fly (match_stats_v2 needs it)
         try:
-            from match_extensions import compute_ppda_both
+            from match_report import compute_ppda_both
 
             _ppda = compute_ppda_both(info, events)
         except Exception:
@@ -15870,8 +15870,8 @@ def main():
         fc = make_danger_creation_v2(events, info, aid, C_BLUE)
         _save_and_append(fc, f"13_danger_away_{ts}.png")
         # GK Saves — keep the legacy chart, wrap in v2 chrome + sidebar/strip
-        from viz_v2_charts import render_legacy_chart_v2
-        from viz_v2 import C_GOLD as _GOLD_V2
+        from tactical_visualizations import render_legacy_chart_v2
+        from visualization_components import C_GOLD as _GOLD_V2
 
         # Build sidebar/strip data from events
         _h_faced = events[(events["team_id"] == aid) & (events["is_shot"] == True)]
@@ -15936,8 +15936,8 @@ def main():
         # exact duplicate of fig 33 (Dominating Zone), so we keep only
         # the Dominating Zone framing later in the sequence.
         # Ball Touches — legacy donut + v2 chrome/sidebar/strip
-        from viz_v2_charts import render_legacy_chart_v2 as _legacy_v2
-        from viz_v2 import C_GOLD as _GOLD_V2
+        from tactical_visualizations import render_legacy_chart_v2 as _legacy_v2
+        from visualization_components import C_GOLD as _GOLD_V2
 
         _h_touches = int(((events["team_id"] == hid) & events["x"].notna()).sum())
         _a_touches = int(((events["team_id"] == aid) & events["x"].notna()).sum())
@@ -16099,7 +16099,7 @@ def main():
 
     # ── 23–27: xT per minute, progressives H/A, crosses H/A (v2) ─
     if _V2_AVAILABLE:
-        from viz_v2_charts import (
+        from tactical_visualizations import (
             make_xt_per_minute_v2,
             make_progressive_passes_v2,
             make_crosses_v2,
@@ -16167,7 +16167,7 @@ def main():
 
     # ── Q/R: Defensive Heatmap — Home + Away (v2) ────────────────
     if _V2_AVAILABLE:
-        from viz_v2_charts import make_defensive_heatmap_v2
+        from tactical_visualizations import make_defensive_heatmap_v2
 
         fq = make_defensive_heatmap_v2(events, info, hid, C_RED)
         _save_and_append(fq, f"28_defensive_hm_home_{ts}.png")
@@ -16201,7 +16201,7 @@ def main():
 
     # ── 30: Defensive Summary (v2) ──────────────────────────────
     if _V2_AVAILABLE:
-        from viz_v2_charts import make_defensive_summary_v2
+        from tactical_visualizations import make_defensive_summary_v2
 
         fs = make_defensive_summary_v2(events, info)
         _save_and_append(fs, f"30_defensive_summary_{ts}.png")
@@ -16217,7 +16217,7 @@ def main():
 
     # ── T/U: Avg Positions — Home + Away (v2) ──────────────────────
     if _V2_AVAILABLE:
-        from viz_v2_charts import make_avg_positions_v2
+        from tactical_visualizations import make_avg_positions_v2
 
         ft = make_avg_positions_v2(events, info, hid, C_RED)
         _save_and_append(ft, f"31_avg_position_home_{ts}.png")
@@ -16251,7 +16251,7 @@ def main():
 
     # ── 33: Dominating Zone (v2) ────────────────────────
     if _V2_AVAILABLE:
-        from viz_v2_charts import make_dominating_zone_v2
+        from tactical_visualizations import make_dominating_zone_v2
 
         f33 = make_dominating_zone_v2(events, info)
         _save_and_append(f33, f"33_dominating_zone_{ts}.png")
@@ -16269,7 +16269,7 @@ def main():
 
     # ── 34/35: Box Entries — Home + Away (v2) ────────────────────
     if _V2_AVAILABLE:
-        from viz_v2_charts import make_box_entries_v2
+        from tactical_visualizations import make_box_entries_v2
 
         f34 = make_box_entries_v2(events, info, hid, C_RED)
         _save_and_append(f34, f"34_box_entries_home_{ts}.png")
@@ -16303,8 +16303,8 @@ def main():
 
     # ── 36/37: High Turnovers — Home + Away (legacy identity, narrow pitch) ─
     if _V2_AVAILABLE:
-        from viz_v2_charts import render_legacy_chart_v2 as _legacy_v2_ht
-        from viz_v2 import C_GOLD as _GOLD_HT
+        from tactical_visualizations import render_legacy_chart_v2 as _legacy_v2_ht
+        from visualization_components import C_GOLD as _GOLD_HT
 
         REGAIN = {"Tackle", "Interception", "BallRecovery"}
         for _tid, _tc, _name, _opp_name, _idx, _suffix in [
@@ -16388,8 +16388,8 @@ def main():
 
     # ── 38/39: Pass Target Zones — Home + Away (legacy identity, narrow pitch) ─
     if _V2_AVAILABLE:
-        from viz_v2_charts import render_legacy_chart_v2 as _legacy_v2_pt
-        from viz_v2 import C_GOLD as _GOLD_PT
+        from tactical_visualizations import render_legacy_chart_v2 as _legacy_v2_pt
+        from visualization_components import C_GOLD as _GOLD_PT
 
         for _tid, _tc, _name, _opp_name, _idx, _suffix in [
             (hid, C_RED, hn, an, 38, "home"),
@@ -16490,7 +16490,7 @@ def main():
     #  Fig 40 — PPDA gauge (player-stat tables removed by request)
     # ══════════════════════════════════════════════════════
     try:
-        from match_extensions import draw_ppda_gauge, compute_ppda_both
+        from match_report import draw_ppda_gauge, compute_ppda_both
 
         # 40 — PPDA gauge
         try:

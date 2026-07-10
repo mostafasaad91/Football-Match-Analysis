@@ -1,5 +1,5 @@
 """
-viz_v2.py — Reusable design-system components for the redesigned (v2)
+visualization_components.py — Reusable design-system components for the redesigned (v2)
 match-analysis visuals.
 
 This module mirrors, as closely as matplotlib allows, the "Pure Black"
@@ -193,7 +193,7 @@ apply_amoled_defaults()
 def _neon_backdrop(fig):
     """No-op: the reference identity is a flat true-black background with
     no gradient/glow texture. Kept as a function (rather than removed) so
-    existing call sites in viz_v2_charts.py do not need to change."""
+    existing call sites in tactical_visualizations.py do not need to change."""
     fig._neon_backdrop_applied = True
     return
 
