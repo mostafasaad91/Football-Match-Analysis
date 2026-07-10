@@ -202,7 +202,7 @@ def _get_credits(events: pd.DataFrame) -> dict:
 #   • SubstitutionOn  event  -> player entered at that (expanded) minute
 #   • SubstitutionOff event  -> player left at that (expanded) minute
 #   • a player with on-ball/defensive events but no SubstitutionOn started
-#   • match end = the maximum expanded minute observed (includes stoppage/ET)
+#   • each period ends at its recorded End event, including added time
 # Every player is classified starter / sub / unused, and real minutes are the
 # span they were actually on the pitch — the basis for any per-90 normalisation.
 _MARKER_TYPES = {
@@ -217,51 +217,121 @@ _MARKER_TYPES = {
 }
 
 
-def _regulation_minutes(events) -> int:
-    """Official match length on the clock: 120 if the game reached extra time,
-    otherwise 90. Stoppage/added time is NOT counted (a full match = 90)."""
-    try:
-        pc = events.get("period_code", pd.Series([], dtype=str)).astype(str).str.lower()
-        if pc.str.contains("extratime").any() or pc.str.contains("et").any():
-            return 120
-    except Exception:
-        pass
-    return 90
+_PLAYING_PERIODS = (
+    ("1h", 0, 45),
+    ("2h", 45, 45),
+    ("et1", 90, 15),
+    ("et2", 105, 15),
+)
 
 
-def _match_end_minute(events) -> int:
-    """End of the match on the OFFICIAL clock (regulation, no stoppage)."""
-    reg = _regulation_minutes(events)
-    try:
-        raw = int(pd.to_numeric(events["minute"], errors="coerce").max())
-    except Exception:
-        return reg
-    return min(raw, reg)
+def _normalise_period(value) -> str:
+    """Return a stable code for a regulation or extra-time period."""
+    raw = str(value or "").strip().lower().replace(" ", "")
+    aliases = {
+        "firsthalf": "1h",
+        "firstperiod": "1h",
+        "secondhalf": "2h",
+        "secondperiod": "2h",
+        "firstperiodofextratime": "et1",
+        "extratimefirsthalf": "et1",
+        "secondperiodofextratime": "et2",
+        "extratimesecondhalf": "et2",
+    }
+    return aliases.get(raw, raw)
+
+
+def _period_timeline(events: pd.DataFrame) -> dict:
+    """Build an elapsed-time timeline that includes added time in every period.
+
+    WhoScored timestamps use the nominal match clock: the second half begins at
+    45:00 even when the first half lasted beyond 45 minutes. Extra time follows
+    the same pattern at 90:00 and 105:00. Summing each period separately avoids
+    losing added time from earlier periods.
+    """
+    if events is None or events.empty:
+        return {}
+
+    period_series = events.get("period_code", pd.Series("", index=events.index))
+    period_codes = period_series.map(_normalise_period)
+    minutes = pd.to_numeric(events.get("minute", 0), errors="coerce").fillna(0.0)
+    seconds = pd.to_numeric(events.get("second", 0), errors="coerce").fillna(0.0)
+    event_seconds = minutes * 60.0 + seconds.clip(lower=0.0, upper=59.999)
+
+    timeline = {}
+    elapsed_start = 0.0
+    for code, clock_start_minute, nominal_minutes in _PLAYING_PERIODS:
+        mask = period_codes == code
+        if not mask.any():
+            continue
+
+        clock_start = clock_start_minute * 60.0
+        period_events = event_seconds[mask]
+        event_types = events.loc[mask, "type"].astype(str)
+        end_events = period_events[event_types.eq("End")]
+        clock_end = (
+            float(end_events.max())
+            if not end_events.empty
+            else float(period_events.max())
+        )
+        duration = max(clock_end - clock_start, nominal_minutes * 60.0)
+        timeline[code] = {
+            "clock_start": clock_start,
+            "elapsed_start": elapsed_start,
+            "duration": duration,
+            "elapsed_end": elapsed_start + duration,
+        }
+        elapsed_start += duration
+    return timeline
+
+
+def _elapsed_event_seconds(row, timeline: dict, default: float) -> float:
+    """Translate a WhoScored period clock value to true elapsed match seconds."""
+    code = _normalise_period(row.get("period_code", row.get("period", "")))
+    period = timeline.get(code)
+    if period is None:
+        return default
+    minute = pd.to_numeric(pd.Series([row.get("minute")]), errors="coerce").iloc[0]
+    second = pd.to_numeric(pd.Series([row.get("second")]), errors="coerce").iloc[0]
+    minute = 0.0 if pd.isna(minute) else float(minute)
+    second = 0.0 if pd.isna(second) else min(max(float(second), 0.0), 59.999)
+    offset = max(minute * 60.0 + second - period["clock_start"], 0.0)
+    return min(period["elapsed_start"] + offset, period["elapsed_end"])
+
+
+def _format_played_time(total_seconds: float) -> str:
+    """Format an exact playing duration as minutes and seconds."""
+    rounded_seconds = max(int(round(total_seconds)), 0)
+    minutes, seconds = divmod(rounded_seconds, 60)
+    return f"{minutes}′ {seconds:02d}″"
 
 
 def player_participation(events: pd.DataFrame) -> dict:
     """Return {player: {"status": starter|sub|unused, "minutes": int,
-    "start": int, "end": int}} reconstructed from substitution events.
+    "start_seconds": float, "end_seconds": float}} reconstructed from events.
 
-    Minutes are on the official clock (regulation 90 / 120), excluding stoppage
-    time, so a player who plays the whole game is credited 90, not 90+added."""
-    reg = _regulation_minutes(events)
-    end_min = _match_end_minute(events)
+    Durations include added time in every period and extra time when played.
+    Penalty shootouts are excluded."""
+    timeline = _period_timeline(events)
+    match_end = max(
+        (period["elapsed_end"] for period in timeline.values()), default=0.0
+    )
     ty = events["type"].astype(str)
     subs_on, subs_off, sent_off = {}, {}, {}
     for _, r in events[ty == "SubstitutionOn"].iterrows():
         if _valid_name(r.get("player")):
-            subs_on[str(r["player"])] = int(r.get("minute") or 0)
+            subs_on[str(r["player"])] = _elapsed_event_seconds(r, timeline, 0.0)
     for _, r in events[ty == "SubstitutionOff"].iterrows():
         if _valid_name(r.get("player")):
-            subs_off[str(r["player"])] = int(r.get("minute") or end_min)
+            subs_off[str(r["player"])] = _elapsed_event_seconds(r, timeline, match_end)
     # a red card (straight or second yellow) ends the player's match too, even
     # though WhoScored logs no SubstitutionOff for a dismissal
     for _, r in events[ty == "Card"].iterrows():
         q = str(r.get("qualifier_names", "")).lower()
         if _valid_name(r.get("player")) and ("red" in q or "secondyellow" in q):
             p = str(r["player"])
-            sent_off[p] = min(sent_off.get(p, 999), int(r.get("minute") or end_min))
+            dismissal = _elapsed_event_seconds(r, timeline, match_end)
+            sent_off[p] = min(sent_off.get(p, float("inf")), dismissal)
 
     real = events[~ty.isin(_MARKER_TYPES)]
     real_counts = real[real["player"].map(_valid_name)].groupby("player").size()
@@ -272,28 +342,30 @@ def player_participation(events: pd.DataFrame) -> dict:
         has_actions = int(real_counts.get(p, 0)) > 0
         if p in subs_on:
             start = subs_on[p]
-            end = subs_off.get(p, end_min)
+            end = subs_off.get(p, match_end)
             status = "sub"
         else:
-            start = 0
-            end = subs_off.get(p, end_min)
+            start = 0.0
+            end = subs_off.get(p, match_end)
             status = "starter"
         # a dismissal ends the match earlier than any sub-off / full time
         if p in sent_off:
             end = min(end, sent_off[p])
             status = "sent_off"
-        # clamp to the official clock so stoppage time is never counted
-        start = min(start, reg)
-        end = min(end, reg)
-        minutes = max(end - start, 0)
-        if minutes <= 0 or not has_actions:
+        start = min(max(start, 0.0), match_end)
+        end = min(max(end, start), match_end)
+        played_seconds = max(end - start, 0.0)
+        if played_seconds <= 0 or not has_actions:
             status = "unused"
-            minutes = 0
+            played_seconds = 0.0
+        rounded_minutes = int(round(played_seconds / 60.0))
         out[p] = {
             "status": status,
-            "minutes": int(minutes),
-            "start": int(start),
-            "end": int(end),
+            "minutes": rounded_minutes,
+            "played_seconds": played_seconds,
+            "played_time": _format_played_time(played_seconds),
+            "start_seconds": start,
+            "end_seconds": end,
         }
     return out
 
@@ -926,8 +998,9 @@ def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extr
         fontweight="bold",
         path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)],
     )
-    mins = _get_participation(events).get(str(player), {}).get("minutes", 0)
-    sub = f"{str(team_name).upper()}  ·  {role}  ·  {mins}′ played"
+    participation = _get_participation(events).get(str(player), {})
+    played_time = participation.get("played_time", "0′ 00″")
+    sub = f"{str(team_name).upper()}  ·  {role}  ·  {played_time} played"
     if subtitle_extra:
         sub += f"  ·  {subtitle_extra}"
     fig.text(0.5, 0.923, sub, ha="center", color=TEXT_DIM, fontsize=13, style="italic")
