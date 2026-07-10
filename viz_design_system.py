@@ -23,34 +23,33 @@ import matplotlib.patheffects as pe
 import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # PALETTE — unified across every visual
 # ═════════════════════════════════════════════════════════════════════════════
-BG_DARK     = "#000000"
-BG_MID      = "#0a0a0a"
-BG_PANEL    = "#0a0a0a"
-BG_HEADER   = "#101010"
-BG_PITCH    = "#0a0a0a"
-GRID_COL    = "#1c1c1c"
-GRID_SOFT   = "#141414"
+BG_DARK = "#000000"
+BG_MID = "#0a0a0a"
+BG_PANEL = "#0a0a0a"
+BG_HEADER = "#101010"
+BG_PITCH = "#0a0a0a"
+GRID_COL = "#1c1c1c"
+GRID_SOFT = "#141414"
 
-TEXT_MAIN   = "#FFFFFF"
+TEXT_MAIN = "#FFFFFF"
 TEXT_BRIGHT = "#FFFFFF"
-TEXT_DIM    = "#9A9A9A"
-TEXT_FADED  = "#5A5A5A"
+TEXT_DIM = "#9A9A9A"
+TEXT_FADED = "#5A5A5A"
 
-C_HOME      = "#4D8DFF"
-C_AWAY      = "#FF4D4D"
-C_GOLD      = "#FFC23C"
-C_MAGENTA   = "#E879F9"
-C_ACCENT      = "#38BDF8"
-C_LIME      = "#22C55E"
-C_GREEN     = "#3DDC84"
-C_PURPLE    = "#a855f7"
-C_TEAL      = "#3DDC84"
-C_ORANGE    = "#f97316"
-OG_COLOR    = "#ff00ff"
+C_HOME = "#4D8DFF"
+C_AWAY = "#FF4D4D"
+C_GOLD = "#FFC23C"
+C_MAGENTA = "#E879F9"
+C_ACCENT = "#38BDF8"
+C_LIME = "#22C55E"
+C_GREEN = "#3DDC84"
+C_PURPLE = "#a855f7"
+C_TEAL = "#3DDC84"
+C_ORANGE = "#f97316"
+OG_COLOR = "#ff00ff"
 
 FONT_SANS = "Inter Variable"
 FONT_MONO = "JetBrains Mono"
@@ -59,6 +58,7 @@ FONT_MONO = "JetBrains Mono"
 def _register_fonts() -> None:
     import os
     import matplotlib.font_manager as _fm
+
     candidate_dirs = [
         os.path.expanduser("~/.fonts"),
         "/usr/share/fonts",
@@ -103,7 +103,13 @@ def contrast_ratio(fg: str, bg: str = BG_PANEL) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
-def readable_on(color: str, bg: str = BG_PANEL, *, min_ratio: float = 5.0, fallback: str | None = None) -> str:
+def readable_on(
+    color: str,
+    bg: str = BG_PANEL,
+    *,
+    min_ratio: float = 5.0,
+    fallback: str | None = None,
+) -> str:
     fallback = fallback or TEXT_BRIGHT
     try:
         return color if contrast_ratio(color, bg) >= min_ratio else fallback
@@ -122,20 +128,22 @@ ACCENT_TEXT = readable_on(C_GOLD, BG_PANEL, min_ratio=5.0, fallback=TEXT_BRIGHT)
 # axes/titles/ticks/legends that are created outside the helper components.
 def apply_amoled_defaults() -> None:
     try:
-        plt.rcParams.update({
-            "figure.facecolor": BG_DARK,
-            "axes.facecolor": BG_PANEL,
-            "savefig.facecolor": BG_DARK,
-            "savefig.edgecolor": BG_DARK,
-            "text.color": TEXT_MAIN,
-            "axes.labelcolor": TEXT_DIM,
-            "xtick.color": TEXT_DIM,
-            "ytick.color": TEXT_DIM,
-            "axes.edgecolor": GRID_COL,
-            "grid.color": GRID_COL,
-            "legend.facecolor": BG_PANEL,
-            "legend.edgecolor": GRID_COL,
-        })
+        plt.rcParams.update(
+            {
+                "figure.facecolor": BG_DARK,
+                "axes.facecolor": BG_PANEL,
+                "savefig.facecolor": BG_DARK,
+                "savefig.edgecolor": BG_DARK,
+                "text.color": TEXT_MAIN,
+                "axes.labelcolor": TEXT_DIM,
+                "xtick.color": TEXT_DIM,
+                "ytick.color": TEXT_DIM,
+                "axes.edgecolor": GRID_COL,
+                "grid.color": GRID_COL,
+                "legend.facecolor": BG_PANEL,
+                "legend.edgecolor": GRID_COL,
+            }
+        )
     except Exception:
         pass
 
@@ -160,12 +168,19 @@ def _shadow(width: float = 0, fg: str = BG_DARK) -> list:
     return [pe.withStroke(linewidth=width, foreground=fg)]
 
 
-def _raised_panel_backdrop(fig, x: float, y: float, w: float, h: float, *,
-                           edge: str | None = None,
-                           glow: str | None = None,
-                           depth: float = 0.006,
-                           radius: float = 0.010,
-                           zorder: float = -4):
+def _raised_panel_backdrop(
+    fig,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    *,
+    edge: str | None = None,
+    glow: str | None = None,
+    depth: float = 0.006,
+    radius: float = 0.010,
+    zorder: float = -4,
+):
     """No-op in the Pure-Black identity: panels are flat with a single
     1px hairline border, no drop shadow / glow ring. Kept for API
     compatibility with existing call sites in match_extensions.py."""
@@ -216,37 +231,80 @@ def apply_unified_frame(
 
     if section:
         fig.text(0.0335, 0.964, "●", color=accent, fontsize=7, family=FONT_SANS)
-        fig.text(0.044, 0.958, section, color=TEXT_DIM, fontsize=9.5,
-                 fontweight="bold", family=FONT_MONO)
+        fig.text(
+            0.044,
+            0.958,
+            section,
+            color=TEXT_DIM,
+            fontsize=9.5,
+            fontweight="bold",
+            family=FONT_MONO,
+        )
     if title:
-        fig.text(0.030, 0.925, title, color=TEXT_BRIGHT, fontsize=20,
-                 fontweight="bold", family=FONT_SANS)
+        fig.text(
+            0.030,
+            0.925,
+            title,
+            color=TEXT_BRIGHT,
+            fontsize=20,
+            fontweight="bold",
+            family=FONT_SANS,
+        )
     if subtitle:
-        fig.text(0.030, 0.895, subtitle, color=TEXT_DIM, fontsize=10.5,
-                 family=FONT_SANS)
+        fig.text(
+            0.030, 0.895, subtitle, color=TEXT_DIM, fontsize=10.5, family=FONT_SANS
+        )
 
     # ── Footer: hairline rule + score / report tag / note ──
-    fig.add_artist(mpatches.Rectangle(
-        (0.030, 0.045), 0.940, 0.0012, transform=fig.transFigure,
-        facecolor=GRID_COL, edgecolor="none", zorder=5))
+    fig.add_artist(
+        mpatches.Rectangle(
+            (0.030, 0.045),
+            0.940,
+            0.0012,
+            transform=fig.transFigure,
+            facecolor=GRID_COL,
+            edgecolor="none",
+            zorder=5,
+        )
+    )
     foot_y = 0.018
     if home_name and away_name:
         match_str = f"{home_name}  {score or '–'}  {away_name}"
-        fig.text(0.030, foot_y, match_str,
-                 color=TEXT_BRIGHT, fontsize=9.5, fontweight="bold",
-                 family=FONT_MONO)
-    fig.text(0.5, foot_y, "MATCH ANALYSIS REPORT",
-             ha="center", color=TEXT_DIM, fontsize=8.5, fontweight="bold",
-             family=FONT_MONO)
+        fig.text(
+            0.030,
+            foot_y,
+            match_str,
+            color=TEXT_BRIGHT,
+            fontsize=9.5,
+            fontweight="bold",
+            family=FONT_MONO,
+        )
+    fig.text(
+        0.5,
+        foot_y,
+        "MATCH ANALYSIS REPORT",
+        ha="center",
+        color=TEXT_DIM,
+        fontsize=8.5,
+        fontweight="bold",
+        family=FONT_MONO,
+    )
     if footer_note:
-        fig.text(0.970, foot_y, footer_note,
-                 ha="right", color=TEXT_FADED, fontsize=8.5, family=FONT_MONO)
+        fig.text(
+            0.970,
+            foot_y,
+            footer_note,
+            ha="right",
+            color=TEXT_FADED,
+            fontsize=8.5,
+            family=FONT_MONO,
+        )
 
     return fig
 
 
 def make_themed_figure(w: float = 14, h: float = 9):
-    """ figure   dark theme —  ."""
+    """figure   dark theme —  ."""
     fig = plt.figure(figsize=(w, h), facecolor=BG_DARK)
     fig.patch.set_facecolor(BG_DARK)
     _neon_backdrop(fig)
@@ -280,23 +338,47 @@ def rebrand_figure(
     foot_y = 0.012
     if home_name and away_name:
         match_str = f"{home_name}  {score or '–'}  {away_name}"
-        fig.text(0.030, foot_y, match_str,
-                 color=TEXT_BRIGHT, fontsize=8.5, fontweight="bold",
-                 family=FONT_MONO)
-    fig.text(0.5, foot_y, "MATCH ANALYSIS REPORT",
-             ha="center", color=TEXT_DIM, fontsize=7.5, fontweight="bold",
-             family=FONT_MONO)
+        fig.text(
+            0.030,
+            foot_y,
+            match_str,
+            color=TEXT_BRIGHT,
+            fontsize=8.5,
+            fontweight="bold",
+            family=FONT_MONO,
+        )
+    fig.text(
+        0.5,
+        foot_y,
+        "MATCH ANALYSIS REPORT",
+        ha="center",
+        color=TEXT_DIM,
+        fontsize=7.5,
+        fontweight="bold",
+        family=FONT_MONO,
+    )
     if footer_note:
-        fig.text(0.975, foot_y, footer_note,
-                 ha="right", color=TEXT_FADED, fontsize=8, family=FONT_MONO)
+        fig.text(
+            0.975,
+            foot_y,
+            footer_note,
+            ha="right",
+            color=TEXT_FADED,
+            fontsize=8,
+            family=FONT_MONO,
+        )
     return fig
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 2) Themed pitch — pitch with the unified visual identity
 # ═════════════════════════════════════════════════════════════════════════════
-def themed_pitch(ax, attacking_only: bool = False, line_color: str = "#3A3A3A",
-                 line_alpha: float = 0.56):
+def themed_pitch(
+    ax,
+    attacking_only: bool = False,
+    line_color: str = "#3A3A3A",
+    line_alpha: float = 0.56,
+):
     """
     Draws a pitch in the report style: BG_PITCH background, hairline
     grey markings, low intensity so the content (dots/arrows) reads
@@ -304,40 +386,50 @@ def themed_pitch(ax, attacking_only: bool = False, line_color: str = "#3A3A3A",
     """
     ax.set_facecolor(BG_PITCH)
     ax.set_aspect("equal")
-    ax.set_xlim(-2, 102); ax.set_ylim(-2, 102)
+    ax.set_xlim(-2, 102)
+    ax.set_ylim(-2, 102)
     ax.set_aspect("equal")
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
     if line_color in ("#2A2A2A", "#A8B8CA", "#C4CEDD", GRID_COL):
         line_color = "#3A3A3A"
     for s in ax.spines.values():
-        s.set_edgecolor(GRID_COL); s.set_linewidth(1.0); s.set_alpha(1.0)
+        s.set_edgecolor(GRID_COL)
+        s.set_linewidth(1.0)
+        s.set_alpha(1.0)
 
     lc = dict(color=line_color, lw=1.05, alpha=line_alpha * 0.88, zorder=2)
 
     # boundary + halfway lines
     ax.plot([0, 100, 100, 0, 0], [0, 0, 100, 100, 0], **lc)
     ax.plot([50, 50], [0, 100], **lc)
-    
+
     circ = plt.Circle((50, 50), 9.15, fill=False, **lc)
     ax.add_patch(circ)
     ax.scatter([50], [50], color=line_color, s=8, alpha=line_alpha, zorder=2)
 
-    
     for x0 in (0, 100):
         sign = 1 if x0 == 0 else -1
-        ax.plot([x0, x0 + sign * 16.5, x0 + sign * 16.5, x0],
-                [21.1, 21.1, 78.9, 78.9], **lc)
-        ax.plot([x0, x0 + sign * 5.5, x0 + sign * 5.5, x0],
-                [36.8, 36.8, 63.2, 63.2], **lc)
-        ax.scatter([x0 + sign * 11], [50], color=line_color, s=6,
-                   alpha=line_alpha, zorder=2)
+        ax.plot(
+            [x0, x0 + sign * 16.5, x0 + sign * 16.5, x0], [21.1, 21.1, 78.9, 78.9], **lc
+        )
+        ax.plot(
+            [x0, x0 + sign * 5.5, x0 + sign * 5.5, x0], [36.8, 36.8, 63.2, 63.2], **lc
+        )
+        ax.scatter(
+            [x0 + sign * 11], [50], color=line_color, s=6, alpha=line_alpha, zorder=2
+        )
 
-    
     for x0 in (0, 100):
         sign = 1 if x0 == 0 else -1
-        ax.plot([x0, x0 + sign * 1.5, x0 + sign * 1.5, x0],
-                [44, 44, 56, 56], color=line_color, lw=1.2,
-                alpha=line_alpha, zorder=2)
+        ax.plot(
+            [x0, x0 + sign * 1.5, x0 + sign * 1.5, x0],
+            [44, 44, 56, 56],
+            color=line_color,
+            lw=1.2,
+            alpha=line_alpha,
+            zorder=2,
+        )
 
     if attacking_only:
         ax.set_xlim(48, 102)
@@ -347,15 +439,23 @@ def themed_panel(ax, fill: str = BG_MID, lw: float = 1.0):
     """Flat pure-black subplot panel: single hairline border, no glow."""
     ax.set_facecolor(fill)
     for s in ax.spines.values():
-        s.set_edgecolor(GRID_COL); s.set_linewidth(max(lw, 1.0)); s.set_alpha(1.0)
+        s.set_edgecolor(GRID_COL)
+        s.set_linewidth(max(lw, 1.0))
+        s.set_alpha(1.0)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 3) Metric strip — metric strip (like the one under the PPDA dial)
 # ═════════════════════════════════════════════════════════════════════════════
-def metric_strip(fig, x: float, y: float, w: float, h: float,
-                 metrics: list[tuple[str, Any, str]],
-                 bg: str = BG_MID):
+def metric_strip(
+    fig,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    metrics: list[tuple[str, Any, str]],
+    bg: str = BG_MID,
+):
     """
     Draws a strip split into N flat metric cards, each:
         (label, value, color)
@@ -370,44 +470,89 @@ def metric_strip(fig, x: float, y: float, w: float, h: float,
     for i, (label, value, color) in enumerate(metrics):
         cx = x + i * (cell_w + gap)
         card = mpatches.FancyBboxPatch(
-            (cx, y), cell_w, h,
+            (cx, y),
+            cell_w,
+            h,
             boxstyle="round,pad=0.0,rounding_size=0.006",
-            transform=fig.transFigure, facecolor=bg if bg != BG_MID else BG_MID,
-            edgecolor=GRID_COL, linewidth=1.0, zorder=-1,
+            transform=fig.transFigure,
+            facecolor=bg if bg != BG_MID else BG_MID,
+            edgecolor=GRID_COL,
+            linewidth=1.0,
+            zorder=-1,
         )
         fig.add_artist(card)
         ax = fig.add_axes([cx, y, cell_w, h])
         ax.set_facecolor((0, 0, 0, 0))
-        ax.set_xticks([]); ax.set_yticks([])
-        ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
         for s in ax.spines.values():
             s.set_visible(False)
-        ax.text(0.5, 0.58, str(value), ha="center", va="center",
-                color=readable_on(color, BG_PANEL), fontsize=22, fontweight="bold",
-                family=FONT_MONO, transform=ax.transAxes)
-        ax.text(0.5, 0.20, label.upper(), ha="center", va="center",
-                color=TEXT_DIM, fontsize=8.5, fontweight="bold",
-                family=FONT_MONO, transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.58,
+            str(value),
+            ha="center",
+            va="center",
+            color=readable_on(color, BG_PANEL),
+            fontsize=22,
+            fontweight="bold",
+            family=FONT_MONO,
+            transform=ax.transAxes,
+        )
+        ax.text(
+            0.5,
+            0.20,
+            label.upper(),
+            ha="center",
+            va="center",
+            color=TEXT_DIM,
+            fontsize=8.5,
+            fontweight="bold",
+            family=FONT_MONO,
+            transform=ax.transAxes,
+        )
 
 
-def tagline_card(fig, x: float, y: float, w: float, h: float,
-                 text: str, color: str = C_GOLD, bg: str = BG_MID):
+def tagline_card(
+    fig,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    text: str,
+    color: str = C_GOLD,
+    bg: str = BG_MID,
+):
     """Raised coloured verdict card."""
     ax = fig.add_axes([x, y, w, h])
     ax.set_facecolor(BG_MID)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
     for s in ax.spines.values():
-        s.set_edgecolor(color); s.set_linewidth(1.2)
-    ax.text(0.5, 0.5, text, ha="center", va="center",
-            color=readable_on(color, BG_PANEL), fontsize=12, fontweight="bold",
-            family=FONT_SANS, transform=ax.transAxes)
+        s.set_edgecolor(color)
+        s.set_linewidth(1.2)
+    ax.text(
+        0.5,
+        0.5,
+        text,
+        ha="center",
+        va="center",
+        color=readable_on(color, BG_PANEL),
+        fontsize=12,
+        fontweight="bold",
+        family=FONT_SANS,
+        transform=ax.transAxes,
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 4) Legend chips — unified
 # ═════════════════════════════════════════════════════════════════════════════
-def legend_chips(ax, items: list[tuple[str, str, str]], y: float = -0.06,
-                 fontsize: float = 9):
+def legend_chips(
+    ax, items: list[tuple[str, str, str]], y: float = -0.06, fontsize: float = 9
+):
     """
     items: list of (label, color, marker) — marker ∈ {'o','s','*','D','X','—'}
     """
@@ -416,14 +561,29 @@ def legend_chips(ax, items: list[tuple[str, str, str]], y: float = -0.06,
         if marker == "—":
             handles.append(Line2D([0], [0], color=color, lw=2.2, label=label))
         else:
-            handles.append(Line2D([0], [0], marker=marker, color=color,
-                                  markeredgecolor="white",
-                                  markersize=10, lw=0, label=label))
-    leg = ax.legend(handles=handles, ncol=min(len(items), 6),
-                    fontsize=fontsize, loc="lower center",
-                    bbox_to_anchor=(0.5, y),
-                    facecolor=BG_MID, edgecolor=GRID_COL,
-                    labelcolor=TEXT_MAIN, framealpha=0.95)
+            handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker=marker,
+                    color=color,
+                    markeredgecolor="white",
+                    markersize=10,
+                    lw=0,
+                    label=label,
+                )
+            )
+    leg = ax.legend(
+        handles=handles,
+        ncol=min(len(items), 6),
+        fontsize=fontsize,
+        loc="lower center",
+        bbox_to_anchor=(0.5, y),
+        facecolor=BG_MID,
+        edgecolor=GRID_COL,
+        labelcolor=TEXT_MAIN,
+        framealpha=0.95,
+    )
     leg.get_frame().set_linewidth(0.6)
     return leg
 
@@ -431,16 +591,26 @@ def legend_chips(ax, items: list[tuple[str, str, str]], y: float = -0.06,
 # ═════════════════════════════════════════════════════════════════════════════
 # 5) Intensity bar — strength bar (colour-coded like a gauge)
 # ═════════════════════════════════════════════════════════════════════════════
-def intensity_bar(fig, x: float, y: float, w: float, h: float,
-                  value: float, vmin: float, vmax: float,
-                  label: str, color: str,
-                  reverse: bool = False):
+def intensity_bar(
+    fig,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    value: float,
+    vmin: float,
+    vmax: float,
+    label: str,
+    color: str,
+    reverse: bool = False,
+):
     """
     Horizontal bar with value + label + tick marks. reverse=True = smaller is better.
     """
     ax = fig.add_axes([x, y, w, h])
     ax.set_facecolor(BG_MID)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
     for s in ax.spines.values():
         s.set_edgecolor(GRID_COL)
 
@@ -450,55 +620,118 @@ def intensity_bar(fig, x: float, y: float, w: float, h: float,
     ratio = max(0, min(1, (value - vmin) / (vmax - vmin)))
     if reverse:
         ratio = 1 - ratio
-    ax.barh(0, ratio, color=color, height=0.6, zorder=2,
-            edgecolor=TEXT_BRIGHT, lw=0.6)
+    ax.barh(0, ratio, color=color, height=0.6, zorder=2, edgecolor=TEXT_BRIGHT, lw=0.6)
 
-    ax.set_xlim(0, 1); ax.set_ylim(-0.6, 0.6)
-    ax.text(0.01, 0, label, ha="left", va="center",
-            color=TEXT_BRIGHT, fontsize=10, fontweight="bold", family=FONT_SANS,
-            transform=ax.transAxes, path_effects=_shadow(2))
-    ax.text(0.99, 0, f"{value:.2f}" if isinstance(value, float) else str(value),
-            ha="right", va="center",
-            color=color, fontsize=11, fontweight="bold",
-            transform=ax.transAxes, path_effects=_shadow(2))
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.6, 0.6)
+    ax.text(
+        0.01,
+        0,
+        label,
+        ha="left",
+        va="center",
+        color=TEXT_BRIGHT,
+        fontsize=10,
+        fontweight="bold",
+        family=FONT_SANS,
+        transform=ax.transAxes,
+        path_effects=_shadow(2),
+    )
+    ax.text(
+        0.99,
+        0,
+        f"{value:.2f}" if isinstance(value, float) else str(value),
+        ha="right",
+        va="center",
+        color=color,
+        fontsize=11,
+        fontweight="bold",
+        transform=ax.transAxes,
+        path_effects=_shadow(2),
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 6) Side panel — info/value list, vertical block beside the visual
 # ═════════════════════════════════════════════════════════════════════════════
-def side_panel(fig, x: float, y: float, w: float, h: float,
-               title: str, rows: list[tuple[str, Any, str]],
-               accent: str = C_GOLD):
+def side_panel(
+    fig,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    title: str,
+    rows: list[tuple[str, Any, str]],
+    accent: str = C_GOLD,
+):
     """
     Panel beside the visual with a title + rows (label, value, colour).
     """
     ax = fig.add_axes([x, y, w, h])
     ax.set_facecolor(BG_MID)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
     for s in ax.spines.values():
         s.set_edgecolor(GRID_COL)
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
 
-    
-    ax.add_patch(mpatches.Rectangle((0, 0.92), 1, 0.08,
-                                     facecolor=accent, alpha=0.15, lw=0,
-                                     transform=ax.transAxes))
-    ax.text(0.05, 0.96, title.upper(), ha="left", va="center",
-            color=readable_on(accent, BG_PANEL), fontsize=10, fontweight="bold",
-            transform=ax.transAxes)
-    ax.plot([0.05, 0.95], [0.92, 0.92], color=accent, lw=0.8,
-            alpha=0.5, transform=ax.transAxes)
+    ax.add_patch(
+        mpatches.Rectangle(
+            (0, 0.92),
+            1,
+            0.08,
+            facecolor=accent,
+            alpha=0.15,
+            lw=0,
+            transform=ax.transAxes,
+        )
+    )
+    ax.text(
+        0.05,
+        0.96,
+        title.upper(),
+        ha="left",
+        va="center",
+        color=readable_on(accent, BG_PANEL),
+        fontsize=10,
+        fontweight="bold",
+        transform=ax.transAxes,
+    )
+    ax.plot(
+        [0.05, 0.95],
+        [0.92, 0.92],
+        color=accent,
+        lw=0.8,
+        alpha=0.5,
+        transform=ax.transAxes,
+    )
 
-    
     n = len(rows)
     if n == 0:
         return
     spacing = 0.85 / n
     for i, (label, value, val_color) in enumerate(rows):
         cy = 0.88 - (i + 0.5) * spacing
-        ax.text(0.05, cy, label, ha="left", va="center",
-                color=TEXT_DIM, fontsize=9, transform=ax.transAxes)
-        ax.text(0.95, cy, str(value), ha="right", va="center",
-                color=val_color, fontsize=11, fontweight="bold",
-                transform=ax.transAxes,
-                path_effects=_shadow(2))
+        ax.text(
+            0.05,
+            cy,
+            label,
+            ha="left",
+            va="center",
+            color=TEXT_DIM,
+            fontsize=9,
+            transform=ax.transAxes,
+        )
+        ax.text(
+            0.95,
+            cy,
+            str(value),
+            ha="right",
+            va="center",
+            color=val_color,
+            fontsize=11,
+            fontweight="bold",
+            transform=ax.transAxes,
+            path_effects=_shadow(2),
+        )
