@@ -183,8 +183,8 @@ VISUALS_DIR = os.path.join(OUTPUT_DIR, "visuals")
 # on a RAM-tight machine ~40 figures at 320 DPI can exhaust memory during
 # writeImages. 260/200 keeps the report sharp while cutting peak image memory
 # by roughly a third — enough to finalise reliably.
-PDF_VISUAL_DPI = 260
-PDF_PAGE_DPI = 200
+PDF_VISUAL_DPI = 140
+PDF_PAGE_DPI = 140
 
 
 def _ensure_output_dirs() -> None:
@@ -4016,22 +4016,35 @@ def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
     import io as _io
     import textwrap as _tw
 
-    buf = _io.BytesIO()
-    fig.savefig(
-        buf, format="png", dpi=PDF_VISUAL_DPI, bbox_inches="tight", facecolor=BG_DARK
-    )
-    buf.seek(0)
-    try:
+    is_disk_visual = isinstance(fig, (str, os.PathLike))
+    if is_disk_visual:
         from PIL import Image as _Image
 
-        img_arr = _Image.open(buf)
-        img = np.asarray(img_arr)
-    except Exception:
-        # Fallback: matplotlib-only path
-        import matplotlib.image as _mpimg
-
+        with _Image.open(os.fspath(fig)) as source_image:
+            source_image = source_image.convert("RGB")
+            source_image.thumbnail((1800, 1200), _Image.Resampling.LANCZOS)
+            img = np.asarray(source_image).copy()
+    else:
+        buf = _io.BytesIO()
+        fig.savefig(
+            buf,
+            format="png",
+            dpi=PDF_VISUAL_DPI,
+            bbox_inches="tight",
+            facecolor=BG_DARK,
+        )
         buf.seek(0)
-        img = _mpimg.imread(buf, format="png")
+        try:
+            from PIL import Image as _Image
+
+            with _Image.open(buf) as img_arr:
+                img = np.asarray(img_arr).copy()
+        except Exception:
+            # Fallback: matplotlib-only path
+            import matplotlib.image as _mpimg
+
+            buf.seek(0)
+            img = _mpimg.imread(buf, format="png")
 
     img_h, img_w = img.shape[:2]
     aspect = img_w / max(img_h, 1)
@@ -4147,7 +4160,8 @@ def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
 
     pdf.savefig(new_fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
     plt.close(new_fig)
-    plt.close(fig)
+    if not is_disk_visual:
+        plt.close(fig)
 
 
 def _draw_visual_commentary(pdf, heading: str, body: str):
@@ -5652,7 +5666,8 @@ def run_analysis(
     def _emit_visual(fig, fname):
         """Apply unified chrome (idempotent for v2 figs) + emit a single
         composite PDF page with visual on top and commentary below."""
-        if rebrand_figure is not None:
+        is_disk_visual = isinstance(fig, (str, os.PathLike))
+        if not is_disk_visual and rebrand_figure is not None:
             try:
                 rebrand_figure(
                     fig, home_name=hn, away_name=an, score=str(score), accent=C_GOLD
@@ -5681,10 +5696,11 @@ def run_analysis(
         try:
             _pdf_page_with_commentary(pdf, fig, heading, body)
         except Exception:
-            try:
-                pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
-            except Exception:
-                pass
+            if not is_disk_visual:
+                try:
+                    pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
+                except Exception:
+                    pass
 
     pdf_path = os.path.join(OUTPUT_DIR, f"match_report_{ts}.pdf")
 

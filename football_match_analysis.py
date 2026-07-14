@@ -143,7 +143,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1998582/live/international-fifa-world-cup-2026-france-morocco"
+MATCH_URL = "https://www.whoscored.com/matches/1998901/live/international-fifa-world-cup-2026-norway-england"
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -239,18 +239,20 @@ XG_INTERNAL_BIG_CHANCE_VALUE = 0.29
 XG_INTERNAL_ON_TARGET_BONUS = 0.024
 XG_INTERNAL_WOODWORK_BONUS = 0.038
 
-# Higher-resolution export settings.
-# The first eight figures used to be saved at 150 DPI; all visuals now use the
-# same high-resolution setting, and grouped boards render embedded figures at a
-# higher internal DPI before saving.
-OUTPUT_IMAGE_DPI = 420
-PDF_EXPORT_DPI = 400
+# Memory-safe high-resolution export settings. A 15x7-inch figure at 420 DPI
+# needs roughly 75 MB for one raw RGBA buffer, and tight-bbox rendering can need
+# more than one buffer at once. With dozens of figures retained for the final
+# report, that causes frequent ``bad allocation`` failures on 16-GB Windows
+# systems. 240 DPI still produces a 3600x1680 image while keeping peak memory
+# practical.
+OUTPUT_IMAGE_DPI = 240
+PDF_EXPORT_DPI = 220
 # Boards re-render every source figure into an RGBA buffer at this DPI, then
 # tile 10 of them onto one large canvas. With ~40 figures already held open,
 # 300 DPI here exhausts RAM on the biggest boards (MemoryError). 170 keeps the
 # collages sharp while cutting the peak buffer memory to roughly a third.
-BOARD_RENDER_DPI = 170
-BOARD_SAVE_DPI = 360
+BOARD_RENDER_DPI = 120
+BOARD_SAVE_DPI = 200
 GROUP_BOARD_MAX_VISUALS = 6
 
 
@@ -12573,6 +12575,25 @@ def _build_visual_catalog(info):
     ]
 
 
+def _release_matplotlib_renderer(fig):
+    """Drop cached raster buffers while preserving a figure's artists."""
+    try:
+        canvas = getattr(fig, "canvas", None)
+        if canvas is not None:
+            for attr in ("renderer", "_renderer"):
+                if hasattr(canvas, attr):
+                    setattr(canvas, attr, None)
+            # FigureCanvasAgg reuses its renderer when this key matches the
+            # canvas dimensions. Reset it so the next draw allocates a fresh
+            # renderer instead of trying to call clear() on None.
+            if hasattr(canvas, "_lastKey"):
+                canvas._lastKey = None
+        if hasattr(fig, "_cachedRenderer"):
+            fig._cachedRenderer = None
+    except Exception:
+        pass
+
+
 def _fig_to_rgb_array(fig):
     """Render a matplotlib figure to a high-resolution RGB numpy array for collage boards."""
     old_dpi = None
@@ -12592,6 +12613,7 @@ def _fig_to_rgb_array(fig):
                 fig.set_dpi(old_dpi)
         except Exception:
             pass
+        _release_matplotlib_renderer(fig)
 
 
 def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames=None):
@@ -15510,38 +15532,58 @@ def main():
     #  (chrome + panel cards + key insight + bottom metric strip).
     #  Falls back to the legacy renderers if tactical_visualizations is unavailable.
     # ══════════════════════════════════════════════════════
+    def _release_figure_renderer(fig):
+        """Release large Agg pixel buffers without closing the figure.
+
+        The artists must remain available for the boards and PDF, but a cached
+        420-DPI renderer can consume tens of megabytes per figure. Matplotlib
+        recreates the renderer automatically the next time the figure is drawn.
+        """
+        _release_matplotlib_renderer(fig)
+
+    def _save_with_memory_fallback(fig, path, dpis, facecolor, pad_inches=None):
+        """Save a figure while keeping peak renderer memory bounded."""
+        last_error = None
+        for dpi in dict.fromkeys(int(value) for value in dpis if int(value) > 0):
+            try:
+                kwargs = {
+                    "dpi": dpi,
+                    "bbox_inches": "tight",
+                    "facecolor": facecolor,
+                    "edgecolor": "none",
+                }
+                if pad_inches is not None:
+                    kwargs["pad_inches"] = pad_inches
+                fig.savefig(path, **kwargs)
+                _release_figure_renderer(fig)
+                return dpi, None
+            except (MemoryError, OSError, RuntimeError, ValueError) as exc:
+                last_error = exc
+                _release_figure_renderer(fig)
+                import gc as _gc
+
+                _gc.collect()
+        return None, last_error
+
     def _save_and_append(fig, fname):
         """Save the v2 figure (its chrome already includes the unified
         identity, so we DON'T add the legacy _watermark on top — it would
         duplicate the yellow bars + footer)."""
         fname = _clean_output_filename(fname)
         _apply_neon_backdrop(fig)
-        # On a RAM-tight machine the Agg renderer for a 420-DPI save can fail
-        # with MemoryError. Rather than abort the whole run (losing the PDF and
-        # every later fig), free memory and retry the save at progressively
-        # lower DPI so the fig still lands — just a touch softer.
-        for _dpi in (OUTPUT_IMAGE_DPI, 300, 200):
-            try:
-                fig.savefig(
-                    f"{SAVE_DIR}/{fname}",
-                    dpi=_dpi,
-                    bbox_inches="tight",
-                    facecolor=BG_DARK,
-                )
-                break
-            except Exception as _sv_err:
-                import gc as _gc
-
-                _gc.collect()
-                if _dpi == 200:
-                    console.print(
-                        f"[yellow]  ⚠ Could not save {fname}: {_sv_err}[/yellow]"
-                    )
-                elif _dpi == OUTPUT_IMAGE_DPI:
-                    console.print(
-                        f"[yellow]  ⚠ {fname} save hit memory pressure — "
-                        f"retrying at lower DPI[/yellow]"
-                    )
+        saved_dpi, save_error = _save_with_memory_fallback(
+            fig,
+            f"{SAVE_DIR}/{fname}",
+            (OUTPUT_IMAGE_DPI, 200, 160, 120, 96),
+            BG_DARK,
+        )
+        if saved_dpi is None:
+            console.print(f"[yellow]  ⚠ Could not save {fname}: {save_error}[/yellow]")
+        elif saved_dpi < OUTPUT_IMAGE_DPI:
+            console.print(
+                f"[yellow]  ⚠ {fname} saved at {saved_dpi} DPI due to "
+                "memory pressure[/yellow]"
+            )
         figs.append(fig)
         figs_filenames.append(fname)
 
@@ -15812,14 +15854,23 @@ def main():
             os.path.dirname(fname), _clean_output_filename(os.path.basename(fname))
         )
         _watermark(fig)
-        fig.savefig(
+        saved_dpi, save_error = _save_with_memory_fallback(
+            fig,
             fname,
-            dpi=PDF_EXPORT_DPI,
-            bbox_inches="tight",
-            facecolor=fig.get_facecolor(),
-            edgecolor="none",
+            (PDF_EXPORT_DPI, 180, 150, 120, 96),
+            fig.get_facecolor(),
             pad_inches=0.1,
         )
+        if saved_dpi is None:
+            console.print(
+                f"[yellow]  ⚠ Could not save {os.path.basename(fname)}: "
+                f"{save_error}[/yellow]"
+            )
+        elif saved_dpi < PDF_EXPORT_DPI:
+            console.print(
+                f"[yellow]  ⚠ {os.path.basename(fname)} saved at {saved_dpi} DPI "
+                "due to memory pressure[/yellow]"
+            )
         figs.append(fig)
         # Track only the basename (without dir path) so the PDF builder
         # can group by filename pattern.
@@ -16546,14 +16597,28 @@ def main():
 
     # ── Extended pipeline (PPDA, goals log, unified PDF) ──
     try:
-        # The unified report now embeds the 39 tactical figs directly via
-        # extra_figs and adds a 'Reading this visual' commentary page after
-        # each one — so we DON'T merge with the legacy tactical PDFs any more.
-        # That keeps the output to a single, comprehensive match_report PDF.
+        # Boards have already consumed the live matplotlib figures. Close them
+        # before building the report and embed their saved PNG files lazily;
+        # retaining every live canvas while PdfPages caches page images can
+        # otherwise exhaust RAM during PDF finalization on Windows.
+        report_visuals = [
+            os.path.join(SAVE_DIR, name) if name else "" for name in figs_filenames
+        ]
+        if not SHOW_WINDOWS:
+            for report_fig in figs:
+                try:
+                    plt.close(report_fig)
+                except Exception:
+                    pass
+            figs.clear()
+            import gc as _report_gc
+
+            _report_gc.collect()
+
         ext_result = _run_extended_analysis(
             md,
             parse_all_fn=parse_all,
-            extra_figs=figs,
+            extra_figs=report_visuals,
             extra_figs_filenames=figs_filenames,
             merge_with_pdfs=None,
         )
