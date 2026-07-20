@@ -27,7 +27,7 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LinearSegmentedColormap
-from match_metrics import team_advanced_metrics
+from match_metrics import defensive_blocks_count, team_advanced_metrics
 
 # Unified design system (AMOLED pure-black frame, fonts, palette)
 try:
@@ -4737,50 +4737,19 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         ),
     ]
 
-    def _blocked_shots_by(shooter_id) -> int:
-        if events is None or events.empty or "team_id" not in events.columns:
-            return 0
-        sub = events[events["team_id"] == shooter_id]
-        if sub.empty:
-            return 0
-        hit = pd.Series(False, index=sub.index)
-        for col in ("type", "shot_whoscored_type", "shot_category"):
-            if col in sub.columns:
-                vals = (
-                    sub[col]
-                    .fillna("")
-                    .astype(str)
-                    .str.lower()
-                    .str.replace(r"[^a-z]", "", regex=True)
-                )
-                hit = hit | vals.isin({"blockedshot", "blocked"})
-        if "qualifier_names" in sub.columns:
-            hit = hit | sub["qualifier_names"].fillna("").astype(str).str.contains(
-                r"\bBlocked\b", case=False, regex=True
-            )
-        if "is_shot" in sub.columns:
-            hit = hit & ((sub["is_shot"] == True) | hit)
-        return int(hit.sum())
-
     def _defensive_blocks_for(team_id) -> int:
+        if events is None or events.empty:
+            return 0
         opp_id = away_id if team_id == home_id else home_id
-        opp_blocks = _blocked_shots_by(opp_id)
-        own_blocks = _blocked_shots_by(team_id)
-        if not opp_blocks:
+        opp_blocks = defensive_blocks_count(events, team_id, opp_id)
+        if opp_blocks == 0:
             opp_side = "away" if team_id == home_id else "home"
             mc = (info.get("matchcentre_stats", {}) or {}).get(opp_side, {}) or {}
             try:
                 opp_blocks = int(mc.get("blocked") or 0)
             except Exception:
                 opp_blocks = 0
-        if not own_blocks:
-            own_side = "home" if team_id == home_id else "away"
-            mc = (info.get("matchcentre_stats", {}) or {}).get(own_side, {}) or {}
-            try:
-                own_blocks = int(mc.get("blocked") or 0)
-            except Exception:
-                own_blocks = 0
-        return opp_blocks if opp_blocks else own_blocks
+        return opp_blocks
 
     # Fouls: a "Foul" event is logged for BOTH the player who committed it
     # (outcome Unsuccessful) and the one who won it (Successful). Count only

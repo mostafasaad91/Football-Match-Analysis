@@ -29,6 +29,8 @@ from match_metrics import (
     box_entry_mask,
     cross_mask,
     deep_completion_mask,
+    defensive_block_events,
+    defensive_blocks_count,
     final_third_entry_mask,
     fouls_committed_count,
     fouls_committed_mask,
@@ -405,12 +407,13 @@ def _separate_network_positions(display: dict[str, tuple[float, float, float]], 
 def team_event_counts(events, team_id):
     team = events[events["team_id"].eq(team_id)]
     types = team["type"].astype(str)
+    opponent_id = AWAY_ID if team_id == HOME_ID else HOME_ID
     return {
         "Tackles": int(types.eq("Tackle").sum()),
         "Interceptions": int(types.eq("Interception").sum()),
         "Recoveries": int(types.eq("BallRecovery").sum()),
         "Clearances": int(types.eq("Clearance").sum()),
-        "Blocks": int(types.eq("BlockedShot").sum()),
+        "Blocks": defensive_blocks_count(events, team_id, opponent_id),
         "Fouls": fouls_committed_count(events, team_id),
     }
 
@@ -1071,11 +1074,16 @@ def crosses(events, team_id, number):
 
 def defensive_activity(events, team_id, number):
     event_types = events["type"].astype(str)
-    non_foul_actions = event_types.isin(["Tackle", "Interception", "BallRecovery", "Clearance", "BlockedShot"])
+    non_foul_actions = event_types.isin(["Tackle", "Interception", "BallRecovery", "Clearance"])
     committed_fouls = fouls_committed_mask(events)
-    actions = events[
+    own_actions = events[
         events["team_id"].eq(team_id) & (non_foul_actions | committed_fouls)
     ].dropna(subset=["x", "y"]).copy()
+    opponent_id = AWAY_ID if team_id == HOME_ID else HOME_ID
+    block_actions = defensive_block_events(events, team_id, opponent_id).dropna(
+        subset=["x", "y"]
+    )
+    actions = pd.concat([own_actions, block_actions], ignore_index=True, sort=False)
     fig, pitch, side = pitch_axes(
         f"Defensive Activity · {TEAM_NAME[team_id]}",
         "Smoothed team-colour heatmap; bright colour and shape identify each action type",

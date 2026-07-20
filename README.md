@@ -171,6 +171,7 @@ prevents the same statistic from changing between pages.
 | Attacking transition | A possession that begins with an open-play regain and quickly advances, enters the final third/box, or produces a shot. |
 | Counterpress success | A regain within five seconds of opponent control and within 15 pitch units of the loss. |
 | Fouls committed | In paired WhoScored feeds, only the offender's `Unsuccessful` foul row is counted; the opponent's mirrored `Successful` foul-won row is excluded. |
+| Defensive blocks | Blocked shots taken by the opponent, detected from `shot_whoscored_type`, `shot_category`, or the exact `Blocked` qualifier, then attributed to the defending team. |
 | Progressive pass | A completed open-play pass meeting the distance threshold for its starting zone. |
 | Field tilt | Share of completed passes ending in the final third; it is not labelled as possession. |
 | Deep completion | Completed open-play pass into the central deep-attacking zone from outside it. |

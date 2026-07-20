@@ -55,6 +55,8 @@ from visualization_components import (
 from visualization_components import _panel_rect
 from match_metrics import (
     cross_mask,
+    defensive_block_events,
+    defensive_blocks_count,
     fouls_committed_count,
     high_regain_events,
     player_sequence_metrics,
@@ -4506,42 +4508,17 @@ def _smooth_density_grid(
 
 def _blocked_shots_for_team(events, info, team_id) -> int:
     """Count blocked shots as defensive blocks by the opponent of the shooter."""
-    if "team_id" not in events.columns:
-        return 0
     hid = info.get("home_id")
     aid = info.get("away_id")
-
-    def _blocked_shots_by(shooter_id):
-        mask = events["team_id"] == shooter_id
-        hit = pd.Series(False, index=events.index)
-        for col in ("type", "shot_whoscored_type", "shot_category"):
-            if col in events.columns:
-                vals = (
-                    events[col]
-                    .fillna("")
-                    .astype(str)
-                    .str.lower()
-                    .str.replace(r"[^a-z]", "", regex=True)
-                )
-                hit = hit | vals.isin({"blockedshot", "blocked"})
-        if "qualifier_names" in events.columns:
-            hit = hit | events["qualifier_names"].fillna("").astype(str).str.contains(
-                r"\bBlocked\b", case=False, regex=True
-            )
-        if "is_shot" in events.columns:
-            mask = mask & ((events["is_shot"] == True) | hit)
-        return events[mask & hit].copy()
-
-    direct = len(_blocked_shots_by(team_id))
     opp_id = aid if team_id == hid else (hid if team_id == aid else None)
     if opp_id is None:
-        return direct
-    opponent_blocked_shots = len(_blocked_shots_by(opp_id))
-    if not opponent_blocked_shots:
+        return 0
+    opponent_blocked_shots = defensive_blocks_count(events, team_id, opp_id)
+    if opponent_blocked_shots == 0:
         opp_side = "away" if team_id == hid else "home"
         mc = (info.get("matchcentre_stats", {}) or {}).get(opp_side, {}) or {}
         opponent_blocked_shots = int(_safe(mc.get("blocked"), 0) or 0)
-    return opponent_blocked_shots if opponent_blocked_shots else direct
+    return opponent_blocked_shots
 
 
 def _defensive_events_for_team(events, info, team_id):
@@ -4552,41 +4529,11 @@ def _defensive_events_for_team(events, info, team_id):
     aid = info.get("away_id")
     opp_id = aid if team_id == hid else (hid if team_id == aid else None)
 
-    def _blocked_shots_by(shooter_id):
-        mask = events["team_id"] == shooter_id
-        hit = pd.Series(False, index=events.index)
-        for col in ("type", "shot_whoscored_type", "shot_category"):
-            if col in events.columns:
-                vals = (
-                    events[col]
-                    .fillna("")
-                    .astype(str)
-                    .str.lower()
-                    .str.replace(r"[^a-z]", "", regex=True)
-                )
-                hit = hit | vals.isin({"blockedshot", "blocked"})
-        if "qualifier_names" in events.columns:
-            hit = hit | events["qualifier_names"].fillna("").astype(str).str.contains(
-                r"\bBlocked\b", case=False, regex=True
-            )
-        if "is_shot" in events.columns:
-            mask = mask & ((events["is_shot"] == True) | hit)
-        return events[mask & hit].copy()
-
-    if opp_id is not None:
-        blocks = _blocked_shots_by(opp_id)
-        if blocks.empty:
-            blocks = _blocked_shots_by(team_id)
-    else:
-        blocks = _blocked_shots_by(team_id)
-
-    if not blocks.empty:
-        blocks["team_id"] = team_id
-        blocks["type"] = "BlockedShot"
-        blocks["player"] = blocks.get("blocked_by", "Team block")
-        blocks["player"] = (
-            blocks["player"].fillna("Team block").replace("", "Team block")
-        )
+    blocks = (
+        defensive_block_events(events, team_id, opp_id)
+        if opp_id is not None
+        else events.iloc[0:0].copy()
+    )
     if own.empty:
         return blocks
     if blocks.empty:
