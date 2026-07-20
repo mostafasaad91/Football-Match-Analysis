@@ -206,7 +206,7 @@ def row_dot_plot(
     rows: list[tuple[str, float, float, str]],
     title: str | None = None,
 ) -> None:
-    """Opta-style bilateral comparison: France | metric | England."""
+    """Opta-style bilateral comparison: home team | metric | away team."""
     row_count = max(len(rows), 1)
     ax.set_xlim(0, 1)
     ax.set_ylim(-0.05, row_count + 0.72)
@@ -286,8 +286,8 @@ def shot_profile(xg: pd.DataFrame, events: pd.DataFrame) -> Path:
         "Opta-style bilateral comparison · exact values from full-match shots",
     )
     row_dot_plot(ax, rows)
-    fig.text(0.08, 0.075, "● France", color=HOME, fontsize=10, fontweight="bold")
-    fig.text(0.18, 0.075, "◆ England", color=AWAY, fontsize=10, fontweight="bold")
+    fig.text(0.08, 0.075, f"● {HOME_NAME}", color=HOME, fontsize=10, fontweight="bold")
+    fig.text(0.18, 0.075, f"◆ {AWAY_NAME}", color=AWAY, fontsize=10, fontweight="bold")
     fig.text(0.94, 0.075, "VALUES LEFT · METRIC CENTRE · VALUES RIGHT", color=MUTED, ha="right", fontsize=8.5)
     return save(fig, "01_shot_profile_redesign.png")
 
@@ -347,8 +347,8 @@ def advanced_metrics(team_metrics: pd.DataFrame) -> Path:
             for label, key, fmt in specs
         ]
         row_dot_plot(ax, rows, group_name)
-    fig.text(0.06, 0.035, "● France", color=HOME, fontsize=10, fontweight="bold")
-    fig.text(0.16, 0.035, "◆ England", color=AWAY, fontsize=10, fontweight="bold")
+    fig.text(0.06, 0.035, f"● {HOME_NAME}", color=HOME, fontsize=10, fontweight="bold")
+    fig.text(0.16, 0.035, f"◆ {AWAY_NAME}", color=AWAY, fontsize=10, fontweight="bold")
     fig.text(0.94, 0.035, "REAL MATCH EVENTS · CANONICAL MATCH_METRICS", ha="right", fontsize=8, color=NEUTRAL)
     return save(fig, "02_advanced_metrics_redesign.png")
 
@@ -581,7 +581,7 @@ def xt_per_minute(events: pd.DataFrame) -> Path:
     away = work[work["team_id"].eq(AWAY_ID)].groupby("minute")["xT"].sum().reindex(minutes, fill_value=0)
     home_roll = home.rolling(5, min_periods=1).mean()
     away_roll = away.rolling(5, min_periods=1).mean()
-    fig, ax = page("xT per Minute", "France above zero; England mirrored below zero for comparison—not negative xT")
+    fig, ax = page("xT per Minute", f"{HOME_NAME} above zero; {AWAY_NAME} mirrored below zero for comparison—not negative xT")
     clean_ax(ax)
     ax.axhline(0, color=GRID, lw=1.4)
     ax.bar(minutes, home.values, width=0.82, color=HOME, alpha=0.38)
@@ -593,8 +593,8 @@ def xt_per_minute(events: pd.DataFrame) -> Path:
     ax.set_xlim(0, max_min + 18)
     ax.set_xlabel("Match minute")
     ax.set_yticks([])
-    ax.text(max_min + 1, float(home_roll.iloc[-1]), "France · 5-min rolling", color=HOME, va="center", fontweight="bold")
-    ax.text(max_min + 1, -float(away_roll.iloc[-1]), "England · mirrored rolling", color=AWAY, va="center", fontweight="bold")
+    ax.text(max_min + 1, float(home_roll.iloc[-1]), f"{HOME_NAME} · 5-min rolling", color=HOME, va="center", fontweight="bold")
+    ax.text(max_min + 1, -float(away_roll.iloc[-1]), f"{AWAY_NAME} · mirrored rolling", color=AWAY, va="center", fontweight="bold")
     ax.grid(axis="x", color=GRID, alpha=0.5, lw=0.7)
     return save(fig, "05_xt_per_minute_redesign.png")
 
@@ -686,10 +686,10 @@ def dominance(events: pd.DataFrame) -> Path:
             diff = int(hh[ix, iy] - ah[ix, iy])
             ax.text(ix * 20 + 10, iy * (100 / 3) + 100 / 6, f"{diff:+d}", ha="center", va="center", color=TEXT, fontsize=10, fontweight="bold")
     cbar = fig.colorbar(image, ax=ax, fraction=0.025, pad=0.03, ticks=[-1, 0, 1])
-    cbar.ax.set_yticklabels(["England", "Balanced", "France"])
+    cbar.ax.set_yticklabels([AWAY_NAME, "Balanced", HOME_NAME])
     cbar.ax.tick_params(colors=MUTED, labelsize=8)
     cbar.outline.set_edgecolor(GRID)
-    fig.text(0.08, 0.075, "Cell labels = France touches minus England touches", color=MUTED, fontsize=9)
+    fig.text(0.08, 0.075, f"Cell labels = {HOME_NAME} touches minus {AWAY_NAME} touches", color=MUTED, fontsize=9)
     return save(fig, "09_dominating_zones_redesign.png")
 
 
@@ -814,8 +814,8 @@ def summary_board(events: pd.DataFrame, team_metrics: pd.DataFrame, xg: pd.DataF
         ax.text(0.05, 0.78, label, transform=ax.transAxes, color=MUTED, fontsize=8, fontweight="bold")
         ax.text(0.05, 0.38, fmt.format(hv), transform=ax.transAxes, color=HOME, fontsize=19, fontweight="bold")
         ax.text(0.55, 0.38, fmt.format(av), transform=ax.transAxes, color=AWAY, fontsize=19, fontweight="bold")
-        ax.text(0.05, 0.10, "France", transform=ax.transAxes, color=MUTED, fontsize=7)
-        ax.text(0.55, 0.10, "England", transform=ax.transAxes, color=MUTED, fontsize=7)
+        ax.text(0.05, 0.10, HOME_NAME, transform=ax.transAxes, color=MUTED, fontsize=7)
+        ax.text(0.55, 0.10, AWAY_NAME, transform=ax.transAxes, color=MUTED, fontsize=7)
 
     flow_ax = fig.add_subplot(gs[1:, :2])
     clean_ax(flow_ax)

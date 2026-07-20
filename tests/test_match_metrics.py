@@ -206,6 +206,21 @@ class MatchMetricTests(unittest.TestCase):
         self.assertEqual(metrics["rest_defence_exposures"], 1)
         self.assertEqual(metrics["rest_defence_vulnerability"], 100.0)
 
+    def test_progressive_break_into_final_third_is_a_dangerous_counter(self):
+        events = pd.DataFrame(
+            [
+                event(1, "Pass", 7, 0, 40, 75, player="Home A"),
+                event(2, "Interception", 7, 5, 15, player="Away A"),
+                event(2, "Pass", 7, 7, 15, 70, player="Away B"),
+                event(1, "BallRecovery", 7, 10, 68, player="Home B"),
+            ]
+        )
+        metrics = team_advanced_metrics(events, self.info)["home"]
+
+        self.assertEqual(metrics["rest_defence_exposures"], 1)
+        self.assertEqual(metrics["rest_defence_dangerous_counters"], 1)
+        self.assertEqual(metrics["rest_defence_vulnerability"], 100.0)
+
     def test_game_state_is_assigned_before_each_possession(self):
         events = pd.DataFrame(
             [
