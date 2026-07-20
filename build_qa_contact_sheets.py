@@ -88,15 +88,37 @@ def _layout(count: int) -> tuple[int, int]:
     return 2, 4
 
 
-def build_qa_contact_sheets(out_dir: Path | str = DEFAULT_OUT) -> list[Path]:
+def build_qa_contact_sheets(
+    out_dir: Path | str = DEFAULT_OUT,
+    *,
+    home_name: str = "France",
+    away_name: str = "England",
+    score: str = "4 - 6",
+    home_color: str = HOME,
+    away_color: str = AWAY,
+    home_slug: str = "france",
+    away_slug: str = "england",
+) -> list[Path]:
     """Build exactly eight story-led QA dashboards from the strongest visuals."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("qa_contact_sheet_*.png"):
         old.unlink(missing_ok=True)
 
+    dashboards = [
+        (
+            title,
+            subtitle,
+            [
+                name.replace("france", home_slug).replace("england", away_slug)
+                for name in filenames
+            ],
+        )
+        for title, subtitle, filenames in DASHBOARDS
+    ]
+
     generated: list[Path] = []
-    for sheet_index, (title, subtitle, filenames) in enumerate(DASHBOARDS, start=1):
+    for sheet_index, (title, subtitle, filenames) in enumerate(dashboards, start=1):
         paths = [out / name for name in filenames if (out / name).exists()]
         missing = [name for name in filenames if not (out / name).exists()]
         if not paths:
@@ -129,15 +151,15 @@ def build_qa_contact_sheets(out_dir: Path | str = DEFAULT_OUT) -> list[Path]:
         fig.text(0.025, 0.958, "POST-MATCH VISUAL REVIEW", color=FOCUS, fontsize=8.5, fontweight="bold", va="top")
         fig.text(0.025, 0.923, title, color=TEXT, fontsize=22, fontweight="bold", va="top")
         fig.text(0.025, 0.885, subtitle, color=MUTED, fontsize=10, va="top")
-        fig.text(0.735, 0.928, "FRANCE", color=HOME, fontsize=11, fontweight="bold", ha="right")
-        fig.text(0.79, 0.925, "4 - 6", color=TEXT, fontsize=18, fontweight="bold", ha="center")
-        fig.text(0.845, 0.928, "ENGLAND", color=AWAY, fontsize=11, fontweight="bold", ha="left")
+        fig.text(0.735, 0.928, home_name.upper(), color=home_color, fontsize=11, fontweight="bold", ha="right")
+        fig.text(0.79, 0.925, score, color=TEXT, fontsize=18, fontweight="bold", ha="center")
+        fig.text(0.845, 0.928, away_name.upper(), color=away_color, fontsize=11, fontweight="bold", ha="left")
         fig.text(0.975, 0.958, f"DASHBOARD {sheet_index:02d} / 08", color=NEUTRAL, fontsize=7.5, fontweight="bold", ha="right", va="top")
-        fig.add_artist(Line2D([0.025, 0.50], [0.862, 0.862], transform=fig.transFigure, color=HOME, lw=2.2))
-        fig.add_artist(Line2D([0.50, 0.975], [0.862, 0.862], transform=fig.transFigure, color=AWAY, lw=2.2))
+        fig.add_artist(Line2D([0.025, 0.50], [0.862, 0.862], transform=fig.transFigure, color=home_color, lw=2.2))
+        fig.add_artist(Line2D([0.50, 0.975], [0.862, 0.862], transform=fig.transFigure, color=away_color, lw=2.2))
         fig.text(0.025, 0.021, "CURATED FROM REAL MATCH EVENTS · QA + STORY SELECTION", color=NEUTRAL, fontsize=7)
         if missing:
-            fig.text(0.975, 0.021, f"Missing {len(missing)} optional source visual(s)", color=AWAY, fontsize=7, ha="right")
+            fig.text(0.975, 0.021, f"Missing {len(missing)} optional source visual(s)", color=away_color, fontsize=7, ha="right")
 
         path = out / f"qa_contact_sheet_{sheet_index:02d}.png"
         fig.savefig(path, dpi=135, facecolor=BG)

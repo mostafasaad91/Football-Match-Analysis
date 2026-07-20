@@ -69,6 +69,12 @@ The production pipeline resolves colours through
 are injected into every downstream visual through the match metadata; they are
 not fixed home/away colours.
 
+Live match runs are routed through the same complete AMOLED renderer used by
+the reference package (`USE_COMPLETE_AMOLED_PACKAGE = True`). The fixture
+identity, score, output names and both team palettes are configured from the
+current match before any visual is rendered, preventing new fixtures from
+falling back to the legacy visual style.
+
 ## Requirements
 
 - Python 3.10 or newer.
@@ -187,12 +193,12 @@ feed the player radar pages.
 | `match_metrics.py` | Canonical possession, transition, progression, territory and advanced-team metrics. |
 | `match_report.py` | Report pages, PPDA analysis, player tables and PDF assembly. |
 | `tactical_pdf_report.py` | Connected tactical commentary written from the visual evidence. |
-| `tactical_visualizations.py` | Production chart renderers and DataFrame adapters. |
+| `tactical_visualizations.py` | Metric adapters and legacy-compatible chart helpers. |
 | `player_radar.py` | Player participation metrics and pizza/radar exports. |
 | `visualization_components.py` | Shared AMOLED chart components and readability helpers. |
 | `visualization_design.py` | Global visual tokens, typography and reusable frames. |
-| `visual_redesign_full.py` | Reproducible full sample package and visual QA build. |
-| `visual_redesign_preview.py` | Shared sample identity and comparison-page helpers. |
+| `visual_redesign_full.py` | Unified production AMOLED renderer, PDF package and visual QA build. |
+| `visual_redesign_preview.py` | Shared dynamic fixture identity and comparison-page helpers. |
 | `build_qa_contact_sheets.py` | Eight curated dashboards that summarise the match story. |
 | `tests/` | Metric, substitution, colour and visual-identity regression tests. |
 

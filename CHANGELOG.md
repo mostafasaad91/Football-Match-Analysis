@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Live match analysis now routes through the unified complete AMOLED renderer,
+  so every fixture receives the same current visual system as the reference
+  package instead of the legacy renderer.
+- Match names, score, colours, export slugs, QA dashboards and PDF commentary
+  are configured dynamically from the active fixture.
 - Pass-network links now use a relationship palette that is always distinct
   from player-node colours.
 - Pass-network and average-position player labels use larger bright text,

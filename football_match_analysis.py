@@ -150,7 +150,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/2007643/live/international-fifa-world-cup-2026-france-england"
+MATCH_URL = "https://www.whoscored.com/matches/2007644/live/international-fifa-world-cup-2026-spain-argentina"
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -185,6 +185,9 @@ def _match_output_folder(info: dict, root: str = SAVE_DIR) -> str:
 # You can also force exact match-day kit colours with CUSTOM_KIT_COLORS below.
 HOME_KIT_TYPE = "home"
 AWAY_KIT_TYPE = "auto"
+# Production renderer switch. Keep True to generate the same complete AMOLED
+# identity used by visual_redesign_full.py for every newly parsed fixture.
+USE_COMPLETE_AMOLED_PACKAGE = True
 CUSTOM_KIT_COLORS = {
     # "home": "#C8102E",
     # "away": "#034694",
@@ -15444,6 +15447,36 @@ def main():
     )
 
     print_summary(info, xg_data, events)
+
+    if USE_COMPLETE_AMOLED_PACKAGE:
+        # One production path for every fixture. The previous implementation
+        # generated the redesigned sample through visual_redesign_full.py but
+        # sent live matches through a separate v2/legacy renderer, so a new
+        # match could still look like the old report. Configure and execute the
+        # exact same AMOLED package from the live match DataFrames instead.
+        from visual_redesign_full import generate_match_package
+
+        xg_frame = (
+            pd.DataFrame(xg_data)
+            .T.reset_index()
+            .rename(columns={"index": "team"})
+        )
+        package = generate_match_package(
+            events,
+            players,
+            xg_frame,
+            team_advanced_frame,
+            player_sequence_frame,
+            info,
+            SAVE_DIR,
+            clean=True,
+        )
+        console.print(
+            f"[bold green]  ✓ Complete AMOLED package → "
+            f"{package['output_dir']}[/bold green]"
+        )
+        console.print(f"[green]  ✓ Tactical PDF → {package['pdf']}[/green]")
+        return package
 
     plt.style.use("dark_background")
     figs = []

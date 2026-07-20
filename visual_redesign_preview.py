@@ -53,6 +53,7 @@ AWAY_ID = 345
 
 TEAM_COLOR = {HOME_ID: HOME, AWAY_ID: AWAY}
 TEAM_NAME = {HOME_ID: HOME_NAME, AWAY_ID: AWAY_NAME}
+MATCH_SCORE = "4 — 6"
 
 
 def _bool(series: pd.Series) -> pd.Series:
@@ -147,7 +148,7 @@ def amoled_header(
 
     fig.text(0.705, 0.954, HOME_NAME.upper(), color=HOME, fontsize=8.2,
              fontweight="bold", ha="right", va="center", zorder=95)
-    fig.text(0.785, 0.954, "4 — 6", color=TEXT, fontsize=12,
+    fig.text(0.785, 0.954, MATCH_SCORE, color=TEXT, fontsize=12,
              fontweight="bold", ha="center", va="center", zorder=95,
              path_effects=glow)
     fig.text(0.865, 0.954, AWAY_NAME.upper(), color=AWAY, fontsize=8.2,

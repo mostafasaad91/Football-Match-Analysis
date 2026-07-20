@@ -1312,9 +1312,9 @@ class TacticalPDF:
         integrated = escape(visual_implication(path, self.context))
         x, width = 42, PAGE_W - 84
         top = VISUAL_NOTE_H - 62
-        h1 = self._paragraph(f'<b><font color="#2563EB">PERFORMANCE ANALYST.</font></b> {performance}', x, top, width, 72, self.commentary_body)
+        h1 = self._paragraph(f'<b><font color="{self.context["home_color"]}">PERFORMANCE ANALYST.</font></b> {performance}', x, top, width, 72, self.commentary_body)
         top -= h1 + 6
-        h2 = self._paragraph(f'<b><font color="#FF734D">DATA ANALYST.</font></b> {evidence}', x, top, width, 53, self.commentary_body)
+        h2 = self._paragraph(f'<b><font color="{self.context["away_color"]}">DATA ANALYST.</font></b> {evidence}', x, top, width, 53, self.commentary_body)
         top -= h2 + 6
         self._paragraph(f'<b><font color="#FFD43B">INTEGRATED READ.</font></b> {integrated}', x, top, width, 42, self.commentary_body)
 
@@ -1353,9 +1353,16 @@ def build_tactical_pdf(
     player_metrics: pd.DataFrame,
     match_info: dict,
 ) -> Path:
+    global HOME, AWAY
+    home_hex = str(match_info.get("home_color") or "#2563EB")
+    away_hex = str(match_info.get("away_color") or "#FF734D")
+    HOME = colors.HexColor(home_hex)
+    AWAY = colors.HexColor(away_hex)
     output.parent.mkdir(parents=True, exist_ok=True)
     valid_paths = [Path(path).resolve() for path in paths if Path(path).exists()]
     context = build_context(events, xg, team_metrics, player_metrics, match_info)
+    context["home_color"] = home_hex
+    context["away_color"] = away_hex
     section_copy = _section_copy(context)
     groups = _ordered_section_paths(valid_paths)
     core = [

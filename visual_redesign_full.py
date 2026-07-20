@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import re
 import shutil
 from pathlib import Path
 
@@ -57,9 +58,59 @@ HOME_NAME = base.HOME_NAME
 AWAY_NAME = base.AWAY_NAME
 TEAM_COLOR = base.TEAM_COLOR
 TEAM_NAME = base.TEAM_NAME
+MATCH_SCORE = "4-6"
 
 PITCH_LENGTH = 105.0
 PITCH_WIDTH = 58.0
+
+
+def _safe_slug(value: str) -> str:
+    """Return a filesystem-safe, stable slug for team-labelled exports."""
+    slug = re.sub(r"[^a-z0-9]+", "_", str(value or "team").strip().lower())
+    return slug.strip("_") or "team"
+
+
+def _team_slug(team_id: int) -> str:
+    return _safe_slug(TEAM_NAME.get(team_id, str(team_id)))
+
+
+def configure_match(match_info: dict, output_dir: Path | str) -> None:
+    """Inject one fixture's identity into the reusable AMOLED renderer.
+
+    The sample renderer originally carried France/England module constants.
+    Production calls now configure the same renderer from parsed match data,
+    so every fixture receives the new identity rather than the legacy path.
+    """
+    global OUT, MATCH_KEY, MATCH_SCORE
+    global HOME_ID, AWAY_ID, HOME_NAME, AWAY_NAME, HOME, AWAY
+    global TEAM_COLOR, TEAM_NAME
+
+    HOME_ID = int(match_info["home_id"])
+    AWAY_ID = int(match_info["away_id"])
+    HOME_NAME = str(match_info.get("home_name") or "Home")
+    AWAY_NAME = str(match_info.get("away_name") or "Away")
+    HOME = str(match_info.get("home_color") or base.HOME)
+    AWAY = str(match_info.get("away_color") or base.AWAY)
+    MATCH_SCORE = str(match_info.get("score") or "-")
+    OUT = Path(output_dir).resolve()
+    MATCH_KEY = OUT.name
+    TEAM_COLOR = {HOME_ID: HOME, AWAY_ID: AWAY}
+    TEAM_NAME = {HOME_ID: HOME_NAME, AWAY_ID: AWAY_NAME}
+
+    # Shared sample helpers draw comparison pages and headers from their own
+    # module globals, so update them at the same configuration boundary.
+    base.HOME_ID = HOME_ID
+    base.AWAY_ID = AWAY_ID
+    base.HOME_NAME = HOME_NAME
+    base.AWAY_NAME = AWAY_NAME
+    base.HOME = HOME
+    base.AWAY = AWAY
+    base.TEAM_COLOR = dict(TEAM_COLOR)
+    base.TEAM_NAME = dict(TEAM_NAME)
+    base.MATCH_SCORE = MATCH_SCORE.replace("-", "—")
+    base.MATCH_KEY = MATCH_KEY
+    base.OUT_DIR = OUT
+    base.COMPARE_DIR = OUT / "comparisons"
 
 
 def as_bool(series: pd.Series) -> pd.Series:
@@ -182,7 +233,7 @@ def save(fig, filename: str) -> Path:
         title_item = max(candidates, key=lambda item: float(item.get_fontsize()), default=None)
         title = title_item.get_text() if title_item is not None else filename.rsplit(".", 1)[0].replace("_", " ").title()
         subtitle_items = [item for item in candidates if item is not title_item and item.get_text().strip()]
-        subtitle = subtitle_items[0].get_text() if subtitle_items else "France vs England · real match data"
+        subtitle = subtitle_items[0].get_text() if subtitle_items else f"{HOME_NAME} vs {AWAY_NAME} · real match data"
         for item in candidates:
             item.set_visible(False)
         active_team = HOME_NAME if HOME_NAME.lower() in title.lower() else (AWAY_NAME if AWAY_NAME.lower() in title.lower() else None)
@@ -333,7 +384,7 @@ def shot_map(events, xg, team_id, number):
     xr = xg_row(xg, TEAM_NAME[team_id])
     side_title(side, "SHOT OUTPUT")
     side_kpis(side, [("Shots", f"{len(shots)}"), ("xG", f"{float(xr.get('xG', 0)):.2f}"), ("xG / shot", f"{float(xr.get('xG_per_shot', 0)):.3f}"), ("On target", f"{int(float(xr.get('on_target', 0)))}")])
-    return save(fig, f"{number:02d}_shot_map_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_shot_map_{_team_slug(team_id)}.png")
 
 
 def goals_breakdown(events):
@@ -537,7 +588,7 @@ def pass_network(events, players, team_id, number, half):
     side.text(0.35, 0.055, "Went off", color=TEXT, fontsize=6.8, va="center")
     side.text(0.54, 0.055, "Came on", color=TEXT, fontsize=6.8, va="center")
     suffix = "1h" if half == 1 else "2h"
-    return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_pass_network_{TEAM_NAME[team_id].lower()}_{suffix}.png")
+    return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_pass_network_{_team_slug(team_id)}_{suffix}.png")
 
 
 def xt_map(events, team_id, number):
@@ -615,7 +666,7 @@ def xt_map(events, team_id, number):
         "Indigo arrows show the top 10 threat-adding passes; the top three use stronger strokes.",
         color=MUTED, fontsize=7.2, wrap=True,
     )
-    return save(fig, f"{number:02d}_xt_map_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_xt_map_{_team_slug(team_id)}.png")
 
 
 def pass_map(events, team_id, number):
@@ -663,7 +714,7 @@ def pass_map(events, team_id, number):
         side.scatter([0.25], [y], s=38 if marker == "*" else 20, marker=marker,
                      color=color, edgecolor=TEXT, linewidth=0.45, zorder=4)
         side.text(0.31, y, label, color=TEXT, fontsize=8, va="center")
-    return save(fig, f"{number:02d}_pass_map_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_pass_map_{_team_slug(team_id)}.png")
 
 
 def danger_creation(events, team_metrics, team_id, number):
@@ -680,7 +731,7 @@ def danger_creation(events, team_metrics, team_id, number):
     pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.085), ncol=2, frameon=False, labelcolor=TEXT, fontsize=7.5)
     side_title(side, "CREATION OUTPUT")
     side_kpis(side, [("Box entries", len(entries)), ("Zone 14 actions", len(zone14)), ("Key passes", len(key)), ("Deep completions", int(base.metric_lookup(team_metrics, "home" if team_id == HOME_ID else "away", "deep_completions")))])
-    return save(fig, f"{number:02d}_danger_creation_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_danger_creation_{_team_slug(team_id)}.png")
 
 
 def gk_saves(events, xg):
@@ -766,7 +817,7 @@ def zone14(events, team_id, number):
         side.text(0.08, y, str(name).split()[-1], color=TEXT, fontsize=8, va="center")
         side.text(0.92, y, str(int(value)), color=FOCUS, fontsize=8, fontweight="bold", ha="right", va="center")
     side.text(0.08, 0.075, f"Zone 14 entries: {len(actions)}", color=FOCUS, fontsize=9.5, fontweight="bold")
-    return save(fig, f"{number:02d}_zone14_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_zone14_{_team_slug(team_id)}.png")
 
 
 def match_stats(events, xg, team_metrics):
@@ -918,7 +969,7 @@ def pass_thirds(events, team_id, number):
     for idx, value in enumerate(started.values): ax.text(value + maxv * 0.02, idx + 0.14, str(int(value)), color=TEAM_COLOR[team_id], va="center", fontweight="bold")
     for idx, value in enumerate(ended.values): ax.text(value + maxv * 0.02, idx - 0.14, str(int(value)), color=VALUE, va="center", fontweight="bold")
     ax.legend(frameon=False, labelcolor=TEXT, loc="lower right")
-    return save(fig, f"{number:02d}_pass_thirds_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_pass_thirds_{_team_slug(team_id)}.png")
 
 
 def progressive(events, team_id, number):
@@ -937,7 +988,7 @@ def progressive(events, team_id, number):
     side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
     side.text(0.08, 0.14, f"All progressive passes: {len(prog)}", color=VALUE, fontsize=9)
     side.text(0.08, 0.09, "Gold = top 10 by xT added", color=FOCUS, fontsize=9)
-    return save(fig, f"{number:02d}_progressive_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_progressive_{_team_slug(team_id)}.png")
 
 
 def crosses(events, team_id, number):
@@ -953,7 +1004,7 @@ def crosses(events, team_id, number):
     completed = int(success.sum()); rate = 100 * completed / max(len(frame), 1)
     side_title(side, "CROSSING OUTPUT")
     side_kpis(side, [("Crosses", len(frame)), ("Completed", completed), ("Completion", f"{rate:.1f}%"), ("Open-play", int((~frame["qualifier_names"].astype(str).str.lower().str.contains("corner")).sum()))])
-    return save(fig, f"{number:02d}_crosses_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_crosses_{_team_slug(team_id)}.png")
 
 
 def defensive_activity(events, team_id, number):
@@ -985,7 +1036,7 @@ def defensive_activity(events, team_id, number):
         side.plot([0.08, 0.92], [y - 0.043, y - 0.043], color=GRID, lw=0.55, alpha=0.7)
     side.add_patch(Rectangle((0.09, 0.105), 0.08, 0.055, facecolor=VALUE, edgecolor=GRID, alpha=0.75))
     side.text(0.21, 0.132, "Teal intensity = action density", color=TEXT, fontsize=8, va="center")
-    return save(fig, f"{number:02d}_defensive_activity_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_defensive_activity_{_team_slug(team_id)}.png")
 
 
 def defensive_summary(events, team_metrics):
@@ -1040,7 +1091,7 @@ def average_positions(events, players, team_id, number, half):
     side.text(0.35, 0.075, "Went off", color=TEXT, fontsize=6.8, va="center")
     side.text(0.54, 0.075, "Came on", color=TEXT, fontsize=6.8, va="center")
     suffix = "1h" if half == 1 else "2h"
-    return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_average_positions_{TEAM_NAME[team_id].lower()}_{suffix}.png")
+    return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_average_positions_{_team_slug(team_id)}_{suffix}.png")
 
 
 def dominating_zones(events):
@@ -1092,7 +1143,7 @@ def box_entries(events, team_id, number):
     side.annotate("", xy=(0.18, 0.15), xytext=(0.08, 0.15), arrowprops=dict(arrowstyle="-|>", color=TEXT, lw=1.1))
     side.text(0.21, 0.15, "Arrow = entry path", color=TEXT, fontsize=8, va="center")
     side.text(0.08, 0.075, f"Total entries: {len(frame)}", color=FOCUS, fontsize=9.5, fontweight="bold")
-    return save(fig, f"{number:02d}_box_entries_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_box_entries_{_team_slug(team_id)}.png")
 
 
 def high_regains(events, team_id, number):
@@ -1116,7 +1167,7 @@ def high_regains(events, team_id, number):
     side_title(side, "HIGH-REGAIN LEADERS")
     side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
     side.text(0.08, 0.14, f"Total high regains: {len(frame)}", color=FOCUS, fontsize=9, fontweight="bold")
-    return save(fig, f"{number:02d}_high_regains_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_high_regains_{_team_slug(team_id)}.png")
 
 
 def pass_targets(events, team_id, number):
@@ -1142,7 +1193,7 @@ def pass_targets(events, team_id, number):
     side_title(side, "TOP PASSERS")
     side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
     side.text(0.08, 0.14, f"Completed passes: {len(frame)}", color=VALUE, fontsize=9, fontweight="bold")
-    return save(fig, f"{number:02d}_pass_targets_{TEAM_NAME[team_id].lower()}.png")
+    return save(fig, f"{number:02d}_pass_targets_{_team_slug(team_id)}.png")
 
 
 def ppda(events):
@@ -1348,23 +1399,23 @@ def game_state(events, team_metrics):
     scenarios = [
         {
             "title": "SCORE LEVEL",
-            "subtitle": "France level · England level",
+            "subtitle": f"{HOME_NAME} level · {AWAY_NAME} level",
             "duration_key": "drawing",
             "home_state": "drawing",
             "away_state": "drawing",
             "color": NEUTRAL,
         },
         {
-            "title": "FRANCE AHEAD",
-            "subtitle": "France leading · England trailing",
+            "title": f"{HOME_NAME.upper()} AHEAD",
+            "subtitle": f"{HOME_NAME} leading · {AWAY_NAME} trailing",
             "duration_key": "home_ahead",
             "home_state": "leading",
             "away_state": "trailing",
             "color": HOME,
         },
         {
-            "title": "ENGLAND AHEAD",
-            "subtitle": "France trailing · England leading",
+            "title": f"{AWAY_NAME.upper()} AHEAD",
+            "subtitle": f"{HOME_NAME} trailing · {AWAY_NAME} leading",
             "duration_key": "away_ahead",
             "home_state": "trailing",
             "away_state": "leading",
@@ -1406,8 +1457,8 @@ def game_state(events, team_metrics):
         card_positions = [[0.20, 0.16, 0.60, 0.535]]
     if inactive_scenarios:
         inactive_labels = {
-            "FRANCE AHEAD": "France never led",
-            "ENGLAND AHEAD": "England never led",
+            f"{HOME_NAME.upper()} AHEAD": f"{HOME_NAME} never led",
+            f"{AWAY_NAME.upper()} AHEAD": f"{AWAY_NAME} never led",
             "SCORE LEVEL": "The score was never level",
         }
         note = " · ".join(inactive_labels[scenario["title"]] for scenario in inactive_scenarios)
@@ -1437,9 +1488,9 @@ def game_state(events, team_metrics):
             ax.plot([0.07, 0.93], [y - 0.064, y - 0.064], color=GRID, lw=0.55, alpha=0.75)
         ax.text(0.07, 0.075, "Values are totals, not per-90 rates.", color=NEUTRAL, fontsize=6.7)
 
-    fig.text(0.055, 0.095, "HOW TO READ  France ahead pairs France's leading output with England's trailing output; England ahead does the reverse.", color=MUTED, fontsize=8.2)
+    fig.text(0.055, 0.095, f"HOW TO READ  {HOME_NAME} ahead pairs {HOME_NAME}'s leading output with {AWAY_NAME}'s trailing output; {AWAY_NAME} ahead does the reverse.", color=MUTED, fontsize=8.2)
     fig.text(0.055, 0.066, "Game state is assigned at possession start · Timeline duration is reconstructed from goal times.", color=NEUTRAL, fontsize=7.5)
-    fig.text(0.945, 0.035, "BLUE = FRANCE · ORANGE = ENGLAND · REAL MATCH DATA", ha="right", fontsize=7.5, color=NEUTRAL)
+    fig.text(0.945, 0.035, f"{HOME_NAME.upper()} · {AWAY_NAME.upper()} · REAL MATCH DATA", ha="right", fontsize=7.5, color=NEUTRAL)
     return save(fig, "43_game_state_splits.png")
 
 
@@ -1455,7 +1506,7 @@ def player_sequence(player_metrics):
         ax.barh(top["player"].astype(str).str.split().str[-1], top[column], color=colors, alpha=0.9)
         base.clean_ax(ax); ax.grid(axis="x", color=GRID, lw=0.65); ax.set_title(title.upper(), loc="left", color=MUTED, fontsize=10, fontweight="bold")
         for idx, value in enumerate(top[column]): ax.text(value + max(top[column].max(), 0.01) * 0.025, idx, f"{value:.2f}", color=TEXT, va="center", fontsize=8)
-    fig.text(0.945, 0.035, "BLUE = FRANCE · ORANGE = ENGLAND", ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(0.945, 0.035, f"{HOME_NAME.upper()} · {AWAY_NAME.upper()}", ha="right", fontsize=8, color=NEUTRAL)
     return save(fig, "44_player_sequence_leaders.png")
 
 
@@ -1515,6 +1566,9 @@ def build_pdf(
             "away_id": AWAY_ID,
             "home_name": HOME_NAME,
             "away_name": AWAY_NAME,
+            "home_color": HOME,
+            "away_color": AWAY,
+            "score": MATCH_SCORE,
         },
     )
 
@@ -1543,7 +1597,9 @@ def player_pizzas(events: pd.DataFrame) -> list[Path]:
         "away_id": AWAY_ID,
         "home_name": HOME_NAME,
         "away_name": AWAY_NAME,
-        "score": "4-6",
+        "home_color": HOME,
+        "away_color": AWAY,
+        "score": MATCH_SCORE,
     }
     export_player_radars(events, info, str(OUT), dpi=135)
     source_root = OUT / "player_radars"
@@ -1557,22 +1613,30 @@ def player_pizzas(events: pd.DataFrame) -> list[Path]:
     return exported
 
 
-def main():
+def generate_match_package(
+    events: pd.DataFrame,
+    players: pd.DataFrame,
+    xg: pd.DataFrame,
+    team_metrics: pd.DataFrame,
+    player_metrics: pd.DataFrame,
+    match_info: dict,
+    output_dir: Path | str,
+    *,
+    clean: bool = True,
+) -> dict:
+    """Generate the production AMOLED package for any parsed fixture."""
+    configure_match(match_info, output_dir)
     OUT.mkdir(parents=True, exist_ok=True)
-    for obsolete in [
-        "05_pass_network_france.png",
-        "06_pass_network_england.png",
-        "31_average_positions_france.png",
-        "32_average_positions_england.png",
-        "41_transition_performance.png",
-    ]:
-        (OUT / obsolete).unlink(missing_ok=True)
-    for duplicate_radar in OUT.glob("45*_player_pizza_*.png"):
-        duplicate_radar.unlink(missing_ok=True)
+    if clean:
+        for pattern in ("*.png", "*.pdf"):
+            for old in OUT.glob(pattern):
+                old.unlink(missing_ok=True)
+        for generated_dir in (OUT / "player_radars", OUT / "comparisons"):
+            if generated_dir.exists():
+                shutil.rmtree(generated_dir)
     base.theme()
-    events, players, xg, team_metrics, player_metrics = load_all()
-    team_metrics.to_csv(OUT / "team_advanced_metrics_real_data.csv", index=False, encoding="utf-8-sig")
-    player_metrics.to_csv(OUT / "player_sequence_metrics_real_data.csv", index=False, encoding="utf-8-sig")
+    team_metrics.to_csv(OUT / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
+    player_metrics.to_csv(OUT / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
     generated = non_pitch_pages(events, xg, team_metrics)
     paths = [
         generated[1],
@@ -1629,11 +1693,48 @@ def main():
     catalog = build_catalog(paths)
     pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
     from build_qa_contact_sheets import build_qa_contact_sheets
-    qa_dashboards = build_qa_contact_sheets(OUT)
+    qa_dashboards = build_qa_contact_sheets(
+        OUT,
+        home_name=HOME_NAME,
+        away_name=AWAY_NAME,
+        score=MATCH_SCORE,
+        home_color=HOME,
+        away_color=AWAY,
+        home_slug=_team_slug(HOME_ID),
+        away_slug=_team_slug(AWAY_ID),
+    )
     print(f"Generated {len(paths)} full redesigned visuals")
     print(f"Pitch visuals: {int(catalog['has_pitch'].sum())}")
     print(f"QA dashboards: {len(qa_dashboards)}")
     print(f"PDF: {pdf}")
+    return {
+        "visuals": paths,
+        "catalog": OUT / "visual_catalog.csv",
+        "pdf": pdf,
+        "qa_dashboards": qa_dashboards,
+        "output_dir": OUT,
+    }
+
+
+def main():
+    events, players, xg, team_metrics, player_metrics = load_all()
+    return generate_match_package(
+        events,
+        players,
+        xg,
+        team_metrics,
+        player_metrics,
+        {
+            "home_id": HOME_ID,
+            "away_id": AWAY_ID,
+            "home_name": HOME_NAME,
+            "away_name": AWAY_NAME,
+            "home_color": HOME,
+            "away_color": AWAY,
+            "score": MATCH_SCORE,
+        },
+        OUT,
+    )
 
 
 if __name__ == "__main__":
