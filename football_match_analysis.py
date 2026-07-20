@@ -57,6 +57,7 @@ from match_report import run_analysis as _run_extended_analysis
 from match_metrics import (
     advanced_metrics_frames,
     build_possessions,
+    fouls_committed_count,
     high_regain_events,
     team_advanced_metrics,
     touch_mask,
@@ -150,7 +151,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/2007644/live/international-fifa-world-cup-2026-spain-argentina"
+MATCH_URL = "https://www.whoscored.com/matches/1995348/live/international-fifa-world-cup-2026-usa-belgium"
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -11371,7 +11372,7 @@ def _collect_match_stats(info, events, xg_data):
         blocked = _blocked_shots_for_team(events, info, tid)
         recoveries = canonical["provider_recoveries"]
 
-        fouls = int(ev[ev["type"] == "Foul"].shape[0]) if "type" in ev.columns else 0
+        fouls = fouls_committed_count(events, tid)
 
         # Zone 14 + half-spaces for PDF tactical notes.
         # Guard both x/y columns to avoid PDF crashes if provider data is partial.
