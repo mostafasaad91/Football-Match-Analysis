@@ -55,6 +55,7 @@ from visualization_components import (
 from visualization_components import _panel_rect
 from match_metrics import (
     cross_mask,
+    fouls_committed_count,
     high_regain_events,
     player_sequence_metrics,
     progressive_pass_mask,
@@ -6758,24 +6759,6 @@ def make_defensive_summary_v2(events, info):
             ((events["team_id"] == team_id) & (events["type"] == type_name)).sum()
         )
 
-    # Fouls: WhoScored logs a "Foul" event for BOTH the player who committed it
-    # (outcome Unsuccessful) and the player who won it (outcome Successful).
-    # Counting every Foul row double-counts and shows fouls-won as fouls-made.
-    # Count only fouls COMMITTED (Unsuccessful) when the feed splits them; fall
-    # back to all Foul rows for feeds that only log the offence.
-    _foul_rows = events[events["type"] == "Foul"]
-    _splits_fouls = (
-        "outcome" in events.columns
-        and _foul_rows["outcome"].astype(str).str.lower().eq("unsuccessful").any()
-        and _foul_rows["outcome"].astype(str).str.lower().eq("successful").any()
-    )
-
-    def _fouls_committed(team_id):
-        f = events[(events["team_id"] == team_id) & (events["type"] == "Foul")]
-        if _splits_fouls:
-            return int(f["outcome"].astype(str).str.lower().eq("unsuccessful").sum())
-        return int(len(f))
-
     rows = [
         ("Tackles", _count(hid, "Tackle"), _count(aid, "Tackle")),
         ("Interceptions", _count(hid, "Interception"), _count(aid, "Interception")),
@@ -6790,7 +6773,7 @@ def make_defensive_summary_v2(events, info):
             home_advanced["provider_recoveries"],
             away_advanced["provider_recoveries"],
         ),
-        ("Fouls", _fouls_committed(hid), _fouls_committed(aid)),
+        ("Fouls", fouls_committed_count(events, hid), fouls_committed_count(events, aid)),
     ]
     # Totals & "top type" use only the six core actions above — duels are shown
     # as extra bars but kept OUT of the total, since a duel win overlaps with a

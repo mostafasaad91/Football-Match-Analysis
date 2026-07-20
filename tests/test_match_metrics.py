@@ -6,6 +6,8 @@ from match_metrics import (
     advanced_metrics_frames,
     build_possessions,
     cross_mask,
+    fouls_committed_count,
+    fouls_committed_mask,
     high_regain_events,
     player_sequence_metrics,
     progressive_pass_mask,
@@ -63,6 +65,23 @@ class MatchMetricTests(unittest.TestCase):
         self.assertEqual(metrics["away"]["possession_regains"], 1)
         self.assertEqual(metrics["away"]["transitions"], 1)
         self.assertEqual(metrics["away"]["transition_shots"], 1)
+
+    def test_paired_foul_rows_count_only_the_offending_team(self):
+        events = pd.DataFrame(
+            [
+                event(1, "Foul", 2, 1, 50, outcome="Unsuccessful"),
+                event(2, "Foul", 2, 1, 50, outcome="Successful"),
+                event(1, "Foul", 4, 1, 55, outcome="Unsuccessful"),
+                event(2, "Foul", 4, 1, 55, outcome="Successful"),
+                event(2, "Foul", 8, 1, 60, outcome="Unsuccessful"),
+                event(1, "Foul", 8, 1, 60, outcome="Successful"),
+            ]
+        )
+
+        committed = fouls_committed_mask(events)
+        self.assertEqual(int(committed.sum()), 3)
+        self.assertEqual(fouls_committed_count(events, 1), 2)
+        self.assertEqual(fouls_committed_count(events, 2), 1)
 
     def test_restart_is_not_an_attacking_transition(self):
         events = pd.DataFrame(

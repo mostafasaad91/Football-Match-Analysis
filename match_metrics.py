@@ -190,6 +190,40 @@ def live_event_mask(events: pd.DataFrame) -> pd.Series:
     return ~periods.isin(NON_LIVE_PERIODS) & ~types.isin(MARKER_TYPES) & ~shootout
 
 
+def fouls_committed_mask(events: pd.DataFrame) -> pd.Series:
+    """Return provider foul rows attributed to the team committing the foul.
+
+    WhoScored-style feeds can emit two ``Foul`` rows per incident: an
+    ``Unsuccessful`` row for the offender and a ``Successful`` row for the
+    player who won the foul. When both outcomes are present, only the former is
+    counted. Single-sided feeds retain all foul rows as a safe fallback.
+    """
+    types = (
+        events.get("type", pd.Series("", index=events.index))
+        .fillna("")
+        .astype(str)
+        .str.casefold()
+    )
+    foul_rows = types.eq("foul") & live_event_mask(events)
+    outcomes = (
+        events.get("outcome", pd.Series("", index=events.index))
+        .fillna("")
+        .astype(str)
+        .str.casefold()
+    )
+    foul_outcomes = outcomes[foul_rows]
+    paired_feed = foul_outcomes.eq("unsuccessful").any() and foul_outcomes.eq(
+        "successful"
+    ).any()
+    return foul_rows & outcomes.eq("unsuccessful") if paired_feed else foul_rows
+
+
+def fouls_committed_count(events: pd.DataFrame, team_id: Any) -> int:
+    """Count committed fouls for one team using the canonical provider rule."""
+    team_ids = events.get("team_id", pd.Series(np.nan, index=events.index))
+    return int((fouls_committed_mask(events) & team_ids.eq(team_id)).sum())
+
+
 def cross_mask(events: pd.DataFrame, successful_only: bool = False) -> pd.Series:
     """Canonical cross mask: passes carrying the provider Cross qualifier."""
     mask = _bool_series(events, "is_cross")
@@ -1183,6 +1217,8 @@ __all__ = [
     "cross_mask",
     "deep_completion_mask",
     "final_third_entry_mask",
+    "fouls_committed_count",
+    "fouls_committed_mask",
     "high_regain_events",
     "live_event_mask",
     "player_sequence_metrics",

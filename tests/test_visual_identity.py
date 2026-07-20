@@ -3,7 +3,7 @@ import visual_redesign_full as complete_visuals
 import visual_redesign_preview as preview
 from football_match_analysis import choose_matchup_colors
 from tactical_visualizations import _clean_dark_navy
-from visualization_components import network_link_palette
+from visualization_components import contrast_ratio, network_link_palette
 
 
 def test_matchup_colors_follow_team_identity():
@@ -64,6 +64,8 @@ def test_live_matches_use_complete_amoled_renderer(tmp_path):
         assert preview.HOME_NAME == "Egypt"
         assert preview.AWAY_NAME == "Morocco"
         assert preview.MATCH_SCORE == "2 — 1"
+        assert contrast_ratio(preview.HOME, "#000000") >= 7.0
+        assert contrast_ratio(preview.AWAY, "#000000") >= 7.0
     finally:
         complete_visuals.configure_match(original, original_out)
 
@@ -111,7 +113,15 @@ def test_visual_catalog_accepts_numbered_and_player_named_files(tmp_path):
 def test_team_series_palette_and_score_are_fixture_aware():
     primary, secondary = complete_visuals._team_series_palette("#C60B1E")
 
-    assert primary.upper() == "#C60B1E"
+    assert primary.upper() != "#C60B1E"
+    assert contrast_ratio(primary, "#000000") >= 7.0
     assert secondary.upper() != primary.upper()
     assert secondary.upper() != complete_visuals.VALUE.upper()
     assert complete_visuals._display_score("*1 : 0") == "1 — 0"
+
+
+def test_dark_team_colours_are_brightened_for_amoled_marks():
+    bright = complete_visuals._bright_visual_color("#3C3B6E")
+
+    assert bright.upper() != "#3C3B6E"
+    assert contrast_ratio(bright, "#000000") >= 7.0

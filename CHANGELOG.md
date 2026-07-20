@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Fouls committed now use one canonical provider-aware count that excludes the
+  mirrored foul-won row emitted by paired WhoScored feeds.
+- Defensive activity uses a smoothed team-colour heatmap with bright,
+  shape-coded action marks and committed fouls only.
+- Dark team identities are automatically tinted for pitch marks, network nodes
+  and transition arrows while the original team hue remains recognisable.
 - Team-specific pass-distribution charts now use two shades derived from the
   active team's identity colour instead of a fixed purple comparison series.
 - Dangerous counters now include 40+ metre transition breaks that reach the

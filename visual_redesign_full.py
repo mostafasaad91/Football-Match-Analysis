@@ -19,6 +19,7 @@ from matplotlib.patches import Arc, Circle, Rectangle, Wedge
 import numpy as np
 import pandas as pd
 from PIL import Image
+from scipy.ndimage import gaussian_filter
 from visualization_components import network_link_palette
 
 import visual_redesign_preview as base
@@ -29,6 +30,8 @@ from match_metrics import (
     cross_mask,
     deep_completion_mask,
     final_third_entry_mask,
+    fouls_committed_count,
+    fouls_committed_mask,
     high_regain_events,
     progressive_pass_mask,
     touch_mask,
@@ -85,15 +88,44 @@ def _display_score(value: object) -> str:
 
 def _team_series_palette(team_color: str) -> tuple[str, str]:
     """Return primary and secondary shades from one team's identity colour."""
+    primary = _bright_visual_color(team_color)
     try:
-        primary_rgb = np.asarray(mcolors.to_rgb(team_color), dtype=float)
+        primary_rgb = np.asarray(mcolors.to_rgb(primary), dtype=float)
     except ValueError:
-        team_color = "#64748B"
-        primary_rgb = np.asarray(mcolors.to_rgb(team_color), dtype=float)
+        primary = "#94A3B8"
+        primary_rgb = np.asarray(mcolors.to_rgb(primary), dtype=float)
     # A light tint stays recognisably within the same team identity while
     # separating origins from destinations on the pure-black background.
     secondary_rgb = primary_rgb * 0.58 + np.ones(3) * 0.42
     return mcolors.to_hex(primary_rgb), mcolors.to_hex(secondary_rgb)
+
+
+def _color_luminance(color: str) -> float:
+    rgb = np.asarray(mcolors.to_rgb(color), dtype=float)
+    linear = np.where(
+        rgb <= 0.04045,
+        rgb / 12.92,
+        ((rgb + 0.055) / 1.055) ** 2.4,
+    )
+    return float(np.dot(linear, [0.2126, 0.7152, 0.0722]))
+
+
+def _bright_visual_color(color: str, min_luminance: float = 0.32) -> str:
+    """Tint a dark identity colour until marks remain clear on AMOLED black."""
+    try:
+        rgb = np.asarray(mcolors.to_rgb(color), dtype=float)
+    except ValueError:
+        rgb = np.asarray(mcolors.to_rgb("#94A3B8"), dtype=float)
+    candidate = rgb.copy()
+    for amount in np.linspace(0.0, 0.72, 19):
+        candidate = rgb * (1.0 - amount) + np.ones(3) * amount
+        if _color_luminance(mcolors.to_hex(candidate)) >= min_luminance:
+            break
+    return mcolors.to_hex(candidate)
+
+
+def _team_mark_color(team_id: int) -> str:
+    return _bright_visual_color(TEAM_COLOR.get(team_id, "#94A3B8"))
 
 
 def configure_match(match_info: dict, output_dir: Path | str) -> None:
@@ -125,9 +157,9 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     base.AWAY_ID = AWAY_ID
     base.HOME_NAME = HOME_NAME
     base.AWAY_NAME = AWAY_NAME
-    base.HOME = HOME
-    base.AWAY = AWAY
-    base.TEAM_COLOR = dict(TEAM_COLOR)
+    base.HOME = _bright_visual_color(HOME)
+    base.AWAY = _bright_visual_color(AWAY)
+    base.TEAM_COLOR = {HOME_ID: base.HOME, AWAY_ID: base.AWAY}
     base.TEAM_NAME = dict(TEAM_NAME)
     base.MATCH_SCORE = MATCH_SCORE.replace("-", "—")
     base.MATCH_KEY = MATCH_KEY
@@ -379,7 +411,7 @@ def team_event_counts(events, team_id):
         "Recoveries": int(types.eq("BallRecovery").sum()),
         "Clearances": int(types.eq("Clearance").sum()),
         "Blocks": int(types.eq("BlockedShot").sum()),
-        "Fouls": int(types.eq("Foul").sum()),
+        "Fouls": fouls_committed_count(events, team_id),
     }
 
 
@@ -453,7 +485,7 @@ def goals_breakdown(events):
         y = 0.75 if tid == HOME_ID else -0.75
         minute = float(goal["minute"])
         team_goal_count[tid] += 1
-        ax.vlines(minute, 0, y, color=TEAM_COLOR[tid], lw=2)
+        ax.vlines(minute, 0, y, color=_team_mark_color(tid), lw=2)
         ax.scatter(minute, y, s=150, marker="*", color=FOCUS, edgecolor=BG, linewidth=1.2, zorder=4)
         player = str(goal.get("player", "Goal")).split()[-1]
         assist = assist_for(goal)
@@ -586,7 +618,7 @@ def pass_network(events, players, team_id, number, half):
         entered = name in sub_on
         left = name in sub_off
         pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
-                      color=TEAM_COLOR[team_id], edgecolor=FOCUS if left else link_color,
+                      color=_team_mark_color(team_id), edgecolor=FOCUS if left else link_color,
                       linewidth=2.3 if left else 1.15, zorder=4)
         draw_node_label(pitch, px, py, name, touches, max_touch)
 
@@ -604,8 +636,8 @@ def pass_network(events, players, team_id, number, half):
     else:
         side.text(0.08, 0.34, "No in-half changes", color=MUTED, fontsize=8)
     side.text(0.08, 0.105, f"Completed pass links: {completed_links}", color=VALUE, fontsize=8, fontweight="bold")
-    side.scatter([0.12, 0.31], [0.055, 0.055], s=[65, 65], marker="o", color=TEAM_COLOR[team_id], edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
-    side.scatter([0.50], [0.055], s=65, marker="s", color=TEAM_COLOR[team_id], edgecolor=TEXT, linewidth=1.0)
+    side.scatter([0.12, 0.31], [0.055, 0.055], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
+    side.scatter([0.50], [0.055], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
     side.text(0.16, 0.055, "Began half", color=TEXT, fontsize=6.8, va="center")
     side.text(0.35, 0.055, "Went off", color=TEXT, fontsize=6.8, va="center")
     side.text(0.54, 0.055, "Came on", color=TEXT, fontsize=6.8, va="center")
@@ -853,7 +885,14 @@ def match_stats(events, xg, team_metrics):
     axes = fig.subplots(1, 2); fig.subplots_adjust(left=0.08, right=0.95, top=0.78, bottom=0.11, wspace=0.32)
     base.row_dot_plot(axes[0], rows_left, "ATTACKING OUTPUT")
     base.row_dot_plot(axes[1], rows_right, "PROCESS & TERRITORY")
-    fig.text(0.945, 0.035, "● FRANCE   ◆ ENGLAND · REAL MATCH DATA", ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        f"● {HOME_NAME.upper()}   ◆ {AWAY_NAME.upper()} · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "18_match_stats.png")
 
 
@@ -1031,19 +1070,65 @@ def crosses(events, team_id, number):
 
 
 def defensive_activity(events, team_id, number):
-    actions = events[events["team_id"].eq(team_id) & events["type"].astype(str).isin(["Tackle", "Interception", "BallRecovery", "Clearance", "BlockedShot", "Foul"])].dropna(subset=["x", "y"]).copy()
-    fig, pitch, side = pitch_axes(f"Defensive Activity · {TEAM_NAME[team_id]}", "One sequential density scale; action types use shapes rather than competing colours")
+    event_types = events["type"].astype(str)
+    non_foul_actions = event_types.isin(["Tackle", "Interception", "BallRecovery", "Clearance", "BlockedShot"])
+    committed_fouls = fouls_committed_mask(events)
+    actions = events[
+        events["team_id"].eq(team_id) & (non_foul_actions | committed_fouls)
+    ].dropna(subset=["x", "y"]).copy()
+    fig, pitch, side = pitch_axes(
+        f"Defensive Activity · {TEAM_NAME[team_id]}",
+        "Smoothed team-colour heatmap; bright colour and shape identify each action type",
+    )
     hx, hy = attack_xy(actions["x"], actions["y"])
-    heat, _, _ = np.histogram2d(hx, hy, bins=[7, 12], range=[[-PITCH_WIDTH / 2, PITCH_WIDTH / 2], [0, PITCH_LENGTH]])
-    cmap = LinearSegmentedColormap.from_list("def_full", [BG, PANEL_2, VALUE])
-    pitch.imshow(heat.T, extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH], origin="lower", cmap=cmap, aspect="equal", alpha=0.82)
+    heat, _, _ = np.histogram2d(
+        hx,
+        hy,
+        bins=[21, 36],
+        range=[[-PITCH_WIDTH / 2, PITCH_WIDTH / 2], [0, PITCH_LENGTH]],
+    )
+    heat = gaussian_filter(heat.astype(float), sigma=1.45)
+    heat = heat / heat.max() if heat.max() > 0 else heat
+    team_mark = _team_mark_color(team_id)
+    cmap = LinearSegmentedColormap.from_list(
+        f"def_{team_id}", [BG, PANEL_2, TEAM_COLOR[team_id], team_mark]
+    )
+    pitch.imshow(
+        heat.T,
+        extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
+        origin="lower",
+        cmap=cmap,
+        aspect="equal",
+        vmin=0,
+        vmax=1,
+        alpha=0.92,
+        interpolation="bicubic",
+    )
     draw_long_pitch(pitch)
     marker_map = {"Tackle": "o", "Interception": "D", "BallRecovery": "s", "Clearance": "^", "BlockedShot": "P", "Foul": "X"}
+    action_colors = {
+        "Tackle": "#67E8F9",
+        "Interception": "#C4B5FD",
+        "BallRecovery": "#86EFAC",
+        "Clearance": "#FDE68A",
+        "BlockedShot": "#F9A8D4",
+        "Foul": "#F9A8D4",
+    }
     for event_type, marker in marker_map.items():
         subset = actions[actions["type"].astype(str).eq(event_type)]
         if subset.empty: continue
         px, py = attack_xy(subset["x"], subset["y"])
-        pitch.scatter(px, py, marker=marker, s=28, facecolors=BG, edgecolors=TEXT, linewidth=0.75, alpha=0.82)
+        pitch.scatter(
+            px,
+            py,
+            marker=marker,
+            s=34,
+            facecolors=action_colors[event_type],
+            edgecolors=BG,
+            linewidth=0.75,
+            alpha=0.96,
+            zorder=5,
+        )
     counts = team_event_counts(events, team_id)
     side_title(side, "ACTION TYPE LEGEND")
     label_to_event = {
@@ -1053,12 +1138,16 @@ def defensive_activity(events, team_id, number):
     for idx, (label, value) in enumerate(counts.items()):
         y = 0.81 - idx * 0.095
         marker = marker_map[label_to_event[label]]
-        side.scatter([0.13], [y], s=48, marker=marker, facecolors=BG, edgecolors=TEXT, linewidth=0.9)
+        event_type = label_to_event[label]
+        side.scatter(
+            [0.13], [y], s=52, marker=marker,
+            facecolors=action_colors[event_type], edgecolors=BG, linewidth=0.9,
+        )
         side.text(0.21, y, label, color=TEXT, fontsize=8.5, va="center")
         side.text(0.90, y, str(value), color=FOCUS, fontsize=8.5, fontweight="bold", ha="right", va="center")
         side.plot([0.08, 0.92], [y - 0.043, y - 0.043], color=GRID, lw=0.55, alpha=0.7)
-    side.add_patch(Rectangle((0.09, 0.105), 0.08, 0.055, facecolor=VALUE, edgecolor=GRID, alpha=0.75))
-    side.text(0.21, 0.132, "Teal intensity = action density", color=TEXT, fontsize=8, va="center")
+    side.add_patch(Rectangle((0.09, 0.105), 0.08, 0.055, facecolor=team_mark, edgecolor=GRID, alpha=0.82))
+    side.text(0.21, 0.132, f"{TEAM_NAME[team_id]} colour = action density", color=TEXT, fontsize=8, va="center")
     return save(fig, f"{number:02d}_defensive_activity_{_team_slug(team_id)}.png")
 
 
@@ -1090,7 +1179,7 @@ def average_positions(events, players, team_id, number, half):
         entered = name in sub_on
         left = name in sub_off
         pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
-                      color=TEAM_COLOR[team_id], edgecolor=FOCUS if left else outline_color,
+                      color=_team_mark_color(team_id), edgecolor=FOCUS if left else outline_color,
                       linewidth=2.3 if left else 1.15, zorder=4)
         draw_node_label(pitch, px, py, name, touches, max_touch)
 
@@ -1108,8 +1197,8 @@ def average_positions(events, players, team_id, number, half):
             side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
     else:
         side.text(0.08, 0.34, "No in-half changes", color=MUTED, fontsize=8)
-    side.scatter([0.12, 0.31], [0.075, 0.075], s=[65, 65], marker="o", color=TEAM_COLOR[team_id], edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
-    side.scatter([0.50], [0.075], s=65, marker="s", color=TEAM_COLOR[team_id], edgecolor=TEXT, linewidth=1.0)
+    side.scatter([0.12, 0.31], [0.075, 0.075], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
+    side.scatter([0.50], [0.075], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
     side.text(0.16, 0.075, "Began half", color=TEXT, fontsize=6.8, va="center")
     side.text(0.35, 0.075, "Went off", color=TEXT, fontsize=6.8, va="center")
     side.text(0.54, 0.075, "Came on", color=TEXT, fontsize=6.8, va="center")
@@ -1138,7 +1227,15 @@ def dominating_zones(events):
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02, ticks=[-1, 0, 1])
     cbar.ax.set_yticklabels([AWAY_NAME, "Balanced", HOME_NAME]); cbar.ax.tick_params(colors=MUTED, labelsize=7); cbar.outline.set_edgecolor(GRID)
     side_title(side, "TERRITORY TOTALS")
-    side_kpis(side, [("France touches", len(home)), ("England touches", len(away)), ("Difference", f"{len(home)-len(away):+d}"), ("Cell label", "France − England")])
+    side_kpis(
+        side,
+        [
+            (f"{HOME_NAME} touches", len(home)),
+            (f"{AWAY_NAME} touches", len(away)),
+            ("Difference", f"{len(home)-len(away):+d}"),
+            ("Cell label", f"{HOME_NAME} − {AWAY_NAME}"),
+        ],
+    )
     return save(fig, "33_dominating_zones.png")
 
 
@@ -1346,7 +1443,7 @@ def transition_outcomes(events):
             elif path["shot"]:
                 color, alpha, width, marker, size = VALUE, 0.82, 1.45, "D", 25
             else:
-                color, alpha, width, marker, size = TEAM_COLOR[team_id], 0.15, 0.65, None, 0
+                color, alpha, width, marker, size = _team_mark_color(team_id), 0.52, 0.90, None, 0
             pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
                            arrowprops=dict(arrowstyle="-|>", color=color, alpha=alpha,
                                            lw=width, mutation_scale=7 if not path["goal"] else 10), zorder=3)
@@ -1372,11 +1469,11 @@ def transition_outcomes(events):
             ("Box entries", data["box_entries"]),
         ], start=0.82, gap=0.135)
         chance_rate = 100 * data["chances"] / max(data["total"], 1)
-        card.text(0.08, 0.065, f"Chance rate: {chance_rate:.1f}%", color=TEAM_COLOR[team_id],
+        card.text(0.08, 0.065, f"Chance rate: {chance_rate:.1f}%", color=_team_mark_color(team_id),
                   fontsize=7.5, fontweight="bold")
 
     legend = [
-        Line2D([0], [0], color=HOME, lw=2, alpha=0.35, label="Transition without shot"),
+        Line2D([0], [0], color="#CBD5E1", lw=2, alpha=0.75, label="Transition without shot"),
         Line2D([0], [0], color=VALUE, lw=2, marker="D", markersize=5, label="Created a chance"),
         Line2D([0], [0], color=FOCUS, lw=2.5, marker="*", markersize=8, label="Ended in a goal"),
     ]
