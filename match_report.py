@@ -166,7 +166,7 @@ def _team_label_color(col: str | None, bg: str | None = None) -> str:
 
 
 C_HOME = "#9A99B4"  # canonical first-listed team role
-C_AWAY = "#F37680"  # canonical second-listed team role
+C_AWAY = "#290405"  # canonical second-listed team role
 C_GOLD = "#FFC23C"
 C_GREEN = "#22c55e"
 C_PURPLE = "#a855f7"
@@ -5481,7 +5481,7 @@ def run_analysis(
 
     global C_HOME, C_AWAY
     C_HOME = "#9A99B4"
-    C_AWAY = "#F37680"
+    C_AWAY = "#290405"
     info["home_color"] = C_HOME
     info["away_color"] = C_AWAY
 

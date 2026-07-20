@@ -100,7 +100,7 @@ def _display_score(value: object) -> str:
 
 def _team_series_palette(team_color: str) -> tuple[str, str]:
     """Return primary and secondary shades from one team's identity colour."""
-    primary = _bright_visual_color(team_color)
+    primary = team_color
     try:
         primary_rgb = np.asarray(mcolors.to_rgb(primary), dtype=float)
     except ValueError:
@@ -137,7 +137,9 @@ def _bright_visual_color(color: str, min_luminance: float = 0.32) -> str:
 
 
 def _team_mark_color(team_id: int) -> str:
-    return _bright_visual_color(TEAM_COLOR.get(team_id, "#94A3B8"))
+    # Preserve the approved role colour exactly. No lift, outline or glow is
+    # added for dark teams; the user-selected palette is the rendered palette.
+    return TEAM_COLOR.get(team_id, "#94A3B8")
 
 
 def configure_match(match_info: dict, output_dir: Path | str) -> None:
@@ -156,7 +158,7 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     HOME_NAME = str(match_info.get("home_name") or "Home")
     AWAY_NAME = str(match_info.get("away_name") or "Away")
     # Fixture names and ids remain dynamic, but visual roles are deliberately
-    # fixed: first-listed team is lavender-grey, second-listed team is coral.
+    # fixed: first-listed team is lavender-grey, second-listed team is dark burgundy.
     HOME = C_HOME
     AWAY = C_AWAY
     MATCH_SCORE = _display_score(match_info.get("score"))

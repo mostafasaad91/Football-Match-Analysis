@@ -31,7 +31,7 @@ TEXT = colors.HexColor("#F5F7FA")
 MUTED = colors.HexColor("#9BA3AE")
 NEUTRAL = colors.HexColor("#626A75")
 HOME = colors.HexColor("#9A99B4")
-AWAY = colors.HexColor("#F37680")
+AWAY = colors.HexColor("#290405")
 FOCUS = colors.HexColor("#FFD43B")
 VALUE = colors.HexColor("#9A7CF2")
 
@@ -1355,7 +1355,7 @@ def build_tactical_pdf(
 ) -> Path:
     global HOME, AWAY
     home_hex = "#9A99B4"
-    away_hex = "#F37680"
+    away_hex = "#290405"
     HOME = colors.HexColor(home_hex)
     AWAY = colors.HexColor(away_hex)
     output.parent.mkdir(parents=True, exist_ok=True)
