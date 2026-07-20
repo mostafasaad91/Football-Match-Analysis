@@ -46,12 +46,20 @@ from visualization_components import (
     shadow,
     readable_on,
     readable_team_text,
+    network_link_palette,
     ACCENT_TEXT,
     FONT_SANS,
     FONT_MONO,
     panel_header_geom,
 )
 from visualization_components import _panel_rect
+from match_metrics import (
+    cross_mask,
+    high_regain_events,
+    player_sequence_metrics,
+    progressive_pass_mask,
+    team_advanced_metrics,
+)
 
 IS_LIGHT_THEME = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
 ROW_BG = "#FFFFFF" if IS_LIGHT_THEME else "#101010"
@@ -68,24 +76,32 @@ C_GREEN = "#3DDC84"
 # ─────────────────────────────────────────────────────────────────────────────
 VP_W = 54.0
 VP_L = 105.0
-XT_ARROW = C_GOLD if not IS_LIGHT_THEME else "#111827"  # neutral accent attack arrow
+XT_ARROW = "#4C6FFF" if not IS_LIGHT_THEME else "#1D4ED8"
 XT_NEG_ARROW = C_AWAY if not IS_LIGHT_THEME else "#7F1D1D"  # negative-xT accent
-LIGHT_BLUE_REPLACEMENT = "#7DD3FC"
+TEAM_COLOR_FALLBACK = "#4D8DFF"
 
 
 def _clean_dark_navy(color: str | None) -> str:
-    """Convert very dark navy marks/text to a readable light blue on AMOLED."""
+    """Preserve the supplied team identity on AMOLED backgrounds.
+
+    Match colours have already been clash-checked by the main pipeline. Older
+    versions replaced dark blues with a generic light blue, which made clubs
+    and national teams lose their real identity. Only near-black colours are
+    lifted, and the lift keeps the original hue instead of substituting cyan.
+    """
     if not color:
-        return color or LIGHT_BLUE_REPLACEMENT
+        return color or TEAM_COLOR_FALLBACK
     try:
         r, g, b, _a = to_rgba(color)
         lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        # dark blue/navy: blue dominant or very high blue component, but low luminance
-        if lum < 0.18 and b > max(r, g) * 1.15:
-            return LIGHT_BLUE_REPLACEMENT
-        # dark blue-ish even when red/green are close but overall too dark
-        if lum < 0.12 and b > 0.22:
-            return LIGHT_BLUE_REPLACEMENT
+        if lum < 0.055 and max(r, g, b) < 0.28:
+            import colorsys
+
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            r, g, b = colorsys.hsv_to_rgb(h, max(s, 0.68), max(v, 0.62))
+            return "#{:02X}{:02X}{:02X}".format(
+                round(r * 255), round(g * 255), round(b * 255)
+            )
     except Exception:
         pass
     return str(color)
@@ -462,10 +478,10 @@ NATIONAL_TEAM_COLOR_FALLBACKS = {
     "egypt": ["#CE1126", "#FFFFFF", "#000000"],
     "argentina": ["#75AADB", "#FFFFFF", "#F6B40E"],
     "brazil": ["#FFDF00", "#009C3B", "#7DD3FC"],
-    "france": ["#7DD3FC", "#FFFFFF", "#EF4135"],
-    "england": ["#FFFFFF", "#C8102E", "#7DD3FC"],
+    "france": ["#0055A4", "#FFFFFF", "#EF4135"],
+    "england": ["#C8102E", "#FFFFFF", "#1D4ED8"],
     "spain": ["#AA151B", "#F1BF00", "#7DD3FC"],
-    "germany": ["#FFFFFF", "#000000", "#DD0000"],
+    "germany": ["#DD0000", "#FFFFFF", "#000000"],
     "italy": ["#0066B3", "#FFFFFF", "#008C45"],
     "portugal": ["#006600", "#FF0000", "#FFCC00"],
     "netherlands": ["#F36C21", "#21468B", "#FFFFFF"],
@@ -474,7 +490,7 @@ NATIONAL_TEAM_COLOR_FALLBACKS = {
     "united states": ["#3C3B6E", "#B22234", "#FFFFFF"],
     "usa": ["#3C3B6E", "#B22234", "#FFFFFF"],
     "canada": ["#FF0000", "#FFFFFF", "#111111"],
-    "japan": ["#FFFFFF", "#BC002D", "#7DD3FC"],
+    "japan": ["#BC002D", "#FFFFFF", "#1D4ED8"],
     "saudi arabia": ["#006C35", "#FFFFFF", "#111111"],
     "qatar": ["#8A1538", "#FFFFFF", "#111111"],
     "ghana": ["#FCD116", "#CE1126", "#006B3F"],
@@ -2174,8 +2190,7 @@ def render_pass_network_v2(team_name, opp_name, score, team_color, players, edge
     counts = [e["count"] for e in edges]
     medium_cut = np.percentile(counts, 50) if counts else 0
     strong_cut = np.percentile(counts, 78) if counts else 0
-    low_col = "#7DD3FC"
-    mid_col = "#A8B8CA"
+    low_col, mid_col, strong_col = network_link_palette(team_color)
     drawable_edges = [
         e
         for e in sorted(edges, key=lambda d: d["count"])
@@ -2188,7 +2203,7 @@ def render_pass_network_v2(team_name, opp_name, score, team_color, players, edge
         p2 = by_name[e["to"]]
         ratio = e["count"] / max_e
         if e["count"] >= strong_cut:
-            line_col = team_color
+            line_col = strong_col
             lw = 1.25 + 3.80 * ratio
             alpha = 0.55 + 0.35 * ratio
             z = 4
@@ -2629,11 +2644,12 @@ def _draw_player_label_vertical(
         family=FONT_SANS,
         bbox=dict(
             facecolor=BG_DARK,
-            edgecolor=GRID_COL,
-            lw=0.5,
-            alpha=0.97,
-            boxstyle="round,pad=0.14",
+            edgecolor="#363D49",
+            lw=0.7,
+            alpha=1.0,
+            boxstyle="round,pad=0.18",
         ),
+        path_effects=[pe.withStroke(linewidth=1.6, foreground=BG_DARK)],
         zorder=zorder,
         clip_on=True,
     )
@@ -2730,11 +2746,12 @@ def _draw_pass_label_above(
         family=FONT_SANS,
         bbox=dict(
             facecolor=BG_DARK,
-            edgecolor=GRID_COL,
-            lw=0.5,
-            alpha=0.97,
-            boxstyle="round,pad=0.14",
+            edgecolor="#363D49",
+            lw=0.7,
+            alpha=1.0,
+            boxstyle="round,pad=0.18",
         ),
+        path_effects=[pe.withStroke(linewidth=1.6, foreground=BG_DARK)],
         zorder=zorder,
         clip_on=True,
     )
@@ -2847,11 +2864,10 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
     counts = [e["count"] for e in edges]
     medium_cut = np.percentile(counts, 50) if counts else 0
     strong_cut = np.percentile(counts, 78) if counts else 0
-    # Neutral grey→white link ramp (StatsBomb-style): edges stay independent of
-    # the team colour so they never compete with the red/blue nodes.
-    low_col = "#3A3A3A"
-    mid_col = "#8A8A8A"
-    strong_col = "#E6E6E6"
+    # The relationship palette is computed independently of the node fill.
+    # Grey/white teams automatically switch to indigo links, so a connection
+    # can never share the same colour as a player circle.
+    low_col, mid_col, strong_col = network_link_palette(accent)
     n_players = len(v_players)
     drawable_edges = [
         e
@@ -2925,11 +2941,11 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
     # as an 11-man first half. (node sizes/radii were already computed above,
     # before the repulsion pass, so edges/nodes/labels all agree.)
     if n_players <= 12:
-        label_fontsize = 5.8
+        label_fontsize = 6.8
     elif n_players <= 14:
-        label_fontsize = 5.4
+        label_fontsize = 6.4
     else:
-        label_fontsize = 5.0
+        label_fontsize = 6.0
 
     # A substitute = a player who started on the bench (not in the XI). Guard
     # against a feed that mislabels everyone: if every node looks like a sub,
@@ -2949,7 +2965,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
                     hull,
                     closed=True,
                     facecolor=accent,
-                    edgecolor=accent,
+                    edgecolor=mid_col,
                     alpha=0.06,
                     lw=1.0,
                     joinstyle="round",
@@ -2961,7 +2977,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
                     hull,
                     closed=True,
                     facecolor="none",
-                    edgecolor=accent,
+                    edgecolor=mid_col,
                     alpha=0.28,
                     lw=1.0,
                     joinstyle="round",
@@ -2978,7 +2994,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
             [2, PASS_PITCH_W - 2],
             [dline, dline],
             ls=(0, (6, 4)),
-            color=accent,
+            color=strong_col,
             lw=1.0,
             alpha=0.45,
             zorder=1,
@@ -2989,7 +3005,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
             "DEF LINE",
             ha="right",
             va="bottom",
-            color=accent,
+            color=strong_col,
             fontsize=5.6,
             fontweight="bold",
             family=FONT_MONO,
@@ -3127,10 +3143,9 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
             zorder=8,
             path_effects=[pe.withStroke(linewidth=1.6, foreground=BG_DARK)],
         )
-        # On a dense half, only label the most-involved players by name; the
-        # rest are identified by their shirt number inside the node. This is
-        # the single biggest declutter for the 2nd-half map.
-        label_cap = 12 if n_players >= 13 else n_players
+        # Every participant keeps a direct name label. The collision-aware
+        # stacker moves dense labels and draws a leader line when necessary.
+        label_cap = n_players
         if rank < label_cap:
             _draw_pass_label_above(
                 ax,
@@ -3404,7 +3419,7 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
         fig,
         section="XT MAP",
         title=f"{team_name} — Expected Threat (xT)",
-        subtitle="Heatmap = pitch xT value (cell numbers) · gold arrows = the top-15 threat-creating passes",
+        subtitle="Heatmap = pitch xT value (cell numbers) · indigo arrows = the top-10 threat-creating passes",
         hn=team_name,
         an=opp_name,
         score=score,
@@ -3518,9 +3533,9 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
     # Only the highest-threat passes are drawn as arrows — the mass of small
     # positive/negative passes is left to the heatmap, which keeps the map clean.
 
-    # Top 15 threat passes: outlined gold arrows.
-    top5_passes = sorted(pos, key=lambda p: -p["xT"])[:15]
-    for p in top5_passes:
+    # Top 10 threat passes: outlined indigo arrows.
+    top_passes = sorted(pos, key=lambda p: -p["xT"])[:10]
+    for p in top_passes:
         _draw_vertical_arrow(
             ax,
             (p["x"], p["y"]),
@@ -3606,12 +3621,13 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
                 (nm or "—").split()[-1],
                 ha="left",
                 va="center",
-                color=TEXT_BR,
-                fontsize=10.5,
+                color="#FFFFFF",
+                fontsize=11.0,
                 fontweight="bold",
                 family=FONT_SANS,
                 transform=ax2.transAxes,
                 zorder=2,
+                path_effects=[pe.withStroke(linewidth=1.5, foreground=BG_DARK)],
             )
             ax2.text(
                 0.65,
@@ -4400,10 +4416,13 @@ def render_pitch_overlay_v2(
             for j, (val, x) in enumerate(zip(row, xs)):
                 ha = "left" if j == 0 else ("right" if j == n_cols - 1 else "center")
                 is_last = j == n_cols - 1
-                col = TEXT_BR if j == 0 else (team_color if is_last else TEXT_DIM)
-                fs = 10.5 if j == 0 else (11 if is_last else 10)
-                fw = "bold" if (j == 0 or is_last) else "normal"
-                fam = FONT_SANS if j == 0 else FONT_MONO
+                # Keep identifiers and player names bright. Team colour is
+                # reserved for marks; the final value only uses it when WCAG
+                # contrast is sufficient, otherwise it falls back to white.
+                col = _safe_team_text(team_color) if is_last else TEXT_BR
+                fs = 10.5 if j < n_cols - 1 else 11
+                fw = "bold"
+                fam = FONT_SANS if j < n_cols - 1 else FONT_MONO
                 ax2.text(
                     x,
                     cy,
@@ -4849,7 +4868,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
     # all as circles rather than all squares.
     _all_sub = bool(players) and all(p.get("is_sub") for p in players)
     n_players = len(players)
-    label_fontsize = 6.2 if n_players <= 12 else (5.8 if n_players <= 14 else 5.4)
+    label_fontsize = 7.0 if n_players <= 12 else (6.6 if n_players <= 14 else 6.2)
 
     # Identify the goalkeeper (positional GK, else the deepest node) so it can
     # carry the same distinct gold edge used on the pass network.
@@ -4863,6 +4882,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
     hub_player = max(players, key=lambda p: p["touches"]) if players else None
 
     def draw_overlay(ax):
+        _link_low, shape_color, _link_strong = network_link_palette(team_color)
         # Team shape: a convex hull over the outfield starters (matching the
         # pass network's "block footprint" treatment) instead of a plain
         # centroid spider-web, which reads far better at a glance.
@@ -4881,7 +4901,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
                         hull_vp,
                         closed=True,
                         facecolor=team_color,
-                        edgecolor=team_color,
+                        edgecolor=shape_color,
                         alpha=0.07,
                         lw=1.0,
                         joinstyle="round",
@@ -4893,7 +4913,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
                         hull_vp,
                         closed=True,
                         facecolor="none",
-                        edgecolor=team_color,
+                        edgecolor=shape_color,
                         alpha=0.30,
                         lw=1.0,
                         joinstyle="round",
@@ -5263,12 +5283,7 @@ def make_high_turnovers_v2(events, info, team_id, team_color):
     opp_name = an if is_home else hn
     score = info.get("score") or "—"
 
-    REGAIN_TYPES = {"Tackle", "Interception", "BallRecovery"}
-    sub = events[
-        (events["team_id"] == team_id)
-        & events["type"].isin(list(REGAIN_TYPES))
-        & (events["x"] >= 60)
-    ]
+    sub = high_regain_events(events, team_id)
 
     points = []
     by_player = {}
@@ -5319,36 +5334,35 @@ def make_high_turnovers_v2(events, info, team_id, team_color):
     top = sorted(by_player.items(), key=lambda kv: -kv[1])[:6]
     rows = [(p.split()[-1] if p else "—", str(c)) for p, c in top]
 
-    counts = {t: 0 for t in REGAIN_TYPES}
-    for _, _, t in points:
-        counts[t] = counts.get(t, 0) + 1
     leader = top[0][0].split()[-1] if top else "—"
     insight = (
         (
             f"{team_name} regained possession {len(points)} times in the "
             f"final 40 metres — the press's tangible reward. {leader} led "
-            f"with {top[0][1]} high turnovers."
+            f"with {top[0][1]} high regains."
         )
         if top
         else f"{team_name} — no high regains recorded."
     )
 
+    side = "home" if is_home else "away"
+    advanced = team_advanced_metrics(events, info)[side]
     cards = [
         ("High Regains", str(len(points)), team_color),
-        ("Tackles", str(counts.get("Tackle", 0)), TEXT_BR),
-        ("Intercepts", str(counts.get("Interception", 0)), TEXT_BR),
-        ("Recoveries", str(counts.get("BallRecovery", 0)), TEXT_BR),
+        ("Transition Shots", str(advanced["transition_shots"]), TEXT_BR),
+        ("Regain→Shot", f'{advanced["regain_to_shot_rate"]:.0f}%', TEXT_BR),
+        ("Counterpress", str(advanced["counterpress_regains"]), TEXT_BR),
         ("Top Player", leader, team_color),
     ]
     return render_pitch_overlay_v2(
-        section="HIGH TURNOVERS",
-        title=f"{team_name} — High Turnovers",
+        section="HIGH REGAINS",
+        title=f"{team_name} — High Regains",
         subtitle="Each dot = a possession regain inside the final 40m · "
         "colour = action type · gold band = high zone",
         hn=team_name,
         an=opp_name,
         score=str(score),
-        footer_note="High = inside the opposition half (x ≥ 60)",
+        footer_note="High regain = new open-play possession starting at x ≥ 60",
         team_color=team_color,
         draw_overlay=draw_overlay,
         sidebar_title="Top High-Pressers",
@@ -5901,32 +5915,7 @@ def make_crosses_v2(events, info, team_id, team_color):
     opp_name = an if is_home else hn
     score = info.get("score") or "—"
 
-    # Real crosses only — use the provider's cross flag / "Cross" qualifier
-    # instead of treating any wide ball as a cross.
-    base = events[
-        (events["team_id"] == team_id)
-        & (events["is_pass"] == True)
-        & events["x"].notna()
-        & events["y"].notna()
-        & events["end_x"].notna()
-        & events["end_y"].notna()
-    ]
-    if "is_cross" in events.columns:
-        sub = base[base["is_cross"] == True]
-    elif "qualifier_names" in events.columns:
-        sub = base[
-            base["qualifier_names"]
-            .fillna("")
-            .astype(str)
-            .str.contains(r"\bcross\b", case=False, regex=True)
-        ]
-    else:
-        # Fallback only when no cross flag exists in the feed.
-        sub = base[
-            (base["x"] >= 60)
-            & ((base["y"] <= 22) | (base["y"] >= 78))
-            & (base["end_x"] >= 80)
-        ]
+    sub = events[(events["team_id"] == team_id) & cross_mask(events)]
 
     crosses = []
     by_player = {}
@@ -6014,7 +6003,7 @@ def make_crosses_v2(events, info, team_id, team_color):
         hn=team_name,
         an=opp_name,
         score=str(score),
-        footer_note="Cross = wide pass into the box from x ≥ 60",
+        footer_note="Cross = provider cross flag or qualifier · geometry only as fallback",
         team_color=team_color,
         draw_overlay=draw_overlay,
         sidebar_title="Top Crossers",
@@ -6036,36 +6025,23 @@ def make_progressive_passes_v2(events, info, team_id, team_color):
     opp_name = an if is_home else hn
     score = info.get("score") or "—"
 
-    sub = events[
-        (events["team_id"] == team_id)
-        & (events["is_pass"] == True)
-        & (events["outcome"] == "Successful")
-        & events["x"].notna()
-        & events["end_x"].notna()
-    ]
+    sub = events[(events["team_id"] == team_id) & progressive_pass_mask(events)]
     progressives = []
     by_player = {}
     for _, r in sub.iterrows():
         sx, sy = float(r["x"]), float(r.get("y") or 50)
         ex, ey = float(r["end_x"]), float(r.get("end_y") or 50)
-        # Progressive: reduces distance to goal by ≥25% OR ends in final third
-        dist_before = 100 - sx
-        dist_after = 100 - ex
-        is_progressive = (dist_before > 0 and (dist_after / dist_before) <= 0.75) or (
-            ex >= 67 and ex - sx >= 10
+        progressives.append(
+            {
+                "sx": sx,
+                "sy": sy,
+                "ex": ex,
+                "ey": ey,
+                "player": str(r.get("player") or "—"),
+            }
         )
-        if is_progressive:
-            progressives.append(
-                {
-                    "sx": sx,
-                    "sy": sy,
-                    "ex": ex,
-                    "ey": ey,
-                    "player": str(r.get("player") or "—"),
-                }
-            )
-            p = str(r.get("player") or "—")
-            by_player[p] = by_player.get(p, 0) + 1
+        p = str(r.get("player") or "—")
+        by_player[p] = by_player.get(p, 0) + 1
 
     def draw_overlay(ax):
         for p in progressives:
@@ -6773,6 +6749,9 @@ def make_defensive_summary_v2(events, info):
     aid = info.get("away_id")
     score = info.get("score") or "—"
     hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home_advanced = advanced["home"]
+    away_advanced = advanced["away"]
 
     def _count(team_id, type_name):
         return int(
@@ -6806,7 +6785,11 @@ def make_defensive_summary_v2(events, info):
             _blocked_shots_for_team(events, info, hid),
             _blocked_shots_for_team(events, info, aid),
         ),
-        ("Recoveries", _count(hid, "BallRecovery"), _count(aid, "BallRecovery")),
+        (
+            "Provider recoveries",
+            home_advanced["provider_recoveries"],
+            away_advanced["provider_recoveries"],
+        ),
         ("Fouls", _fouls_committed(hid), _fouls_committed(aid)),
     ]
     # Totals & "top type" use only the six core actions above — duels are shown
@@ -6819,6 +6802,16 @@ def make_defensive_summary_v2(events, info):
     h_aw, h_at, h_gw, h_gt = _compute_duels(events, hid)
     a_aw, a_at, a_gw, a_gt = _compute_duels(events, aid)
     duel_rows = [
+        (
+            "Possession regains",
+            home_advanced["possession_regains"],
+            away_advanced["possession_regains"],
+        ),
+        (
+            "High regains",
+            home_advanced["high_regains"],
+            away_advanced["high_regains"],
+        ),
         ("Aerial duels", (h_aw, f"{h_aw}/{h_at}"), (a_aw, f"{a_aw}/{a_at}")),
         ("Ground duels", (h_gw, f"{h_gw}/{h_gt}"), (a_gw, f"{a_gw}/{a_gt}")),
     ]
@@ -6827,7 +6820,8 @@ def make_defensive_summary_v2(events, info):
     insight = (
         f"{leader} did more defensive work overall ({max(h_total, a_total)} "
         f"vs {min(h_total, a_total)}). Tackles + interceptions describe duels; "
-        f"recoveries + clearances mark how each side escaped pressure. Duel "
+        f"provider recoveries are feed events, while possession regains are "
+        f"inferred from control changes. Duel "
         f"bars show won/contested (aerial + ground)."
     )
     cards = [
@@ -6840,17 +6834,254 @@ def make_defensive_summary_v2(events, info):
     return render_bar_compare_v2(
         section="DEFENSIVE SUMMARY",
         title=f"{hn} vs {an} — Defensive Summary",
-        subtitle="Six defensive actions + aerial & ground duels (won/contested) "
-        "· gold card = duels won",
+        subtitle="Provider actions + inferred possession regains + duels "
+        "(won/contested)",
         hn=hn,
         an=an,
         score=str(score),
-        footer_note="Duels: won/contested · aerial = header duels · "
-        "ground = tackles + take-ons",
+        footer_note="Provider recovery = feed event · possession regain = "
+        "inferred control change",
         hc=hc,
         ac=ac,
         rows=rows + duel_rows,
         insight_text=insight,
+        metric_cards=cards,
+    )
+
+
+def make_transition_summary_v2(events, info):
+    """Compare canonical attacking-transition and pressing outcomes."""
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home = advanced["home"]
+    away = advanced["away"]
+
+    rows = [
+        ("Attacking transitions", home["transitions"], away["transitions"]),
+        ("Transition shots", home["transition_shots"], away["transition_shots"]),
+        ("Transition goals", home["transition_goals"], away["transition_goals"]),
+        (
+            "Transition box entries",
+            home["transition_box_entries"],
+            away["transition_box_entries"],
+        ),
+        ("High regains", home["high_regains"], away["high_regains"]),
+        (
+            "Counterpress regains",
+            home["counterpress_regains"],
+            away["counterpress_regains"],
+        ),
+    ]
+    leader = hn if home["transition_shots"] >= away["transition_shots"] else an
+    insight = (
+        f"{leader} produced more shots from transition. A transition starts "
+        "after an open-play regain and must progress at least 20 pitch units, "
+        "reach the final third or box, or create a shot within 12 seconds."
+    )
+    cards = [
+        (f"{hn[:12]} xG", f'{home["transition_xG"]:.2f}', hc),
+        (f"{an[:12]} xG", f'{away["transition_xG"]:.2f}', ac),
+        (
+            "Shot Rate H/A",
+            f'{home["transition_shot_rate"]:.0f}/{away["transition_shot_rate"]:.0f}%',
+            C_GOLD,
+        ),
+        (
+            "Avg Progress H/A",
+            f'{home["avg_transition_progress"]:.0f}/{away["avg_transition_progress"]:.0f}',
+            C_GOLD,
+        ),
+        (
+            "Transition xT H/A",
+            f'{home["transition_xT"]:.2f}/{away["transition_xT"]:.2f}',
+            C_GOLD,
+        ),
+    ]
+    return render_bar_compare_v2(
+        section="TRANSITIONS",
+        title=f"{hn} vs {an} — Transition Performance",
+        subtitle="Open-play regains converted into fast territorial or shooting outcomes",
+        hn=hn,
+        an=an,
+        score=str(score),
+        footer_note="Window: first 12 seconds of the same possession · restarts excluded",
+        hc=hc,
+        ac=ac,
+        rows=rows,
+        insight_text=insight,
+        metric_cards=cards,
+    )
+
+
+def make_advanced_metrics_summary_v2(events, info):
+    """Compare the complete canonical advanced-metric set."""
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home = advanced["home"]
+    away = advanced["away"]
+
+    rows = [
+        ("Field tilt %", home["field_tilt"], away["field_tilt"]),
+        ("Deep completions", home["deep_completions"], away["deep_completions"]),
+        (
+            "Build-up success %",
+            home["build_up_success_rate"],
+            away["build_up_success_rate"],
+        ),
+        (
+            "Final-third entry efficiency %",
+            home["final_third_entry_efficiency"],
+            away["final_third_entry_efficiency"],
+        ),
+        (
+            "Box entry → shot %",
+            home["box_entry_to_shot_rate"],
+            away["box_entry_to_shot_rate"],
+        ),
+        ("Sequence xT", home["sequence_xT"], away["sequence_xT"]),
+        ("Directness %", home["directness"], away["directness"]),
+        (
+            "Counterpress success %",
+            home["counterpress_success_rate"],
+            away["counterpress_success_rate"],
+        ),
+        (
+            "Rest-defence vulnerability %",
+            home["rest_defence_vulnerability"],
+            away["rest_defence_vulnerability"],
+        ),
+    ]
+
+    sequence = player_sequence_metrics(events)
+
+    def _top_sequence(team_id, metric):
+        candidates = []
+        for player, values in sequence.items():
+            player_events = events[events["player"].astype(str) == str(player)]
+            if player_events.empty or player_events["team_id"].dropna().empty:
+                continue
+            if player_events["team_id"].dropna().mode().iloc[0] == team_id:
+                candidates.append((player, float(values.get(metric, 0.0))))
+        return max(candidates, key=lambda item: item[1]) if candidates else ("—", 0.0)
+
+    home_chain = _top_sequence(info.get("home_id"), "xGChain")
+    away_chain = _top_sequence(info.get("away_id"), "xGChain")
+    home_buildup = _top_sequence(info.get("home_id"), "xGBuildup")
+    away_buildup = _top_sequence(info.get("away_id"), "xGBuildup")
+    cards = [
+        ("Home xGChain", f"{home_chain[0].split()[-1]} {home_chain[1]:.2f}", hc),
+        ("Away xGChain", f"{away_chain[0].split()[-1]} {away_chain[1]:.2f}", ac),
+        (
+            "Home xGBuildup",
+            f"{home_buildup[0].split()[-1]} {home_buildup[1]:.2f}",
+            hc,
+        ),
+        (
+            "Away xGBuildup",
+            f"{away_buildup[0].split()[-1]} {away_buildup[1]:.2f}",
+            ac,
+        ),
+        (
+            "Seq xT / Poss H-A",
+            f'{home["sequence_xT_per_possession"]:.2f}-{away["sequence_xT_per_possession"]:.2f}',
+            C_GOLD,
+        ),
+    ]
+    insight = (
+        "These metrics separate territory, progression efficiency, sequence value, "
+        "counterpressing and protection after advanced attacks. Rest-defence "
+        "vulnerability is the only row where lower is better."
+    )
+    return render_bar_compare_v2(
+        section="ADVANCED METRICS",
+        title=f"{hn} vs {an} — Advanced Team Metrics",
+        subtitle="Canonical possession-sequence metrics · lower rest-defence vulnerability is better",
+        hn=hn,
+        an=an,
+        score=str(score),
+        footer_note="xGChain/xGBuildup are non-penalty player sequence credits",
+        hc=hc,
+        ac=ac,
+        rows=rows,
+        insight_text=insight,
+        metric_cards=cards,
+    )
+
+
+def make_game_state_summary_v2(events, info):
+    """Compare team output while leading, drawing, and trailing."""
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home = advanced["home"]["game_state_splits"]
+    away = advanced["away"]["game_state_splits"]
+
+    rows = []
+    state_labels = {"leading": "Leading", "drawing": "Drawing", "trailing": "Trailing"}
+    for state in ("leading", "drawing", "trailing"):
+        label = state_labels[state]
+        rows.extend(
+            [
+                (f"{label} shots", home[state]["shots"], away[state]["shots"]),
+                (f"{label} xG", home[state]["xG"], away[state]["xG"]),
+                (
+                    f"{label} transitions",
+                    home[state]["transitions"],
+                    away[state]["transitions"],
+                ),
+            ]
+        )
+    cards = [
+        (
+            "Leading Poss H-A",
+            f'{home["leading"]["possessions"]}-{away["leading"]["possessions"]}',
+            C_GOLD,
+        ),
+        (
+            "Drawing Poss H-A",
+            f'{home["drawing"]["possessions"]}-{away["drawing"]["possessions"]}',
+            C_GOLD,
+        ),
+        (
+            "Trailing Poss H-A",
+            f'{home["trailing"]["possessions"]}-{away["trailing"]["possessions"]}',
+            C_GOLD,
+        ),
+        (
+            "Leading xT H-A",
+            f'{home["leading"]["sequence_xT"]:.2f}-{away["leading"]["sequence_xT"]:.2f}',
+            C_GOLD,
+        ),
+        (
+            "Trailing xT H-A",
+            f'{home["trailing"]["sequence_xT"]:.2f}-{away["trailing"]["sequence_xT"]:.2f}',
+            C_GOLD,
+        ),
+    ]
+    return render_bar_compare_v2(
+        section="GAME STATE",
+        title=f"{hn} vs {an} — Game-State Splits",
+        subtitle="Possession output measured against the score before each sequence began",
+        hn=hn,
+        an=an,
+        score=str(score),
+        footer_note="Shootout goals excluded · own goals credited to the benefiting team",
+        hc=hc,
+        ac=ac,
+        rows=rows,
+        insight_text=(
+            "Game-state splits show whether volume came from controlling a lead, "
+            "breaking a draw, or chasing the score. Compare rates only where each "
+            "team had enough possessions in that state."
+        ),
         metric_cards=cards,
     )
 

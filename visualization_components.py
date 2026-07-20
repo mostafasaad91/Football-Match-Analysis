@@ -160,6 +160,29 @@ def readable_team_text(team_color: str, bg: str = BG_PANEL) -> str:
     return readable_on(team_color, bg, min_ratio=5.0, fallback=TEXT_BR)
 
 
+def _rgb_distance(first: str, second: str) -> float:
+    """Return a compact RGB distance used for visual collision checks."""
+    try:
+        a = mcolors.to_rgb(first)
+        b = mcolors.to_rgb(second)
+        return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+    except Exception:
+        return 1.0
+
+
+def network_link_palette(team_color: str) -> tuple[str, str, str]:
+    """Return low/medium/strong link colours distinct from player nodes.
+
+    Passing links encode relationship strength, while node fill encodes team
+    identity. The neutral ramp is preferred because it works with almost every
+    kit. If a team itself is grey/white, an indigo ramp is selected so links
+    can never disappear into the nodes.
+    """
+    neutral = ("#3F4652", "#98A2B3", "#F1F5F9")
+    indigo = ("#2E3A67", "#647DFF", "#B8C2FF")
+    return indigo if min(_rgb_distance(team_color, c) for c in neutral) < 0.22 else neutral
+
+
 ACCENT_TEXT = readable_on(C_GOLD, BG_PANEL, min_ratio=5.0, fallback=TEXT_BR)
 
 

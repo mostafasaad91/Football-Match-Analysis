@@ -1,0 +1,68 @@
+import football_match_analysis as analysis
+import visual_redesign_full as complete_visuals
+import visual_redesign_preview as preview
+from football_match_analysis import choose_matchup_colors
+from tactical_visualizations import _clean_dark_navy
+from visualization_components import network_link_palette
+
+
+def test_matchup_colors_follow_team_identity():
+    assert choose_matchup_colors("France", "England") == ("#0055A4", "#C8102E")
+    assert choose_matchup_colors("Liverpool", "Manchester City") == (
+        "#C8102E",
+        "#6CABDD",
+    )
+
+
+def test_unknown_teams_receive_stable_distinct_colors():
+    first = choose_matchup_colors("Unknown Alpha", "Unknown Beta")
+    second = choose_matchup_colors("Unknown Alpha", "Unknown Beta")
+    assert first == second
+    assert first[0] != first[1]
+
+
+def test_dark_blue_is_not_replaced_with_generic_light_blue():
+    assert _clean_dark_navy("#0055A4") == "#0055A4"
+
+
+def test_network_links_never_reuse_node_color():
+    for node_color in ("#0055A4", "#C8102E", "#F1F5F9", "#98A2B3"):
+        link_colors = network_link_palette(node_color)
+        assert node_color.upper() not in {color.upper() for color in link_colors}
+        assert len(set(link_colors)) == 3
+
+
+def test_live_matches_use_complete_amoled_renderer(tmp_path):
+    assert analysis.USE_COMPLETE_AMOLED_PACKAGE is True
+
+    original = {
+        "home_id": complete_visuals.HOME_ID,
+        "away_id": complete_visuals.AWAY_ID,
+        "home_name": complete_visuals.HOME_NAME,
+        "away_name": complete_visuals.AWAY_NAME,
+        "home_color": complete_visuals.HOME,
+        "away_color": complete_visuals.AWAY,
+        "score": complete_visuals.MATCH_SCORE,
+    }
+    original_out = complete_visuals.OUT
+    try:
+        complete_visuals.configure_match(
+            {
+                "home_id": 1,
+                "away_id": 2,
+                "home_name": "Egypt",
+                "away_name": "Morocco",
+                "home_color": "#CE1126",
+                "away_color": "#006233",
+                "score": "2 — 1",
+            },
+            tmp_path / "Egypt_vs_Morocco_2-1",
+        )
+        assert complete_visuals.TEAM_COLOR == {1: "#CE1126", 2: "#006233"}
+        assert complete_visuals._team_slug(1) == "egypt"
+        assert complete_visuals._team_slug(2) == "morocco"
+        assert preview.HOME_NAME == "Egypt"
+        assert preview.AWAY_NAME == "Morocco"
+        assert preview.MATCH_SCORE == "2 — 1"
+    finally:
+        complete_visuals.configure_match(original, original_out)

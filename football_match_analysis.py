@@ -54,6 +54,13 @@ os.environ["SOFASCORE_MIN_MATCH_CONFIDENCE"] = str(SOFASCORE_MIN_MATCH_CONFIDENC
 if SOFASCORE_EVENT_ID is not None:
     os.environ["SOFASCORE_EVENT_ID"] = str(SOFASCORE_EVENT_ID)
 from match_report import run_analysis as _run_extended_analysis
+from match_metrics import (
+    advanced_metrics_frames,
+    build_possessions,
+    high_regain_events,
+    team_advanced_metrics,
+    touch_mask,
+)
 
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
 os.environ["MATCH_ANALYSIS_THEME"] = "dark"
@@ -143,7 +150,7 @@ console = Console()
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1998901/live/international-fifa-world-cup-2026-norway-england"
+MATCH_URL = "https://www.whoscored.com/matches/2007644/live/international-fifa-world-cup-2026-spain-argentina"
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -178,6 +185,9 @@ def _match_output_folder(info: dict, root: str = SAVE_DIR) -> str:
 # You can also force exact match-day kit colours with CUSTOM_KIT_COLORS below.
 HOME_KIT_TYPE = "home"
 AWAY_KIT_TYPE = "auto"
+# Production renderer switch. Keep True to generate the same complete AMOLED
+# identity used by visual_redesign_full.py for every newly parsed fixture.
+USE_COMPLETE_AMOLED_PACKAGE = True
 CUSTOM_KIT_COLORS = {
     # "home": "#C8102E",
     # "away": "#034694",
@@ -11075,43 +11085,13 @@ def _panel_prog_carries(ax, events, tid, tc, name):
 #  PANEL 4 — High Turnovers  (single team, vertical pitch)
 # ══════════════════════════════════════════════════════════════════════
 def _panel_high_turnovers(ax, events, tid, tc, name):
-    """
-    Possession wins (Interception / BallRecovery / Tackle won) within
-    the 40m-radius zone around the opponent's goal centre.
-    """
+    """Canonical inferred possession regains in the final 40 pitch units."""
     _vert_pitch(ax)
-    _lbl(ax, f"High Turnovers — {name}", tc)
+    _lbl(ax, f"High Regains — {name}", tc)
 
-    R40 = 40 / 105 * 100  # 40m in WhoScored x-units ≈ 38.1
-    GCX = 100  # goal centre x in WhoScored (opponent)
-    GCY = 50
-
-    # Highlight 40m circle — light fill
-    circle = plt.Circle(
-        (GCY, GCX),
-        R40,  # (ax_x, ax_y) after transpose
-        facecolor=tc,
-        alpha=0.10,
-        edgecolor=tc,
-        lw=1.2,
-        linestyle="--",
-        zorder=2,
-    )
-    ax.add_patch(circle)
-
-    # High-turnover event types
-    HT_TYPES = {"Interception", "BallRecovery", "Tackle", "BlockedShot", "Clearance"}
-    ht_events = events[
-        (events["team_id"] == tid)
-        & (events["type"].isin(HT_TYPES))
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-
-    # Filter: inside 40m zone
-    ht_events["dist_goal"] = np.sqrt(
-        ((ht_events["x"] - GCX) ** 2) + ((ht_events["y"] - GCY) ** 2)
-    )
-    ht_high = ht_events[ht_events["dist_goal"] <= R40].copy()
+    ax.axhspan(60, 100, facecolor=tc, alpha=0.10, zorder=1)
+    ax.axhline(60, color=tc, lw=1.2, linestyle="--", alpha=0.75, zorder=2)
+    ht_high = high_regain_events(events, tid)
 
     n_total = len(ht_high)
 
@@ -11128,24 +11108,9 @@ def _panel_high_turnovers(ax, events, tid, tc, name):
             zorder=6,
         )
 
-    # Count led to shot (within next 3 minutes of play → approximate:
-    # same period, minute within +3 of turnover)
-    led_shot = led_goal = 0
-    if not ht_high.empty and "minute" in events.columns:
-        ev_sorted = events.sort_values(["minute", "second"]).reset_index(drop=True)
-        for _, row in ht_high.iterrows():
-            min_ = row.get("minute", 0)
-            pid = row.get("period_code", "")
-            window = ev_sorted[
-                (ev_sorted["team_id"] == tid)
-                & (ev_sorted["minute"] >= min_)
-                & (ev_sorted["minute"] <= min_ + 3)
-                & (ev_sorted["period_code"] == pid)
-            ]
-            if window["is_shot"].any():
-                led_shot += 1
-            if window["is_goal"].any():
-                led_goal += 1
+    profile = _high_turnover_profile(events, tid)
+    led_shot = profile["led_shot"]
+    led_goal = profile["led_goal"]
 
     # Hexagon stat badges
     def _hex(ax, cx, cy, txt, val, col, size=0.085):
@@ -11194,11 +11159,11 @@ def _panel_high_turnovers(ax, events, tid, tc, name):
     _hex(ax, 0.35, 0.14, "Led to\nShot", led_shot, tc, size=0.075)
     _hex(ax, 0.65, 0.14, "Led to\nGoal", led_goal, tc, size=0.075)
 
-    # 40m radius annotation
+    # Canonical high-zone annotation
     ax.text(
         50,
         61,
-        "← 40m radius →",
+        "Final 40 pitch units",
         ha="center",
         va="center",
         color=tc,
@@ -11343,9 +11308,12 @@ def _collect_match_stats(info, events, xg_data):
     """Extract all key stats into a flat dict."""
     hn, an = info["home_name"], info["away_name"]
     hid, aid = info["home_id"], info["away_id"]
+    advanced = team_advanced_metrics(events, info)
 
     def _team(tid, tname):
         ev = events[events["team_id"] == tid]
+        side = "home" if tid == hid else "away"
+        canonical = advanced[side]
 
         goals = int(ev["is_goal"].sum()) if "is_goal" in ev.columns else 0
         shots_ev = (
@@ -11369,15 +11337,7 @@ def _collect_match_stats(info, events, xg_data):
         p_total = len(passes)
         p_pct = round(p_succ / p_total * 100) if p_total else 0
 
-        prog_p = (
-            int(
-                passes[
-                    (passes["end_x"] - passes["x"] >= 9.5) & (passes["x"] >= 33)
-                ].shape[0]
-            )
-            if not passes.empty and "end_x" in passes.columns
-            else 0
-        )
+        prog_p = canonical["progressive_passes"]
 
         fwd_p = (
             int(passes[passes["end_x"] > passes["x"]].shape[0])
@@ -11392,15 +11352,9 @@ def _collect_match_stats(info, events, xg_data):
             else 0
         )
 
-        crosses_ev = (
-            ev[ev["type"] == "Cross"] if "type" in ev.columns else pd.DataFrame()
-        )
-        cross_succ = (
-            int(crosses_ev[crosses_ev["outcome"] == "Successful"].shape[0])
-            if not crosses_ev.empty
-            else 0
-        )
-        cross_pct = round(cross_succ / len(crosses_ev) * 100) if len(crosses_ev) else 0
+        cross_total = canonical["crosses"]
+        cross_succ = canonical["completed_crosses"]
+        cross_pct = round(cross_succ / cross_total * 100) if cross_total else 0
 
         def_ev = _defensive_events_for_team(events, info, tid)
         tackles = (
@@ -11415,72 +11369,47 @@ def _collect_match_stats(info, events, xg_data):
             int(ev[ev["type"] == "Clearance"].shape[0]) if "type" in ev.columns else 0
         )
         blocked = _blocked_shots_for_team(events, info, tid)
-        recoveries = (
-            int(ev[ev["type"] == "BallRecovery"].shape[0])
-            if "type" in ev.columns
-            else 0
-        )
+        recoveries = canonical["provider_recoveries"]
 
         fouls = int(ev[ev["type"] == "Foul"].shape[0]) if "type" in ev.columns else 0
-
-        ht_ev = (
-            def_ev[
-                np.sqrt(((def_ev["x"] - 100) ** 2) + ((def_ev["y"] - 50) ** 2)) <= 38
-            ]
-            if not def_ev.empty and "x" in def_ev.columns
-            else pd.DataFrame()
-        )
 
         # Zone 14 + half-spaces for PDF tactical notes.
         # Guard both x/y columns to avoid PDF crashes if provider data is partial.
         has_xy = ("x" in ev.columns) and ("y" in ev.columns)
+        actual_touches = touch_mask(ev)
         z14 = (
-            int(ev[(ev["x"].between(66, 83)) & (ev["y"].between(33, 67))].shape[0])
+            int(
+                (
+                    actual_touches & ev["x"].between(66, 83) & ev["y"].between(33, 67)
+                ).sum()
+            )
             if has_xy
             else 0
         )
         left_halfspace = (
-            int(ev[(ev["x"].between(66, 83)) & (ev["y"].between(17, 33))].shape[0])
+            int(
+                (
+                    actual_touches & ev["x"].between(66, 83) & ev["y"].between(17, 33)
+                ).sum()
+            )
             if has_xy
             else 0
         )
         right_halfspace = (
-            int(ev[(ev["x"].between(66, 83)) & (ev["y"].between(67, 83))].shape[0])
+            int(
+                (
+                    actual_touches & ev["x"].between(66, 83) & ev["y"].between(67, 83)
+                ).sum()
+            )
             if has_xy
             else 0
         )
         halfspace_touches = left_halfspace + right_halfspace
 
-        touches = (
-            int(
-                ev[
-                    ev["type"].isin(
-                        [
-                            "Pass",
-                            "TakeOn",
-                            "Carry",
-                            "BallRecovery",
-                            "Tackle",
-                            "Interception",
-                            "Clearance",
-                        ]
-                    )
-                ].shape[0]
-            )
-            if "type" in ev.columns
-            else 0
-        )
-
-        # touches by third
-        t_def = int(ev[ev["x"] < 33]["type"].count()) if "x" in ev.columns else 0
-        t_mid = (
-            int(ev[ev["x"].between(33, 67)]["type"].count()) if "x" in ev.columns else 0
-        )
-        t_att = int(ev[ev["x"] > 67]["type"].count()) if "x" in ev.columns else 0
-        tot_thirds = (t_def + t_mid + t_att) or 1
-        t_def_pct = round(t_def / tot_thirds * 100)
-        t_mid_pct = round(t_mid / tot_thirds * 100)
-        t_att_pct = round(t_att / tot_thirds * 100)
+        touches = canonical["touches"]
+        t_def_pct = canonical["touch_def_pct"]
+        t_mid_pct = canonical["touch_mid_pct"]
+        t_att_pct = canonical["touch_att_pct"]
 
         xg_t = xg_data.get(tname, {})
 
@@ -11496,7 +11425,7 @@ def _collect_match_stats(info, events, xg_data):
             "fwd_passes": fwd_p,
             "fwd_pct": fwd_pct,
             "back_passes": back_p,
-            "crosses_total": len(crosses_ev),
+            "crosses_total": cross_total,
             "crosses_succ": cross_succ,
             "cross_pct": cross_pct,
             "touches": touches,
@@ -11513,8 +11442,33 @@ def _collect_match_stats(info, events, xg_data):
             "clearances": clearance,
             "blocked_shots": blocked,
             "recoveries": recoveries,
+            "possession_regains": canonical["possession_regains"],
+            "high_regains": canonical["high_regains"],
+            "transitions": canonical["transitions"],
+            "transition_shots": canonical["transition_shots"],
+            "transition_goals": canonical["transition_goals"],
+            "transition_xG": canonical["transition_xG"],
+            "transition_xT": canonical["transition_xT"],
+            "counterpress_regains": canonical["counterpress_regains"],
+            "counterpress_attempts": canonical["counterpress_attempts"],
+            "counterpress_success_rate": canonical["counterpress_success_rate"],
+            "field_tilt": canonical["field_tilt"],
+            "deep_completions": canonical["deep_completions"],
+            "final_third_entries": canonical["final_third_entries"],
+            "final_third_entry_efficiency": canonical["final_third_entry_efficiency"],
+            "box_entries": canonical["box_entries"],
+            "box_entry_to_shot_rate": canonical["box_entry_to_shot_rate"],
+            "build_up_success_rate": canonical["build_up_success_rate"],
+            "sequence_xT": canonical["sequence_xT"],
+            "sequence_xT_per_possession": canonical["sequence_xT_per_possession"],
+            "directness": canonical["directness"],
+            "rest_defence_vulnerability": canonical["rest_defence_vulnerability"],
+            "rest_defence_dangerous_counters": canonical[
+                "rest_defence_dangerous_counters"
+            ],
+            "game_state_splits": canonical["game_state_splits"],
             "fouls": fouls,
-            "high_turnovers": len(ht_ev),
+            "high_turnovers": canonical["high_regains"],
         }
 
     return {
@@ -11560,6 +11514,29 @@ def _ensure_match_stats_defaults(stats: dict) -> dict:
         "clearances": 0,
         "blocked_shots": 0,
         "recoveries": 0,
+        "possession_regains": 0,
+        "high_regains": 0,
+        "transitions": 0,
+        "transition_shots": 0,
+        "transition_goals": 0,
+        "transition_xG": 0.0,
+        "transition_xT": 0.0,
+        "counterpress_regains": 0,
+        "counterpress_attempts": 0,
+        "counterpress_success_rate": 0.0,
+        "field_tilt": 0.0,
+        "deep_completions": 0,
+        "final_third_entries": 0,
+        "final_third_entry_efficiency": 0.0,
+        "box_entries": 0,
+        "box_entry_to_shot_rate": 0.0,
+        "build_up_success_rate": 0.0,
+        "sequence_xT": 0.0,
+        "sequence_xT_per_possession": 0.0,
+        "directness": 0.0,
+        "rest_defence_vulnerability": 0.0,
+        "rest_defence_dangerous_counters": 0,
+        "game_state_splits": {},
         "fouls": 0,
         "high_turnovers": 0,
     }
@@ -11802,7 +11779,7 @@ def generate_tactical_analysis(info, events, xg_data):
         f"picture of pressing intensity and defensive line height.\n\n"
         f"High-intensity pressing sides tend to cluster their defensive actions in the opponent's half "
         f"or midfield, while deeper defensive blocks show concentration in their own half. "
-        f"{_better(h['high_turnovers'], a['high_turnovers'])} registered more high turnovers "
+        f"{_better(h['high_turnovers'], a['high_turnovers'])} registered more high regains "
         f"({_dom(h['high_turnovers'], a['high_turnovers'])}), indicating a more proactive pressing strategy.\n\n"
         f"Defensive shape can also be inferred from action type distribution. A high tackle count "
         f"({_dom(h['tackles'], a['tackles'])}) relative to interceptions ({_dom(h['interceptions'], a['interceptions'])}) "
@@ -11812,8 +11789,10 @@ def generate_tactical_analysis(info, events, xg_data):
     # ── DEFENSIVE SUMMARY ──────────────────────────────────────────
     def_summary = (
         f"Defensive performance metrics: {hn} recorded {h['tackles']} tackles, {h['interceptions']} interceptions, "
-        f"{h['clearances']} clearances, {h['blocked_shots']} blocked shots, and {h['recoveries']} ball recoveries. "
+        f"{h['clearances']} clearances, {h['blocked_shots']} blocked shots, and {h['recoveries']} provider recovery events. "
         f"{an} posted {a['tackles']} / {a['interceptions']} / {a['clearances']} / {a['blocked_shots']} / {a['recoveries']} respectively.\n\n"
+        f"The possession model inferred {h['possession_regains']} regains for {hn} and "
+        f"{a['possession_regains']} for {an}; these are intentionally separate from the provider's BallRecovery count.\n\n"
         f"Total defensive actions: {_dom(h['defensive_acts'], a['defensive_acts'])}. "
         f"{'A higher defensive action count for ' + _better(h['defensive_acts'], a['defensive_acts']) + ' could indicate sustained pressure absorbed, or alternatively a more aggressive pressing style.' if abs(h['defensive_acts'] - a['defensive_acts']) > 15 else 'Both teams were relatively balanced in their defensive work-rate.'}\n\n"
         f"Fouls committed ({_dom(h['fouls'], a['fouls'])}) add another dimension — "
@@ -11857,15 +11836,17 @@ def generate_tactical_analysis(info, events, xg_data):
         f"low box entries with high xG points to efficient but infrequent penetration — counter-attack efficiency."
     )
 
-    # ── HIGH TURNOVERS ─────────────────────────────────────────────
+    # ── HIGH REGAINS AND TRANSITIONS ───────────────────────────────
     high_to = (
-        f"High turnovers — ball recoveries within the 40-metre radius of the opponent's goal — "
-        f"are a direct measure of pressing effectiveness in dangerous areas.\n\n"
-        f"{hn} registered {h['high_turnovers']} high turnovers versus {an}'s {a['high_turnovers']}. "
-        f"{'This clear advantage for ' + _better(h['high_turnovers'], a['high_turnovers']) + ' indicates a more aggressive, organised counter-pressing structure that threatened to quickly transition turnovers into shots.' if abs(h['high_turnovers'] - a['high_turnovers']) > 2 else 'Neither team gained a pronounced advantage in high pressing, suggesting both sides were comfortable circulating the ball away from their own goal under moderate pressure.'}\n\n"
-        f"The ability to convert high turnovers into shots on goal is the ultimate test of pressing "
-        f"quality. A high turnover count that does not translate into chances may reflect poor decision-making "
-        f"in the transition moment — a key area for tactical improvement."
+        f"A high regain is an inferred open-play change of control beginning at x ≥ 60; "
+        f"restarts and administrative events are excluded. {hn} recorded "
+        f"{h['high_regains']} high regains versus {an}'s {a['high_regains']}.\n\n"
+        f"An attacking transition must stay in the same possession and, within 12 seconds, "
+        f"advance at least 20 pitch units, reach the final third or box, or produce a shot. "
+        f"{hn} generated {h['transitions']} transitions and {h['transition_shots']} shots; "
+        f"{an} generated {a['transitions']} and {a['transition_shots']} shots.\n\n"
+        f"This same-possession rule replaces the old three-minute look-ahead, which could "
+        f"incorrectly credit a later shot after possession had already changed."
     )
 
     # ── PASS TARGET ZONES ──────────────────────────────────────────
@@ -12267,47 +12248,17 @@ def _box_entry_profile(events, tid):
 
 
 def _high_turnover_profile(events, tid):
-    if "type" not in events.columns:
+    if events is None or events.empty:
         return {"total": 0, "led_shot": 0, "led_goal": 0}
-
-    r40 = 40 / 105 * 100
-    gcx, gcy = 100, 50
-    ht_types = {"Interception", "BallRecovery", "Tackle", "BlockedShot", "Clearance"}
-
-    ht_events = events[
-        (events["team_id"] == tid)
-        & (events["type"].isin(ht_types))
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    if ht_events.empty:
+    _, possessions = build_possessions(events)
+    if possessions.empty:
         return {"total": 0, "led_shot": 0, "led_goal": 0}
-
-    ht_events["dist_goal"] = np.sqrt(
-        ((ht_events["x"] - gcx) ** 2) + ((ht_events["y"] - gcy) ** 2)
-    )
-    ht_high = ht_events[ht_events["dist_goal"] <= r40].copy()
-    if ht_high.empty:
-        return {"total": 0, "led_shot": 0, "led_goal": 0}
-
-    led_shot = 0
-    led_goal = 0
-    if "minute" in events.columns:
-        ev_sorted = events.sort_values(["minute", "second"]).reset_index(drop=True)
-        for _, row in ht_high.iterrows():
-            minute = row.get("minute", 0)
-            period_code = row.get("period_code", "")
-            window = ev_sorted[
-                (ev_sorted["team_id"] == tid)
-                & (ev_sorted["minute"] >= minute)
-                & (ev_sorted["minute"] <= minute + 3)
-                & (ev_sorted["period_code"] == period_code)
-            ]
-            if "is_shot" in window.columns and window["is_shot"].any():
-                led_shot += 1
-            if "is_goal" in window.columns and window["is_goal"].any():
-                led_goal += 1
-
-    return {"total": len(ht_high), "led_shot": led_shot, "led_goal": led_goal}
+    high = possessions[(possessions["team_id"] == tid) & possessions["is_high_regain"]]
+    return {
+        "total": len(high),
+        "led_shot": int((high["transition_shots"] > 0).sum()),
+        "led_goal": int((high["transition_goals"] > 0).sum()),
+    }
 
 
 def _build_visual_catalog(info):
@@ -12549,14 +12500,14 @@ def _build_visual_catalog(info):
             "section": "home",
             "team": "home",
             "kind": "team_high_turnovers",
-            "title": f"{hn} High Turnovers",
+            "title": f"{hn} High Regains",
         },
         {
             "idx": 35,
             "section": "away",
             "team": "away",
             "kind": "team_high_turnovers",
-            "title": f"{an} High Turnovers",
+            "title": f"{an} High Regains",
         },
         {
             "idx": 36,
@@ -12571,6 +12522,27 @@ def _build_visual_catalog(info):
             "team": "away",
             "kind": "team_pass_target_zones",
             "title": f"{an} Pass Target Zones",
+        },
+        {
+            "idx": 41,
+            "section": "shared",
+            "team": None,
+            "kind": "shared_transition_summary",
+            "title": "Transition Performance",
+        },
+        {
+            "idx": 42,
+            "section": "shared",
+            "team": None,
+            "kind": "shared_advanced_metrics",
+            "title": "Advanced Team Metrics",
+        },
+        {
+            "idx": 43,
+            "section": "shared",
+            "team": None,
+            "kind": "shared_game_state",
+            "title": "Game-State Splits",
         },
     ]
 
@@ -12706,8 +12678,11 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
         from match_report import calculate_ppda as _calc_ppda
     except Exception:
         _calc_ppda = None
+    board_advanced = team_advanced_metrics(events, info)
 
     def _metrics(tid):
+        side = "home" if tid == hid else "away"
+        canonical = board_advanced[side]
         o = {
             "goals": 0,
             "shots": 0,
@@ -12722,7 +12697,12 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
             "tackles": 0,
             "intercept": 0,
             "recoveries": 0,
+            "regains": 0,
+            "high_regains": 0,
+            "transitions": 0,
+            "transition_shots": 0,
             "clearances": 0,
+            "poss": 0,
             "ppda": None,
         }
         if events is None or events.empty:
@@ -12766,19 +12746,14 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
             o["key"] = int((d["is_key_pass"].fillna(False) == True).sum())  # noqa: E712
         o["tackles"] = int((ty == "Tackle").sum())
         o["intercept"] = int((ty == "Interception").sum())
-        o["recoveries"] = int((ty == "BallRecovery").sum())
+        o["recoveries"] = canonical["provider_recoveries"]
+        o["regains"] = canonical["possession_regains"]
+        o["high_regains"] = canonical["high_regains"]
+        o["transitions"] = canonical["transitions"]
+        o["transition_shots"] = canonical["transition_shots"]
+        o["poss"] = round(canonical["possession_share"])
         o["clearances"] = int((ty == "Clearance").sum())
-        if {"is_pass", "end_x", "end_y", "x", "y"}.issubset(d.columns):
-            pp = d[
-                (d["is_pass"].fillna(False) == True) & (d["outcome"] == "Successful")
-            ]  # noqa: E712
-            o["box"] = int(
-                (
-                    (pp["end_x"] >= 83)
-                    & (pp["end_y"].between(21, 79))
-                    & ~((pp["x"] >= 83) & (pp["y"].between(21, 79)))
-                ).sum()
-            )
+        o["box"] = canonical["box_entries"]
         return o
 
     TS = {"home": _metrics(hid), "away": _metrics(aid)}
@@ -12794,9 +12769,6 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
         TS["away"]["goals"] = int((g["scoring_team"] == aid).sum())
     else:
         TS["home"]["goals"], TS["away"]["goals"] = hg, ag
-    _pt = TS["home"]["passes"] + TS["away"]["passes"] or 1
-    TS["home"]["poss"] = round(100 * TS["home"]["passes"] / _pt)
-    TS["away"]["poss"] = round(100 * TS["away"]["passes"] / _pt)
     # Use the own-goal-aware goal counts for the board score header.
     score_txt = f"{TS['home']['goals']} : {TS['away']['goals']}"
     if _calc_ppda is not None:
@@ -12911,7 +12883,7 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
             [
                 ("Tackles", "tackles", 0, False),
                 ("Interceptions", "intercept", 0, False),
-                ("Recoveries", "recoveries", 0, False),
+                ("Provider recoveries", "recoveries", 0, False),
                 ("PPDA", "ppda", 2, True),
             ],
         ),
@@ -12937,14 +12909,14 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
             "Where each side won the ball high.",
             "#F87171",
             [
-                ("team_high_turnovers", "home", f"{hn} High Turnovers"),
-                ("team_high_turnovers", "away", f"{an} High Turnovers"),
+                ("team_high_turnovers", "home", f"{hn} High Regains"),
+                ("team_high_turnovers", "away", f"{an} High Regains"),
             ],
             [
-                ("Recoveries", "recoveries", 0, False),
-                ("Tackles", "tackles", 0, False),
-                ("Interceptions", "intercept", 0, False),
-                ("PPDA", "ppda", 2, True),
+                ("Possession regains", "regains", 0, False),
+                ("High regains", "high_regains", 0, False),
+                ("Transitions", "transitions", 0, False),
+                ("Transition shots", "transition_shots", 0, False),
             ],
         ),
     ]
@@ -13590,10 +13562,40 @@ def _expert_tactical_commentary(
             else {"total": 0, "led_shot": 0, "led_goal": 0}
         )
         paragraphs.append(
-            f"High turnovers are the best measure of whether the press created attacking value. {team_name}'s {prof['total']} high regains only become decisive when followed by immediate forward passes, shots or box entries before {opp_name} can reset."
+            f"High regains show where the press changed control. {team_name}'s {prof['total']} high regains produced {prof['led_shot']} same-possession shots and {prof['led_goal']} goals before {opp_name} could reset."
         )
         paragraphs.append(
             "The conversion of turnovers into shots is the key benchmark. A press that wins the ball then plays backwards controls territory; a press that wins the ball and attacks quickly changes the game state."
+        )
+    elif kind == "shared_transition_summary":
+        advanced = team_advanced_metrics(events, info)
+        home_transition = advanced["home"]
+        away_transition = advanced["away"]
+        paragraphs.append(
+            f"The transition model keeps outcomes inside the same possession and a 12-second window. {info['home_name']} generated {home_transition['transitions']} transitions and {home_transition['transition_shots']} shots, while {info['away_name']} generated {away_transition['transitions']} and {away_transition['transition_shots']}."
+        )
+        paragraphs.append(
+            f"Transition xG was {home_transition['transition_xG']:.2f} to {away_transition['transition_xG']:.2f}. Read that with high and counterpress regains to separate pressing volume from the attacking value created immediately after the ball was won."
+        )
+    elif kind == "shared_advanced_metrics":
+        advanced = team_advanced_metrics(events, info)
+        home_advanced = advanced["home"]
+        away_advanced = advanced["away"]
+        paragraphs.append(
+            f"Field tilt was {home_advanced['field_tilt']:.1f}% to {away_advanced['field_tilt']:.1f}%, while build-up success was {home_advanced['build_up_success_rate']:.1f}% to {away_advanced['build_up_success_rate']:.1f}%. Together they separate territorial control from the ability to progress cleanly out of the first third."
+        )
+        paragraphs.append(
+            f"Rest-defence vulnerability was {home_advanced['rest_defence_vulnerability']:.1f}% to {away_advanced['rest_defence_vulnerability']:.1f}%; lower is better. Counterpress success was {home_advanced['counterpress_success_rate']:.1f}% to {away_advanced['counterpress_success_rate']:.1f}%, showing how often each side recovered quickly after an eligible open-play loss."
+        )
+    elif kind == "shared_game_state":
+        advanced = team_advanced_metrics(events, info)
+        home_states = advanced["home"]["game_state_splits"]
+        away_states = advanced["away"]["game_state_splits"]
+        paragraphs.append(
+            f"While leading, {info['home_name']} produced {home_states['leading']['shots']} shots and {home_states['leading']['xG']:.2f} xG; {info['away_name']} produced {away_states['leading']['shots']} and {away_states['leading']['xG']:.2f}. These totals should be read against how many possessions each team actually spent ahead."
+        )
+        paragraphs.append(
+            f"While trailing, the comparison was {home_states['trailing']['shots']} to {away_states['trailing']['shots']} shots and {home_states['trailing']['sequence_xT']:.2f} to {away_states['trailing']['sequence_xT']:.2f} sequence xT. This shows how each side changed its attacking behaviour when chasing the score."
         )
     else:
         paragraphs.append(
@@ -14718,7 +14720,12 @@ def _render_executive_summary_page(
         ("Pass Accuracy", f"{h['pass_accuracy']}%", f"{a['pass_accuracy']}%"),
         ("Progressive Passes", h["prog_passes"], a["prog_passes"]),
         ("Crosses", h["crosses_total"], a["crosses_total"]),
-        ("High Turnovers", h["high_turnovers"], a["high_turnovers"]),
+        ("High Regains", h["high_regains"], a["high_regains"]),
+        (
+            "Transitions (Shots)",
+            f"{h['transitions']} ({h['transition_shots']})",
+            f"{a['transitions']} ({a['transition_shots']})",
+        ),
         (
             "GK Saves",
             h.get("saved", xg_data.get(hn, {}).get("saved", 0)),
@@ -14794,6 +14801,9 @@ def _pdf_section_for_meta(meta, info):
         "team_def_heatmap",
         "shared_def_summary",
         "shared_xt_per_minute",
+        "shared_transition_summary",
+        "shared_advanced_metrics",
+        "shared_game_state",
     }:
         return "7. Pressing & Defensive Work", "#38BDF8"
     return "8. Additional Match Visuals", "#38BDF8"
@@ -14834,6 +14844,9 @@ def _report_catalog_order(info):
         30,
         34,
         35,
+        41,
+        42,
+        43,
         26,
         27,
         28,
@@ -15421,8 +15434,49 @@ def main():
     pd.DataFrame(xg_data).T.reset_index().rename(columns={"index": "team"}).to_csv(
         os.path.join(SAVE_DIR, "xg.csv"), index=False, encoding="utf-8-sig"
     )
+    team_advanced_frame, player_sequence_frame = advanced_metrics_frames(events, info)
+    team_advanced_frame.to_csv(
+        os.path.join(SAVE_DIR, "team_advanced_metrics.csv"),
+        index=False,
+        encoding="utf-8-sig",
+    )
+    player_sequence_frame.to_csv(
+        os.path.join(SAVE_DIR, "player_sequence_metrics.csv"),
+        index=False,
+        encoding="utf-8-sig",
+    )
 
     print_summary(info, xg_data, events)
+
+    if USE_COMPLETE_AMOLED_PACKAGE:
+        # One production path for every fixture. The previous implementation
+        # generated the redesigned sample through visual_redesign_full.py but
+        # sent live matches through a separate v2/legacy renderer, so a new
+        # match could still look like the old report. Configure and execute the
+        # exact same AMOLED package from the live match DataFrames instead.
+        from visual_redesign_full import generate_match_package
+
+        xg_frame = (
+            pd.DataFrame(xg_data)
+            .T.reset_index()
+            .rename(columns={"index": "team"})
+        )
+        package = generate_match_package(
+            events,
+            players,
+            xg_frame,
+            team_advanced_frame,
+            player_sequence_frame,
+            info,
+            SAVE_DIR,
+            clean=True,
+        )
+        console.print(
+            f"[bold green]  ✓ Complete AMOLED package → "
+            f"{package['output_dir']}[/bold green]"
+        )
+        console.print(f"[green]  ✓ Tactical PDF → {package['pdf']}[/green]")
+        return package
 
     plt.style.use("dark_background")
     figs = []
@@ -16352,73 +16406,24 @@ def main():
         )
         _sv(f35, f"{base}/35_box_entries_away_{ts}.png")
 
-    # ── 36/37: High Turnovers — Home + Away (legacy identity, narrow pitch) ─
+    # ── 36/37: Canonical High Regains — Home + Away ────────────────
     if _V2_AVAILABLE:
-        from tactical_visualizations import render_legacy_chart_v2 as _legacy_v2_ht
-        from visualization_components import C_GOLD as _GOLD_HT
+        from tactical_visualizations import make_high_turnovers_v2
 
-        REGAIN = {"Tackle", "Interception", "BallRecovery"}
-        for _tid, _tc, _name, _opp_name, _idx, _suffix in [
-            (hid, C_RED, hn, an, 36, "home"),
-            (aid, C_BLUE, an, hn, 37, "away"),
+        for _tid, _tc, _idx, _suffix in [
+            (hid, C_RED, 36, "home"),
+            (aid, C_BLUE, 37, "away"),
         ]:
-            _sub = events[
-                (events["team_id"] == _tid)
-                & events["type"].isin(list(REGAIN))
-                & (events["x"] >= 60)
-            ]
-            _by_player = {}
-            _types = {}
-            for _, _r in _sub.iterrows():
-                _p = str(_r.get("player") or "—")
-                _by_player[_p] = _by_player.get(_p, 0) + 1
-                _t = _r.get("type")
-                _types[_t] = _types.get(_t, 0) + 1
-            _top = sorted(_by_player.items(), key=lambda kv: -kv[1])[:6]
-            _rows = [(p.split()[-1] if p else "—", str(c)) for p, c in _top]
-            _leader = _top[0][0].split()[-1] if _top else "—"
-
-            _fig_ht = _legacy_v2_ht(
-                section="HIGH TURNOVERS",
-                title=f"{_name} — High Turnovers",
-                subtitle="Possession regains inside the final 40m — the "
-                "press's tangible reward",
-                hn=_name,
-                an=_opp_name,
-                score=str(info.get("score") or "—"),
-                footer_note="High = inside the opposition half (x ≥ 60)",
-                team_color=_tc,
-                draw_legacy=(
-                    lambda tid=_tid, tc=_tc, nm=_name: lambda fig, ax: _panel_high_turnovers(
-                        ax, events, tid, tc, nm
-                    )
-                )(),
-                sidebar_title="Top High-Pressers",
-                sidebar_headers=["PLAYER", "REGAINS"],
-                sidebar_rows=_rows,
-                insight_text=(
-                    f"{_name} regained possession {len(_sub)} times in the "
-                    f"final 40 metres. {_leader} led with "
-                    f"{_top[0][1] if _top else 0} high turnovers."
-                ),
-                metric_cards=[
-                    ("High Regains", str(len(_sub)), _GOLD_HT),
-                    ("Tackles", str(_types.get("Tackle", 0)), _tc),
-                    ("Intercepts", str(_types.get("Interception", 0)), _GOLD_HT),
-                    ("Recoveries", str(_types.get("BallRecovery", 0)), _tc),
-                    ("Top Player", _leader, _GOLD_HT),
-                ],
-                legacy_box=[0.165, 0.145, 0.245, 0.705],
-            )
+            _fig_ht = make_high_turnovers_v2(events, info, _tid, _tc)
             _save_and_append(_fig_ht, f"{_idx}_high_turnovers_{_suffix}_{ts}.png")
     else:
         f36 = _sf(
             8,
             11,
-            "High Turnovers",
+            "High Regains",
             team_color=C_RED,
             team_name=hn,
-            subtitle=f"{hn}  |  Ball wins within 40m of opponent goal",
+            subtitle=f"{hn}  |  Inferred possession regains at x ≥ 60",
         )
         _panel_high_turnovers(
             _sp(f36, lp=0.05, rp=0.95, tp=0.84, bp=0.06), events, hid, C_RED, hn
@@ -16427,10 +16432,10 @@ def main():
         f37 = _sf(
             8,
             11,
-            "High Turnovers",
+            "High Regains",
             team_color=C_BLUE,
             team_name=an,
-            subtitle=f"{an}  |  Ball wins within 40m of opponent goal",
+            subtitle=f"{an}  |  Inferred possession regains at x ≥ 60",
         )
         _panel_high_turnovers(
             _sp(f37, lp=0.05, rp=0.95, tp=0.84, bp=0.06), events, aid, C_BLUE, an
@@ -16556,6 +16561,38 @@ def main():
     except Exception as _ext_inline_err:
         console.print(f"[yellow]  ⚠ Inline PPDA failed: {_ext_inline_err}[/yellow]")
 
+    # ── 41: Canonical transition summary ─────────────────────────
+    if _V2_AVAILABLE:
+        try:
+            from tactical_visualizations import make_transition_summary_v2
+
+            _f41 = make_transition_summary_v2(events, info)
+            _save_and_append(_f41, f"41_transition_summary_{ts}.png")
+        except Exception as _transition_err:
+            console.print(
+                f"[yellow]  ⚠ Transition summary (41) failed: {_transition_err}[/yellow]"
+            )
+
+        try:
+            from tactical_visualizations import make_advanced_metrics_summary_v2
+
+            _f42 = make_advanced_metrics_summary_v2(events, info)
+            _save_and_append(_f42, f"42_advanced_metrics_{ts}.png")
+        except Exception as _advanced_metrics_err:
+            console.print(
+                f"[yellow]  ⚠ Advanced metrics summary (42) failed: {_advanced_metrics_err}[/yellow]"
+            )
+
+        try:
+            from tactical_visualizations import make_game_state_summary_v2
+
+            _f43 = make_game_state_summary_v2(events, info)
+            _save_and_append(_f43, f"43_game_state_splits_{ts}.png")
+        except Exception as _game_state_err:
+            console.print(
+                f"[yellow]  ⚠ Game-state summary (43) failed: {_game_state_err}[/yellow]"
+            )
+
     # ══════════════════════════════════════════════════════
     #  CATEGORY SUMMARY BOARDS (4 grouped collages)
     # ══════════════════════════════════════════════════════
@@ -16584,13 +16621,13 @@ def main():
     #  'Reading this visual' commentary page).
     # ══════════════════════════════════════════════════════
 
-    total_figs = 40  # Includes PPDA; player-stat tables removed by request
+    total_figs = len(figs)
     extra_boards = len(board_paths)
     console.print(
         f"\n[bold green]  ✅ {total_figs} figures saved → {SAVE_DIR}/[/bold green]\n"
         f"  [dim]Figs  1-8  : individual analytics[/dim]\n"
         f"  [dim]Figs  9-32 : standalone visuals[/dim]\n"
-        f"  [dim]Figs 33-40 : Dominating Zone · Box Entries · High Turnovers · Pass Target Zones · PPDA[/dim]\n"
+        f"  [dim]Figs 33-43 : Dominating Zone · Box Entries · High Regains · Pass Targets · PPDA · Transitions · Advanced Metrics · Game State[/dim]\n"
         f"  [dim]{extra_boards} grouped summary boards added[/dim]\n"
         f"  [dim]Shot Summary Tiles and player-stat tables removed by request[/dim]"
     )
@@ -16723,6 +16760,9 @@ def _next_visual_bridge(next_meta, info):
         "team_average_positions": "to see the shape that underpinned all of this",
         "team_def_heatmap": "to see how the same side defended without the ball",
         "team_high_turnovers": "to see whether the press created attacking value",
+        "shared_transition_summary": "to compare the immediate value created after open-play regains",
+        "shared_advanced_metrics": "to compare progression efficiency, counterpressing, and rest-defence protection",
+        "shared_game_state": "to see how the scoreline changed each team's attacking behaviour",
     }.get(nk, "to add the next layer of the tactical picture")
     return f"Read next alongside “{nt}” {reason}."
 
@@ -16782,6 +16822,9 @@ def _visual_tactical_note(meta, info, events, xg_data, stats, next_meta=None):
         "shared_dominating_zone": "Zone dominance translates possession into geography. It becomes valuable when it leads to box entries, cut-backs, shots or second-ball pressure.",
         "shared_xt_per_minute": "xT per minute is the momentum page for ball progression. Repeated spikes suggest a stable attacking route; isolated spikes suggest transitions or individual actions.",
         "shared_def_summary": "Defensive totals need context: tackles show duels, interceptions show anticipation, and recoveries show control of loose-ball moments.",
+        "shared_transition_summary": "This page measures the immediate attacking value of open-play regains within the same possession and a 12-second window.",
+        "shared_advanced_metrics": "This page exposes the full advanced set: field tilt, deep completions, build-up and entry efficiency, sequence xT, directness, counterpress success and rest-defence vulnerability.",
+        "shared_game_state": "Game-state splits separate output while leading, drawing and trailing, using the score before each possession began.",
     }
     team_notes = {
         "team_shot_map": f"The shot map shows how {team_name} reached the final action. Central and close-range shots suggest clean penetration; wide or long-range shots suggest {opp_name} protected the middle.",
@@ -16796,7 +16839,7 @@ def _visual_tactical_note(meta, info, events, xg_data, stats, next_meta=None):
         "team_pass_target_zones": f"Pass target zones reveal intention: where {team_name} wanted the next receiver. Wide concentration suggests isolations; central concentration points to No. 10 or striker connections.",
         "team_average_positions": f"Average positions show occupation over time, not a fixed formation. The spacing explains compactness, counter-pressing potential and transition risk.",
         "team_def_heatmap": f"The defensive heatmap shows where {team_name} had to solve problems without the ball. High actions point to pressing; deep actions point to box protection.",
-        "team_high_turnovers": f"High turnovers are the best measure of whether {team_name}'s press created attacking value. The key is whether regains quickly led to shots or box entries.",
+        "team_high_turnovers": f"High regains show where {team_name}'s press changed control. The key is whether those regains created shots or box entries in the same possession.",
     }
     base_note = shared_notes.get(kind) if not side_key else team_notes.get(kind)
     if not base_note:
