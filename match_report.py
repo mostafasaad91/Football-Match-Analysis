@@ -27,6 +27,7 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LinearSegmentedColormap
+from match_metrics import team_advanced_metrics
 
 # Unified design system (AMOLED pure-black frame, fonts, palette)
 try:
@@ -4507,21 +4508,19 @@ _VISUAL_COMMENTARY = [
         "attack actually arrived inside the 18-yard box, and through which "
         "channel the bulk of the entries came.",
     ),
-    # 34. Home High Turnovers
+    # 34. Home High Regains
     (
-        "Reading Home High Turnovers",
-        "Marks every regain of possession in the attacking third. Frequent "
-        "high turnovers are a hallmark of a successful press — the more "
-        "concentrated the dots near the opposition box, the more often the "
-        "team won the ball in dangerous areas.",
+        "Reading Home High Regains",
+        "Marks inferred open-play changes of control beginning at x >= 60. "
+        "Restarts are excluded, and each dot represents the first event of "
+        "the new possession rather than every defensive action in the zone.",
     ),
-    # 35. Away High Turnovers
+    # 35. Away High Regains
     (
-        "Reading Away High Turnovers",
-        "Same high-turnover map for the away side. The team with more "
-        "attacking-third regains generated more counter-press shot threats. "
-        "Empty heatmaps point to a team that ceded the high zone to the "
-        "opposition.",
+        "Reading Away High Regains",
+        "Use the count with transition shots and regain-to-shot rate. More "
+        "high regains show where control was won, but only same-possession "
+        "outcomes show whether the press created an immediate attack.",
     ),
     # 36. Home Pass Target Zones
     (
@@ -4620,6 +4619,9 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
 
     home_id = info.get("home_id")
     away_id = info.get("away_id")
+    advanced = team_advanced_metrics(events, info)
+    home_advanced = advanced["home"]
+    away_advanced = advanced["away"]
 
     def _count(team_id, mask_fn) -> int:
         if events is None or events.empty:
@@ -4718,6 +4720,21 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             ),  # noqa: E712
             _count(away_id, lambda d: d.get("is_key_pass", False) == True),
         ),  # noqa: E712
+        (
+            "Progressive passes",
+            home_advanced["progressive_passes"],
+            away_advanced["progressive_passes"],
+        ),
+        (
+            "Box entries",
+            home_advanced["box_entries"],
+            away_advanced["box_entries"],
+        ),
+        (
+            "Field tilt %",
+            home_advanced["field_tilt"],
+            away_advanced["field_tilt"],
+        ),
     ]
 
     def _blocked_shots_by(shooter_id) -> int:
@@ -4849,9 +4866,19 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             _count(away_id, lambda d: d["type"] == "Clearance"),
         ),
         (
-            "Recoveries",
-            _count(home_id, lambda d: d["type"] == "BallRecovery"),
-            _count(away_id, lambda d: d["type"] == "BallRecovery"),
+            "Provider recoveries",
+            home_advanced["provider_recoveries"],
+            away_advanced["provider_recoveries"],
+        ),
+        (
+            "Possession regains",
+            home_advanced["possession_regains"],
+            away_advanced["possession_regains"],
+        ),
+        (
+            "High regains",
+            home_advanced["high_regains"],
+            away_advanced["high_regains"],
         ),
         ("Fouls", _fouls_committed(home_id), _fouls_committed(away_id)),
         ("Aerial duels", _h_aer, _a_aer),

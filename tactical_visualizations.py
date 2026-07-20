@@ -52,6 +52,13 @@ from visualization_components import (
     panel_header_geom,
 )
 from visualization_components import _panel_rect
+from match_metrics import (
+    cross_mask,
+    high_regain_events,
+    player_sequence_metrics,
+    progressive_pass_mask,
+    team_advanced_metrics,
+)
 
 IS_LIGHT_THEME = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
 ROW_BG = "#FFFFFF" if IS_LIGHT_THEME else "#101010"
@@ -5263,12 +5270,7 @@ def make_high_turnovers_v2(events, info, team_id, team_color):
     opp_name = an if is_home else hn
     score = info.get("score") or "—"
 
-    REGAIN_TYPES = {"Tackle", "Interception", "BallRecovery"}
-    sub = events[
-        (events["team_id"] == team_id)
-        & events["type"].isin(list(REGAIN_TYPES))
-        & (events["x"] >= 60)
-    ]
+    sub = high_regain_events(events, team_id)
 
     points = []
     by_player = {}
@@ -5319,36 +5321,35 @@ def make_high_turnovers_v2(events, info, team_id, team_color):
     top = sorted(by_player.items(), key=lambda kv: -kv[1])[:6]
     rows = [(p.split()[-1] if p else "—", str(c)) for p, c in top]
 
-    counts = {t: 0 for t in REGAIN_TYPES}
-    for _, _, t in points:
-        counts[t] = counts.get(t, 0) + 1
     leader = top[0][0].split()[-1] if top else "—"
     insight = (
         (
             f"{team_name} regained possession {len(points)} times in the "
             f"final 40 metres — the press's tangible reward. {leader} led "
-            f"with {top[0][1]} high turnovers."
+            f"with {top[0][1]} high regains."
         )
         if top
         else f"{team_name} — no high regains recorded."
     )
 
+    side = "home" if is_home else "away"
+    advanced = team_advanced_metrics(events, info)[side]
     cards = [
         ("High Regains", str(len(points)), team_color),
-        ("Tackles", str(counts.get("Tackle", 0)), TEXT_BR),
-        ("Intercepts", str(counts.get("Interception", 0)), TEXT_BR),
-        ("Recoveries", str(counts.get("BallRecovery", 0)), TEXT_BR),
+        ("Transition Shots", str(advanced["transition_shots"]), TEXT_BR),
+        ("Regain→Shot", f'{advanced["regain_to_shot_rate"]:.0f}%', TEXT_BR),
+        ("Counterpress", str(advanced["counterpress_regains"]), TEXT_BR),
         ("Top Player", leader, team_color),
     ]
     return render_pitch_overlay_v2(
-        section="HIGH TURNOVERS",
-        title=f"{team_name} — High Turnovers",
+        section="HIGH REGAINS",
+        title=f"{team_name} — High Regains",
         subtitle="Each dot = a possession regain inside the final 40m · "
         "colour = action type · gold band = high zone",
         hn=team_name,
         an=opp_name,
         score=str(score),
-        footer_note="High = inside the opposition half (x ≥ 60)",
+        footer_note="High regain = new open-play possession starting at x ≥ 60",
         team_color=team_color,
         draw_overlay=draw_overlay,
         sidebar_title="Top High-Pressers",
@@ -5901,32 +5902,7 @@ def make_crosses_v2(events, info, team_id, team_color):
     opp_name = an if is_home else hn
     score = info.get("score") or "—"
 
-    # Real crosses only — use the provider's cross flag / "Cross" qualifier
-    # instead of treating any wide ball as a cross.
-    base = events[
-        (events["team_id"] == team_id)
-        & (events["is_pass"] == True)
-        & events["x"].notna()
-        & events["y"].notna()
-        & events["end_x"].notna()
-        & events["end_y"].notna()
-    ]
-    if "is_cross" in events.columns:
-        sub = base[base["is_cross"] == True]
-    elif "qualifier_names" in events.columns:
-        sub = base[
-            base["qualifier_names"]
-            .fillna("")
-            .astype(str)
-            .str.contains(r"\bcross\b", case=False, regex=True)
-        ]
-    else:
-        # Fallback only when no cross flag exists in the feed.
-        sub = base[
-            (base["x"] >= 60)
-            & ((base["y"] <= 22) | (base["y"] >= 78))
-            & (base["end_x"] >= 80)
-        ]
+    sub = events[(events["team_id"] == team_id) & cross_mask(events)]
 
     crosses = []
     by_player = {}
@@ -6014,7 +5990,7 @@ def make_crosses_v2(events, info, team_id, team_color):
         hn=team_name,
         an=opp_name,
         score=str(score),
-        footer_note="Cross = wide pass into the box from x ≥ 60",
+        footer_note="Cross = provider cross flag or qualifier · geometry only as fallback",
         team_color=team_color,
         draw_overlay=draw_overlay,
         sidebar_title="Top Crossers",
@@ -6036,36 +6012,23 @@ def make_progressive_passes_v2(events, info, team_id, team_color):
     opp_name = an if is_home else hn
     score = info.get("score") or "—"
 
-    sub = events[
-        (events["team_id"] == team_id)
-        & (events["is_pass"] == True)
-        & (events["outcome"] == "Successful")
-        & events["x"].notna()
-        & events["end_x"].notna()
-    ]
+    sub = events[(events["team_id"] == team_id) & progressive_pass_mask(events)]
     progressives = []
     by_player = {}
     for _, r in sub.iterrows():
         sx, sy = float(r["x"]), float(r.get("y") or 50)
         ex, ey = float(r["end_x"]), float(r.get("end_y") or 50)
-        # Progressive: reduces distance to goal by ≥25% OR ends in final third
-        dist_before = 100 - sx
-        dist_after = 100 - ex
-        is_progressive = (dist_before > 0 and (dist_after / dist_before) <= 0.75) or (
-            ex >= 67 and ex - sx >= 10
+        progressives.append(
+            {
+                "sx": sx,
+                "sy": sy,
+                "ex": ex,
+                "ey": ey,
+                "player": str(r.get("player") or "—"),
+            }
         )
-        if is_progressive:
-            progressives.append(
-                {
-                    "sx": sx,
-                    "sy": sy,
-                    "ex": ex,
-                    "ey": ey,
-                    "player": str(r.get("player") or "—"),
-                }
-            )
-            p = str(r.get("player") or "—")
-            by_player[p] = by_player.get(p, 0) + 1
+        p = str(r.get("player") or "—")
+        by_player[p] = by_player.get(p, 0) + 1
 
     def draw_overlay(ax):
         for p in progressives:
@@ -6773,6 +6736,9 @@ def make_defensive_summary_v2(events, info):
     aid = info.get("away_id")
     score = info.get("score") or "—"
     hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home_advanced = advanced["home"]
+    away_advanced = advanced["away"]
 
     def _count(team_id, type_name):
         return int(
@@ -6806,7 +6772,11 @@ def make_defensive_summary_v2(events, info):
             _blocked_shots_for_team(events, info, hid),
             _blocked_shots_for_team(events, info, aid),
         ),
-        ("Recoveries", _count(hid, "BallRecovery"), _count(aid, "BallRecovery")),
+        (
+            "Provider recoveries",
+            home_advanced["provider_recoveries"],
+            away_advanced["provider_recoveries"],
+        ),
         ("Fouls", _fouls_committed(hid), _fouls_committed(aid)),
     ]
     # Totals & "top type" use only the six core actions above — duels are shown
@@ -6819,6 +6789,16 @@ def make_defensive_summary_v2(events, info):
     h_aw, h_at, h_gw, h_gt = _compute_duels(events, hid)
     a_aw, a_at, a_gw, a_gt = _compute_duels(events, aid)
     duel_rows = [
+        (
+            "Possession regains",
+            home_advanced["possession_regains"],
+            away_advanced["possession_regains"],
+        ),
+        (
+            "High regains",
+            home_advanced["high_regains"],
+            away_advanced["high_regains"],
+        ),
         ("Aerial duels", (h_aw, f"{h_aw}/{h_at}"), (a_aw, f"{a_aw}/{a_at}")),
         ("Ground duels", (h_gw, f"{h_gw}/{h_gt}"), (a_gw, f"{a_gw}/{a_gt}")),
     ]
@@ -6827,7 +6807,8 @@ def make_defensive_summary_v2(events, info):
     insight = (
         f"{leader} did more defensive work overall ({max(h_total, a_total)} "
         f"vs {min(h_total, a_total)}). Tackles + interceptions describe duels; "
-        f"recoveries + clearances mark how each side escaped pressure. Duel "
+        f"provider recoveries are feed events, while possession regains are "
+        f"inferred from control changes. Duel "
         f"bars show won/contested (aerial + ground)."
     )
     cards = [
@@ -6840,17 +6821,254 @@ def make_defensive_summary_v2(events, info):
     return render_bar_compare_v2(
         section="DEFENSIVE SUMMARY",
         title=f"{hn} vs {an} — Defensive Summary",
-        subtitle="Six defensive actions + aerial & ground duels (won/contested) "
-        "· gold card = duels won",
+        subtitle="Provider actions + inferred possession regains + duels "
+        "(won/contested)",
         hn=hn,
         an=an,
         score=str(score),
-        footer_note="Duels: won/contested · aerial = header duels · "
-        "ground = tackles + take-ons",
+        footer_note="Provider recovery = feed event · possession regain = "
+        "inferred control change",
         hc=hc,
         ac=ac,
         rows=rows + duel_rows,
         insight_text=insight,
+        metric_cards=cards,
+    )
+
+
+def make_transition_summary_v2(events, info):
+    """Compare canonical attacking-transition and pressing outcomes."""
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home = advanced["home"]
+    away = advanced["away"]
+
+    rows = [
+        ("Attacking transitions", home["transitions"], away["transitions"]),
+        ("Transition shots", home["transition_shots"], away["transition_shots"]),
+        ("Transition goals", home["transition_goals"], away["transition_goals"]),
+        (
+            "Transition box entries",
+            home["transition_box_entries"],
+            away["transition_box_entries"],
+        ),
+        ("High regains", home["high_regains"], away["high_regains"]),
+        (
+            "Counterpress regains",
+            home["counterpress_regains"],
+            away["counterpress_regains"],
+        ),
+    ]
+    leader = hn if home["transition_shots"] >= away["transition_shots"] else an
+    insight = (
+        f"{leader} produced more shots from transition. A transition starts "
+        "after an open-play regain and must progress at least 20 pitch units, "
+        "reach the final third or box, or create a shot within 12 seconds."
+    )
+    cards = [
+        (f"{hn[:12]} xG", f'{home["transition_xG"]:.2f}', hc),
+        (f"{an[:12]} xG", f'{away["transition_xG"]:.2f}', ac),
+        (
+            "Shot Rate H/A",
+            f'{home["transition_shot_rate"]:.0f}/{away["transition_shot_rate"]:.0f}%',
+            C_GOLD,
+        ),
+        (
+            "Avg Progress H/A",
+            f'{home["avg_transition_progress"]:.0f}/{away["avg_transition_progress"]:.0f}',
+            C_GOLD,
+        ),
+        (
+            "Transition xT H/A",
+            f'{home["transition_xT"]:.2f}/{away["transition_xT"]:.2f}',
+            C_GOLD,
+        ),
+    ]
+    return render_bar_compare_v2(
+        section="TRANSITIONS",
+        title=f"{hn} vs {an} — Transition Performance",
+        subtitle="Open-play regains converted into fast territorial or shooting outcomes",
+        hn=hn,
+        an=an,
+        score=str(score),
+        footer_note="Window: first 12 seconds of the same possession · restarts excluded",
+        hc=hc,
+        ac=ac,
+        rows=rows,
+        insight_text=insight,
+        metric_cards=cards,
+    )
+
+
+def make_advanced_metrics_summary_v2(events, info):
+    """Compare the complete canonical advanced-metric set."""
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home = advanced["home"]
+    away = advanced["away"]
+
+    rows = [
+        ("Field tilt %", home["field_tilt"], away["field_tilt"]),
+        ("Deep completions", home["deep_completions"], away["deep_completions"]),
+        (
+            "Build-up success %",
+            home["build_up_success_rate"],
+            away["build_up_success_rate"],
+        ),
+        (
+            "Final-third entry efficiency %",
+            home["final_third_entry_efficiency"],
+            away["final_third_entry_efficiency"],
+        ),
+        (
+            "Box entry → shot %",
+            home["box_entry_to_shot_rate"],
+            away["box_entry_to_shot_rate"],
+        ),
+        ("Sequence xT", home["sequence_xT"], away["sequence_xT"]),
+        ("Directness %", home["directness"], away["directness"]),
+        (
+            "Counterpress success %",
+            home["counterpress_success_rate"],
+            away["counterpress_success_rate"],
+        ),
+        (
+            "Rest-defence vulnerability %",
+            home["rest_defence_vulnerability"],
+            away["rest_defence_vulnerability"],
+        ),
+    ]
+
+    sequence = player_sequence_metrics(events)
+
+    def _top_sequence(team_id, metric):
+        candidates = []
+        for player, values in sequence.items():
+            player_events = events[events["player"].astype(str) == str(player)]
+            if player_events.empty or player_events["team_id"].dropna().empty:
+                continue
+            if player_events["team_id"].dropna().mode().iloc[0] == team_id:
+                candidates.append((player, float(values.get(metric, 0.0))))
+        return max(candidates, key=lambda item: item[1]) if candidates else ("—", 0.0)
+
+    home_chain = _top_sequence(info.get("home_id"), "xGChain")
+    away_chain = _top_sequence(info.get("away_id"), "xGChain")
+    home_buildup = _top_sequence(info.get("home_id"), "xGBuildup")
+    away_buildup = _top_sequence(info.get("away_id"), "xGBuildup")
+    cards = [
+        ("Home xGChain", f"{home_chain[0].split()[-1]} {home_chain[1]:.2f}", hc),
+        ("Away xGChain", f"{away_chain[0].split()[-1]} {away_chain[1]:.2f}", ac),
+        (
+            "Home xGBuildup",
+            f"{home_buildup[0].split()[-1]} {home_buildup[1]:.2f}",
+            hc,
+        ),
+        (
+            "Away xGBuildup",
+            f"{away_buildup[0].split()[-1]} {away_buildup[1]:.2f}",
+            ac,
+        ),
+        (
+            "Seq xT / Poss H-A",
+            f'{home["sequence_xT_per_possession"]:.2f}-{away["sequence_xT_per_possession"]:.2f}',
+            C_GOLD,
+        ),
+    ]
+    insight = (
+        "These metrics separate territory, progression efficiency, sequence value, "
+        "counterpressing and protection after advanced attacks. Rest-defence "
+        "vulnerability is the only row where lower is better."
+    )
+    return render_bar_compare_v2(
+        section="ADVANCED METRICS",
+        title=f"{hn} vs {an} — Advanced Team Metrics",
+        subtitle="Canonical possession-sequence metrics · lower rest-defence vulnerability is better",
+        hn=hn,
+        an=an,
+        score=str(score),
+        footer_note="xGChain/xGBuildup are non-penalty player sequence credits",
+        hc=hc,
+        ac=ac,
+        rows=rows,
+        insight_text=insight,
+        metric_cards=cards,
+    )
+
+
+def make_game_state_summary_v2(events, info):
+    """Compare team output while leading, drawing, and trailing."""
+    hn = info.get("home_name") or "Home"
+    an = info.get("away_name") or "Away"
+    score = info.get("score") or "—"
+    hc, ac = _match_colors(info)
+    advanced = team_advanced_metrics(events, info)
+    home = advanced["home"]["game_state_splits"]
+    away = advanced["away"]["game_state_splits"]
+
+    rows = []
+    state_labels = {"leading": "Leading", "drawing": "Drawing", "trailing": "Trailing"}
+    for state in ("leading", "drawing", "trailing"):
+        label = state_labels[state]
+        rows.extend(
+            [
+                (f"{label} shots", home[state]["shots"], away[state]["shots"]),
+                (f"{label} xG", home[state]["xG"], away[state]["xG"]),
+                (
+                    f"{label} transitions",
+                    home[state]["transitions"],
+                    away[state]["transitions"],
+                ),
+            ]
+        )
+    cards = [
+        (
+            "Leading Poss H-A",
+            f'{home["leading"]["possessions"]}-{away["leading"]["possessions"]}',
+            C_GOLD,
+        ),
+        (
+            "Drawing Poss H-A",
+            f'{home["drawing"]["possessions"]}-{away["drawing"]["possessions"]}',
+            C_GOLD,
+        ),
+        (
+            "Trailing Poss H-A",
+            f'{home["trailing"]["possessions"]}-{away["trailing"]["possessions"]}',
+            C_GOLD,
+        ),
+        (
+            "Leading xT H-A",
+            f'{home["leading"]["sequence_xT"]:.2f}-{away["leading"]["sequence_xT"]:.2f}',
+            C_GOLD,
+        ),
+        (
+            "Trailing xT H-A",
+            f'{home["trailing"]["sequence_xT"]:.2f}-{away["trailing"]["sequence_xT"]:.2f}',
+            C_GOLD,
+        ),
+    ]
+    return render_bar_compare_v2(
+        section="GAME STATE",
+        title=f"{hn} vs {an} — Game-State Splits",
+        subtitle="Possession output measured against the score before each sequence began",
+        hn=hn,
+        an=an,
+        score=str(score),
+        footer_note="Shootout goals excluded · own goals credited to the benefiting team",
+        hc=hc,
+        ac=ac,
+        rows=rows,
+        insight_text=(
+            "Game-state splits show whether volume came from controlling a lead, "
+            "breaking a draw, or chasing the score. Compare rates only where each "
+            "team had enough possessions in that state."
+        ),
         metric_cards=cards,
     )
 

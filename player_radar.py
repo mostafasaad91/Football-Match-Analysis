@@ -30,11 +30,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 import matplotlib.patches as mpatches
+from match_metrics import (
+    box_entry_mask,
+    player_sequence_metrics,
+    progressive_pass_mask,
+    touch_mask,
+)
 
 try:
-    from match_report import BG_DARK, TEXT_BRIGHT, TEXT_DIM
+    import visual_redesign_preview as _identity
+    BG_DARK, TEXT_BRIGHT, TEXT_DIM = _identity.BG, _identity.TEXT, _identity.MUTED
 except Exception:  # pragma: no cover - fallback colours
-    BG_DARK, TEXT_BRIGHT, TEXT_DIM = "#000000", "#F5F5F5", "#9aa4b2"
+    _identity = None
+    BG_DARK, TEXT_BRIGHT, TEXT_DIM = "#000000", "#F7F7F5", "#A3A3A3"
+
+RADAR_GRID = _identity.GRID if _identity is not None else "#242424"
 
 # ── Metric layout: (group name, colour, [metric labels]) ──────────────────────
 # A full tactical + numerical match profile, grouped by role of the action.
@@ -42,12 +52,12 @@ except Exception:  # pragma: no cover - fallback colours
 GROUPS = [
     (
         "ATTACK",
-        "#F2B233",
+        "#FFC400",
         ["Goals", "Assists", "Big ch.\ncreated", "Shots", "xT\ncontrib", "Dribbles"],
     ),
     (
         "PASSING",
-        "#4E8FF0",
+        "#2563EB",
         [
             "Passes",
             "Pass %",
@@ -59,7 +69,7 @@ GROUPS = [
     ),
     (
         "THREAT",
-        "#A78BFA",
+        "#B79CFF",
         [
             "xG",
             "npxG",
@@ -69,15 +79,28 @@ GROUPS = [
             "G\N{MINUS SIGN}xG",
             "Shot-cr.\nactions",
             "Deep\ncompl.",
+            "xG\nChain",
+            "xG\nBuildup",
         ],
     ),
     (
         "DEFENCE",
-        "#E4483D",
+        "#FF734D",
         ["Tackles\nwon", "Intercep\ntions", "Recov\neries", "Blocks", "Clear\nances"],
     ),
-    ("DUELS", "#22D3EE", ["Grd duels\nwon", "Aerials\nwon", "Duels\nwon"]),
+    ("DUELS", "#4967C8", ["Grd duels\nwon", "Aerials\nwon", "Duels\nwon"]),
 ]
+
+
+def _chip_text_color(color: str) -> str:
+    """Keep metric values readable on both bright and dark group fills."""
+    value = str(color).lstrip("#")
+    if len(value) != 6:
+        return TEXT_BRIGHT
+    rgb = [int(value[i : i + 2], 16) / 255.0 for i in (0, 2, 4)]
+    linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+    luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    return TEXT_BRIGHT if luminance < 0.36 else BG_DARK
 # metrics whose chip shows "numerator / denominator" instead of a single number.
 # Value is (numerator_key, denominator_key); the bar still uses the label's own
 # value. Passes/Shots/Long balls -> completed·on-target / total; duels -> won / contested.
@@ -594,16 +617,11 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
     )
     pc = d[isp & (o == "Successful")]
 
-    prog = ptobox = tib = 0
-    if {"end_x", "x"}.issubset(d.columns):
-        pp = d[isp & (o == "Successful")]
-        prog = int((pp["end_x"] - pp["x"] >= 15).sum())
-        if "end_y" in d.columns:
-            in_box_end = (pp["end_x"] >= 83) & (pp["end_y"].between(21, 79))
-            from_box = (pp["x"] >= 83) & (pp["y"].between(21, 79))
-            ptobox = int((in_box_end & ~from_box).sum())
+    prog = int(progressive_pass_mask(d).sum())
+    ptobox = int(box_entry_mask(d).sum())
+    tib = 0
     if {"x", "y"}.issubset(d.columns):
-        tib = int(((d["x"] >= 83) & (d["y"].between(21, 79))).sum())
+        tib = int((touch_mask(d) & (d["x"] >= 83) & d["y"].between(21, 79)).sum())
 
     xt_pos = 0.0
     if "xT" in d.columns:
@@ -612,6 +630,9 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
 
     cr = _get_credits(ev).get(
         str(player), {"xA": 0.0, "assists": 0, "bcc": 0, "sca": 0}
+    )
+    sequence = player_sequence_metrics(ev).get(
+        str(player), {"xGChain": 0.0, "xGBuildup": 0.0, "sequence_xT": 0.0}
     )
     asst = int(cr["assists"])
     xa = round(float(cr["xA"]), 2)
@@ -814,6 +835,9 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
         "G\N{MINUS SIGN}xG": round(goals - xg_tot, 2),
         "Shot-cr.\nactions": sca,
         "Deep\ncompl.": deep,
+        "xG\nChain": round(sequence["xGChain"], 2),
+        "xG\nBuildup": round(sequence["xGBuildup"], 2),
+        "Sequence\nxT": round(sequence["sequence_xT"], 2),
         "Box\ntouches": tib,
     }
 
@@ -848,7 +872,9 @@ def _player_role(events: pd.DataFrame, player: str, default="Player") -> str:
     return str(s.iloc[0]) if len(s) else default
 
 
-def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extra=""):
+def make_player_pizza(
+    events, player, team_name, role, allm, elig, subtitle_extra="", opponent_name=""
+):
     """Build and return the pizza Figure for one player."""
     me_m = player_metrics(events, player)
 
@@ -886,7 +912,7 @@ def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extr
     R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 113, 130, 140, 154
 
     fig = plt.figure(figsize=(12, 12.6), facecolor=BG_DARK)
-    ax = fig.add_axes([0.06, 0.045, 0.88, 0.80], projection="polar")
+    ax = fig.add_axes([0.06, 0.035, 0.88, 0.735], projection="polar")
     ax.set_facecolor(BG_DARK)
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
@@ -902,7 +928,7 @@ def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extr
         ax.plot(
             np.linspace(0, 2 * np.pi, 200),
             [rmap(pv)] * 200,
-            color="#232323",
+            color=RADAR_GRID,
             lw=0.8,
             zorder=1,
         )
@@ -970,7 +996,7 @@ def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extr
             a,
             RVAL,
             dv,
-            color=BG_DARK,
+            color=_chip_text_color(c),
             fontsize=9,
             fontweight="bold",
             family="monospace",
@@ -988,22 +1014,16 @@ def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extr
         np.linspace(0, 2 * np.pi, 120), [R0] * 120, color="#2e2e2e", lw=1.2, zorder=6
     )
 
-    fig.text(
-        0.5,
-        0.958,
-        str(player).upper(),
-        ha="center",
-        color=TEXT_BRIGHT,
-        fontsize=30,
-        fontweight="bold",
-        path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)],
-    )
     participation = _get_participation(events).get(str(player), {})
     played_time = participation.get("played_time", "0′ 00″")
     sub = f"{str(team_name).upper()}  ·  {role}  ·  {played_time} played"
     if subtitle_extra:
         sub += f"  ·  {subtitle_extra}"
-    fig.text(0.5, 0.923, sub, ha="center", color=TEXT_DIM, fontsize=13, style="italic")
+    if _identity is not None:
+        _identity.amoled_header(
+            fig, str(player).upper(), sub, section="PLAYER PIZZA",
+            active_team=team_name,
+        )
 
     ng = len(GROUPS)
     step = min(0.135, 0.90 / max(ng - 1, 1))
@@ -1012,12 +1032,12 @@ def make_player_pizza(events, player, team_name, role, allm, elig, subtitle_extr
     for gn, gc, _ms in GROUPS:
         fig.add_artist(
             mpatches.Circle(
-                (lx, 0.892), 0.006, transform=fig.transFigure, facecolor=gc, ec="none"
+                (lx, 0.822), 0.006, transform=fig.transFigure, facecolor=gc, ec="none"
             )
         )
         fig.text(
             lx + 0.012,
-            0.892,
+            0.822,
             gn,
             color=gc,
             fontsize=lfs,
@@ -1249,7 +1269,11 @@ def export_player_radars(events, info, out_dir, dpi=115):
         for p in players:
             role = _player_role(events, p)
             try:
-                fig = make_player_pizza(events, p, team_name, role, allm, elig)
+                opponent = info.get("away_name") if side == "home" else info.get("home_name")
+                fig = make_player_pizza(
+                    events, p, team_name, role, allm, elig,
+                    opponent_name=str(opponent or ""),
+                )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
                     dpi=dpi,
@@ -1288,7 +1312,11 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
         for p in players:
             role = _player_role(events, p)
             try:
-                fig = make_player_pizza(events, p, team_name, role, allm, elig)
+                opponent = info.get("away_name") if side == "home" else info.get("home_name")
+                fig = make_player_pizza(
+                    events, p, team_name, role, allm, elig,
+                    opponent_name=str(opponent or ""),
+                )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
                     dpi=dpi,
@@ -1311,6 +1339,7 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     allm,
                     elig,
                     subtitle_extra=f"Team rank #{rank}",
+                    opponent_name=str(opp[side]),
                 )
                 try:
                     note = player_commentary(

@@ -7,6 +7,8 @@ output/
 *.png
 *.pdf
 *.csv
+!sample_data/
+!sample_data/**/*.csv
 
 # ── Claude Code session data ─────────────────────────
 .claude/
