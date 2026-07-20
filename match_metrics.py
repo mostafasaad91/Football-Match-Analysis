@@ -224,6 +224,69 @@ def fouls_committed_count(events: pd.DataFrame, team_id: Any) -> int:
     return int((fouls_committed_mask(events) & team_ids.eq(team_id)).sum())
 
 
+def blocked_shot_mask(events: pd.DataFrame) -> pd.Series:
+    """Return shot rows the provider classified as blocked.
+
+    The normalized event ``type`` can be ``SavedShot`` even when WhoScored's
+    original shot type is ``BlockedShot``.  Preserve the provider meaning by
+    checking the canonical shot fields and the exact ``Blocked`` qualifier.
+    ``BlockedX``/``BlockedY`` alone do not make a shot a block.
+    """
+    blocked = pd.Series(False, index=events.index, dtype=bool)
+    for column in ("type", "shot_whoscored_type", "shot_category"):
+        if column not in events.columns:
+            continue
+        values = (
+            events[column]
+            .fillna("")
+            .astype(str)
+            .str.casefold()
+            .str.replace(r"[^a-z]", "", regex=True)
+        )
+        blocked |= values.isin({"blockedshot", "blocked"})
+    if "qualifier_names" in events.columns:
+        blocked |= events["qualifier_names"].map(
+            lambda value: "blocked" in _qualifier_tokens(value)
+        )
+
+    types = events.get("type", pd.Series("", index=events.index)).fillna("").astype(str)
+    is_shot = _bool_series(events, "is_shot") | types.isin(SHOT_TYPES)
+    return blocked & is_shot & live_event_mask(events)
+
+
+def defensive_block_events(
+    events: pd.DataFrame,
+    defending_team_id: Any,
+    opponent_team_id: Any,
+) -> pd.DataFrame:
+    """Map the opponent's blocked shots onto the defending team's perspective."""
+    team_ids = events.get("team_id", pd.Series(np.nan, index=events.index))
+    blocks = events[blocked_shot_mask(events) & team_ids.eq(opponent_team_id)].copy()
+    if blocks.empty:
+        return blocks
+
+    # WhoScored normalizes both teams to their own left-to-right attack. Rotate
+    # the shooter's coordinates so a block appears in the defender's own half.
+    for column in ("x", "y", "end_x", "end_y"):
+        if column in blocks.columns:
+            values = pd.to_numeric(blocks[column], errors="coerce")
+            blocks[column] = 100.0 - values
+    blocks["team_id"] = defending_team_id
+    blocks["type"] = "BlockedShot"
+    if "player" in blocks.columns:
+        blocks["player"] = "Team block"
+    return blocks
+
+
+def defensive_blocks_count(
+    events: pd.DataFrame,
+    defending_team_id: Any,
+    opponent_team_id: Any,
+) -> int:
+    """Count shots blocked by a defence, not shots blocked against its attack."""
+    return int(len(defensive_block_events(events, defending_team_id, opponent_team_id)))
+
+
 def cross_mask(events: pd.DataFrame, successful_only: bool = False) -> pd.Series:
     """Canonical cross mask: passes carrying the provider Cross qualifier."""
     mask = _bool_series(events, "is_cross")
@@ -1212,10 +1275,13 @@ __all__ = [
     "FINAL_THIRD_X",
     "HIGH_REGAIN_X",
     "advanced_metrics_frames",
+    "blocked_shot_mask",
     "build_possessions",
     "box_entry_mask",
     "cross_mask",
     "deep_completion_mask",
+    "defensive_block_events",
+    "defensive_blocks_count",
     "final_third_entry_mask",
     "fouls_committed_count",
     "fouls_committed_mask",

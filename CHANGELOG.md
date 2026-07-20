@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Defensive blocks now retain the provider's original blocked-shot
+  classification after shot normalization and are attributed to the defending
+  team in summaries, heatmaps and report text.
 - Fouls committed now use one canonical provider-aware count that excludes the
   mirrored foul-won row emitted by paired WhoScored feeds.
 - Defensive activity uses a smoothed team-colour heatmap with bright,

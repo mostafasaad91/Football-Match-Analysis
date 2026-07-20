@@ -57,6 +57,8 @@ from match_report import run_analysis as _run_extended_analysis
 from match_metrics import (
     advanced_metrics_frames,
     build_possessions,
+    defensive_block_events,
+    defensive_blocks_count,
     fouls_committed_count,
     high_regain_events,
     team_advanced_metrics,
@@ -8596,41 +8598,13 @@ DEFENSIVE_TYPES = {
 
 def _blocked_shots_for_team(events, info, team_id) -> int:
     """WhoScored stores BlockedShot on the shooting team; count it for the defence."""
-    if "team_id" not in events.columns:
-        return 0
     hid = info.get("home_id")
     aid = info.get("away_id")
-
-    def _blocked_shots_by(shooter_id):
-        sub = events[events["team_id"] == shooter_id].copy()
-        if sub.empty:
-            return sub
-        hit = pd.Series(False, index=sub.index)
-        for col in ("type", "shot_whoscored_type", "shot_category"):
-            if col in sub.columns:
-                vals = (
-                    sub[col]
-                    .fillna("")
-                    .astype(str)
-                    .str.lower()
-                    .str.replace(r"[^a-z]", "", regex=True)
-                )
-                hit = hit | vals.isin({"blockedshot", "blocked"})
-        if "qualifier_names" in sub.columns:
-            hit = hit | sub["qualifier_names"].fillna("").astype(str).str.contains(
-                r"\bBlocked\b", case=False, regex=True
-            )
-        if "is_shot" in sub.columns:
-            shot_mask = (sub["is_shot"] == True) | hit
-            hit = hit & shot_mask
-        return sub[hit].copy()
-
-    direct = len(_blocked_shots_by(team_id))
     opp_id = aid if team_id == hid else (hid if team_id == aid else None)
     if opp_id is None:
-        return direct
-    opp_blocked = len(_blocked_shots_by(opp_id))
-    if not opp_blocked:
+        return 0
+    opp_blocked = defensive_blocks_count(events, team_id, opp_id)
+    if opp_blocked == 0:
         opp_side = "away" if team_id == hid else "home"
         mc = (info.get("matchcentre_stats", {}) or {}).get(opp_side, {}) or {}
         raw_blocked = mc.get("blocked", 0)
@@ -8638,7 +8612,7 @@ def _blocked_shots_for_team(events, info, team_id) -> int:
             opp_blocked = int(float(raw_blocked or 0))
         except (TypeError, ValueError):
             opp_blocked = 0
-    return opp_blocked if opp_blocked else direct
+    return opp_blocked
 
 
 def _defensive_events_for_team(events, info, team_id):
@@ -8651,39 +8625,11 @@ def _defensive_events_for_team(events, info, team_id):
     aid = info.get("away_id")
     opp_id = aid if team_id == hid else (hid if team_id == aid else None)
 
-    def _blocked_shots_by(shooter_id):
-        sub = events[events["team_id"] == shooter_id].copy()
-        if sub.empty:
-            return sub
-        hit = pd.Series(False, index=sub.index)
-        for col in ("type", "shot_whoscored_type", "shot_category"):
-            if col in sub.columns:
-                vals = (
-                    sub[col]
-                    .fillna("")
-                    .astype(str)
-                    .str.lower()
-                    .str.replace(r"[^a-z]", "", regex=True)
-                )
-                hit = hit | vals.isin({"blockedshot", "blocked"})
-        if "qualifier_names" in sub.columns:
-            hit = hit | sub["qualifier_names"].fillna("").astype(str).str.contains(
-                r"\bBlocked\b", case=False, regex=True
-            )
-        if "is_shot" in sub.columns:
-            shot_mask = (sub["is_shot"] == True) | hit
-            hit = hit & shot_mask
-        return sub[hit].copy()
-
-    if opp_id is not None:
-        blocks = _blocked_shots_by(opp_id)
-        if blocks.empty:
-            blocks = _blocked_shots_by(team_id)
-    else:
-        blocks = _blocked_shots_by(team_id)
-    if not blocks.empty:
-        blocks["team_id"] = team_id
-        blocks["type"] = "BlockedShot"
+    blocks = (
+        defensive_block_events(events, team_id, opp_id)
+        if opp_id is not None
+        else events.iloc[0:0].copy()
+    )
     if own.empty:
         return blocks
     if blocks.empty:

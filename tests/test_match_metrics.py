@@ -4,8 +4,11 @@ import pandas as pd
 
 from match_metrics import (
     advanced_metrics_frames,
+    blocked_shot_mask,
     build_possessions,
     cross_mask,
+    defensive_block_events,
+    defensive_blocks_count,
     fouls_committed_count,
     fouls_committed_mask,
     high_regain_events,
@@ -82,6 +85,43 @@ class MatchMetricTests(unittest.TestCase):
         self.assertEqual(int(committed.sum()), 3)
         self.assertEqual(fouls_committed_count(events, 1), 2)
         self.assertEqual(fouls_committed_count(events, 2), 1)
+
+    def test_blocks_use_original_shot_classification_and_defending_team(self):
+        events = pd.DataFrame(
+            [
+                event(
+                    2,
+                    "SavedShot",
+                    12,
+                    1,
+                    88,
+                    y=35,
+                    shot_category="Blocked",
+                    shot_whoscored_type="BlockedShot",
+                    qualifier_names=["Blocked", "BlockedX", "BlockedY"],
+                ),
+                event(
+                    2,
+                    "SavedShot",
+                    20,
+                    1,
+                    91,
+                    y=62,
+                    shot_category="On Target",
+                    shot_whoscored_type="SavedShot",
+                    qualifier_names=["BlockedX", "BlockedY"],
+                ),
+            ]
+        )
+
+        self.assertEqual(int(blocked_shot_mask(events).sum()), 1)
+        self.assertEqual(defensive_blocks_count(events, 1, 2), 1)
+        self.assertEqual(defensive_blocks_count(events, 2, 1), 0)
+        blocks = defensive_block_events(events, 1, 2)
+        self.assertEqual(blocks.iloc[0]["team_id"], 1)
+        self.assertEqual(blocks.iloc[0]["type"], "BlockedShot")
+        self.assertAlmostEqual(float(blocks.iloc[0]["x"]), 12.0)
+        self.assertAlmostEqual(float(blocks.iloc[0]["y"]), 65.0)
 
     def test_restart_is_not_an_attacking_transition(self):
         events = pd.DataFrame(
