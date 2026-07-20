@@ -23,8 +23,8 @@ GRID = "#252A31"
 TEXT = "#F5F7FA"
 MUTED = "#9BA3AE"
 NEUTRAL = "#626A75"
-HOME = "#2563EB"
-AWAY = "#FF734D"
+HOME = "#9A99B4"
+AWAY = "#F37680"
 FOCUS = "#FFD43B"
 
 
@@ -100,6 +100,7 @@ def build_qa_contact_sheets(
     away_slug: str = "england",
 ) -> list[Path]:
     """Build exactly eight story-led QA dashboards from the strongest visuals."""
+    home_color, away_color = HOME, AWAY
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("qa_contact_sheet_*.png"):

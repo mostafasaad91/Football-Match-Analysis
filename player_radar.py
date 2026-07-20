@@ -36,6 +36,7 @@ from match_metrics import (
     progressive_pass_mask,
     touch_mask,
 )
+from visualization_components import C_AWAY, C_HOME, C_GOLD
 
 try:
     import visual_redesign_preview as _identity
@@ -52,12 +53,12 @@ RADAR_GRID = _identity.GRID if _identity is not None else "#242424"
 GROUPS = [
     (
         "ATTACK",
-        "#FFC400",
+        C_GOLD,
         ["Goals", "Assists", "Big ch.\ncreated", "Shots", "xT\ncontrib", "Dribbles"],
     ),
     (
         "PASSING",
-        "#2563EB",
+        C_HOME,
         [
             "Passes",
             "Pass %",
@@ -69,7 +70,7 @@ GROUPS = [
     ),
     (
         "THREAT",
-        "#B79CFF",
+        C_HOME,
         [
             "xG",
             "npxG",
@@ -85,10 +86,10 @@ GROUPS = [
     ),
     (
         "DEFENCE",
-        "#FF734D",
+        C_AWAY,
         ["Tackles\nwon", "Intercep\ntions", "Recov\neries", "Blocks", "Clear\nances"],
     ),
-    ("DUELS", "#4967C8", ["Grd duels\nwon", "Aerials\nwon", "Duels\nwon"]),
+    ("DUELS", C_AWAY, ["Grd duels\nwon", "Aerials\nwon", "Duels\nwon"]),
 ]
 
 

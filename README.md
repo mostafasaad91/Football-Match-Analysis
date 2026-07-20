@@ -55,24 +55,27 @@ The visual package includes, when supported by the source data:
 The project uses a consistent AMOLED design system across all report pages:
 
 - True-black backgrounds with restrained panel borders.
-- Team-specific colours resolved from club and national-team palettes.
-- Automatic kit-clash protection when both teams have similar colours.
-- Stable, deterministic colours for previously unknown teams.
+- A fixed two-role matchup palette on every fixture and every output:
+  first-listed/home `#9A99B4`, second-listed/away `#F37680`.
+- Gold is reserved for decisive highlights; neutral low-priority paths are
+  thin and dashed instead of competing with the main evidence.
+- Successful actions use lavender; failed actions use coral plus a dashed
+  line, so meaning remains readable without relying on colour alone.
 - Passing links that always use a separate relationship palette from player
   nodes, so network strength cannot be confused with team identity.
 - Collision-aware labels with direct player names and leader lines.
 - Contrast-aware text on bright heatmap cells and coloured marks.
 - Shared headers, metric strips, notes and chart typography.
 
-The production pipeline resolves colours through
-`choose_matchup_colors()` in `football_match_analysis.py`. The selected colours
-are injected into every downstream visual through the match metadata; they are
-not fixed home/away colours.
+The production pipeline resolves the fixed role mapping through
+`choose_matchup_colors()` in `football_match_analysis.py`. Names, score and data
+remain fixture-aware, while the two team colours stay identical across PNGs,
+player radars, QA dashboards and the tactical PDF.
 
 Live match runs are routed through the same complete AMOLED renderer used by
 the reference package (`USE_COMPLETE_AMOLED_PACKAGE = True`). The fixture
-identity, score, output names and both team palettes are configured from the
-current match before any visual is rendered, preventing new fixtures from
+identity, score and output names are configured from the current match before
+any visual is rendered, preventing new fixtures from
 falling back to the legacy visual style.
 
 ## Requirements
@@ -103,8 +106,7 @@ python football_match_analysis.py
 ```
 
 For most fixtures, changing `MATCH_URL` is sufficient. The configuration block
-also supports browser settings, output options, official-stat fallbacks and kit
-selection.
+also supports browser settings, output options and official-stat fallbacks.
 
 ### Rebuild the included sample
 
@@ -126,20 +128,13 @@ Rebuild only the curated QA contact sheets with:
 python build_qa_contact_sheets.py
 ```
 
-## Kit and colour configuration
+## Colour configuration
 
-The default colour mode is automatic and fixture-aware. Optional settings in
-`football_match_analysis.py` allow explicit kit selection:
-
-| Setting | Purpose |
-| --- | --- |
-| `HOME_KIT_TYPE` | Select `home`, `accent`, `away` or `auto` for the home team. |
-| `AWAY_KIT_TYPE` | Select `home`, `accent`, `away` or `auto` for the away team. |
-| `CUSTOM_KIT_COLORS` | Override either team with a specific hexadecimal colour. |
-
-Automatic mode prioritises the team's real palette, removes near-white or
-near-black marks that would disappear on AMOLED, and searches alternate kit
-colours when the two teams are visually too similar.
+Production exports intentionally use one stable visual language instead of kit
+colours. The first-listed/home side is always `#9A99B4`; the second-listed/away
+side is always `#F37680`. Legacy kit configuration variables remain in the
+entry point for backwards compatibility, but they do not override the
+production renderer, PDF or QA dashboards.
 
 ## Processing pipeline
 
@@ -191,7 +186,7 @@ feed the player radar pages.
 
 | File | Responsibility |
 | --- | --- |
-| `football_match_analysis.py` | Main entry point, collection fallbacks, parsing, colour resolution and export orchestration. |
+| `football_match_analysis.py` | Main entry point, collection fallbacks, parsing, fixed-role colour mapping and export orchestration. |
 | `match_metrics.py` | Canonical possession, transition, progression, territory and advanced-team metrics. |
 | `match_report.py` | Report pages, PPDA analysis, player tables and PDF assembly. |
 | `tactical_pdf_report.py` | Connected tactical commentary written from the visual evidence. |
@@ -200,7 +195,7 @@ feed the player radar pages.
 | `visualization_components.py` | Shared AMOLED chart components and readability helpers. |
 | `visualization_design.py` | Global visual tokens, typography and reusable frames. |
 | `visual_redesign_full.py` | Unified production AMOLED renderer, PDF package and visual QA build. |
-| `visual_redesign_preview.py` | Shared dynamic fixture identity and comparison-page helpers. |
+| `visual_redesign_preview.py` | Shared fixture identity and fixed-palette comparison-page helpers. |
 | `build_qa_contact_sheets.py` | Eight curated dashboards that summarise the match story. |
 | `tests/` | Metric, substitution, colour and visual-identity regression tests. |
 

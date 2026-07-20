@@ -165,8 +165,8 @@ def _team_label_color(col: str | None, bg: str | None = None) -> str:
     return TEXT_BRIGHT
 
 
-C_HOME = "#4D8DFF"  # fallback home shirt colour
-C_AWAY = "#FF4D4D"  # fallback away shirt colour
+C_HOME = "#9A99B4"  # canonical first-listed team role
+C_AWAY = "#F37680"  # canonical second-listed team role
 C_GOLD = "#FFC23C"
 C_GREEN = "#22c55e"
 C_PURPLE = "#a855f7"
@@ -5480,8 +5480,10 @@ def run_analysis(
     info, events, _players_df = parse_all_fn(match_data)
 
     global C_HOME, C_AWAY
-    C_HOME = info.get("home_color") or info.get("HOME_COLOR") or C_HOME
-    C_AWAY = info.get("away_color") or info.get("AWAY_COLOR") or C_AWAY
+    C_HOME = "#9A99B4"
+    C_AWAY = "#F37680"
+    info["home_color"] = C_HOME
+    info["away_color"] = C_AWAY
 
     ppda = compute_ppda_both(info, events)
     goals_df = build_goals_log(events, info)

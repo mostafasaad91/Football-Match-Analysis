@@ -272,8 +272,10 @@ GROUP_BOARD_MAX_VISUALS = 6
 # ══════════════════════════════════════════════════════
 #  COLORS & CONSTANTS
 # ══════════════════════════════════════════════════════
-C_BLUE = "#4D8DFF"
-C_RED = "#FF4D4D"
+FIXED_HOME_COLOR = "#9A99B4"
+FIXED_AWAY_COLOR = "#F37680"
+C_BLUE = FIXED_AWAY_COLOR
+C_RED = FIXED_HOME_COLOR
 C_GREEN = "#22c55e"
 C_GOLD = "#FFC23C"
 
@@ -934,8 +936,8 @@ TEAM_ALIASES.update(
 )
 
 
-DEFAULT_HOME = "#4D8DFF"
-DEFAULT_AWAY = "#FF4D4D"
+DEFAULT_HOME = FIXED_HOME_COLOR
+DEFAULT_AWAY = FIXED_AWAY_COLOR
 
 
 def get_team_color(team_name: str, fallback: str) -> str:
@@ -1307,7 +1309,11 @@ def choose_matchup_colors(
     home_name: str, away_name: str, home_kit_type=None, away_kit_type=None
 ):
     """
-    Pick kit-based colours for a match while keeping the home team's identity stable.
+    Return the canonical production role colours for every fixture.
+
+    Team names, kits and competition do not alter this mapping: the first-listed
+    (home) side is always lavender-grey and the second-listed (away) side is
+    always coral.  This keeps every chart, report and QA sheet visually stable.
 
     v6 fix:
       - White/off-white primary kits are replaced with the team's accent or
@@ -1320,6 +1326,8 @@ def choose_matchup_colors(
       - Very light alternates are avoided when a readable non-light alternate is
         available with enough contrast.
     """
+    return FIXED_HOME_COLOR, FIXED_AWAY_COLOR
+
     custom_home = (CUSTOM_KIT_COLORS or {}).get("home")
     custom_away = (CUSTOM_KIT_COLORS or {}).get("away")
     forced_home = custom_home or _configured_kit_colour(
@@ -15300,8 +15308,8 @@ def main():
     info["away_kit_type"] = AWAY_KIT_TYPE
 
     console.print(
-        f"[dim]  Team colors: {info.get('home_name', '?')} ({HOME_KIT_TYPE}) = {home_col}  |  "
-        f"{info.get('away_name', '?')} ({AWAY_KIT_TYPE}) = {away_col}[/dim]"
+        f"[dim]  Fixed visual roles: {info.get('home_name', '?')} = {home_col}  |  "
+        f"{info.get('away_name', '?')} = {away_col}[/dim]"
     )
 
     # First try the official team stats already embedded in matchCentreData.

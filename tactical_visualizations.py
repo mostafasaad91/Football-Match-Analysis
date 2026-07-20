@@ -79,9 +79,9 @@ C_GREEN = "#3DDC84"
 # ─────────────────────────────────────────────────────────────────────────────
 VP_W = 54.0
 VP_L = 105.0
-XT_ARROW = "#4C6FFF" if not IS_LIGHT_THEME else "#1D4ED8"
+XT_ARROW = C_HOME if not IS_LIGHT_THEME else "#62617A"
 XT_NEG_ARROW = C_AWAY if not IS_LIGHT_THEME else "#7F1D1D"  # negative-xT accent
-TEAM_COLOR_FALLBACK = "#4D8DFF"
+TEAM_COLOR_FALLBACK = C_HOME
 
 
 def _clean_dark_navy(color: str | None) -> str:
@@ -472,8 +472,8 @@ class _VerticalPitchProxy:
         return self._ax.add_patch(patch)
 
 
-# National-team fallback colours for isolated v2 chart rendering.
-# The full pipeline still respects info["home_color"] / info["away_color"] first.
+# Legacy national-team palette data retained for compatibility helpers only.
+# Production rendering uses the fixed first-team/second-team role colours.
 # First colour in each list is the primary DISPLAY colour on dark charts.
 NATIONAL_TEAM_COLOR_FALLBACKS = {
     "mexico": ["#006847", "#CE1126", "#FFFFFF"],
@@ -1365,7 +1365,7 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
     GOAL_RING = "#FFC23C"
     SAVE_RING = "#3DDC84"
     BLOCK_COL = "#6B7280"
-    OFF_RING = "#FF4D4D"
+    OFF_RING = C_AWAY
     PEN_RING = "#38BDF8"
 
     # Penalty-area depth shading + average shot-distance line (under the shots).
@@ -1990,9 +1990,9 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals, hc=None, ac=None)
 # ═════════════════════════════════════════════════════════════════════════
 PASS_ROLE_COLORS = {
     "gk": "#FFC23C",  # goalkeeper — gold
-    "def": "#4D8DFF",  # defender   — blue
+    "def": C_HOME,  # defender — canonical lavender
     "mid": "#3DDC84",  # midfielder — green
-    "att": "#FF4D4D",  # forward    — red
+    "att": C_AWAY,  # forward — canonical coral
 }
 # Substituted players get one distinct fill colour, kept separate from the
 # four positional units so the eye reads "this player came on/off" instantly.
@@ -3721,27 +3721,8 @@ def _safe(v, default=0):
 
 
 def _match_colors(info):
-    """Return match colours.
-
-    Priority:
-      1) colours injected by the main pipeline;
-      2) national-team fallback palette;
-      3) old defaults.
-    """
-    hn = info.get("home_name") or info.get("home") or ""
-    an = info.get("away_name") or info.get("away") or ""
-    return (
-        _clean_dark_navy(
-            info.get("home_color")
-            or info.get("HOME_COLOR")
-            or _team_color_fallback(hn, C_HOME)
-        ),
-        _clean_dark_navy(
-            info.get("away_color")
-            or info.get("AWAY_COLOR")
-            or _team_color_fallback(an, C_AWAY)
-        ),
-    )
+    """Return the canonical first-listed and second-listed team colours."""
+    return C_HOME, C_AWAY
 
 
 def _shots_for_team(events, team_id):
