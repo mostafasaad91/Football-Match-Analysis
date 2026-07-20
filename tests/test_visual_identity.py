@@ -106,3 +106,12 @@ def test_visual_catalog_accepts_numbered_and_player_named_files(tmp_path):
         ]
     finally:
         complete_visuals.configure_match(original, original_out)
+
+
+def test_team_series_palette_and_score_are_fixture_aware():
+    primary, secondary = complete_visuals._team_series_palette("#C60B1E")
+
+    assert primary.upper() == "#C60B1E"
+    assert secondary.upper() != primary.upper()
+    assert secondary.upper() != complete_visuals.VALUE.upper()
+    assert complete_visuals._display_score("*1 : 0") == "1 — 0"

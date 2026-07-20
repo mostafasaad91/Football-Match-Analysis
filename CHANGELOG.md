@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Team-specific pass-distribution charts now use two shades derived from the
+  active team's identity colour instead of a fixed purple comparison series.
+- Dangerous counters now include 40+ metre transition breaks that reach the
+  final third within 12 seconds, alongside transition shots and box entries.
+- Remaining comparison legends and xT labels now use the active fixture names,
+  and provider score markers are removed from visual headers.
 - Live match analysis now routes through the unified complete AMOLED renderer,
   so every fixture receives the same current visual system as the reference
   package instead of the legacy renderer.

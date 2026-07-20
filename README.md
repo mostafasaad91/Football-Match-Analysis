@@ -179,7 +179,7 @@ prevents the same statistic from changing between pages.
 | xGChain | Non-penalty xG credited to every player involved in the shot-producing possession. |
 | xGBuildup | xGChain credit excluding the shooter and key-pass provider. |
 | Directness | Net forward progress divided by successful pass-and-carry distance. |
-| Rest-defence vulnerability | Share of advanced open-play losses that allow a transition box entry or shot within 12 seconds. Lower is better. |
+| Rest-defence vulnerability | Share of advanced open-play losses that allow, within 12 seconds, a transition shot, box entry, or a 40+ metre break reaching the final third. Lower is better. |
 
 The complete team metric set is exported to `team_advanced_metrics.csv`.
 Player sequence metrics are exported to `player_sequence_metrics.csv` and also

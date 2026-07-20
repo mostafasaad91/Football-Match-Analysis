@@ -11,6 +11,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
+from matplotlib import colors as mcolors
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
@@ -74,6 +75,27 @@ def _team_slug(team_id: int) -> str:
     return _safe_slug(TEAM_NAME.get(team_id, str(team_id)))
 
 
+def _display_score(value: object) -> str:
+    """Normalize provider score strings such as ``*1 : 0`` for headers."""
+    numbers = re.findall(r"\d+", str(value or ""))
+    if len(numbers) >= 2:
+        return f"{numbers[0]} — {numbers[1]}"
+    return str(value or "-").lstrip("*").strip()
+
+
+def _team_series_palette(team_color: str) -> tuple[str, str]:
+    """Return primary and secondary shades from one team's identity colour."""
+    try:
+        primary_rgb = np.asarray(mcolors.to_rgb(team_color), dtype=float)
+    except ValueError:
+        team_color = "#64748B"
+        primary_rgb = np.asarray(mcolors.to_rgb(team_color), dtype=float)
+    # A light tint stays recognisably within the same team identity while
+    # separating origins from destinations on the pure-black background.
+    secondary_rgb = primary_rgb * 0.58 + np.ones(3) * 0.42
+    return mcolors.to_hex(primary_rgb), mcolors.to_hex(secondary_rgb)
+
+
 def configure_match(match_info: dict, output_dir: Path | str) -> None:
     """Inject one fixture's identity into the reusable AMOLED renderer.
 
@@ -91,7 +113,7 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     AWAY_NAME = str(match_info.get("away_name") or "Away")
     HOME = str(match_info.get("home_color") or base.HOME)
     AWAY = str(match_info.get("away_color") or base.AWAY)
-    MATCH_SCORE = str(match_info.get("score") or "-")
+    MATCH_SCORE = _display_score(match_info.get("score"))
     OUT = Path(output_dir).resolve()
     MATCH_KEY = OUT.name
     TEAM_COLOR = {HOME_ID: HOME, AWAY_ID: AWAY}
@@ -962,12 +984,13 @@ def pass_thirds(events, team_id, number):
     fig.text(0.055, 0.898, "Completed passes by origin and destination third", fontsize=11, color=MUTED)
     ax = fig.add_axes([0.12, 0.18, 0.76, 0.55]); base.clean_ax(ax)
     y = np.arange(3); maxv = max(started.max(), ended.max(), 1)
-    ax.barh(y + 0.14, started.values, height=0.26, color=TEAM_COLOR[team_id], alpha=0.95, label="Pass origins")
-    ax.barh(y - 0.14, ended.values, height=0.26, color=VALUE, alpha=0.75, label="Pass destinations")
+    origin_color, destination_color = _team_series_palette(TEAM_COLOR[team_id])
+    ax.barh(y + 0.14, started.values, height=0.26, color=origin_color, alpha=0.95, label="Pass origins")
+    ax.barh(y - 0.14, ended.values, height=0.26, color=destination_color, alpha=0.88, label="Pass destinations")
     ax.set_yticks(y); ax.set_yticklabels(labels, color=TEXT); ax.invert_yaxis(); ax.set_xlim(0, maxv * 1.25)
     ax.grid(axis="x", color=GRID, lw=0.7)
-    for idx, value in enumerate(started.values): ax.text(value + maxv * 0.02, idx + 0.14, str(int(value)), color=TEAM_COLOR[team_id], va="center", fontweight="bold")
-    for idx, value in enumerate(ended.values): ax.text(value + maxv * 0.02, idx - 0.14, str(int(value)), color=VALUE, va="center", fontweight="bold")
+    for idx, value in enumerate(started.values): ax.text(value + maxv * 0.02, idx + 0.14, str(int(value)), color=origin_color, va="center", fontweight="bold")
+    for idx, value in enumerate(ended.values): ax.text(value + maxv * 0.02, idx - 0.14, str(int(value)), color=destination_color, va="center", fontweight="bold")
     ax.legend(frameon=False, labelcolor=TEXT, loc="lower right")
     return save(fig, f"{number:02d}_pass_thirds_{_team_slug(team_id)}.png")
 

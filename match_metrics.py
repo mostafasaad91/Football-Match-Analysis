@@ -79,6 +79,7 @@ DEAD_BALL_TYPES = {
 
 TRANSITION_WINDOW_SECONDS = 12.0
 TRANSITION_MIN_PROGRESS = 20.0
+DANGEROUS_COUNTER_MIN_PROGRESS = 40.0
 HIGH_REGAIN_X = 60.0
 FINAL_THIRD_X = 66.7
 DEEP_COMPLETION_X = 80.0
@@ -884,9 +885,19 @@ def team_advanced_metrics(
                     counterpress_successes += 1
             if float(lost["max_x"]) >= FINAL_THIRD_X:
                 rest_defence_exposures += 1
+                reached_final_third_in_window = (
+                    float(opponent["start_x"])
+                    + float(opponent["transition_progress"])
+                    >= FINAL_THIRD_X
+                )
                 dangerous_counter = bool(opponent["is_transition"]) and (
                     int(opponent["transition_shots"]) > 0
                     or int(opponent["transition_box_entries"]) > 0
+                    or (
+                        float(opponent["transition_progress"])
+                        >= DANGEROUS_COUNTER_MIN_PROGRESS
+                        and reached_final_third_in_window
+                    )
                 )
                 if dangerous_counter:
                     rest_defence_dangerous_counters += 1
