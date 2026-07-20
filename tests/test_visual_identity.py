@@ -75,7 +75,7 @@ def test_live_matches_use_complete_amoled_renderer(tmp_path):
         assert preview.HOME == C_HOME
         assert preview.AWAY == C_AWAY
         assert contrast_ratio(preview.HOME, "#000000") >= 7.0
-        assert contrast_ratio(preview.AWAY, "#000000") < 1.2
+        assert 3.0 <= contrast_ratio(preview.AWAY, "#000000") < 4.0
     finally:
         complete_visuals.configure_match(original, original_out)
 
@@ -133,10 +133,10 @@ def test_team_series_palette_and_score_are_fixture_aware():
 def test_approved_dark_team_colour_is_preserved_without_lift_or_outline():
     primary, _secondary = complete_visuals._team_series_palette(C_AWAY)
 
-    assert C_AWAY == "#290405"
+    assert C_AWAY == "#A83246"
     assert primary.upper() == C_AWAY.upper()
     assert complete_visuals._team_mark_color(complete_visuals.AWAY_ID) == C_AWAY
-    assert contrast_ratio(C_AWAY, "#000000") < 1.2
+    assert 3.0 <= contrast_ratio(C_AWAY, "#000000") < 4.0
 
 
 def test_semantic_event_styles_share_the_canonical_identity():

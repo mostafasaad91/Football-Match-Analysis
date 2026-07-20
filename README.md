@@ -56,7 +56,7 @@ The project uses a consistent AMOLED design system across all report pages:
 
 - True-black backgrounds with restrained panel borders.
 - A fixed two-role matchup palette on every fixture and every output:
-  first-listed/home `#9A99B4`, second-listed/away `#290405`.
+  first-listed/home `#9A99B4`, second-listed/away `#A83246`.
 - Gold is reserved for decisive highlights; neutral low-priority paths are
   thin and dashed instead of competing with the main evidence.
 - Successful actions use lavender; failed actions use dark burgundy plus a dashed
@@ -132,7 +132,7 @@ python build_qa_contact_sheets.py
 
 Production exports intentionally use one stable visual language instead of kit
 colours. The first-listed/home side is always `#9A99B4`; the second-listed/away
-side is always `#290405`. The approved colours are rendered without automatic
+side is always `#A83246`. The approved colours are rendered without automatic
 brightening, outlines or glow. Legacy kit configuration variables remain in the
 entry point for backwards compatibility, but they do not override the
 production renderer, PDF or QA dashboards.

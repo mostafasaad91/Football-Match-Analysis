@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fouls committed now use one canonical provider-aware count that excludes the
   mirrored foul-won row emitted by paired WhoScored feeds.
 - All production outputs now use one canonical matchup palette: lavender-grey
-  (`#9A99B4`) for the first-listed/home side and dark burgundy (`#290405`) for the
+  (`#9A99B4`) for the first-listed/home side and clear burgundy (`#A83246`) for the
   second-listed/away side, independent of club, country or kit selection.
 - Dark burgundy is rendered as the exact approved colour without automatic
   brightening, outline, glow or shadow treatment.
