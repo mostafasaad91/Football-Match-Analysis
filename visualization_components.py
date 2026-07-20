@@ -113,12 +113,24 @@ else:
     TEXT_FAD = "#5A5A5A"
     TEXT_FAINT = "#3A3A3A"
 
-C_HOME = "#4D8DFF"
-C_AWAY = "#FF4D4D"
+# Canonical production matchup palette. Every fixture uses the same two roles
+# so a reader learns one stable visual language instead of relearning kit
+# colours from match to match.
+C_HOME = "#9A99B4"
+C_AWAY = "#F37680"
 C_GOLD = "#FFC23C"
 C_MAGENTA = "#E879F9"
 C_ACCENT = "#38BDF8"
 C_LIME = "#22C55E"
+
+# Shared semantic styles for path-heavy pitch visuals. Colour identifies the
+# event outcome; line style keeps the distinction available in grayscale.
+EVENT_SUCCESS = C_HOME
+EVENT_FAILURE = C_AWAY
+EVENT_NEUTRAL = "#B8BDC8"
+EVENT_HIGHLIGHT = C_GOLD
+QUIET_DASH = (0, (2.2, 3.2))
+FAILURE_DASH = (0, (4.0, 3.0))
 
 
 # ── Readability helpers ─────────────────────────────────────────────

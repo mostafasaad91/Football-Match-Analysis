@@ -15,6 +15,7 @@ from matplotlib.patches import Arc, Circle, FancyBboxPatch, Rectangle
 import matplotlib.patheffects as path_effects
 import numpy as np
 import pandas as pd
+from visualization_components import C_AWAY, C_HOME
 
 from match_metrics import (
     advanced_metrics_frames,
@@ -37,11 +38,9 @@ PANEL_2 = "#080808"
 TEXT = "#F7F7F5"
 MUTED = "#A3A3A3"
 GRID = "#242424"
-# Sample-match colours use the teams' real identity instead of generic
-# home/away colours. Production runs resolve every matchup dynamically in
-# football_match_analysis.choose_matchup_colors().
-HOME = "#0055A4"
-AWAY = "#C8102E"
+# Stable role colours used by every fixture and every comparison visual.
+HOME = C_HOME
+AWAY = C_AWAY
 VALUE = "#B79CFF"
 FOCUS = "#FFD43B"
 NEUTRAL = "#666666"

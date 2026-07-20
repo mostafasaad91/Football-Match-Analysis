@@ -20,7 +20,17 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from scipy.ndimage import gaussian_filter
-from visualization_components import network_link_palette
+from visualization_components import (
+    C_AWAY,
+    C_HOME,
+    EVENT_FAILURE,
+    EVENT_HIGHLIGHT,
+    EVENT_NEUTRAL,
+    EVENT_SUCCESS,
+    FAILURE_DASH,
+    QUIET_DASH,
+    network_link_palette,
+)
 
 import visual_redesign_preview as base
 from match_metrics import (
@@ -145,8 +155,10 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     AWAY_ID = int(match_info["away_id"])
     HOME_NAME = str(match_info.get("home_name") or "Home")
     AWAY_NAME = str(match_info.get("away_name") or "Away")
-    HOME = str(match_info.get("home_color") or base.HOME)
-    AWAY = str(match_info.get("away_color") or base.AWAY)
+    # Fixture names and ids remain dynamic, but visual roles are deliberately
+    # fixed: first-listed team is lavender-grey, second-listed team is coral.
+    HOME = C_HOME
+    AWAY = C_AWAY
     MATCH_SCORE = _display_score(match_info.get("score"))
     OUT = Path(output_dir).resolve()
     MATCH_KEY = OUT.name
@@ -159,8 +171,8 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     base.AWAY_ID = AWAY_ID
     base.HOME_NAME = HOME_NAME
     base.AWAY_NAME = AWAY_NAME
-    base.HOME = _bright_visual_color(HOME)
-    base.AWAY = _bright_visual_color(AWAY)
+    base.HOME = HOME
+    base.AWAY = AWAY
     base.TEAM_COLOR = {HOME_ID: base.HOME, AWAY_ID: base.AWAY}
     base.TEAM_NAME = dict(TEAM_NAME)
     base.MATCH_SCORE = MATCH_SCORE.replace("-", "—")
@@ -296,8 +308,14 @@ def save(fig, filename: str) -> Path:
         base.amoled_header(fig, title, subtitle, active_team=active_team)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / filename
-    fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0.16, facecolor=BG)
-    plt.close(fig)
+    try:
+        fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0.16, facecolor=BG)
+    finally:
+        # Long match packages can contain 70+ figures.  Release every canvas
+        # immediately so Windows does not retain Agg buffers until process exit.
+        fig.clear()
+        plt.close(fig)
+        gc.collect()
     return path
 
 
@@ -658,7 +676,12 @@ def xt_map(events, team_id, number):
         f"xT Heatmap · {TEAM_NAME[team_id]}",
         "Full-pitch 7 × 12 square grid · every cell sums threat added from pass origins",
     )
-    cmap = LinearSegmentedColormap.from_list("xt_full_grid", [BG, "#12101F", "#2D2359", VALUE, FOCUS])
+    team_mark = _team_mark_color(team_id)
+    team_rgb = np.asarray(mcolors.to_rgb(team_mark), dtype=float)
+    team_dark = mcolors.to_hex(team_rgb * 0.42)
+    cmap = LinearSegmentedColormap.from_list(
+        f"xt_full_grid_{team_id}", [BG, PANEL_2, team_dark, team_mark]
+    )
     nonzero = heat[heat > 0]
     vmax = max(float(np.percentile(nonzero, 92)) if nonzero.size else 0.0, 0.001)
     x_grid = np.linspace(-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 8)
@@ -687,21 +710,23 @@ def xt_map(events, team_id, number):
                 fontsize=5.0, fontweight="bold", ha="center", va="center", zorder=3,
             )
     top = team.nlargest(10, "xT")
-    arrow_color = "#4C6FFF"
     for rank, (_, row) in enumerate(top.iterrows(), start=1):
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        top_three = rank <= 3
+        arrow_color = EVENT_HIGHLIGHT if top_three else team_mark
         arrow = pitch.annotate(
             "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
             arrowprops=dict(
                 arrowstyle="-|>", color=arrow_color,
-                lw=1.9 if rank <= 3 else 1.05,
-                alpha=0.96 if rank <= 3 else 0.58,
-                mutation_scale=11 if rank <= 3 else 8,
+                lw=1.75 if top_three else 0.80,
+                alpha=0.94 if top_three else 0.42,
+                linestyle="-" if top_three else QUIET_DASH,
+                mutation_scale=11 if top_three else 8,
             ),
         )
         if arrow.arrow_patch is not None:
             arrow.arrow_patch.set_path_effects([
-                path_effects.Stroke(linewidth=3.2 if rank <= 3 else 2.0, foreground=BG),
+                path_effects.Stroke(linewidth=3.0 if top_three else 1.6, foreground=BG),
                 path_effects.Normal(),
             ])
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
@@ -714,13 +739,13 @@ def xt_map(events, team_id, number):
         [(f"{rank}. {str(row['player']).split()[-1]}", f"{float(row['xT']):.3f}") for rank, (_, row) in enumerate(top.iterrows(), start=1)],
         start=0.835,
         gap=0.063,
-        value_color=arrow_color,
+        value_color=team_mark,
         label_color="#FFFFFF",
         label_weight="bold",
     )
     side.text(
         0.08, 0.075,
-        "Indigo arrows show the top 10 threat-adding passes; the top three use stronger strokes.",
+        "Gold solid = top 3 xT passes · team-colour dashed = ranks 4–10.",
         color=MUTED, fontsize=7.2, wrap=True,
     )
     return save(fig, f"{number:02d}_xt_map_{_team_slug(team_id)}.png")
@@ -740,15 +765,15 @@ def pass_map(events, team_id, number):
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         if bool(key_pass.loc[idx]):
-            color, alpha, width, style = FOCUS, 0.95, 1.8, "-"
+            color, alpha, width, style = EVENT_HIGHLIGHT, 0.95, 1.8, "-"
         elif bool(completed.loc[idx]):
-            color, alpha, width, style = VALUE, 0.22, 0.65, "-"
+            color, alpha, width, style = EVENT_SUCCESS, 0.20, 0.58, "-"
         else:
-            color, alpha, width, style = MUTED, 0.32, 0.65, (0, (3, 3))
+            color, alpha, width, style = EVENT_FAILURE, 0.34, 0.62, FAILURE_DASH
         pitch.plot([sx[0], ex[0]], [sy[0], ey[0]], color=color, alpha=alpha,
                    lw=width, ls=style, zorder=2)
         if bool(key_pass.loc[idx]):
-            pitch.scatter(ex[0], ey[0], s=22, marker="*", color=FOCUS,
+            pitch.scatter(ex[0], ey[0], s=22, marker="*", color=EVENT_HIGHLIGHT,
                           edgecolor=TEXT, linewidth=0.45, zorder=4)
     attempts = len(frame)
     complete_count = int(completed.sum())
@@ -762,9 +787,9 @@ def pass_map(events, team_id, number):
     ], start=0.82, gap=0.13)
     legend_y = [0.235, 0.165, 0.095]
     legend_items = [
-        ("Completed pass", VALUE, "-", "o"),
-        ("Incomplete pass", MUTED, (0, (3, 3)), "o"),
-        (f"Key pass ({int(key_pass.sum())})", FOCUS, "-", "*"),
+        ("Completed pass", EVENT_SUCCESS, "-", "o"),
+        ("Incomplete pass", EVENT_FAILURE, FAILURE_DASH, "o"),
+        (f"Key pass ({int(key_pass.sum())})", EVENT_HIGHLIGHT, "-", "*"),
     ]
     for y, (label, color, style, marker) in zip(legend_y, legend_items):
         side.plot([0.09, 0.25], [y, y], color=color, lw=2.0, ls=style)
@@ -781,10 +806,15 @@ def danger_creation(events, team_metrics, team_id, number):
     key = team[as_bool(team.get("is_key_pass", pd.Series(False, index=team.index)))].dropna(subset=["x", "y"])
     fig, pitch, side = pitch_axes(f"Danger Creation · {TEAM_NAME[team_id]}", "Box entries, Zone 14 access and key passes · shape-coded on one long pitch")
     draw_long_pitch(pitch)
-    for frame, coord_cols, marker, label, size in [(entries, ("end_x", "end_y"), "o", "Box entry", 46), (zone14, ("end_x", "end_y"), "D", "Zone 14 action", 42), (key, ("x", "y"), "*", "Key pass", 85)]:
+    creation_styles = [
+        (entries, ("end_x", "end_y"), "o", "Box entry", 46, EVENT_SUCCESS),
+        (zone14, ("end_x", "end_y"), "D", "Zone 14 action", 42, EVENT_FAILURE),
+        (key, ("x", "y"), "*", "Key pass", 85, EVENT_HIGHLIGHT),
+    ]
+    for frame, coord_cols, marker, label, size, color in creation_styles:
         if frame.empty: continue
         px, py = attack_xy(frame[coord_cols[0]], frame[coord_cols[1]])
-        pitch.scatter(px, py, s=size, marker=marker, color=VALUE if marker != "*" else FOCUS, edgecolor=TEXT, linewidth=0.75, alpha=0.85, label=f"{label} ({len(frame)})")
+        pitch.scatter(px, py, s=size, marker=marker, color=color, edgecolor=TEXT, linewidth=0.75, alpha=0.88, label=f"{label} ({len(frame)})")
     pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.085), ncol=2, frameon=False, labelcolor=TEXT, fontsize=7.5)
     side_title(side, "CREATION OUTPUT")
     side_kpis(side, [("Box entries", len(entries)), ("Zone 14 actions", len(zone14)), ("Key passes", len(key)), ("Deep completions", int(base.metric_lookup(team_metrics, "home" if team_id == HOME_ID else "away", "deep_completions")))])
@@ -826,7 +856,8 @@ def zone14(events, team_id, number):
         ("Right half-space", 60, 80),
         ("Right wing", 80, 100.0001),
     ]
-    lane_colors = [HOME, VALUE, "#8E7CE8", "#FF9A8A", AWAY]
+    team_mark = _team_mark_color(team_id)
+    lane_colors = [team_mark] * len(lane_defs)
     lane_counts = [int(final_third["end_y_num"].between(lo, hi, inclusive="left").sum()) for _, lo, hi in lane_defs]
     fig, pitch, side = pitch_axes(
         f"Zone 14 & Five Lanes · {TEAM_NAME[team_id]}",
@@ -857,7 +888,13 @@ def zone14(events, team_id, number):
                fontweight="bold", ha="center", va="bottom", zorder=5)
     for _, row in actions.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]), arrowprops=dict(arrowstyle="-|>", color=VALUE, alpha=0.45, lw=1.0, mutation_scale=8))
+        pitch.annotate(
+            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            arrowprops=dict(
+                arrowstyle="-|>", color=team_mark, alpha=0.42, lw=0.78,
+                linestyle=QUIET_DASH, mutation_scale=8,
+            ),
+        )
     top = actions.groupby("player").size().sort_values(ascending=False).head(3)
     side_title(side, "FIVE ATTACKING LANES")
     for idx, ((label, _, _), value, color) in enumerate(zip(lane_defs, lane_counts, lane_colors)):
@@ -1044,15 +1081,27 @@ def progressive(events, team_id, number):
     draw_long_pitch(pitch)
     for _, row in prog.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]), arrowprops=dict(arrowstyle="-|>", color=VALUE, alpha=0.18, lw=0.65, mutation_scale=7))
+        pitch.annotate(
+            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            arrowprops=dict(
+                arrowstyle="-|>", color=_team_mark_color(team_id), alpha=0.14,
+                lw=0.55, linestyle=QUIET_DASH, mutation_scale=7,
+            ),
+        )
     for _, row in prog.nlargest(10, "xT").iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]), arrowprops=dict(arrowstyle="-|>", color=FOCUS, alpha=0.95, lw=1.9, mutation_scale=11))
+        pitch.annotate(
+            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            arrowprops=dict(
+                arrowstyle="-|>", color=EVENT_HIGHLIGHT, alpha=0.95,
+                lw=1.9, mutation_scale=11,
+            ),
+        )
     top = prog.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PROGRESSORS")
     side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
-    side.text(0.08, 0.14, f"All progressive passes: {len(prog)}", color=VALUE, fontsize=9)
-    side.text(0.08, 0.09, "Gold = top 10 by xT added", color=FOCUS, fontsize=9)
+    side.text(0.08, 0.14, f"Team-colour dashed = all progressive passes ({len(prog)})", color=_team_mark_color(team_id), fontsize=8.2)
+    side.text(0.08, 0.09, "Gold solid = top 10 by xT added", color=EVENT_HIGHLIGHT, fontsize=8.4)
     return save(fig, f"{number:02d}_progressive_{_team_slug(team_id)}.png")
 
 
@@ -1065,10 +1114,24 @@ def crosses(events, team_id, number):
     for idx, row in frame.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         good = bool(success.loc[idx])
-        pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]), arrowprops=dict(arrowstyle="-|>" if good else "->", color=VALUE if good else MUTED, alpha=0.85 if good else 0.35, lw=1.3 if good else 0.75, mutation_scale=9))
+        pitch.annotate(
+            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            arrowprops=dict(
+                arrowstyle="-|>" if good else "->",
+                color=EVENT_SUCCESS if good else EVENT_FAILURE,
+                alpha=0.82 if good else 0.38,
+                lw=1.15 if good else 0.68,
+                linestyle="-" if good else FAILURE_DASH,
+                mutation_scale=9,
+            ),
+        )
     completed = int(success.sum()); rate = 100 * completed / max(len(frame), 1)
     side_title(side, "CROSSING OUTPUT")
     side_kpis(side, [("Crosses", len(frame)), ("Completed", completed), ("Completion", f"{rate:.1f}%"), ("Open-play", int((~frame["qualifier_names"].astype(str).str.lower().str.contains("corner")).sum()))])
+    side.plot([0.09, 0.24], [0.12, 0.12], color=EVENT_SUCCESS, lw=1.35)
+    side.text(0.28, 0.12, "Completed", color=TEXT, fontsize=7.5, va="center")
+    side.plot([0.55, 0.70], [0.12, 0.12], color=EVENT_FAILURE, lw=1.0, linestyle=FAILURE_DASH)
+    side.text(0.74, 0.12, "Incomplete", color=TEXT, fontsize=7.5, va="center")
     return save(fig, f"{number:02d}_crosses_{_team_slug(team_id)}.png")
 
 
@@ -1255,8 +1318,16 @@ def box_entries(events, team_id, number):
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         event_type = str(row["type"])
         marker = "o" if event_type == "Pass" else "D"
-        entry_color = VALUE if marker == "o" else FOCUS
-        pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]), arrowprops=dict(arrowstyle="-|>", color=entry_color, alpha=0.58, lw=1.0, mutation_scale=8))
+        is_pass = marker == "o"
+        entry_color = EVENT_SUCCESS if is_pass else EVENT_FAILURE
+        pitch.annotate(
+            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            arrowprops=dict(
+                arrowstyle="-|>", color=entry_color, alpha=0.62 if is_pass else 0.52,
+                lw=1.0 if is_pass else 0.82,
+                linestyle="-" if is_pass else FAILURE_DASH, mutation_scale=8,
+            ),
+        )
         pitch.scatter(ex[0], ey[0], s=32, marker=marker, color=entry_color, edgecolor=TEXT, linewidth=0.65)
     top = frame.groupby("player").size().sort_values(ascending=False).head(5)
     side_title(side, "ENTRY CONTRIBUTORS")
@@ -1264,9 +1335,9 @@ def box_entries(events, team_id, number):
     pass_count = int(frame["type"].astype(str).eq("Pass").sum())
     carry_count = len(frame) - pass_count
     side.text(0.08, 0.35, "ENTRY METHOD LEGEND", color=MUTED, fontsize=7.5, fontweight="bold")
-    side.scatter([0.13], [0.285], s=45, marker="o", color=VALUE, edgecolor=TEXT, linewidth=0.6)
+    side.scatter([0.13], [0.285], s=45, marker="o", color=EVENT_SUCCESS, edgecolor=TEXT, linewidth=0.6)
     side.text(0.21, 0.285, f"Pass entry ({pass_count})", color=TEXT, fontsize=8, va="center")
-    side.scatter([0.13], [0.22], s=45, marker="D", color=FOCUS, edgecolor=TEXT, linewidth=0.6)
+    side.scatter([0.13], [0.22], s=45, marker="D", color=EVENT_FAILURE, edgecolor=TEXT, linewidth=0.6)
     side.text(0.21, 0.22, f"Carry / take-on ({carry_count})", color=TEXT, fontsize=8, va="center")
     side.annotate("", xy=(0.18, 0.15), xytext=(0.08, 0.15), arrowprops=dict(arrowstyle="-|>", color=TEXT, lw=1.1))
     side.text(0.21, 0.15, "Arrow = entry path", color=TEXT, fontsize=8, va="center")
@@ -1447,21 +1518,22 @@ def transition_outcomes(events):
             sx, sy = player_position_xy([path["start_x"]], [path["start_y"]])
             ex, ey = player_position_xy([path["end_x"]], [path["end_y"]])
             if path["goal"]:
-                color, alpha, width, marker, size = FOCUS, 0.95, 2.25, "*", 75
+                color, alpha, width, marker, size, line_style = EVENT_HIGHLIGHT, 0.95, 2.25, "*", 75, "-"
             elif path["shot"]:
-                color, alpha, width, marker, size = VALUE, 0.82, 1.45, "D", 25
+                color, alpha, width, marker, size, line_style = EVENT_SUCCESS, 0.82, 1.35, "D", 25, "-"
             else:
-                color, alpha, width, marker, size = _team_mark_color(team_id), 0.52, 0.90, None, 0
+                color, alpha, width, marker, size, line_style = EVENT_NEUTRAL, 0.24, 0.62, None, 0, QUIET_DASH
             pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
                            arrowprops=dict(arrowstyle="-|>", color=color, alpha=alpha,
-                                           lw=width, mutation_scale=7 if not path["goal"] else 10), zorder=3)
+                                           lw=width, linestyle=line_style,
+                                           mutation_scale=7 if not path["goal"] else 10), zorder=3)
             pitch.scatter(sx[0], sy[0], s=8, facecolors=BG, edgecolors=color,
                           linewidth=0.55, alpha=max(alpha, 0.35), zorder=4)
             if marker:
                 pitch.scatter(ex[0], ey[0], s=size, marker=marker, color=color,
                               edgecolor=TEXT, linewidth=0.55, zorder=5)
             if path["goal"]:
-                pitch.text(ex[0], ey[0] + 2.0, f"{path['minute']}′", color=FOCUS,
+                pitch.text(ex[0], ey[0] + 2.0, f"{path['minute']}′", color=EVENT_HIGHLIGHT,
                            fontsize=6.5, fontweight="bold", ha="center", zorder=6)
 
         card = fig.add_axes(card_rect)
@@ -1481,9 +1553,12 @@ def transition_outcomes(events):
                   fontsize=7.5, fontweight="bold")
 
     legend = [
-        Line2D([0], [0], color="#CBD5E1", lw=2, alpha=0.75, label="Transition without shot"),
-        Line2D([0], [0], color=VALUE, lw=2, marker="D", markersize=5, label="Created a chance"),
-        Line2D([0], [0], color=FOCUS, lw=2.5, marker="*", markersize=8, label="Ended in a goal"),
+        Line2D([0], [0], color=EVENT_NEUTRAL, lw=1.35, alpha=0.55,
+               linestyle=QUIET_DASH, label="Transition without shot"),
+        Line2D([0], [0], color=EVENT_SUCCESS, lw=2, marker="D", markersize=5,
+               label="Created a chance"),
+        Line2D([0], [0], color=EVENT_HIGHLIGHT, lw=2.5, marker="*", markersize=8,
+               label="Ended in a goal"),
     ]
     fig.legend(handles=legend, loc="lower center", bbox_to_anchor=(0.5, 0.067), ncol=3,
                frameon=False, labelcolor=TEXT, fontsize=8)
@@ -1803,6 +1878,8 @@ def generate_match_package(
     team_metrics.to_csv(OUT / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
     player_metrics.to_csv(OUT / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
     generated = non_pitch_pages(events, xg, team_metrics)
+    plt.close("all")
+    gc.collect()
     paths = [
         generated[1],
         shot_map(events, xg, HOME_ID, 2),

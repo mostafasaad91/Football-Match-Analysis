@@ -3,22 +3,30 @@ import visual_redesign_full as complete_visuals
 import visual_redesign_preview as preview
 from football_match_analysis import choose_matchup_colors
 from tactical_visualizations import _clean_dark_navy
-from visualization_components import contrast_ratio, network_link_palette
+from visualization_components import (
+    C_AWAY,
+    C_HOME,
+    EVENT_FAILURE,
+    EVENT_HIGHLIGHT,
+    EVENT_NEUTRAL,
+    EVENT_SUCCESS,
+    FAILURE_DASH,
+    QUIET_DASH,
+    contrast_ratio,
+    network_link_palette,
+)
 
 
-def test_matchup_colors_follow_team_identity():
-    assert choose_matchup_colors("France", "England") == ("#0055A4", "#C8102E")
-    assert choose_matchup_colors("Liverpool", "Manchester City") == (
-        "#C8102E",
-        "#6CABDD",
-    )
+def test_every_matchup_uses_fixed_visual_roles():
+    assert choose_matchup_colors("France", "England") == (C_HOME, C_AWAY)
+    assert choose_matchup_colors("Liverpool", "Manchester City") == (C_HOME, C_AWAY)
 
 
-def test_unknown_teams_receive_stable_distinct_colors():
+def test_unknown_teams_receive_the_same_fixed_roles():
     first = choose_matchup_colors("Unknown Alpha", "Unknown Beta")
     second = choose_matchup_colors("Unknown Alpha", "Unknown Beta")
     assert first == second
-    assert first[0] != first[1]
+    assert first == (C_HOME, C_AWAY)
 
 
 def test_dark_blue_is_not_replaced_with_generic_light_blue():
@@ -58,12 +66,14 @@ def test_live_matches_use_complete_amoled_renderer(tmp_path):
             },
             tmp_path / "Egypt_vs_Morocco_2-1",
         )
-        assert complete_visuals.TEAM_COLOR == {1: "#CE1126", 2: "#006233"}
+        assert complete_visuals.TEAM_COLOR == {1: C_HOME, 2: C_AWAY}
         assert complete_visuals._team_slug(1) == "egypt"
         assert complete_visuals._team_slug(2) == "morocco"
         assert preview.HOME_NAME == "Egypt"
         assert preview.AWAY_NAME == "Morocco"
         assert preview.MATCH_SCORE == "2 — 1"
+        assert preview.HOME == C_HOME
+        assert preview.AWAY == C_AWAY
         assert contrast_ratio(preview.HOME, "#000000") >= 7.0
         assert contrast_ratio(preview.AWAY, "#000000") >= 7.0
     finally:
@@ -111,9 +121,9 @@ def test_visual_catalog_accepts_numbered_and_player_named_files(tmp_path):
 
 
 def test_team_series_palette_and_score_are_fixture_aware():
-    primary, secondary = complete_visuals._team_series_palette("#C60B1E")
+    primary, secondary = complete_visuals._team_series_palette(C_HOME)
 
-    assert primary.upper() != "#C60B1E"
+    assert primary.upper() == C_HOME.upper()
     assert contrast_ratio(primary, "#000000") >= 7.0
     assert secondary.upper() != primary.upper()
     assert secondary.upper() != complete_visuals.VALUE.upper()
@@ -125,3 +135,12 @@ def test_dark_team_colours_are_brightened_for_amoled_marks():
 
     assert bright.upper() != "#3C3B6E"
     assert contrast_ratio(bright, "#000000") >= 7.0
+
+
+def test_semantic_event_styles_share_the_canonical_identity():
+    assert EVENT_SUCCESS == C_HOME
+    assert EVENT_FAILURE == C_AWAY
+    assert EVENT_NEUTRAL not in {C_HOME, C_AWAY, EVENT_HIGHLIGHT}
+    assert EVENT_HIGHLIGHT not in {C_HOME, C_AWAY}
+    assert QUIET_DASH != "-"
+    assert FAILURE_DASH != "-"
