@@ -165,8 +165,8 @@ def _team_label_color(col: str | None, bg: str | None = None) -> str:
     return TEXT_BRIGHT
 
 
-C_HOME = "#9A99B4"  # canonical first-listed team role
-C_AWAY = "#A83246"  # canonical second-listed team role
+C_HOME = "#7A3DFF"  # canonical first-listed team role
+C_AWAY = "#BEEA24"  # canonical second-listed team role
 C_GOLD = "#FFC23C"
 C_GREEN = "#22c55e"
 C_PURPLE = "#a855f7"
@@ -5480,8 +5480,8 @@ def run_analysis(
     info, events, _players_df = parse_all_fn(match_data)
 
     global C_HOME, C_AWAY
-    C_HOME = "#9A99B4"
-    C_AWAY = "#A83246"
+    C_HOME = "#7A3DFF"
+    C_AWAY = "#BEEA24"
     info["home_color"] = C_HOME
     info["away_color"] = C_AWAY
 

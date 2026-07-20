@@ -272,8 +272,8 @@ GROUP_BOARD_MAX_VISUALS = 6
 # ══════════════════════════════════════════════════════
 #  COLORS & CONSTANTS
 # ══════════════════════════════════════════════════════
-FIXED_HOME_COLOR = "#9A99B4"
-FIXED_AWAY_COLOR = "#A83246"
+FIXED_HOME_COLOR = "#7A3DFF"
+FIXED_AWAY_COLOR = "#BEEA24"
 C_BLUE = FIXED_AWAY_COLOR
 C_RED = FIXED_HOME_COLOR
 C_GREEN = "#22c55e"
@@ -1312,8 +1312,8 @@ def choose_matchup_colors(
     Return the canonical production role colours for every fixture.
 
     Team names, kits and competition do not alter this mapping: the first-listed
-    (home) side is always lavender-grey and the second-listed (away) side is
-    always dark burgundy. This keeps every chart, report and QA sheet visually stable.
+    (home) side is always ultraviolet and the second-listed (away) side is
+    always chartreuse. This keeps every chart, report and QA sheet visually stable.
 
     v6 fix:
       - White/off-white primary kits are replaced with the team's accent or
