@@ -37,8 +37,11 @@ PANEL_2 = "#080808"
 TEXT = "#F7F7F5"
 MUTED = "#A3A3A3"
 GRID = "#242424"
-HOME = "#2563EB"
-AWAY = "#FF734D"
+# Sample-match colours use the teams' real identity instead of generic
+# home/away colours. Production runs resolve every matchup dynamically in
+# football_match_analysis.choose_matchup_colors().
+HOME = "#0055A4"
+AWAY = "#C8102E"
 VALUE = "#B79CFF"
 FOCUS = "#FFD43B"
 NEUTRAL = "#666666"

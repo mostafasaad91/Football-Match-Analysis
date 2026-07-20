@@ -46,6 +46,7 @@ from visualization_components import (
     shadow,
     readable_on,
     readable_team_text,
+    network_link_palette,
     ACCENT_TEXT,
     FONT_SANS,
     FONT_MONO,
@@ -75,24 +76,32 @@ C_GREEN = "#3DDC84"
 # ─────────────────────────────────────────────────────────────────────────────
 VP_W = 54.0
 VP_L = 105.0
-XT_ARROW = C_GOLD if not IS_LIGHT_THEME else "#111827"  # neutral accent attack arrow
+XT_ARROW = "#4C6FFF" if not IS_LIGHT_THEME else "#1D4ED8"
 XT_NEG_ARROW = C_AWAY if not IS_LIGHT_THEME else "#7F1D1D"  # negative-xT accent
-LIGHT_BLUE_REPLACEMENT = "#7DD3FC"
+TEAM_COLOR_FALLBACK = "#4D8DFF"
 
 
 def _clean_dark_navy(color: str | None) -> str:
-    """Convert very dark navy marks/text to a readable light blue on AMOLED."""
+    """Preserve the supplied team identity on AMOLED backgrounds.
+
+    Match colours have already been clash-checked by the main pipeline. Older
+    versions replaced dark blues with a generic light blue, which made clubs
+    and national teams lose their real identity. Only near-black colours are
+    lifted, and the lift keeps the original hue instead of substituting cyan.
+    """
     if not color:
-        return color or LIGHT_BLUE_REPLACEMENT
+        return color or TEAM_COLOR_FALLBACK
     try:
         r, g, b, _a = to_rgba(color)
         lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        # dark blue/navy: blue dominant or very high blue component, but low luminance
-        if lum < 0.18 and b > max(r, g) * 1.15:
-            return LIGHT_BLUE_REPLACEMENT
-        # dark blue-ish even when red/green are close but overall too dark
-        if lum < 0.12 and b > 0.22:
-            return LIGHT_BLUE_REPLACEMENT
+        if lum < 0.055 and max(r, g, b) < 0.28:
+            import colorsys
+
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            r, g, b = colorsys.hsv_to_rgb(h, max(s, 0.68), max(v, 0.62))
+            return "#{:02X}{:02X}{:02X}".format(
+                round(r * 255), round(g * 255), round(b * 255)
+            )
     except Exception:
         pass
     return str(color)
@@ -469,10 +478,10 @@ NATIONAL_TEAM_COLOR_FALLBACKS = {
     "egypt": ["#CE1126", "#FFFFFF", "#000000"],
     "argentina": ["#75AADB", "#FFFFFF", "#F6B40E"],
     "brazil": ["#FFDF00", "#009C3B", "#7DD3FC"],
-    "france": ["#7DD3FC", "#FFFFFF", "#EF4135"],
-    "england": ["#FFFFFF", "#C8102E", "#7DD3FC"],
+    "france": ["#0055A4", "#FFFFFF", "#EF4135"],
+    "england": ["#C8102E", "#FFFFFF", "#1D4ED8"],
     "spain": ["#AA151B", "#F1BF00", "#7DD3FC"],
-    "germany": ["#FFFFFF", "#000000", "#DD0000"],
+    "germany": ["#DD0000", "#FFFFFF", "#000000"],
     "italy": ["#0066B3", "#FFFFFF", "#008C45"],
     "portugal": ["#006600", "#FF0000", "#FFCC00"],
     "netherlands": ["#F36C21", "#21468B", "#FFFFFF"],
@@ -481,7 +490,7 @@ NATIONAL_TEAM_COLOR_FALLBACKS = {
     "united states": ["#3C3B6E", "#B22234", "#FFFFFF"],
     "usa": ["#3C3B6E", "#B22234", "#FFFFFF"],
     "canada": ["#FF0000", "#FFFFFF", "#111111"],
-    "japan": ["#FFFFFF", "#BC002D", "#7DD3FC"],
+    "japan": ["#BC002D", "#FFFFFF", "#1D4ED8"],
     "saudi arabia": ["#006C35", "#FFFFFF", "#111111"],
     "qatar": ["#8A1538", "#FFFFFF", "#111111"],
     "ghana": ["#FCD116", "#CE1126", "#006B3F"],
@@ -2181,8 +2190,7 @@ def render_pass_network_v2(team_name, opp_name, score, team_color, players, edge
     counts = [e["count"] for e in edges]
     medium_cut = np.percentile(counts, 50) if counts else 0
     strong_cut = np.percentile(counts, 78) if counts else 0
-    low_col = "#7DD3FC"
-    mid_col = "#A8B8CA"
+    low_col, mid_col, strong_col = network_link_palette(team_color)
     drawable_edges = [
         e
         for e in sorted(edges, key=lambda d: d["count"])
@@ -2195,7 +2203,7 @@ def render_pass_network_v2(team_name, opp_name, score, team_color, players, edge
         p2 = by_name[e["to"]]
         ratio = e["count"] / max_e
         if e["count"] >= strong_cut:
-            line_col = team_color
+            line_col = strong_col
             lw = 1.25 + 3.80 * ratio
             alpha = 0.55 + 0.35 * ratio
             z = 4
@@ -2636,11 +2644,12 @@ def _draw_player_label_vertical(
         family=FONT_SANS,
         bbox=dict(
             facecolor=BG_DARK,
-            edgecolor=GRID_COL,
-            lw=0.5,
-            alpha=0.97,
-            boxstyle="round,pad=0.14",
+            edgecolor="#363D49",
+            lw=0.7,
+            alpha=1.0,
+            boxstyle="round,pad=0.18",
         ),
+        path_effects=[pe.withStroke(linewidth=1.6, foreground=BG_DARK)],
         zorder=zorder,
         clip_on=True,
     )
@@ -2737,11 +2746,12 @@ def _draw_pass_label_above(
         family=FONT_SANS,
         bbox=dict(
             facecolor=BG_DARK,
-            edgecolor=GRID_COL,
-            lw=0.5,
-            alpha=0.97,
-            boxstyle="round,pad=0.14",
+            edgecolor="#363D49",
+            lw=0.7,
+            alpha=1.0,
+            boxstyle="round,pad=0.18",
         ),
+        path_effects=[pe.withStroke(linewidth=1.6, foreground=BG_DARK)],
         zorder=zorder,
         clip_on=True,
     )
@@ -2854,11 +2864,10 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
     counts = [e["count"] for e in edges]
     medium_cut = np.percentile(counts, 50) if counts else 0
     strong_cut = np.percentile(counts, 78) if counts else 0
-    # Neutral grey→white link ramp (StatsBomb-style): edges stay independent of
-    # the team colour so they never compete with the red/blue nodes.
-    low_col = "#3A3A3A"
-    mid_col = "#8A8A8A"
-    strong_col = "#E6E6E6"
+    # The relationship palette is computed independently of the node fill.
+    # Grey/white teams automatically switch to indigo links, so a connection
+    # can never share the same colour as a player circle.
+    low_col, mid_col, strong_col = network_link_palette(accent)
     n_players = len(v_players)
     drawable_edges = [
         e
@@ -2932,11 +2941,11 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
     # as an 11-man first half. (node sizes/radii were already computed above,
     # before the repulsion pass, so edges/nodes/labels all agree.)
     if n_players <= 12:
-        label_fontsize = 5.8
+        label_fontsize = 6.8
     elif n_players <= 14:
-        label_fontsize = 5.4
+        label_fontsize = 6.4
     else:
-        label_fontsize = 5.0
+        label_fontsize = 6.0
 
     # A substitute = a player who started on the bench (not in the XI). Guard
     # against a feed that mislabels everyone: if every node looks like a sub,
@@ -2956,7 +2965,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
                     hull,
                     closed=True,
                     facecolor=accent,
-                    edgecolor=accent,
+                    edgecolor=mid_col,
                     alpha=0.06,
                     lw=1.0,
                     joinstyle="round",
@@ -2968,7 +2977,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
                     hull,
                     closed=True,
                     facecolor="none",
-                    edgecolor=accent,
+                    edgecolor=mid_col,
                     alpha=0.28,
                     lw=1.0,
                     joinstyle="round",
@@ -2985,7 +2994,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
             [2, PASS_PITCH_W - 2],
             [dline, dline],
             ls=(0, (6, 4)),
-            color=accent,
+            color=strong_col,
             lw=1.0,
             alpha=0.45,
             zorder=1,
@@ -2996,7 +3005,7 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
             "DEF LINE",
             ha="right",
             va="bottom",
-            color=accent,
+            color=strong_col,
             fontsize=5.6,
             fontweight="bold",
             family=FONT_MONO,
@@ -3134,10 +3143,9 @@ def _draw_pass_network_half(ax, title, players, edges, accent):
             zorder=8,
             path_effects=[pe.withStroke(linewidth=1.6, foreground=BG_DARK)],
         )
-        # On a dense half, only label the most-involved players by name; the
-        # rest are identified by their shirt number inside the node. This is
-        # the single biggest declutter for the 2nd-half map.
-        label_cap = 12 if n_players >= 13 else n_players
+        # Every participant keeps a direct name label. The collision-aware
+        # stacker moves dense labels and draws a leader line when necessary.
+        label_cap = n_players
         if rank < label_cap:
             _draw_pass_label_above(
                 ax,
@@ -3411,7 +3419,7 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
         fig,
         section="XT MAP",
         title=f"{team_name} — Expected Threat (xT)",
-        subtitle="Heatmap = pitch xT value (cell numbers) · gold arrows = the top-15 threat-creating passes",
+        subtitle="Heatmap = pitch xT value (cell numbers) · indigo arrows = the top-10 threat-creating passes",
         hn=team_name,
         an=opp_name,
         score=score,
@@ -3525,9 +3533,9 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
     # Only the highest-threat passes are drawn as arrows — the mass of small
     # positive/negative passes is left to the heatmap, which keeps the map clean.
 
-    # Top 15 threat passes: outlined gold arrows.
-    top5_passes = sorted(pos, key=lambda p: -p["xT"])[:15]
-    for p in top5_passes:
+    # Top 10 threat passes: outlined indigo arrows.
+    top_passes = sorted(pos, key=lambda p: -p["xT"])[:10]
+    for p in top_passes:
         _draw_vertical_arrow(
             ax,
             (p["x"], p["y"]),
@@ -3613,12 +3621,13 @@ def render_xt_map_v2(team_name, opp_name, score, team_color, passes):
                 (nm or "—").split()[-1],
                 ha="left",
                 va="center",
-                color=TEXT_BR,
-                fontsize=10.5,
+                color="#FFFFFF",
+                fontsize=11.0,
                 fontweight="bold",
                 family=FONT_SANS,
                 transform=ax2.transAxes,
                 zorder=2,
+                path_effects=[pe.withStroke(linewidth=1.5, foreground=BG_DARK)],
             )
             ax2.text(
                 0.65,
@@ -4407,10 +4416,13 @@ def render_pitch_overlay_v2(
             for j, (val, x) in enumerate(zip(row, xs)):
                 ha = "left" if j == 0 else ("right" if j == n_cols - 1 else "center")
                 is_last = j == n_cols - 1
-                col = TEXT_BR if j == 0 else (team_color if is_last else TEXT_DIM)
-                fs = 10.5 if j == 0 else (11 if is_last else 10)
-                fw = "bold" if (j == 0 or is_last) else "normal"
-                fam = FONT_SANS if j == 0 else FONT_MONO
+                # Keep identifiers and player names bright. Team colour is
+                # reserved for marks; the final value only uses it when WCAG
+                # contrast is sufficient, otherwise it falls back to white.
+                col = _safe_team_text(team_color) if is_last else TEXT_BR
+                fs = 10.5 if j < n_cols - 1 else 11
+                fw = "bold"
+                fam = FONT_SANS if j < n_cols - 1 else FONT_MONO
                 ax2.text(
                     x,
                     cy,
@@ -4856,7 +4868,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
     # all as circles rather than all squares.
     _all_sub = bool(players) and all(p.get("is_sub") for p in players)
     n_players = len(players)
-    label_fontsize = 6.2 if n_players <= 12 else (5.8 if n_players <= 14 else 5.4)
+    label_fontsize = 7.0 if n_players <= 12 else (6.6 if n_players <= 14 else 6.2)
 
     # Identify the goalkeeper (positional GK, else the deepest node) so it can
     # carry the same distinct gold edge used on the pass network.
@@ -4870,6 +4882,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
     hub_player = max(players, key=lambda p: p["touches"]) if players else None
 
     def draw_overlay(ax):
+        _link_low, shape_color, _link_strong = network_link_palette(team_color)
         # Team shape: a convex hull over the outfield starters (matching the
         # pass network's "block footprint" treatment) instead of a plain
         # centroid spider-web, which reads far better at a glance.
@@ -4888,7 +4901,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
                         hull_vp,
                         closed=True,
                         facecolor=team_color,
-                        edgecolor=team_color,
+                        edgecolor=shape_color,
                         alpha=0.07,
                         lw=1.0,
                         joinstyle="round",
@@ -4900,7 +4913,7 @@ def make_avg_positions_v2(events, info, team_id, team_color):
                         hull_vp,
                         closed=True,
                         facecolor="none",
-                        edgecolor=team_color,
+                        edgecolor=shape_color,
                         alpha=0.30,
                         lw=1.0,
                         joinstyle="round",

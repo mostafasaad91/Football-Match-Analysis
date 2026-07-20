@@ -17,6 +17,7 @@ from matplotlib.patches import Arc, Circle, Rectangle, Wedge
 import numpy as np
 import pandas as pd
 from PIL import Image
+from visualization_components import network_link_palette
 
 import visual_redesign_preview as base
 from match_metrics import (
@@ -143,12 +144,28 @@ def side_kpis(ax, items: list[tuple[str, str]], start=0.82, gap=0.14):
         ax.text(0.08, y - 0.055, str(value), color=TEXT, fontsize=16, fontweight="bold", va="top")
 
 
-def side_rows(ax, rows: list[tuple[str, str]], start=0.82, gap=0.085, value_color=FOCUS):
+def side_rows(
+    ax,
+    rows: list[tuple[str, str]],
+    start=0.82,
+    gap=0.085,
+    value_color=FOCUS,
+    label_color=TEXT,
+    label_weight="normal",
+):
     for idx, (label, value) in enumerate(rows):
         y = start - idx * gap
         if y < 0.04:
             break
-        ax.text(0.08, y, str(label), color=TEXT, fontsize=8.5, va="center")
+        ax.text(
+            0.08,
+            y,
+            str(label),
+            color=label_color,
+            fontsize=8.5,
+            fontweight=label_weight,
+            va="center",
+        )
         ax.text(0.92, y, str(value), color=value_color, fontsize=8.5, fontweight="bold", ha="right", va="center")
         ax.plot([0.08, 0.92], [y - gap * 0.45, y - gap * 0.45], color=GRID, lw=0.55, alpha=0.7)
 
@@ -219,10 +236,10 @@ def compact_player_label(name: str) -> str:
 def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch: float):
     label = compact_player_label(name)
     ratio = float(touches) / max(float(max_touch), 1.0)
-    size = (5.2 if len(label) <= 7 else 4.2) if ratio >= 0.25 else (4.4 if len(label) <= 7 else 3.6)
-    text = ax.text(x, y, label, color=TEXT, fontsize=size, fontweight="bold",
+    size = (5.7 if len(label) <= 7 else 4.7) if ratio >= 0.25 else (4.9 if len(label) <= 7 else 4.1)
+    text = ax.text(x, y, label, color="#FFFFFF", fontsize=size, fontweight="bold",
                    ha="center", va="center", zorder=6, clip_on=True)
-    text.set_path_effects([path_effects.withStroke(linewidth=1.5, foreground=BG, alpha=0.9)])
+    text.set_path_effects([path_effects.withStroke(linewidth=2.1, foreground=BG, alpha=1.0)])
 
 
 def _role_fallback_position(position: str) -> tuple[float, float]:
@@ -482,20 +499,21 @@ def pass_network(events, players, team_id, number, half):
         px, py = player_position_xy([row["x"]], [row["y"]])
         display[str(name)] = (float(px[0]), float(py[0]), float(row["touches"]))
     display = _separate_network_positions(display, min_gap=6.3)
+    _link_low, link_color, _link_strong = network_link_palette(TEAM_COLOR[team_id])
     max_edge = max(float(edges["passes"].max()) if not edges.empty else 1, 1)
     for _, edge in edges.iterrows():
         a, b = str(edge["player"]), str(edge["next_player"])
         if a not in display or b not in display:
             continue
         ax, ay, _ = display[a]; bx, by, _ = display[b]
-        pitch.plot([ax, bx], [ay, by], color=TEAM_COLOR[team_id], alpha=0.34,
+        pitch.plot([ax, bx], [ay, by], color=link_color, alpha=0.52,
                    lw=0.75 + 4.4 * float(edge["passes"]) / max_edge, zorder=2)
     max_touch = max([value[2] for value in display.values()] or [1])
     for name, (px, py, touches) in display.items():
         entered = name in sub_on
         left = name in sub_off
         pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
-                      color=TEAM_COLOR[team_id], edgecolor=FOCUS if left else TEXT,
+                      color=TEAM_COLOR[team_id], edgecolor=FOCUS if left else link_color,
                       linewidth=2.3 if left else 1.15, zorder=4)
         draw_node_label(pitch, px, py, name, touches, max_touch)
 
@@ -589,6 +607,8 @@ def xt_map(events, team_id, number):
         start=0.835,
         gap=0.063,
         value_color=arrow_color,
+        label_color="#FFFFFF",
+        label_weight="bold",
     )
     side.text(
         0.08, 0.075,
@@ -990,12 +1010,13 @@ def average_positions(events, players, team_id, number, half):
         px, py = player_position_xy([row["x"]], [row["y"]])
         display[str(name)] = (float(px[0]), float(py[0]), float(row["touches"]))
     display = _separate_network_positions(display, min_gap=6.3)
+    _link_low, outline_color, _link_strong = network_link_palette(TEAM_COLOR[team_id])
     max_touch = max([value[2] for value in display.values()] or [1])
     for name, (px, py, touches) in display.items():
         entered = name in sub_on
         left = name in sub_off
         pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
-                      color=TEAM_COLOR[team_id], edgecolor=FOCUS if left else TEXT,
+                      color=TEAM_COLOR[team_id], edgecolor=FOCUS if left else outline_color,
                       linewidth=2.3 if left else 1.15, zorder=4)
         draw_node_label(pitch, px, py, name, touches, max_touch)
 
