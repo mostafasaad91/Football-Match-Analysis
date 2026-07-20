@@ -158,7 +158,7 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     HOME_NAME = str(match_info.get("home_name") or "Home")
     AWAY_NAME = str(match_info.get("away_name") or "Away")
     # Fixture names and ids remain dynamic, but visual roles are deliberately
-    # fixed: first-listed team is lavender-grey, second-listed team is dark burgundy.
+    # fixed: first-listed team is ultraviolet, second-listed team is chartreuse.
     HOME = C_HOME
     AWAY = C_AWAY
     MATCH_SCORE = _display_score(match_info.get("score"))

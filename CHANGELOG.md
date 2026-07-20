@@ -21,14 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   team in summaries, heatmaps and report text.
 - Fouls committed now use one canonical provider-aware count that excludes the
   mirrored foul-won row emitted by paired WhoScored feeds.
-- All production outputs now use one canonical matchup palette: lavender-grey
-  (`#9A99B4`) for the first-listed/home side and clear burgundy (`#A83246`) for the
+- All production outputs now use one canonical matchup palette: ultraviolet
+  (`#7A3DFF`) for the first-listed/home side and chartreuse (`#BEEA24`) for the
   second-listed/away side, independent of club, country or kit selection.
-- Dark burgundy is rendered as the exact approved colour without automatic
+- Both team colours are rendered as the exact approved colours without automatic
   brightening, outline, glow or shadow treatment.
 - Arrow-heavy maps use colour plus line style: low-priority paths are light
-  dashed lines, successful actions use lavender, failed actions use dashed
-  dark burgundy and decisive highlights use gold.
+  dashed lines, successful actions use ultraviolet, failed actions use dashed
+  chartreuse and decisive highlights use gold.
 - Defensive activity uses a smoothed team-colour heatmap with bright,
   shape-coded action marks and committed fouls only.
 - Team-specific pass-distribution charts use two readable shades derived from

@@ -116,8 +116,8 @@ else:
 # Canonical production matchup palette. Every fixture uses the same two roles
 # so a reader learns one stable visual language instead of relearning kit
 # colours from match to match.
-C_HOME = "#9A99B4"
-C_AWAY = "#A83246"
+C_HOME = "#7A3DFF"
+C_AWAY = "#BEEA24"
 C_GOLD = "#FFC23C"
 C_MAGENTA = "#E879F9"
 C_ACCENT = "#38BDF8"

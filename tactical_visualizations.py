@@ -1990,9 +1990,9 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals, hc=None, ac=None)
 # ═════════════════════════════════════════════════════════════════════════
 PASS_ROLE_COLORS = {
     "gk": "#FFC23C",  # goalkeeper — gold
-    "def": C_HOME,  # defender — canonical lavender
+    "def": C_HOME,  # defender — canonical ultraviolet
     "mid": "#3DDC84",  # midfielder — green
-    "att": C_AWAY,  # forward — canonical dark burgundy
+    "att": C_AWAY,  # forward — canonical chartreuse
 }
 # Substituted players get one distinct fill colour, kept separate from the
 # four positional units so the eye reads "this player came on/off" instantly.
