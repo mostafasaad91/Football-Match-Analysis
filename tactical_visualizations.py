@@ -1992,7 +1992,7 @@ PASS_ROLE_COLORS = {
     "gk": "#FFC23C",  # goalkeeper — gold
     "def": C_HOME,  # defender — canonical lavender
     "mid": "#3DDC84",  # midfielder — green
-    "att": C_AWAY,  # forward — canonical coral
+    "att": C_AWAY,  # forward — canonical dark burgundy
 }
 # Substituted players get one distinct fill colour, kept separate from the
 # four positional units so the eye reads "this player came on/off" instantly.

@@ -117,7 +117,7 @@ else:
 # so a reader learns one stable visual language instead of relearning kit
 # colours from match to match.
 C_HOME = "#9A99B4"
-C_AWAY = "#F37680"
+C_AWAY = "#290405"
 C_GOLD = "#FFC23C"
 C_MAGENTA = "#E879F9"
 C_ACCENT = "#38BDF8"
