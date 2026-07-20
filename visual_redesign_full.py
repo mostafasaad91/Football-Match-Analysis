@@ -1575,15 +1575,52 @@ def build_pdf(
 
 def build_catalog(paths: list[Path]):
     rows = []
-    for path in paths:
+    for order, path in enumerate(paths, start=1):
         stem = path.stem
-        number = stem.split("_", 1)[0]
+        prefix, separator, remainder = stem.partition("_")
+        if separator and re.fullmatch(r"\d+[a-z]?", prefix, flags=re.IGNORECASE):
+            number = prefix
+            title_source = remainder
+        else:
+            # Player radar exports use the player's display name directly
+            # (for example ``Pedri.png``), so they have no numbered prefix.
+            # Give them a stable catalogue reference without assuming that
+            # every filename contains a separator.
+            number = f"P{order:02d}"
+            title_source = stem
         try:
             file_name = path.relative_to(OUT.resolve()).as_posix()
         except ValueError:
             file_name = path.name
-        rows.append({"number": number, "title": stem.split("_", 1)[1].replace("_", " ").title(), "file": file_name, "has_pitch": any(token in stem for token in ["shot_map", "pass_network", "pass_map", "xt_map", "danger", "zone14", "progressive", "crosses", "defensive_activity", "average_positions", "dominating", "box_entries", "high_regains", "pass_targets", "transition_outcomes"])})
-    catalog = pd.DataFrame(rows).sort_values("number")
+        rows.append(
+            {
+                "_order": order,
+                "number": number,
+                "title": title_source.replace("_", " ").replace("-", " ").title(),
+                "file": file_name,
+                "has_pitch": any(
+                    token in stem
+                    for token in [
+                        "shot_map",
+                        "pass_network",
+                        "pass_map",
+                        "xt_map",
+                        "danger",
+                        "zone14",
+                        "progressive",
+                        "crosses",
+                        "defensive_activity",
+                        "average_positions",
+                        "dominating",
+                        "box_entries",
+                        "high_regains",
+                        "pass_targets",
+                        "transition_outcomes",
+                    ]
+                ),
+            }
+        )
+    catalog = pd.DataFrame(rows).sort_values("_order").drop(columns="_order")
     catalog.to_csv(OUT / "visual_catalog.csv", index=False, encoding="utf-8-sig")
     return catalog
 

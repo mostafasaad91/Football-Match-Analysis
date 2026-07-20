@@ -66,3 +66,43 @@ def test_live_matches_use_complete_amoled_renderer(tmp_path):
         assert preview.MATCH_SCORE == "2 — 1"
     finally:
         complete_visuals.configure_match(original, original_out)
+
+
+def test_visual_catalog_accepts_numbered_and_player_named_files(tmp_path):
+    original = {
+        "home_id": complete_visuals.HOME_ID,
+        "away_id": complete_visuals.AWAY_ID,
+        "home_name": complete_visuals.HOME_NAME,
+        "away_name": complete_visuals.AWAY_NAME,
+        "home_color": complete_visuals.HOME,
+        "away_color": complete_visuals.AWAY,
+        "score": complete_visuals.MATCH_SCORE,
+    }
+    original_out = complete_visuals.OUT
+    try:
+        complete_visuals.configure_match(
+            {
+                "home_id": 1,
+                "away_id": 2,
+                "home_name": "Spain",
+                "away_name": "Argentina",
+                "home_color": "#C60B1E",
+                "away_color": "#75AADB",
+                "score": "1 — 0",
+            },
+            tmp_path,
+        )
+        catalog = complete_visuals.build_catalog(
+            [
+                tmp_path / "01_xg_flow.png",
+                tmp_path / "player_radars" / "Spain" / "Pedri.png",
+            ]
+        )
+        assert catalog["number"].tolist() == ["01", "P02"]
+        assert catalog["title"].tolist() == ["Xg Flow", "Pedri"]
+        assert catalog["file"].tolist() == [
+            "01_xg_flow.png",
+            "player_radars/Spain/Pedri.png",
+        ]
+    finally:
+        complete_visuals.configure_match(original, original_out)
