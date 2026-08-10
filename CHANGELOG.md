@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- End-to-end golden test (`tests/test_metrics_golden.py`). The whole metric
+  engine is run over the committed France vs England events and all 66
+  published team columns plus every player sequence metric are compared against
+  a frozen reference in `tests/golden/`. The unit tests prove each definition is
+  implemented as written; this proves the assembled pipeline still produces the
+  numbers it produced before. `scripts/freeze_golden.py` re-freezes the
+  reference (`--check` reports drift without writing).
+- `fixtures.py` and `data/fixtures/`: committed season calendars for the Premier
+  League, La Liga and Serie A (1,140 fixtures) carrying each match's WhoScored
+  id, so the analyser's one manual input becomes a lookup —
+  `python fixtures.py arsenal --next --url`. An ambiguous name is refused with
+  its candidates rather than resolved to whichever club sorts first.
 - `team_palettes.py`: real home-kit colours for ~770 clubs and national teams —
   every UEFA league that supplies Champions League, Europa League or Conference
   League entrants, the non-UEFA continental competitions (CAF, AFC, CONMEBOL,
@@ -142,6 +154,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `reportlab` was imported by `tactical_pdf_report.py` but absent from
+  `requirements.txt`, so a fresh install produced every PNG and then failed at
+  PDF assembly.
+- The blanket `*.csv` ignore rule swallowed the golden reference, which would
+  have kept it out of the repository entirely. The test skips when the
+  reference is missing, so a fresh clone would have reported a pass while
+  checking nothing.
+- README documented the fixed blue/yellow role palette and told the reader to
+  edit `MATCH_URL` in the source file. Both had been superseded by real kit
+  colours and `MATCH_ANALYSIS_URL`, so following the instructions produced the
+  wrong colours on the wrong match.
 - The PDF commentary named the wrong team on the advanced-dashboard page. Both
   the tactical paragraph and the data paragraph hard-coded the home side as the
   territorial team and the away side as the efficient one, so any fixture where

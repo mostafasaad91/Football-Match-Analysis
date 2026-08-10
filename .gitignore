@@ -9,6 +9,12 @@ output/
 *.csv
 !sample_data/
 !sample_data/**/*.csv
+# The frozen reference the golden test compares against. Without this the
+# blanket *.csv rule above keeps it out of the repository, and the test skips
+# itself on a fresh clone instead of failing — the quietest way to lose a
+# regression guard.
+!tests/golden/
+!tests/golden/**/*.csv
 
 # ── Claude Code session data ─────────────────────────
 .claude/

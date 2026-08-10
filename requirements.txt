@@ -28,6 +28,9 @@ rich>=13.0.0
 # Scientific / Statistical
 scipy>=1.11.0
 
+# PDF authoring (tactical report pages and commentary)
+reportlab>=4.0.0
+
 # PDF merging (for unified report)
 pypdf>=4.0.0
 

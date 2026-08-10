@@ -1,0 +1,2286 @@
+{
+ "competition": "LALIGA",
+ "season": "2026-2027",
+ "fixtures": [
+  {
+   "kickoff_utc": "2026-08-15T17:30:00+00:00",
+   "home": "alaves",
+   "away": "getafe",
+   "whoscored_id": "1993897"
+  },
+  {
+   "kickoff_utc": "2026-08-15T19:30:00+00:00",
+   "home": "sevilla",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1993905"
+  },
+  {
+   "kickoff_utc": "2026-08-16T15:00:00+00:00",
+   "home": "racing-santander",
+   "away": "villarreal",
+   "whoscored_id": "1993903"
+  },
+  {
+   "kickoff_utc": "2026-08-16T17:00:00+00:00",
+   "home": "espanyol",
+   "away": "levante",
+   "whoscored_id": "1993901"
+  },
+  {
+   "kickoff_utc": "2026-08-16T19:30:00+00:00",
+   "home": "celta-vigo",
+   "away": "osasuna",
+   "whoscored_id": "1993899"
+  },
+  {
+   "kickoff_utc": "2026-08-17T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "elche",
+   "whoscored_id": "1993900"
+  },
+  {
+   "kickoff_utc": "2026-08-19T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "malaga",
+   "whoscored_id": "1993898"
+  },
+  {
+   "kickoff_utc": "2026-08-20T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "alaves",
+   "whoscored_id": "1993915"
+  },
+  {
+   "kickoff_utc": "2026-08-21T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "real-sociedad",
+   "whoscored_id": "1993909"
+  },
+  {
+   "kickoff_utc": "2026-08-22T15:00:00+00:00",
+   "home": "athletic-club",
+   "away": "sevilla",
+   "whoscored_id": "1993907"
+  },
+  {
+   "kickoff_utc": "2026-08-22T17:30:00+00:00",
+   "home": "valencia",
+   "away": "celta-vigo",
+   "whoscored_id": "1993916"
+  },
+  {
+   "kickoff_utc": "2026-08-22T19:30:00+00:00",
+   "home": "espanyol",
+   "away": "real-madrid",
+   "whoscored_id": "1993911"
+  },
+  {
+   "kickoff_utc": "2026-08-23T15:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "villarreal",
+   "whoscored_id": "1993908"
+  },
+  {
+   "kickoff_utc": "2026-08-23T17:30:00+00:00",
+   "home": "getafe",
+   "away": "racing-santander",
+   "whoscored_id": "1993912"
+  },
+  {
+   "kickoff_utc": "2026-08-23T19:30:00+00:00",
+   "home": "elche",
+   "away": "barcelona",
+   "whoscored_id": "1993910"
+  },
+  {
+   "kickoff_utc": "2026-08-24T17:30:00+00:00",
+   "home": "osasuna",
+   "away": "levante",
+   "whoscored_id": "1993914"
+  },
+  {
+   "kickoff_utc": "2026-08-24T19:30:00+00:00",
+   "home": "malaga",
+   "away": "deportivo",
+   "whoscored_id": "1993913"
+  },
+  {
+   "kickoff_utc": "2026-08-25T19:00:00+00:00",
+   "home": "valencia",
+   "away": "real-betis",
+   "whoscored_id": "1993906"
+  },
+  {
+   "kickoff_utc": "2026-08-26T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "real-sociedad",
+   "whoscored_id": "1993904"
+  },
+  {
+   "kickoff_utc": "2026-08-27T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "athletic-club",
+   "whoscored_id": "1993902"
+  },
+  {
+   "kickoff_utc": "2026-08-28T17:00:00+00:00",
+   "home": "racing-santander",
+   "away": "elche",
+   "whoscored_id": "1993923"
+  },
+  {
+   "kickoff_utc": "2026-08-28T19:30:00+00:00",
+   "home": "alaves",
+   "away": "villarreal",
+   "whoscored_id": "1993917"
+  },
+  {
+   "kickoff_utc": "2026-08-29T15:00:00+00:00",
+   "home": "levante",
+   "away": "real-betis",
+   "whoscored_id": "1993921"
+  },
+  {
+   "kickoff_utc": "2026-08-29T17:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "espanyol",
+   "whoscored_id": "1993925"
+  },
+  {
+   "kickoff_utc": "2026-08-29T19:30:00+00:00",
+   "home": "sevilla",
+   "away": "atletico-madrid",
+   "whoscored_id": "1993926"
+  },
+  {
+   "kickoff_utc": "2026-08-30T15:00:00+00:00",
+   "home": "real-madrid",
+   "away": "malaga",
+   "whoscored_id": "1993924"
+  },
+  {
+   "kickoff_utc": "2026-08-30T17:30:00+00:00",
+   "home": "deportivo",
+   "away": "valencia",
+   "whoscored_id": "1993919"
+  },
+  {
+   "kickoff_utc": "2026-08-30T19:30:00+00:00",
+   "home": "celta-vigo",
+   "away": "athletic-club",
+   "whoscored_id": "1993918"
+  },
+  {
+   "kickoff_utc": "2026-08-31T17:30:00+00:00",
+   "home": "osasuna",
+   "away": "getafe",
+   "whoscored_id": "1993922"
+  },
+  {
+   "kickoff_utc": "2026-08-31T19:30:00+00:00",
+   "home": "barcelona",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1993920"
+  },
+  {
+   "kickoff_utc": "2026-09-04T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "real-madrid",
+   "whoscored_id": "1993928"
+  },
+  {
+   "kickoff_utc": "2026-09-05T14:15:00+00:00",
+   "home": "athletic-club",
+   "away": "atletico-madrid",
+   "whoscored_id": "1993946"
+  },
+  {
+   "kickoff_utc": "2026-09-05T16:30:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "racing-santander",
+   "whoscored_id": "1993945"
+  },
+  {
+   "kickoff_utc": "2026-09-05T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "deportivo",
+   "whoscored_id": "1993927"
+  },
+  {
+   "kickoff_utc": "2026-09-06T14:15:00+00:00",
+   "home": "valencia",
+   "away": "barcelona",
+   "whoscored_id": "1993949"
+  },
+  {
+   "kickoff_utc": "2026-09-06T16:30:00+00:00",
+   "home": "alaves",
+   "away": "osasuna",
+   "whoscored_id": "1993942"
+  },
+  {
+   "kickoff_utc": "2026-09-06T16:30:00+00:00",
+   "home": "malaga",
+   "away": "levante",
+   "whoscored_id": "1993940"
+  },
+  {
+   "kickoff_utc": "2026-09-06T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "sevilla",
+   "whoscored_id": "1993933"
+  },
+  {
+   "kickoff_utc": "2026-09-07T17:00:00+00:00",
+   "home": "getafe",
+   "away": "celta-vigo",
+   "whoscored_id": "1993936"
+  },
+  {
+   "kickoff_utc": "2026-09-07T19:30:00+00:00",
+   "home": "elche",
+   "away": "real-sociedad",
+   "whoscored_id": "1993931"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "elche",
+   "whoscored_id": "1993930"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "malaga",
+   "whoscored_id": "1993935"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "getafe",
+   "away": "deportivo",
+   "whoscored_id": "1993938"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "levante",
+   "away": "barcelona",
+   "whoscored_id": "1993941"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "espanyol",
+   "whoscored_id": "1993943"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "alaves",
+   "whoscored_id": "1994160"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994162"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994164"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "valencia",
+   "whoscored_id": "1994166"
+  },
+  {
+   "kickoff_utc": "2026-09-13T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "real-betis",
+   "whoscored_id": "1994168"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "alaves",
+   "away": "valencia",
+   "whoscored_id": "1994170"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "osasuna",
+   "whoscored_id": "1994173"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "racing-santander",
+   "whoscored_id": "1994181"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "sevilla",
+   "whoscored_id": "1994177"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "elche",
+   "away": "real-madrid",
+   "whoscored_id": "1994179"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "levante",
+   "away": "athletic-club",
+   "whoscored_id": "1994183"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "malaga",
+   "away": "villarreal",
+   "whoscored_id": "1994146"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "espanyol",
+   "whoscored_id": "1994147"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "getafe",
+   "whoscored_id": "1994175"
+  },
+  {
+   "kickoff_utc": "2026-09-16T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "celta-vigo",
+   "whoscored_id": "1994148"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "alaves",
+   "whoscored_id": "1994149"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "real-madrid",
+   "whoscored_id": "1994150"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "racing-santander",
+   "whoscored_id": "1994151"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "real-betis",
+   "whoscored_id": "1994152"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "elche",
+   "whoscored_id": "1994153"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "getafe",
+   "away": "malaga",
+   "whoscored_id": "1994154"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994155"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "barcelona",
+   "whoscored_id": "1994156"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "valencia",
+   "away": "real-sociedad",
+   "whoscored_id": "1994157"
+  },
+  {
+   "kickoff_utc": "2026-09-20T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "levante",
+   "whoscored_id": "1994158"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "alaves",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994159"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "getafe",
+   "whoscored_id": "1994165"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "elche",
+   "away": "celta-vigo",
+   "whoscored_id": "1994163"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "levante",
+   "away": "sevilla",
+   "whoscored_id": "1994167"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "malaga",
+   "away": "espanyol",
+   "whoscored_id": "1994169"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "valencia",
+   "whoscored_id": "1994171"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "athletic-club",
+   "whoscored_id": "1994172"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "osasuna",
+   "whoscored_id": "1994161"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "villarreal",
+   "whoscored_id": "1994174"
+  },
+  {
+   "kickoff_utc": "2026-10-11T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "deportivo",
+   "whoscored_id": "1994176"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "alaves",
+   "whoscored_id": "1994180"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "levante",
+   "whoscored_id": "1994182"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994184"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "getafe",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994185"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "malaga",
+   "away": "real-sociedad",
+   "whoscored_id": "1994186"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "racing-santander",
+   "whoscored_id": "1994187"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "barcelona",
+   "whoscored_id": "1994178"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "sevilla",
+   "whoscored_id": "1994188"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "valencia",
+   "away": "athletic-club",
+   "whoscored_id": "1994189"
+  },
+  {
+   "kickoff_utc": "2026-10-18T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "elche",
+   "whoscored_id": "1994190"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "alaves",
+   "away": "malaga",
+   "whoscored_id": "1994191"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "getafe",
+   "whoscored_id": "1994192"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "deportivo",
+   "whoscored_id": "1993929"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "real-madrid",
+   "whoscored_id": "1993934"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "real-betis",
+   "whoscored_id": "1993932"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "espanyol",
+   "whoscored_id": "1993937"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "elche",
+   "whoscored_id": "1993939"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "levante",
+   "whoscored_id": "1993944"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "osasuna",
+   "whoscored_id": "1993948"
+  },
+  {
+   "kickoff_utc": "2026-10-25T19:00:00+00:00",
+   "home": "valencia",
+   "away": "villarreal",
+   "whoscored_id": "1993952"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "real-sociedad",
+   "whoscored_id": "1993955"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "alaves",
+   "whoscored_id": "1993972"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "osasuna",
+   "whoscored_id": "1993962"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "elche",
+   "away": "valencia",
+   "whoscored_id": "1993968"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "getafe",
+   "away": "sevilla",
+   "whoscored_id": "1993976"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "levante",
+   "away": "atletico-madrid",
+   "whoscored_id": "1993980"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "real-madrid",
+   "whoscored_id": "1993983"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "celta-vigo",
+   "whoscored_id": "1993987"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "malaga",
+   "whoscored_id": "1993959"
+  },
+  {
+   "kickoff_utc": "2026-11-01T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "espanyol",
+   "whoscored_id": "1993991"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "barcelona",
+   "whoscored_id": "1993995"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "levante",
+   "whoscored_id": "1993999"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "elche",
+   "away": "real-betis",
+   "whoscored_id": "1994003"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "deportivo",
+   "whoscored_id": "1994007"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "malaga",
+   "away": "racing-santander",
+   "whoscored_id": "1994011"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "athletic-club",
+   "whoscored_id": "1994015"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994019"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "alaves",
+   "whoscored_id": "1994023"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "valencia",
+   "away": "real-madrid",
+   "whoscored_id": "1994027"
+  },
+  {
+   "kickoff_utc": "2026-11-08T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "getafe",
+   "whoscored_id": "1994031"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "alaves",
+   "away": "deportivo",
+   "whoscored_id": "1994035"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "espanyol",
+   "whoscored_id": "1994039"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "villarreal",
+   "whoscored_id": "1994043"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "getafe",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994047"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "levante",
+   "away": "elche",
+   "whoscored_id": "1994051"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "malaga",
+   "whoscored_id": "1994055"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "real-sociedad",
+   "whoscored_id": "1993950"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "valencia",
+   "whoscored_id": "1993954"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "celta-vigo",
+   "whoscored_id": "1993958"
+  },
+  {
+   "kickoff_utc": "2026-11-22T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "real-betis",
+   "whoscored_id": "1993963"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "villarreal",
+   "whoscored_id": "1993970"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "barcelona",
+   "whoscored_id": "1993974"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "elche",
+   "away": "atletico-madrid",
+   "whoscored_id": "1993978"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "getafe",
+   "whoscored_id": "1993982"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "levante",
+   "away": "racing-santander",
+   "whoscored_id": "1993985"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "malaga",
+   "away": "athletic-club",
+   "whoscored_id": "1993989"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1993966"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "alaves",
+   "whoscored_id": "1993993"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "sevilla",
+   "whoscored_id": "1993997"
+  },
+  {
+   "kickoff_utc": "2026-11-29T19:00:00+00:00",
+   "home": "valencia",
+   "away": "osasuna",
+   "whoscored_id": "1994001"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "alaves",
+   "away": "espanyol",
+   "whoscored_id": "1994005"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "real-madrid",
+   "whoscored_id": "1994009"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "real-betis",
+   "whoscored_id": "1994013"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "celta-vigo",
+   "whoscored_id": "1994017"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "getafe",
+   "away": "valencia",
+   "whoscored_id": "1994021"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "elche",
+   "whoscored_id": "1994025"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "deportivo",
+   "whoscored_id": "1994029"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "levante",
+   "whoscored_id": "1994033"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "malaga",
+   "whoscored_id": "1994036"
+  },
+  {
+   "kickoff_utc": "2026-12-06T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "real-sociedad",
+   "whoscored_id": "1994040"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "valencia",
+   "whoscored_id": "1994044"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "athletic-club",
+   "whoscored_id": "1994052"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "elche",
+   "away": "sevilla",
+   "whoscored_id": "1994056"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "celta-vigo",
+   "whoscored_id": "1994060"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "levante",
+   "away": "alaves",
+   "whoscored_id": "1994062"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "malaga",
+   "away": "barcelona",
+   "whoscored_id": "1994065"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "racing-santander",
+   "whoscored_id": "1994048"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "osasuna",
+   "whoscored_id": "1994068"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "getafe",
+   "whoscored_id": "1994074"
+  },
+  {
+   "kickoff_utc": "2026-12-13T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994077"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "alaves",
+   "away": "elche",
+   "whoscored_id": "1993953"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "real-betis",
+   "whoscored_id": "1993957"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "real-sociedad",
+   "whoscored_id": "1993967"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "atletico-madrid",
+   "whoscored_id": "1993960"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "real-madrid",
+   "whoscored_id": "1993964"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "getafe",
+   "away": "levante",
+   "whoscored_id": "1993971"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "villarreal",
+   "whoscored_id": "1993975"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "malaga",
+   "whoscored_id": "1993979"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "racing-santander",
+   "whoscored_id": "1993984"
+  },
+  {
+   "kickoff_utc": "2026-12-20T19:00:00+00:00",
+   "home": "valencia",
+   "away": "espanyol",
+   "whoscored_id": "1993988"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "deportivo",
+   "whoscored_id": "1993996"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "barcelona",
+   "whoscored_id": "1994000"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "levante",
+   "away": "valencia",
+   "whoscored_id": "1994004"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "malaga",
+   "away": "elche",
+   "whoscored_id": "1994008"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "athletic-club",
+   "whoscored_id": "1994012"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994016"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "alaves",
+   "whoscored_id": "1993992"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "getafe",
+   "whoscored_id": "1994020"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "osasuna",
+   "whoscored_id": "1994024"
+  },
+  {
+   "kickoff_utc": "2027-01-03T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "sevilla",
+   "whoscored_id": "1994028"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "alaves",
+   "away": "real-sociedad",
+   "whoscored_id": "1994032"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "villarreal",
+   "whoscored_id": "1994037"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "racing-santander",
+   "whoscored_id": "1994041"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994045"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "elche",
+   "away": "getafe",
+   "whoscored_id": "1994049"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "real-betis",
+   "whoscored_id": "1994053"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "barcelona",
+   "whoscored_id": "1994057"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "levante",
+   "whoscored_id": "1994059"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "celta-vigo",
+   "whoscored_id": "1994063"
+  },
+  {
+   "kickoff_utc": "2027-01-10T19:00:00+00:00",
+   "home": "valencia",
+   "away": "malaga",
+   "whoscored_id": "1994066"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "real-sociedad",
+   "whoscored_id": "1994069"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "elche",
+   "whoscored_id": "1993947"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "valencia",
+   "whoscored_id": "1994073"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "getafe",
+   "away": "athletic-club",
+   "whoscored_id": "1993951"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "levante",
+   "away": "espanyol",
+   "whoscored_id": "1993956"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "malaga",
+   "away": "real-madrid",
+   "whoscored_id": "1993961"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "osasuna",
+   "whoscored_id": "1993965"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "sevilla",
+   "whoscored_id": "1993969"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "deportivo",
+   "whoscored_id": "1994071"
+  },
+  {
+   "kickoff_utc": "2027-01-17T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "alaves",
+   "whoscored_id": "1993973"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "alaves",
+   "away": "barcelona",
+   "whoscored_id": "1993977"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "levante",
+   "whoscored_id": "1993981"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "atletico-madrid",
+   "whoscored_id": "1993986"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "elche",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1993990"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "villarreal",
+   "whoscored_id": "1993994"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "getafe",
+   "away": "osasuna",
+   "whoscored_id": "1993998"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "celta-vigo",
+   "whoscored_id": "1994002"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "real-betis",
+   "whoscored_id": "1994006"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "malaga",
+   "whoscored_id": "1994010"
+  },
+  {
+   "kickoff_utc": "2027-01-24T19:00:00+00:00",
+   "home": "valencia",
+   "away": "sevilla",
+   "whoscored_id": "1994014"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "espanyol",
+   "whoscored_id": "1994018"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "valencia",
+   "whoscored_id": "1994030"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "getafe",
+   "whoscored_id": "1994026"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "levante",
+   "away": "real-sociedad",
+   "whoscored_id": "1994034"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "malaga",
+   "away": "alaves",
+   "whoscored_id": "1994038"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "deportivo",
+   "whoscored_id": "1994042"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "real-madrid",
+   "whoscored_id": "1994046"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "elche",
+   "whoscored_id": "1994022"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "athletic-club",
+   "whoscored_id": "1994050"
+  },
+  {
+   "kickoff_utc": "2027-01-31T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "racing-santander",
+   "whoscored_id": "1994054"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "alaves",
+   "away": "celta-vigo",
+   "whoscored_id": "1994058"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "osasuna",
+   "whoscored_id": "1994061"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994091"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "malaga",
+   "whoscored_id": "1994067"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "elche",
+   "away": "levante",
+   "whoscored_id": "1994070"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994072"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "getafe",
+   "away": "villarreal",
+   "whoscored_id": "1994093"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "sevilla",
+   "whoscored_id": "1994064"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "real-madrid",
+   "whoscored_id": "1994095"
+  },
+  {
+   "kickoff_utc": "2027-02-07T19:00:00+00:00",
+   "home": "valencia",
+   "away": "racing-santander",
+   "whoscored_id": "1994097"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994099"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "elche",
+   "away": "deportivo",
+   "whoscored_id": "1994101"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "levante",
+   "away": "malaga",
+   "whoscored_id": "1994103"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994106"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "getafe",
+   "whoscored_id": "1994107"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "athletic-club",
+   "whoscored_id": "1994109"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "real-betis",
+   "whoscored_id": "1994112"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "espanyol",
+   "whoscored_id": "1994114"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "valencia",
+   "away": "alaves",
+   "whoscored_id": "1994116"
+  },
+  {
+   "kickoff_utc": "2027-02-14T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "barcelona",
+   "whoscored_id": "1994118"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "alaves",
+   "away": "racing-santander",
+   "whoscored_id": "1994120"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "celta-vigo",
+   "whoscored_id": "1994122"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "elche",
+   "whoscored_id": "1994123"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "levante",
+   "whoscored_id": "1994129"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "real-sociedad",
+   "whoscored_id": "1994125"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "osasuna",
+   "whoscored_id": "1994127"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "malaga",
+   "away": "real-betis",
+   "whoscored_id": "1994131"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "getafe",
+   "whoscored_id": "1994133"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "real-madrid",
+   "whoscored_id": "1994135"
+  },
+  {
+   "kickoff_utc": "2027-02-21T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "valencia",
+   "whoscored_id": "1994137"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "barcelona",
+   "whoscored_id": "1994139"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "espanyol",
+   "whoscored_id": "1994075"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "getafe",
+   "away": "alaves",
+   "whoscored_id": "1994076"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "levante",
+   "away": "deportivo",
+   "whoscored_id": "1994078"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "malaga",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994079"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "sevilla",
+   "whoscored_id": "1994080"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994081"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "villarreal",
+   "whoscored_id": "1994141"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "valencia",
+   "whoscored_id": "1994082"
+  },
+  {
+   "kickoff_utc": "2027-02-28T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "elche",
+   "whoscored_id": "1994083"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "alaves",
+   "away": "athletic-club",
+   "whoscored_id": "1994084"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "celta-vigo",
+   "whoscored_id": "1994085"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "real-betis",
+   "whoscored_id": "1994089"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "getafe",
+   "whoscored_id": "1994086"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "elche",
+   "away": "malaga",
+   "whoscored_id": "1994087"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "racing-santander",
+   "whoscored_id": "1994088"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "osasuna",
+   "whoscored_id": "1994090"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "real-sociedad",
+   "whoscored_id": "1994092"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "valencia",
+   "away": "levante",
+   "whoscored_id": "1994094"
+  },
+  {
+   "kickoff_utc": "2027-03-07T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "real-madrid",
+   "whoscored_id": "1994096"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "alaves",
+   "away": "sevilla",
+   "whoscored_id": "1994098"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "valencia",
+   "whoscored_id": "1994100"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "deportivo",
+   "whoscored_id": "1994105"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "elche",
+   "away": "villarreal",
+   "whoscored_id": "1994104"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "getafe",
+   "away": "real-sociedad",
+   "whoscored_id": "1994108"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "malaga",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994110"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "celta-vigo",
+   "whoscored_id": "1994111"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994113"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "levante",
+   "whoscored_id": "1994102"
+  },
+  {
+   "kickoff_utc": "2027-03-14T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "espanyol",
+   "whoscored_id": "1994115"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "getafe",
+   "whoscored_id": "1994117"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "real-madrid",
+   "whoscored_id": "1994119"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "athletic-club",
+   "whoscored_id": "1994121"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "levante",
+   "away": "osasuna",
+   "whoscored_id": "1994124"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "real-betis",
+   "whoscored_id": "1994126"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "barcelona",
+   "whoscored_id": "1994128"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "alaves",
+   "whoscored_id": "1994130"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "elche",
+   "whoscored_id": "1994132"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "valencia",
+   "away": "deportivo",
+   "whoscored_id": "1994134"
+  },
+  {
+   "kickoff_utc": "2027-03-21T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "malaga",
+   "whoscored_id": "1994136"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "racing-santander",
+   "whoscored_id": "1994138"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "sevilla",
+   "whoscored_id": "1994144"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "villarreal",
+   "whoscored_id": "1994142"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "elche",
+   "away": "alaves",
+   "whoscored_id": "1994143"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "getafe",
+   "away": "espanyol",
+   "whoscored_id": "1994145"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "levante",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994193"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "malaga",
+   "away": "osasuna",
+   "whoscored_id": "1994194"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "celta-vigo",
+   "whoscored_id": "1994140"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994195"
+  },
+  {
+   "kickoff_utc": "2027-04-04T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "valencia",
+   "whoscored_id": "1994196"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "alaves",
+   "away": "real-betis",
+   "whoscored_id": "1994197"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "levante",
+   "whoscored_id": "1994198"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "elche",
+   "whoscored_id": "1994199"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "malaga",
+   "whoscored_id": "1994200"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "real-madrid",
+   "whoscored_id": "1994201"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "barcelona",
+   "whoscored_id": "1994202"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "real-sociedad",
+   "whoscored_id": "1994203"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "deportivo",
+   "whoscored_id": "1994204"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "valencia",
+   "away": "getafe",
+   "whoscored_id": "1994205"
+  },
+  {
+   "kickoff_utc": "2027-04-11T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "athletic-club",
+   "whoscored_id": "1994206"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "alaves",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994207"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "sevilla",
+   "whoscored_id": "1994208"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "espanyol",
+   "whoscored_id": "1994212"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "celta-vigo",
+   "whoscored_id": "1994210"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "elche",
+   "away": "osasuna",
+   "whoscored_id": "1994211"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "getafe",
+   "away": "real-madrid",
+   "whoscored_id": "1994213"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "levante",
+   "away": "villarreal",
+   "whoscored_id": "1994214"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "malaga",
+   "away": "valencia",
+   "whoscored_id": "1994215"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "athletic-club",
+   "whoscored_id": "1994209"
+  },
+  {
+   "kickoff_utc": "2027-04-18T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "racing-santander",
+   "whoscored_id": "1994216"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "deportivo",
+   "whoscored_id": "1994217"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "barcelona",
+   "whoscored_id": "1994218"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "real-sociedad",
+   "whoscored_id": "1994219"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "getafe",
+   "away": "real-betis",
+   "whoscored_id": "1994220"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "alaves",
+   "whoscored_id": "1994221"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "malaga",
+   "whoscored_id": "1994222"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "elche",
+   "whoscored_id": "1994223"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "levante",
+   "whoscored_id": "1994224"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "valencia",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994225"
+  },
+  {
+   "kickoff_utc": "2027-04-21T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994226"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "alaves",
+   "whoscored_id": "1994227"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "osasuna",
+   "whoscored_id": "1994232"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "sevilla",
+   "whoscored_id": "1994229"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "racing-santander",
+   "whoscored_id": "1994230"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "elche",
+   "away": "espanyol",
+   "whoscored_id": "1994231"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "levante",
+   "away": "real-madrid",
+   "whoscored_id": "1994233"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "malaga",
+   "away": "getafe",
+   "whoscored_id": "1994234"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "villarreal",
+   "whoscored_id": "1994235"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "valencia",
+   "whoscored_id": "1994228"
+  },
+  {
+   "kickoff_utc": "2027-05-02T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "athletic-club",
+   "whoscored_id": "1994236"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "alaves",
+   "away": "levante",
+   "whoscored_id": "1994237"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "malaga",
+   "whoscored_id": "1994238"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "getafe",
+   "away": "elche",
+   "whoscored_id": "1994240"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "real-sociedad",
+   "whoscored_id": "1994241"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "sevilla",
+   "whoscored_id": "1994242"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "deportivo",
+   "whoscored_id": "1994243"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "espanyol",
+   "whoscored_id": "1994239"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "barcelona",
+   "whoscored_id": "1994244"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "valencia",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994245"
+  },
+  {
+   "kickoff_utc": "2027-05-09T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "celta-vigo",
+   "whoscored_id": "1994246"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994247"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "alaves",
+   "whoscored_id": "1994248"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "elche",
+   "away": "athletic-club",
+   "whoscored_id": "1994249"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "valencia",
+   "whoscored_id": "1994250"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "levante",
+   "away": "getafe",
+   "whoscored_id": "1994251"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "malaga",
+   "away": "celta-vigo",
+   "whoscored_id": "1994252"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "real-betis",
+   "whoscored_id": "1994253"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "racing-santander",
+   "whoscored_id": "1994254"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "barcelona",
+   "whoscored_id": "1994255"
+  },
+  {
+   "kickoff_utc": "2027-05-16T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "villarreal",
+   "whoscored_id": "1994256"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "alaves",
+   "away": "real-madrid",
+   "whoscored_id": "1994257"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "atletico-madrid",
+   "away": "athletic-club",
+   "whoscored_id": "1994258"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "barcelona",
+   "away": "malaga",
+   "whoscored_id": "1994261"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "celta-vigo",
+   "away": "real-sociedad",
+   "whoscored_id": "1994259"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "deportivo",
+   "away": "espanyol",
+   "whoscored_id": "1994260"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "racing-santander",
+   "away": "levante",
+   "whoscored_id": "1994262"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "rayo-vallecano",
+   "away": "real-betis",
+   "whoscored_id": "1994263"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "sevilla",
+   "away": "getafe",
+   "whoscored_id": "1994264"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "valencia",
+   "away": "elche",
+   "whoscored_id": "1994265"
+  },
+  {
+   "kickoff_utc": "2027-05-23T19:00:00+00:00",
+   "home": "villarreal",
+   "away": "osasuna",
+   "whoscored_id": "1994266"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "athletic-club",
+   "away": "rayo-vallecano",
+   "whoscored_id": "1994267"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "elche",
+   "away": "racing-santander",
+   "whoscored_id": "1994269"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "espanyol",
+   "away": "alaves",
+   "whoscored_id": "1994270"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "getafe",
+   "away": "barcelona",
+   "whoscored_id": "1994271"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "levante",
+   "away": "celta-vigo",
+   "whoscored_id": "1994272"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "malaga",
+   "away": "sevilla",
+   "whoscored_id": "1994273"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "osasuna",
+   "away": "valencia",
+   "whoscored_id": "1994274"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "real-betis",
+   "away": "atletico-madrid",
+   "whoscored_id": "1994268"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "real-madrid",
+   "away": "deportivo",
+   "whoscored_id": "1994275"
+  },
+  {
+   "kickoff_utc": "2027-05-30T19:00:00+00:00",
+   "home": "real-sociedad",
+   "away": "villarreal",
+   "whoscored_id": "1994276"
+  }
+ ]
+}

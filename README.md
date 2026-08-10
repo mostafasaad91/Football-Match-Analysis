@@ -54,9 +54,11 @@ The visual package includes, when supported by the source data:
 
 The project uses a consistent AMOLED design system across all report pages:
 
-- True-black backgrounds with restrained panel borders.
-- A fixed two-role matchup palette on every fixture and every output:
-  first-listed/home `#2F5BFF`, second-listed/away `#FFD400`.
+- True-black backgrounds with white pitch markings and restrained panel borders.
+- Real home-kit colours for roughly 975 clubs and national teams, resolved from
+  `team_palettes.py`. When two kits clash, or one fails the contrast floor
+  against pure black, the renderer substitutes a readable variant rather than
+  shipping two indistinguishable sides.
 - White is reserved for all exact values and decisive highlights; neutral low-priority paths are
   thin and dashed instead of competing with the main evidence.
 - Single-team maps keep that team's role colour for every main mark. Outcome
@@ -67,10 +69,14 @@ The project uses a consistent AMOLED design system across all report pages:
 - Contrast-aware text on bright heatmap cells and coloured marks.
 - Shared headers, metric strips, notes and chart typography.
 
-The production pipeline resolves the fixed role mapping through
-`choose_matchup_colors()` in `football_match_analysis.py`. Names, score and data
-remain fixture-aware, while the two team colours stay identical across PNGs,
-player radars, QA dashboards and the tactical PDF.
+The production pipeline resolves both sides once through
+`choose_matchup_colors()` in `football_match_analysis.py`, and every surface —
+PNGs, player radars, QA dashboards, the tactical PDF — reads that single
+decision, so a team never changes colour between pages of one report.
+
+A team name that matches several palette entries is refused rather than
+guessed; the unresolved name is reported instead of silently rendering the
+wrong club's colours.
 
 Live match runs are routed through the same complete AMOLED renderer used by
 the reference package (`USE_COMPLETE_AMOLED_PACKAGE = True`). The fixture
@@ -81,8 +87,11 @@ falling back to the legacy visual style.
 ## Requirements
 
 - Python 3.10 or newer.
-- Google Chrome or Chromium for the Selenium collection fallback.
 - Internet access when collecting a new WhoScored match.
+- Google Chrome or Chromium only as the last collection fallback. Collection
+  now tries `curl-cffi` first, which impersonates a browser's TLS and HTTP/2
+  fingerprint without launching one; a typical run no longer starts Chrome at
+  all.
 
 Install the dependencies from the project directory:
 
@@ -90,23 +99,51 @@ Install the dependencies from the project directory:
 python -m pip install -r requirements.txt
 ```
 
-Core dependencies include pandas, NumPy, Matplotlib, SciPy, Rich,
-cloudscraper, Beautiful Soup, Selenium, pypdf and PyMuPDF.
+Core dependencies include pandas, NumPy, Matplotlib, SciPy, Rich, curl-cffi,
+cloudscraper, Beautiful Soup, Selenium, reportlab, pypdf and PyMuPDF.
 
 ## Quick start
 
 ### Analyse a new match
 
-1. Open `football_match_analysis.py`.
-2. Set `MATCH_URL` to the required WhoScored match URL.
-3. Run the main pipeline:
+Point `MATCH_ANALYSIS_URL` at the fixture and run the pipeline:
 
-```bash
+```powershell
+$env:MATCH_ANALYSIS_URL = "https://www.whoscored.com/matches/1903428/live"
 python football_match_analysis.py
 ```
 
-For most fixtures, changing `MATCH_URL` is sufficient. The configuration block
-also supports browser settings, output options and official-stat fallbacks.
+Without that variable the run falls back to the default URL in the file, which
+is the bundled sample — not the match you meant. Set it every time.
+
+`MATCH_URL` in `football_match_analysis.py` remains the fallback, so editing
+the file still works if you prefer it. The configuration block also covers
+browser settings, output options and official-stat fallbacks.
+
+### Find the URL without a browser
+
+The stored season calendars under `data/fixtures/` carry the WhoScored match id
+for every fixture in the Premier League, La Liga and Serie A, so the URL is a
+lookup rather than a search:
+
+```bash
+python fixtures.py arsenal --next
+python fixtures.py --on 2026-08-22
+python fixtures.py "aston villa" --last --url
+```
+
+Chained into a run:
+
+```powershell
+$env:MATCH_ANALYSIS_URL = (python fixtures.py arsenal --last --url)
+python football_match_analysis.py
+```
+
+An ambiguous name is refused rather than resolved to whichever club sorts
+first — `real` reports the four candidates instead of picking Real Madrid.
+
+The calendar is a committed file, not a live feed: a postponed match keeps its
+id but not its listed date.
 
 ### Rebuild the included sample
 
@@ -128,14 +165,53 @@ Rebuild only the curated QA contact sheets with:
 python build_qa_contact_sheets.py
 ```
 
+## Match history
+
+Every run appends its metrics to `output/match_history.db` and archives the
+untouched provider payload under `output/raw_snapshots/`. One match is a sample
+of one; the history is what makes a claim about a team rather than about an
+afternoon.
+
+```bash
+python team_history.py matches
+python team_history.py team Arsenal --last 6
+python team_history.py team Arsenal --last 6 --summary
+python team_history.py player "Bukayo Saka" --last 5
+python team_history.py export Arsenal --last 10 --out arsenal_last10.csv
+```
+
+A fixture is keyed on its provider id, so re-analysing a match replaces its row
+instead of double-counting it. The fallback key is competition, season and the
+two teams — deliberately not the date, so a postponement does not split one
+fixture into two.
+
+Because the raw payloads are kept, a metric added today can be backfilled
+across every match already collected without going back to the network:
+
+```bash
+python team_history.py replay
+```
+
+Percentiles stay silent below ten stored matches rather than dressing noise up
+as a ranking.
+
 ## Colour configuration
 
-Production exports intentionally use one stable visual language instead of kit
-colours. The first-listed/home side is always `#2F5BFF`; the second-listed/away
-side is always `#FFD400`. The approved colours are rendered without automatic
-brightening, outlines or glow. Legacy kit configuration variables remain in the
-entry point for backwards compatibility, but they do not override the
-production renderer, PDF or QA dashboards.
+Real kit colours are the default. Set `MATCH_ANALYSIS_TEAM_COLORS` to change
+that for a run:
+
+| Value | Behaviour |
+| --- | --- |
+| `kit` (default) | Each side takes its real home-kit colour from `team_palettes.py`. |
+| `roles` | The former fixed pair — home `#2F5BFF`, away `#FFD400` — regardless of fixture. |
+
+```powershell
+$env:MATCH_ANALYSIS_TEAM_COLORS = "roles"
+```
+
+`team_palettes.py` is organised by domestic league rather than by a single
+season's continental entry list, so it does not go stale when a club drops out
+of Europe. Hand-picked entries in the main module win over the bulk import.
 
 ## Processing pipeline
 
@@ -198,7 +274,13 @@ feed the player radar pages.
 | `visual_redesign_full.py` | Unified production AMOLED renderer, PDF package and visual QA build. |
 | `visual_redesign_preview.py` | Shared fixture identity and fixed-palette comparison-page helpers. |
 | `build_qa_contact_sheets.py` | Eight curated dashboards that summarise the match story. |
-| `tests/` | Metric, substitution, colour and visual-identity regression tests. |
+| `team_palettes.py` | Real home-kit colours for roughly 975 clubs and national teams, organised by league. |
+| `match_store.py` | SQLite match history and the gzipped raw-payload archive. |
+| `team_history.py` | Command-line reader for the stored history, including snapshot replay. |
+| `fixtures.py` | Season-calendar lookup that resolves a fixture to its WhoScored URL. |
+| `data/fixtures/` | Committed EPL, La Liga and Serie A calendars with WhoScored match ids. |
+| `scripts/freeze_golden.py` | Re-freezes the reference output the golden test compares against. |
+| `tests/` | Metric, substitution, colour, visual-identity and end-to-end golden regression tests. |
 
 ## Validation
 
@@ -214,6 +296,20 @@ Useful static checks:
 python -m compileall -q .
 python -m black --check *.py
 python -m ruff check *.py --select E9,F63,F7,F82
+```
+
+The suite includes an end-to-end golden test: the whole metric engine is run
+over the committed France vs England events and every published column is
+compared against a frozen reference. The unit tests prove each definition is
+implemented as written; the golden test proves the assembled pipeline still
+produces the numbers it produced before.
+
+When a metric changes on purpose, read the drift first and then accept it:
+
+```bash
+python -m pytest tests/test_metrics_golden.py   # names every column that moved
+python scripts/freeze_golden.py                 # rewrite the reference
+git diff tests/golden/                          # review the new numbers
 ```
 
 Visual changes should also be checked in the exported PNG and PDF files. The
