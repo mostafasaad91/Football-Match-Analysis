@@ -175,10 +175,15 @@ and all 64 non-PDF outputs byte-for-byte identical.
 
 ### Fixed
 
-- Importing `football_match_analysis` crashed on Windows whenever stdout was a
-  pipe. The stale-copy guard printed its result through characters cp1252
-  cannot encode, so `UnicodeEncodeError` came out of the import itself. Both
-  messages are now ASCII.
+- A full run died on Windows whenever stdout was redirected, after the match
+  had already been fetched, parsed and analysed. The console output uses
+  arrows, box drawing and status glyphs throughout, and a redirected Windows
+  stdout defaults to cp1252, which cannot encode any of them — so the first
+  status line raised `UnicodeEncodeError` and cost the whole analysis. Both
+  streams are now reconfigured to UTF-8 with `errors="replace"` at startup, so
+  a decorative character can never again take down a completed run. The
+  stale-copy guard's messages, one of which crashed the import itself for the
+  same reason, are also plain ASCII now.
 - `reportlab` was imported by `tactical_pdf_report.py` but absent from
   `requirements.txt`, so a fresh install produced every PNG and then failed at
   PDF assembly.

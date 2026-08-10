@@ -21,6 +21,19 @@ Install the required packages:
 #  IMPORTS
 # ══════════════════════════════════════════════════════
 import ast, json, math, os, re, sys, time, random, warnings, shutil, tempfile, hashlib
+
+# The console output uses arrows, box drawing and status glyphs throughout. On
+# Windows a redirected stdout defaults to cp1252, which cannot encode any of
+# them, so the first status line raises UnicodeEncodeError and takes the whole
+# run down after the match has already been fetched and parsed. Ask for UTF-8
+# and fall back to replacing the odd unmappable glyph, so a cosmetic character
+# can never again cost a completed analysis.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # not a reconfigurable text stream
+        pass
+
 import numpy as np
 import pandas as pd
 import matplotlib
