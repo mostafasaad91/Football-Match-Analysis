@@ -43,7 +43,9 @@ from rich.console import Console
 from rich.table import Table
 from matplotlib.backends.backend_pdf import PdfPages
 
-os.environ["MATCH_ANALYSIS_THEME"] = "dark"
+# Default to the AMOLED identity, but honour an explicit theme choice
+# (MATCH_ANALYSIS_THEME=light renders the white "Ink & Petrol" package).
+os.environ.setdefault("MATCH_ANALYSIS_THEME", "dark")
 SOFASCORE_PLAYER_TABLES = False
 SOFASCORE_AUTO_SEARCH = False
 SOFASCORE_EVENT_ID = 15186710
@@ -66,7 +68,6 @@ from match_metrics import (
 )
 
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
-os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 try:
     from tactical_visualizations import (
         make_xg_flow_v2,
@@ -153,7 +154,11 @@ console = Console()
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1995348/live/international-fifa-world-cup-2026-usa-belgium"
+# Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
+MATCH_URL = os.environ.get(
+    "MATCH_ANALYSIS_URL",
+    "https://www.whoscored.com/matches/2007644/live/international-fifa-world-cup-2026-spain-argentina",
+).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -210,7 +215,15 @@ CHROME_PROFILE_NAME = "Default"
 
 BROWSER_USE_REAL_PROFILE = False
 BROWSER_HEADLESS = True
-BROWSER_DOM_FALLBACK_ENABLED = True
+# WhoScored renders the official stats table client-side, so capturing it needs
+# a real browser. On a machine where Chrome startup fails, that attempt still
+# costs around four minutes before giving up — and the run then completes on
+# matchCentreData counts anyway, so the wait buys nothing. Off by default; set
+# MATCH_ANALYSIS_BROWSER_STATS=1 to retry it where Chrome does work.
+BROWSER_DOM_FALLBACK_ENABLED = (
+    os.environ.get("MATCH_ANALYSIS_BROWSER_STATS", "").strip().lower()
+    in {"1", "true", "yes"}
+)
 
 
 LAST_PAGE_HTML = ""
@@ -272,8 +285,13 @@ GROUP_BOARD_MAX_VISUALS = 6
 # ══════════════════════════════════════════════════════
 #  COLORS & CONSTANTS
 # ══════════════════════════════════════════════════════
-FIXED_HOME_COLOR = "#7A3DFF"
-FIXED_AWAY_COLOR = "#BEEA24"
+# Role colours come from the shared theme palette: AMOLED blue/yellow by
+# default, ink/petrol when MATCH_ANALYSIS_THEME=light.
+from visualization_components import (  # noqa: E402
+    C_AWAY as FIXED_AWAY_COLOR,
+    C_HOME as FIXED_HOME_COLOR,
+    USE_REAL_TEAM_KIT_COLORS,
+)
 C_BLUE = FIXED_AWAY_COLOR
 C_RED = FIXED_HOME_COLOR
 C_GREEN = "#22c55e"
@@ -844,6 +862,22 @@ EXTRA_TEAM_PALETTES = {
 }
 TOP5_2025_26_TEAM_PALETTES.update(EXTRA_TEAM_PALETTES)
 
+# ── Bulk kit-colour database ─────────────────────────────────────────────
+# team_palettes.py carries the real home-kit colours for every club that can
+# reach the Champions League, Europa League or Conference League league phase
+# (organised by domestic league so the table does not go stale each season),
+# the non-UEFA continental competitions (CAF, AFC, CONMEBOL, CONCACAF), and
+# every FIFA national team. It is merged non-destructively: the hand-picked
+# entries above always win, the bulk table only fills the gaps.
+try:
+    import team_palettes as _team_palettes
+
+    _added_palettes, _added_aliases = _team_palettes.merge_into(
+        TOP5_2025_26_TEAM_PALETTES, TEAM_ALIASES, overwrite=False
+    )
+except Exception:  # pragma: no cover - the report must still render without it
+    _added_palettes = _added_aliases = 0
+
 # Make the primary colour table cover all new teams while preserving earlier explicit values.
 for _club_name, _palette in TOP5_2025_26_TEAM_PALETTES.items():
     if _palette:
@@ -940,6 +974,11 @@ DEFAULT_HOME = FIXED_HOME_COLOR
 DEFAULT_AWAY = FIXED_AWAY_COLOR
 
 
+# Names the palette could not resolve without guessing, reported at the end of
+# a run so they can be added to TEAM_ALIASES instead of silently drifting.
+UNRESOLVED_TEAM_NAMES: dict[str, str] = {}
+
+
 def get_team_color(team_name: str, fallback: str) -> str:
     """
     Return a team color from TEAM_COLORS.
@@ -961,10 +1000,22 @@ def get_team_color(team_name: str, fallback: str) -> str:
         alias_target = TEAM_ALIASES[name_lc]
         return TEAM_COLORS.get(alias_target, fallback)
 
-    for key, color in TEAM_COLORS.items():
-        key_lc = key.lower()
-        if key_lc in name_lc or name_lc in key_lc:
-            return color
+    # Partial matching only when it is unambiguous. The old loop returned the
+    # first overlapping key, so a two-letter fragment such as "Al " resolved to
+    # Arsenal and any "United" took whichever United came first in the table.
+    if len(name_lc) >= 4:
+        candidates = {
+            key
+            for key in TEAM_COLORS
+            if key.lower() in name_lc or name_lc in key.lower()
+        }
+        if len(candidates) == 1:
+            return TEAM_COLORS[candidates.pop()]
+        if len(candidates) > 1:
+            UNRESOLVED_TEAM_NAMES.setdefault(
+                team_name,
+                f"ambiguous between {len(candidates)}: {', '.join(sorted(candidates)[:4])}",
+            )
 
     return fallback
 
@@ -1089,18 +1140,44 @@ def _canonical_team_name(team_name: str) -> str:
     return raw
 
 
+def _partial_palette_matches(canonical: str) -> list[str]:
+    """Return every palette key a shortened provider name could refer to."""
+    low = (canonical or "").strip().lower()
+    if len(low) < 4:
+        # Two- and three-letter fragments match half the table; treat them as
+        # no information rather than as a lookup.
+        return []
+    return [
+        key
+        for key in TOP5_2025_26_TEAM_PALETTES
+        if low in key.lower() or key.lower() in low
+    ]
+
+
 def _team_palette(team_name: str, fallback: str) -> list[str]:
-    """Return the kit palette for a team; always at least one colour."""
+    """Return the kit palette for a team; always at least one colour.
+
+    Partial matching used to take the first key that overlapped the name, which
+    with ~975 teams in the table quietly resolved "Al Ahli" to Al Ahli Saudi's
+    green and "America" to Club América's yellow. A wrong colour attributed
+    with full confidence is worse than an obviously unknown one, so an
+    ambiguous name is now refused and recorded for review rather than guessed.
+    """
     canonical = _canonical_team_name(team_name)
     pal = TOP5_2025_26_TEAM_PALETTES.get(canonical)
     if not pal:
-        # Try loose matching for shortened provider names.
-        low = canonical.lower()
-        for key, vals in TOP5_2025_26_TEAM_PALETTES.items():
-            k = key.lower()
-            if low and (low in k or k in low):
-                pal = vals
-                break
+        candidates = _partial_palette_matches(canonical)
+        if len(candidates) == 1:
+            pal = TOP5_2025_26_TEAM_PALETTES[candidates[0]]
+            if candidates[0].lower() != canonical.lower():
+                UNRESOLVED_TEAM_NAMES.setdefault(
+                    team_name, f"matched on partial name -> {candidates[0]}"
+                )
+        elif len(candidates) > 1:
+            shortlist = ", ".join(sorted(candidates)[:4])
+            UNRESOLVED_TEAM_NAMES.setdefault(
+                team_name, f"ambiguous between {len(candidates)}: {shortlist}"
+            )
     if not pal:
         looked_up = get_team_color(canonical or team_name, fallback)
         if looked_up == fallback:
@@ -1221,6 +1298,11 @@ def _readable_kit_candidate(
     return best
 
 
+# Stand-in for a white home shirt. Distinct from the pure #FFFFFF used by pitch
+# markings and the highlight layer, still unmistakably "the white team".
+WHITE_KIT_SILVER = "#DCE3EC"
+
+
 def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
     """
     Avoid invisible black/near-black on the dark visual background.
@@ -1262,12 +1344,16 @@ def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") 
             team_name, pal[1:] + pal[:1], fallback, allow_light=False
         )
 
-    # Pure white / off-white kits only (keep yellows/golds as visible bar colours)
+    # Pure white / off-white kits (keep yellows/golds as visible bar colours).
+    #
+    # These used to fall through to the next palette entry, which sent a
+    # white-shirted side to a colour it does not play in — Juventus came out
+    # gold, Real Madrid came out gold. On the pure-black page white is the most
+    # readable colour there is, and it is also the honest one. Substitute a soft
+    # silver instead: it still reads as "the white kit team", but stays clear of
+    # pure #FFFFFF, which the highlight layer and pitch markings already own.
     if lum >= 0.80:
-        pal = _team_palette(team_name, fallback)
-        return _readable_kit_candidate(
-            team_name, pal[1:] + pal[:1], fallback, allow_light=False
-        )
+        return WHITE_KIT_SILVER
 
     return hex_color
 
@@ -1309,13 +1395,18 @@ def choose_matchup_colors(
     home_name: str, away_name: str, home_kit_type=None, away_kit_type=None
 ):
     """
-    Return the canonical production role colours for every fixture.
+    Return the two display colours for a fixture.
 
-    Team names, kits and competition do not alter this mapping: the first-listed
-    (home) side is always ultraviolet and the second-listed (away) side is
-    always chartreuse. This keeps every chart, report and QA sheet visually stable.
+    With ``USE_REAL_TEAM_KIT_COLORS`` (the default, set
+    ``MATCH_ANALYSIS_TEAM_COLORS=roles`` to turn it off) each side is drawn in
+    its real home-kit colour resolved through ``TOP5_2025_26_TEAM_PALETTES``
+    and the bulk table in ``team_palettes.py``, with the clash- and
+    contrast-resolution passes below. In ``roles`` mode team names, kits and
+    competition do not alter the mapping: the first-listed (home) side is
+    always electric blue and the second-listed (away) side is always true
+    yellow, which keeps every chart, report and QA sheet visually stable.
 
-    v6 fix:
+    Kit-colour resolution:
       - White/off-white primary kits are replaced with the team's accent or
         alternate colour so visuals remain readable on the dark background.
       - Home team uses a visible version of their HOME kit colour.
@@ -1326,7 +1417,8 @@ def choose_matchup_colors(
       - Very light alternates are avoided when a readable non-light alternate is
         available with enough contrast.
     """
-    return FIXED_HOME_COLOR, FIXED_AWAY_COLOR
+    if not USE_REAL_TEAM_KIT_COLORS:
+        return FIXED_HOME_COLOR, FIXED_AWAY_COLOR
 
     custom_home = (CUSTOM_KIT_COLORS or {}).get("home")
     custom_away = (CUSTOM_KIT_COLORS or {}).get("away")
@@ -1413,18 +1505,30 @@ def choose_matchup_colors(
         return home_primary, away_primary
 
     # ── Step 3: Try away palette colours for better contrast ───────
+    # Preference order matters more than raw distance here. A generic neutral
+    # is always the furthest colour from a saturated home kit, so a pure
+    # "maximise distance" search hands every red-v-red derby a grey away team
+    # and throws the away side's identity away. Walk the away team's own kit
+    # colours in order — accent/stripe, then alternate, then primary — and take
+    # the first one that already separates cleanly from the home colour.
+    away_candidates = []
+    if len(away_palette) >= 2:
+        away_candidates.append(away_palette[1])  # accent/stripe
+    if len(away_palette) >= 3:
+        away_candidates.append(away_palette[2])  # alternate/away kit
+    away_candidates += away_palette
+
+    for ac in away_candidates:
+        ac = _usable_on_dark(ac, "#9CA3AF")
+        if _color_distance(home_primary, ac) >= 0.34 and _light_penalty(ac) == 0.0:
+            return home_primary, ac
+
+    # No kit colour separated cleanly: fall back to the widest-separation
+    # search, neutrals included.
     best_away = away_primary
     best_score = _color_distance(home_primary, away_primary) - _light_penalty(
         away_primary
     )
-    # Prefer alternate/away colours first, then the rest
-    away_candidates = []
-    if len(away_palette) >= 3:
-        away_candidates.append(away_palette[2])  # alternate/away kit
-    if len(away_palette) >= 2:
-        away_candidates.append(away_palette[1])  # accent/stripe
-    away_candidates += away_palette
-
     for ac in away_candidates:
         ac = _usable_on_dark(ac, "#9CA3AF")
         score = _color_distance(home_primary, ac) - _light_penalty(ac)
@@ -1470,12 +1574,28 @@ HOME_COLOR = DEFAULT_HOME
 AWAY_COLOR = DEFAULT_AWAY
 
 BG_DARK = "#000000"
-BG_MID = "#020202"
-PITCH_COL = "#030303"
+BG_MID = "#000000"
+PITCH_COL = "#000000"
 GRID_COL = "#2A2A2A"
 TEXT_MAIN = "#F4F8FF"
 TEXT_DIM = "#D6DEE8"
 TEXT_BRIGHT = "#FFFFFF"
+
+# Pitch markings for the legacy renderer. These used to be green (#3d8a3d),
+# which read as a faint grass tint on the black page and clashed with any team
+# playing in green. White at a controlled alpha matches the rest of the report.
+from visualization_components import (  # noqa: E402
+    PITCH_LINE,
+    PITCH_LINE_ALPHA,
+    PITCH_LINE_WIDTH,
+    SHOT_BLOCKED,
+    SHOT_GOAL,
+    SHOT_MISS,
+    SHOT_OWN_GOAL,
+    SHOT_POST,
+    SHOT_SAVED,
+    shot_outcome_color,
+)
 
 
 def _relative_luminance_hex(color: str) -> float:
@@ -1586,12 +1706,16 @@ SHOT_FAMILY = {
     "ShotOnPost": "Off Target",
 }
 
+# Outcome colours come from the shared shot palette (visualization_components)
+# so every shot map in the report — legacy and v2 — uses one key: red scored,
+# blue saved, orange off target, grey blocked, violet woodwork. Marker shape is
+# kept as the secondary, colour-blind-safe encoding of the same outcome.
 SHOT_STYLE_RAW = {
-    "Goal": ("*", "#FFD700", "#ffffff", 520, 8, "Goal"),
-    "SavedShot": ("o", "#00FF87", "#a7f3d0", 220, 6, "SavedShot"),
-    "MissedShots": ("X", "#FF6B6B", "#fca5a5", 180, 5, "MissedShots"),
-    "BlockedShot": ("s", "#FFE66D", "#fed7aa", 180, 5, "BlockedShot"),
-    "ShotOnPost": ("D", "#A855F7", "#d8b4fe", 200, 6, "ShotOnPost"),
+    "Goal": ("*", SHOT_GOAL, "#ffffff", 520, 8, "Goal"),
+    "SavedShot": ("o", SHOT_SAVED, "#a7c8e8", 220, 6, "SavedShot"),
+    "MissedShots": ("X", SHOT_MISS, "#f7cfa8", 180, 5, "MissedShots"),
+    "BlockedShot": ("s", SHOT_BLOCKED, "#dcdcdc", 180, 5, "BlockedShot"),
+    "ShotOnPost": ("D", SHOT_POST, "#d8b4fe", 200, 6, "ShotOnPost"),
 }
 
 SHOT_BREAKDOWN_KEYS = ["shots", "post", "on_target", "off_target", "blocked"]
@@ -1964,6 +2088,46 @@ _HEADERS_POOL = [
 ]
 
 
+def _try_curl_impersonate(url: str) -> dict:
+    """Fetch the match page with a browser-shaped TLS fingerprint.
+
+    WhoScored refuses a stock Python HTTP client during the TLS handshake,
+    before a single header is read, which is why changing the User-Agent never
+    helped and the pipeline fell through to driving a real Chrome. ``curl_cffi``
+    reproduces Chrome's TLS and HTTP/2 fingerprint, so the same page returns 200
+    over a plain GET — under a second, against minutes for the browser path.
+
+    The browser attempts are kept behind this one as a fallback: if the
+    impersonation profile goes stale, the report still gets built.
+    """
+    try:
+        from curl_cffi import requests as curl_requests
+    except ImportError:
+        raise RuntimeError("curl-cffi is not installed; run: pip install curl-cffi")
+
+    console.print("[cyan]  [1/4] Trying curl-cffi (browser TLS fingerprint)...[/cyan]")
+    session = curl_requests.Session(
+        impersonate="chrome",
+        headers={
+            "Referer": "https://www.whoscored.com/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-GB,en;q=0.9",
+        },
+    )
+    try:
+        resp = session.get(url, timeout=45)
+        if resp.status_code != 200:
+            raise RuntimeError(f"HTTP {resp.status_code}")
+        if "matchCentreData" not in resp.text:
+            raise RuntimeError("matchCentreData not found — challenge page or layout change")
+
+        _capture_scraped_page(resp.text)
+        console.print("[green]  curl-cffi succeeded![/green]")
+        return _extract_match_data(resp.text)
+    finally:
+        session.close()
+
+
 def _try_cloudscraper(url: str) -> dict:
     """
     Attempt 1: use cloudscraper to bypass Cloudflare without a browser.
@@ -1976,7 +2140,7 @@ def _try_cloudscraper(url: str) -> dict:
             "cloudscraper is not installed; run: pip install cloudscraper"
         )
 
-    console.print("[cyan]  [1/3] Trying cloudscraper...[/cyan]")
+    console.print("[cyan]  [2/4] Trying cloudscraper...[/cyan]")
     scraper = cloudscraper.create_scraper(
         browser={"browser": "chrome", "platform": "windows", "mobile": False}
     )
@@ -2003,7 +2167,7 @@ def _try_requests(url: str) -> dict:
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
 
-    console.print("[cyan]  [2/3] Trying requests + session...[/cyan]")
+    console.print("[cyan]  [3/4] Trying requests + session...[/cyan]")
 
     session = requests.Session()
     retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
@@ -2050,7 +2214,7 @@ def _try_chrome(
 
     from selenium.webdriver.support.ui import WebDriverWait
 
-    console.print("[cyan]  [3/3] Trying Chrome + stealth...[/cyan]")
+    console.print("[cyan]  [4/4] Trying Chrome + stealth...[/cyan]")
 
     opts = uc.ChromeOptions()
     opts.add_argument("--no-sandbox")
@@ -2200,9 +2364,21 @@ def scrape_match(
     profile_name: str = "Default",
 ) -> dict:
     """
-    Try three methods in order and raise a clear exception if all fail.
+    Try four methods in order and raise a clear exception if all fail.
+
+    curl-cffi goes first because it is the only one that answers in under a
+    second: it wins on the TLS fingerprint rather than by driving a browser.
+    The older attempts stay behind it so a stale impersonation profile degrades
+    to the slow path instead of failing the run.
     """
     errors = []
+
+    try:
+        return _try_curl_impersonate(url)
+    except Exception as e:
+        msg = f"curl-cffi: {e}"
+        errors.append(msg)
+        console.print(f"[yellow]  ✗ {msg}[/yellow]")
 
     try:
         return _try_cloudscraper(url)
@@ -3115,6 +3291,25 @@ def has_q(quals, name: str) -> bool:
     )
 
 
+def q_value(quals, name: str) -> float | None:
+    """Return a qualifier's numeric value, or None when absent/unparseable.
+
+    ``has_q`` only answers whether a qualifier is present. Shot placement needs
+    the value: GoalMouthY is the crossing point across the goal line and
+    GoalMouthZ is its height, and both are what a goal-frame plot is drawn from.
+    """
+    if not isinstance(quals, list):
+        return None
+    for q in quals:
+        if q.get("type", {}).get("displayName") != name:
+            continue
+        try:
+            return float(q.get("value"))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def get_shot_family(raw_type: str) -> str | None:
     return SHOT_FAMILY.get(raw_type)
 
@@ -3403,17 +3598,33 @@ def _candidate_official_urls(url: str) -> list[str]:
 def _fetch_html_via_http(url: str) -> tuple[str, str]:
     html = ""
     text = ""
+    # curl-cffi first for the same reason as the match page: WhoScored refuses
+    # a stock client at the TLS handshake, and cloudscraper's retries are what
+    # made this path take minutes when it was going to fail anyway.
     try:
-        import cloudscraper
+        from curl_cffi import requests as curl_requests
 
-        scraper = cloudscraper.create_scraper(
-            browser={"browser": "chrome", "platform": "windows", "mobile": False}
-        )
-        resp = scraper.get(url, timeout=60)
-        if resp is not None and getattr(resp, "status_code", None) == 200:
-            html = resp.text or ""
+        with curl_requests.Session(
+            impersonate="chrome",
+            headers={"Referer": "https://www.whoscored.com/"},
+        ) as session:
+            resp = session.get(url, timeout=25)
+            if resp is not None and getattr(resp, "status_code", None) == 200:
+                html = resp.text or ""
     except Exception:
         pass
+    if not html:
+        try:
+            import cloudscraper
+
+            scraper = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "windows", "mobile": False}
+            )
+            resp = scraper.get(url, timeout=60)
+            if resp is not None and getattr(resp, "status_code", None) == 200:
+                html = resp.text or ""
+        except Exception:
+            pass
     if not html:
         try:
             import requests
@@ -4632,6 +4843,20 @@ def parse_all(md: dict):
                 "is_header": has_q(quals, "Head"),
                 "is_penalty": has_q(quals, "Penalty"),
                 "is_penalty_shootout": is_penalty_shootout,
+                # Where the shot crossed the goal line: Y across the width,
+                # Z its height. Feeds the goalkeeper goal-frame plot; absent on
+                # blocked shots and on wild misses the provider does not track.
+                "goal_mouth_y": q_value(quals, "GoalMouthY") if is_shot else None,
+                "goal_mouth_z": q_value(quals, "GoalMouthZ") if is_shot else None,
+                # Where a blocked shot was stopped, for block geometry.
+                "blocked_x": q_value(quals, "BlockedX") if is_shot else None,
+                "blocked_y": q_value(quals, "BlockedY") if is_shot else None,
+                # Provider pass length/angle. Both are also derivable from the
+                # coordinates, so the metrics layer falls back to geometry when
+                # these are absent — but the provider values are the truth when
+                # present, and cost nothing to carry.
+                "pass_length": q_value(quals, "Length") if is_pass else None,
+                "pass_angle": q_value(quals, "Angle") if is_pass else None,
                 "big_chance": has_q(quals, "BigChance"),
                 "body_part": next(
                     (
@@ -4921,12 +5146,13 @@ def _player_role_badge(pid, sub_in, sub_out, red_cards):
 # ══════════════════════════════════════════════════════
 #  PITCH
 # ══════════════════════════════════════════════════════
-def draw_pitch(ax, pitch_color=None, line_color=None, line_alpha=0.82):
+def draw_pitch(ax, pitch_color=None, line_color=None, line_alpha=None):
     pc = pitch_color or PITCH_COL
     ax.set_facecolor(pc)
     is_light = pc in ("white", "#ffffff", "#f5f5f5", "#fafafa")
-    lc = line_color or ("black" if is_light else "#3d8a3d")
-    lw = 1.15
+    lc = line_color or ("black" if is_light else PITCH_LINE)
+    line_alpha = PITCH_LINE_ALPHA if line_alpha is None else line_alpha
+    lw = PITCH_LINE_WIDTH
 
     def L(*args, **kw):
         a = kw.pop("alpha", line_alpha)
@@ -15311,6 +15537,13 @@ def main():
         f"[dim]  Fixed visual roles: {info.get('home_name', '?')} = {home_col}  |  "
         f"{info.get('away_name', '?')} = {away_col}[/dim]"
     )
+    # A name the palette could not pin down produced a placeholder colour, not
+    # the club's. Say so, rather than let a wrong kit ship looking deliberate.
+    for unresolved, reason in UNRESOLVED_TEAM_NAMES.items():
+        console.print(
+            f"[yellow]  Team name not resolved: {unresolved!r} — {reason}. "
+            f"Add it to TEAM_ALIASES to fix the colour.[/yellow]"
+        )
 
     # First try the official team stats already embedded in matchCentreData.
     # This is the most stable path and avoids Selenium completely when available.
@@ -15400,6 +15633,25 @@ def main():
         index=False,
         encoding="utf-8-sig",
     )
+
+    # Append this fixture to the persistent history so questions spanning more
+    # than one match are answerable. Re-analysing the same fixture replaces its
+    # earlier rows rather than double-counting it. A storage failure must never
+    # cost the caller the report they just waited for.
+    try:
+        from match_store import DEFAULT_DB, save_match, save_snapshot
+
+        stored_id = save_match(
+            info, team_advanced_frame, player_sequence_frame, url=MATCH_URL
+        )
+        # Keep the provider payload verbatim so a metric added next month can be
+        # computed across every stored match without fetching a page again.
+        save_snapshot(stored_id, md)
+        console.print(
+            f"[dim]  History → {DEFAULT_DB.name}  (match {stored_id}, raw snapshot kept)[/dim]"
+        )
+    except Exception as error:  # pragma: no cover - never block the report
+        console.print(f"[yellow]  Could not write match history: {error}[/yellow]")
 
     print_summary(info, xg_data, events)
 

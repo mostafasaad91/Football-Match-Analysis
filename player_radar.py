@@ -30,13 +30,22 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
 from match_metrics import (
     box_entry_mask,
     player_sequence_metrics,
     progressive_pass_mask,
     touch_mask,
 )
-from visualization_components import C_AWAY, C_HOME, C_GOLD
+from visualization_components import (
+    C_AWAY,
+    C_HOME,
+    C_GOLD,
+    IS_LIGHT_THEME,
+    contrast_ratio,
+    label_outline,
+    text_on_fill,
+)
 
 try:
     import visual_redesign_preview as _identity
@@ -46,6 +55,48 @@ except Exception:  # pragma: no cover - fallback colours
     BG_DARK, TEXT_BRIGHT, TEXT_DIM = "#000000", "#F7F7F5", "#A3A3A3"
 
 RADAR_GRID = _identity.GRID if _identity is not None else "#242424"
+
+
+def team_group_colors(team_color: str, n_groups: int) -> list[str]:
+    """Return one shade per metric group, all drawn from the team's own colour.
+
+    A radar belongs to a player, and a player belongs to a team, so the whole
+    chart should read in that team's colour rather than a fixed category
+    palette. Hue and saturation are held constant and only lightness varies, so
+    the groups stay separable while the radar still reads as one team.
+
+    Kits with almost no saturation (white/silver sides) fall back to a grey
+    ramp of the same shape, which is the honest rendering of a white shirt.
+    """
+    import colorsys
+
+    try:
+        r, g, b = mcolors.to_rgb(team_color)
+    except (ValueError, TypeError):
+        r, g, b = mcolors.to_rgb(C_HOME)
+    hue, _lightness, saturation = colorsys.rgb_to_hls(r, g, b)
+    # Lightness range chosen so the darkest step still separates from the black
+    # page and the lightest stays below pure white.
+    lows, highs = 0.40, 0.80
+    if n_groups <= 1:
+        levels = [(lows + highs) / 2]
+    else:
+        levels = [
+            lows + (highs - lows) * i / (n_groups - 1) for i in range(n_groups)
+        ]
+    # Alternate dark/light so neighbouring groups never sit on adjacent steps.
+    ordered = []
+    front, back = 0, len(levels) - 1
+    while front <= back:
+        ordered.append(levels[back])
+        if front != back:
+            ordered.append(levels[front])
+        front += 1
+        back -= 1
+    return [
+        mcolors.to_hex(colorsys.hls_to_rgb(hue, level, max(saturation, 0.06)))
+        for level in ordered[:n_groups]
+    ]
 
 # ── Metric layout: (group name, colour, [metric labels]) ──────────────────────
 # A full tactical + numerical match profile, grouped by role of the action.
@@ -94,14 +145,39 @@ GROUPS = [
 
 
 def _chip_text_color(color: str) -> str:
-    """Keep metric values readable on both bright and dark group fills."""
-    value = str(color).lstrip("#")
-    if len(value) != 6:
+    """Keep metric values readable on the group-coloured chip fill.
+
+    Contrast is measured against the *fill*, not the page, so the returned
+    colours are absolute rather than the theme's text/background — otherwise a
+    dark fill on the light theme would take dark text and vanish.
+
+    This used to split on a fixed luminance of 0.36, which broke as soon as the
+    chips took their colour from the team. Every ramp has mid steps that sit
+    just under that line and got white text at 2.6–4.1 contrast (Man City
+    #59a0d9, Liverpool #f47187, Juventus #7b95b7). Picking whichever tier
+    actually measures highest against the fill fixes all of them at once.
+    """
+    return text_on_fill(color)
+
+
+def _readable_on_page(color: str, min_ratio: float = 4.0) -> str:
+    """Lift a group shade until it reads as text on the page background.
+
+    The darkest step of a ramp is fine as a fill or a legend dot but too dim as
+    a label on black. Blend it toward the page's text colour until it clears.
+    """
+    try:
+        if contrast_ratio(color, BG_DARK) >= min_ratio:
+            return color
+        rgb = np.asarray(mcolors.to_rgb(color), dtype=float)
+        target = np.asarray(mcolors.to_rgb(TEXT_BRIGHT), dtype=float)
+        for amount in np.linspace(0.1, 0.85, 16):
+            lifted = mcolors.to_hex(rgb * (1 - amount) + target * amount)
+            if contrast_ratio(lifted, BG_DARK) >= min_ratio:
+                return lifted
         return TEXT_BRIGHT
-    rgb = [int(value[i : i + 2], 16) / 255.0 for i in (0, 2, 4)]
-    linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
-    luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
-    return TEXT_BRIGHT if luminance < 0.36 else BG_DARK
+    except Exception:
+        return TEXT_BRIGHT
 # metrics whose chip shows "numerator / denominator" instead of a single number.
 # Value is (numerator_key, denominator_key); the bar still uses the label's own
 # value. Passes/Shots/Long balls -> completed·on-target / total; duels -> won / contested.
@@ -874,13 +950,25 @@ def _player_role(events: pd.DataFrame, player: str, default="Player") -> str:
 
 
 def make_player_pizza(
-    events, player, team_name, role, allm, elig, subtitle_extra="", opponent_name=""
+    events, player, team_name, role, allm, elig, subtitle_extra="", opponent_name="",
+    team_color=None,
 ):
-    """Build and return the pizza Figure for one player."""
+    """Build and return the pizza Figure for one player.
+
+    ``team_color`` paints the whole radar in the player's team colour, one
+    lightness step per metric group. Omit it to keep the legacy fixed palette.
+    """
     me_m = player_metrics(events, player)
 
+    group_colors = (
+        team_group_colors(team_color, len(GROUPS))
+        if team_color
+        else [gc for _gn, gc, _ms in GROUPS]
+    )
+
     labels, colors, vals, disps, pcts, gidx = [], [], [], [], [], []
-    for gi, (_gn, gc, ms) in enumerate(GROUPS):
+    for gi, (_gn, _gc, ms) in enumerate(GROUPS):
+        gc = group_colors[gi]
         for m in ms:
             v = me_m.get(m, 0)
             labels.append(m)
@@ -935,7 +1023,8 @@ def make_player_pizza(
         )
 
     # faint per-category background zones
-    for gi, (_gn, gc, _ms) in enumerate(GROUPS):
+    for gi, (_gn, _gc, _ms) in enumerate(GROUPS):
+        gc = group_colors[gi]
         ids = [i for i in range(N) if gidx[i] == gi]
         a0 = angs[ids[0]] - width / 2 - np.radians(1.2)
         a1 = angs[ids[-1]] + width / 2 + np.radians(1.2)
@@ -963,7 +1052,8 @@ def make_player_pizza(
     )
 
     # category arcs
-    for gi, (_gn, gc, _ms) in enumerate(GROUPS):
+    for gi, (_gn, _gc, _ms) in enumerate(GROUPS):
+        gc = group_colors[gi]
         ids = [i for i in range(N) if gidx[i] == gi]
         a0 = angs[ids[0]] - width / 2 - np.radians(1.5)
         a1 = angs[ids[-1]] + width / 2 + np.radians(1.5)
@@ -1005,6 +1095,10 @@ def make_player_pizza(
             va="center",
             zorder=7,
             clip_on=False,
+            # Saturated mid-lightness fills (a red team's middle ramp step)
+            # sit where neither tier quite clears 4.5:1 on its own. The stroke
+            # is a no-op everywhere else.
+            path_effects=label_outline(c, linewidth=1.4),
             bbox=dict(boxstyle="round,pad=0.24", fc=c, ec=BG_DARK, lw=1.2),
         )
     for sp in ax.spines.values():
@@ -1030,7 +1124,8 @@ def make_player_pizza(
     step = min(0.135, 0.90 / max(ng - 1, 1))
     lfs = 11 if ng <= 5 else 9
     lx = 0.5 - (ng - 1) * step / 2 - 0.02  # centre the legend row
-    for gn, gc, _ms in GROUPS:
+    for gi, (gn, _gc, _ms) in enumerate(GROUPS):
+        gc = group_colors[gi]
         fig.add_artist(
             mpatches.Circle(
                 (lx, 0.822), 0.006, transform=fig.transFigure, facecolor=gc, ec="none"
@@ -1040,7 +1135,10 @@ def make_player_pizza(
             lx + 0.012,
             0.822,
             gn,
-            color=gc,
+            # The dot carries the exact group shade; the label is lifted until
+            # it reads on the page, because the darkest step of a ramp is too
+            # dim as text even though it is fine as a fill.
+            color=_readable_on_page(gc),
             fontsize=lfs,
             fontweight="bold",
             family="monospace",
@@ -1252,6 +1350,20 @@ def _rating(allm, elig, events, player):
     return float(np.mean(ps)) if ps else 0.0
 
 
+def _side_team_color(info, side: str) -> str:
+    """Resolve the fixture colour for one side, so a player's radar carries
+    their own team's colour rather than a fixed category palette."""
+    key = "home_color" if side == "home" else "away_color"
+    supplied = str((info or {}).get(key) or "").strip()
+    if supplied:
+        try:
+            mcolors.to_rgb(supplied)
+            return supplied
+        except ValueError:
+            pass
+    return C_HOME if side == "home" else C_AWAY
+
+
 def export_player_radars(events, info, out_dir, dpi=115):
     """Save one pizza PNG per participating player into per-team folders.
 
@@ -1274,6 +1386,7 @@ def export_player_radars(events, info, out_dir, dpi=115):
                 fig = make_player_pizza(
                     events, p, team_name, role, allm, elig,
                     opponent_name=str(opponent or ""),
+                    team_color=_side_team_color(info, side),
                 )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
@@ -1317,6 +1430,7 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                 fig = make_player_pizza(
                     events, p, team_name, role, allm, elig,
                     opponent_name=str(opponent or ""),
+                    team_color=_side_team_color(info, side),
                 )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
@@ -1341,6 +1455,7 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     elig,
                     subtitle_extra=f"Team rank #{rank}",
                     opponent_name=str(opp[side]),
+                    team_color=_side_team_color(info, side),
                 )
                 try:
                     note = player_commentary(

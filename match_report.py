@@ -84,19 +84,21 @@ def configure_theme(theme: str | None = None) -> None:
     global BG_DARK, BG_MID, BG_PANEL, BG_HEADER, GRID_COL, TEXT_MAIN, TEXT_BRIGHT, TEXT_DIM, TEXT_FADED, C_GOLD, RATING_CMAP
     theme = (theme or os.environ.get("MATCH_ANALYSIS_THEME", "dark")).strip().lower()
     if theme == "light":
-        BG_DARK = "#FFFFFF"
-        BG_MID = "#F3F4F6"
+        # Mirrors LIGHT_PALETTE in visualization_components: #F5F5F5 page,
+        # charcoal type (never pure black — the home team owns black).
+        BG_DARK = "#F5F5F5"
+        BG_MID = "#EDEDED"
         BG_PANEL = "#FFFFFF"
-        BG_HEADER = "#E5E7EB"
-        GRID_COL = "#D1D5DB"
-        TEXT_MAIN = "#1F2937"
-        TEXT_BRIGHT = "#111827"
-        TEXT_DIM = "#4B5563"
-        TEXT_FADED = "#6B7280"
-        C_GOLD = "#FFC23C"
+        BG_HEADER = "#E8E8E8"
+        GRID_COL = "#CCCCCC"
+        TEXT_MAIN = "#333333"
+        TEXT_BRIGHT = "#333333"
+        TEXT_DIM = "#666666"
+        TEXT_FADED = "#888888"
+        C_GOLD = "#14505C"
         RATING_CMAP = LinearSegmentedColormap.from_list(
             "rating",
-            ["#FEE2E2", "#FDBA74", "#FACC15", "#86EFAC", "#7DD3FC", "#38BDF8"],
+            ["#E8D5C4", "#D9A87C", "#C99A3C", "#7FB07F", "#5C93AE", "#14505C"],
         )
     else:
         BG_DARK = "#000000"
@@ -165,12 +167,42 @@ def _team_label_color(col: str | None, bg: str | None = None) -> str:
     return TEXT_BRIGHT
 
 
-C_HOME = "#7A3DFF"  # canonical first-listed team role
-C_AWAY = "#BEEA24"  # canonical second-listed team role
+# Canonical team roles come from the shared palette so the report follows the
+# active theme (AMOLED blue/yellow · light ink/petrol).
+from visualization_components import (  # noqa: E402
+    C_AWAY,
+    C_HOME,
+    USE_REAL_TEAM_KIT_COLORS,
+)
 C_GOLD = "#FFC23C"
 C_GREEN = "#22c55e"
 C_PURPLE = "#a855f7"
 OG_COLOR = "#ff00ff"
+
+
+def _fixture_colors(info: dict) -> tuple[str, str]:
+    """Return the two display colours for a fixture.
+
+    Kit mode resolves each side's real home-kit colour from the shared team
+    palette (with clash and dark-page contrast handling). Roles mode, and any
+    fixture whose two kits resolve too close together, uses the fixed pair so
+    the two teams are never drawn in the same colour.
+    """
+    if not USE_REAL_TEAM_KIT_COLORS:
+        return C_HOME, C_AWAY
+    home_name = str((info or {}).get("home_name") or "").strip()
+    away_name = str((info or {}).get("away_name") or "").strip()
+    if not home_name or not away_name:
+        return C_HOME, C_AWAY
+    try:
+        from football_match_analysis import choose_matchup_colors
+
+        home, away = choose_matchup_colors(home_name, away_name)
+    except Exception:
+        return C_HOME, C_AWAY
+    if not home or not away or home.lower() == away.lower():
+        return C_HOME, C_AWAY
+    return home, away
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -333,6 +365,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict, save_path: str | None = None):
     Draw a complete PPDA analysis with a dial and numeric breakdown for each
     team, plus a small pitch-area guide and an intensity classification.
     """
+    _team_home_col, _team_away_col = _fixture_colors(info)
     fig = _new_dark_fig(14, 8)
     fig.patch.set_facecolor(BG_DARK)
     if _neon_backdrop is not None:
@@ -550,17 +583,17 @@ def draw_ppda_gauge(ppda_data: dict, info: dict, save_path: str | None = None):
             fontweight="bold",
         )
 
-    _draw_dial([0.05, 0.42, 0.40, 0.45], home_name, h, h_passes, h_def, C_HOME)
-    _draw_dial([0.55, 0.42, 0.40, 0.45], away_name, a, a_passes, a_def, C_AWAY)
+    _draw_dial([0.05, 0.42, 0.40, 0.45], home_name, h, h_passes, h_def, _team_home_col)
+    _draw_dial([0.55, 0.42, 0.40, 0.45], away_name, a, a_passes, a_def, _team_away_col)
 
     if h is not None and a is not None:
         if h < a:
             verdict = f"{home_name} pressed more aggressively"
-            v_color = C_HOME
+            v_color = _team_home_col
             diff = a - h
         elif a < h:
             verdict = f"{away_name} pressed more aggressively"
-            v_color = C_AWAY
+            v_color = _team_away_col
             diff = h - a
         else:
             verdict = "Both teams pressed equally"
@@ -1072,7 +1105,7 @@ def draw_player_stats_table(
         return fig
 
     # ── Group header row (y=0..1) ──
-    is_light_theme = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
+    is_light_theme = BG_DARK.upper() in {"#FFFFFF", "WHITE", "#F5F5F5"}
     group_header_colors = (
         GROUP_HEADER_COLORS_LIGHT if is_light_theme else GROUP_HEADER_COLORS
     )
@@ -1778,6 +1811,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
     """One-page executive summary: the verdict, the six numbers that decided the
     match, the key moments and a two-sentence story — the front page a coach or
     analyst reads first."""
+    _team_home_col, _team_away_col = _fixture_colors(info)
     fig = _new_dark_fig(11.7, 8.27)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
@@ -1943,7 +1977,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
             0.44,
             hv,
             ha="center",
-            color=C_GOLD if h_win is True else TEXT_BRIGHT,
+            color=TEXT_BRIGHT,
             fontsize=14,
             fontweight="bold",
             family="monospace",
@@ -1953,7 +1987,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
             0.44,
             av,
             ha="center",
-            color=C_GOLD if h_win is False else TEXT_BRIGHT,
+            color=TEXT_BRIGHT,
             fontsize=14,
             fontweight="bold",
             family="monospace",
@@ -1963,7 +1997,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
             0.14,
             hn[:9],
             ha="center",
-            color=C_HOME,
+            color=_team_home_col,
             fontsize=6.8,
             fontweight="bold",
         )
@@ -1972,7 +2006,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
             0.14,
             an[:9],
             ha="center",
-            color=C_AWAY,
+            color=_team_away_col,
             fontsize=6.8,
             fontweight="bold",
         )
@@ -1991,7 +2025,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
     my = 0.355
     if moments:
         for mn, scorer, team, tag in moments[:6]:
-            col = C_HOME if team == hn else (C_AWAY if team == an else TEXT_BRIGHT)
+            col = _team_home_col if team == hn else (_team_away_col if team == an else TEXT_BRIGHT)
             fig.text(
                 0.06,
                 my,
@@ -2054,6 +2088,7 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
     result on xG, finishing efficiency, control vs penetration, the pressing
     battle and how the game was decided, laid out in two analyst columns with a
     numeric match ledger."""
+    _team_home_col, _team_away_col = _fixture_colors(info)
     fig = _new_dark_fig(11.7, 8.27)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
@@ -2241,7 +2276,7 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
         0.075,
         led_y + 0.045,
         hn[:14],
-        color=C_HOME,
+        color=_team_home_col,
         fontsize=8.5,
         fontweight="bold",
         family="monospace",
@@ -2250,7 +2285,7 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
         0.075,
         led_y + 0.012,
         an[:14],
-        color=C_AWAY,
+        color=_team_away_col,
         fontsize=8.5,
         fontweight="bold",
         family="monospace",
@@ -2312,6 +2347,7 @@ def _wrap_text_simple(text, width):
 def _draw_glance_page(pdf, info, events, ppda, goals_df):
     """One-screen 'Match at a Glance' dashboard: score + home/away split bars
     for xG, shots, on-target and possession."""
+    _team_home_col, _team_away_col = _fixture_colors(info)
     fig = _new_dark_fig(11.7, 8.27)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
@@ -2351,7 +2387,7 @@ def _draw_glance_page(pdf, info, events, ppda, goals_df):
         fontweight="bold",
         path_effects=[pe.withStroke(linewidth=3, foreground=BG_DARK)],
     )
-    fig.text(0.27, 0.85, hn, ha="right", color=C_HOME, fontsize=16, fontweight="bold")
+    fig.text(0.27, 0.85, hn, ha="right", color=_team_home_col, fontsize=16, fontweight="bold")
     fig.text(
         0.50,
         0.85,
@@ -2361,7 +2397,7 @@ def _draw_glance_page(pdf, info, events, ppda, goals_df):
         fontsize=26,
         fontweight="bold",
     )
-    fig.text(0.73, 0.85, an, ha="left", color=C_AWAY, fontsize=16, fontweight="bold")
+    fig.text(0.73, 0.85, an, ha="left", color=_team_away_col, fontsize=16, fontweight="bold")
 
     # Extra time / penalty shootout context — a match that went past 90
     # minutes should say so, and a shootout result belongs right under the
@@ -2415,15 +2451,15 @@ def _draw_glance_page(pdf, info, events, ppda, goals_df):
         ax.set_ylim(0, 1)
         for s in ax.spines.values():
             s.set_visible(False)
-        ax.barh(0.5, frac, height=1.0, color=C_HOME, align="center")
-        ax.barh(0.5, 1 - frac, left=frac, height=1.0, color=C_AWAY, align="center")
+        ax.barh(0.5, frac, height=1.0, color=_team_home_col, align="center")
+        ax.barh(0.5, 1 - frac, left=frac, height=1.0, color=_team_away_col, align="center")
         fig.text(
             0.18,
             y + 0.016,
             lv,
             ha="right",
             va="center",
-            color=C_HOME,
+            color=TEXT_BRIGHT,
             fontsize=12,
             fontweight="bold",
         )
@@ -2433,7 +2469,7 @@ def _draw_glance_page(pdf, info, events, ppda, goals_df):
             rv,
             ha="left",
             va="center",
-            color=C_AWAY,
+            color=TEXT_BRIGHT,
             fontsize=12,
             fontweight="bold",
         )
@@ -2853,12 +2889,13 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda, events=None):
 
 def _draw_goals_log_page(pdf, goals_df, info):
     """Goals log with the unified visual identity."""
+    _team_home_col, _team_away_col = _fixture_colors(info)
     fig = _new_dark_fig(14, 9)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     score = info.get("score") or "—"
-    home_col = info.get("home_color") or info.get("HOME_COLOR") or C_HOME
-    away_col = info.get("away_color") or info.get("AWAY_COLOR") or C_AWAY
+    home_col = info.get("home_color") or info.get("HOME_COLOR") or _team_home_col
+    away_col = info.get("away_color") or info.get("AWAY_COLOR") or _team_away_col
     home_text_col = _team_label_color(home_col, BG_PANEL)
     away_text_col = _team_label_color(away_col, BG_PANEL)
     if apply_unified_frame is not None:
@@ -2943,10 +2980,10 @@ def _draw_goals_log_page(pdf, goals_df, info):
         col = (
             OG_COLOR
             if is_og
-            else (C_HOME if team_id == info.get("home_id") else C_AWAY)
+            else (_team_home_col if team_id == info.get("home_id") else _team_away_col)
         )
 
-        bg = "#1a0a0a" if col == C_HOME else ("#090909" if col == C_AWAY else "#1e0a2e")
+        bg = "#1a0a0a" if col == _team_home_col else ("#090909" if col == _team_away_col else "#1e0a2e")
         ax.add_patch(
             mpatches.FancyBboxPatch(
                 (0.02, y - row_h * 0.92),
@@ -4059,7 +4096,7 @@ def _pdf_page_with_commentary(pdf, fig, heading: str, body: str):
         except Exception:
             pass
 
-    is_light_theme = str(BG_DARK).upper() in {"#FFFFFF", "WHITE"}
+    is_light_theme = str(BG_DARK).upper() in {"#FFFFFF", "WHITE", "#F5F5F5"}
     subtitle_color = TEXT_DIM
     visual_bg = "#FFFFFF" if is_light_theme else BG_DARK
 
@@ -4568,12 +4605,13 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         • Defensive stats bars (bottom) — including correct Blocks count
         • Detailed English commentary footer
     """
+    _team_home_col, _team_away_col = _fixture_colors(info)
     fig = _new_dark_fig(14, 9)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     score = info.get("score") or "—"
-    home_col = info.get("home_color") or info.get("HOME_COLOR") or C_HOME
-    away_col = info.get("away_color") or info.get("AWAY_COLOR") or C_AWAY
+    home_col = info.get("home_color") or info.get("HOME_COLOR") or _team_home_col
+    away_col = info.get("away_color") or info.get("AWAY_COLOR") or _team_away_col
     home_text_col = _team_label_color(home_col, BG_PANEL)
     away_text_col = _team_label_color(away_col, BG_PANEL)
 
@@ -4985,9 +5023,9 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             a_better = aa is not None and hh is not None and aa > hh
 
             # Numbers — placed OUTSIDE the bars so nothing overlaps them.
-            # Leader gets gold + bold for instant scan; loser stays bright.
-            leader_home_col = C_GOLD if h_better else TEXT_BRIGHT
-            leader_away_col = C_GOLD if a_better else TEXT_BRIGHT
+            # Values remain white; bar fill and team labels carry identity.
+            leader_home_col = TEXT_BRIGHT
+            leader_away_col = TEXT_BRIGHT
             # Long "won/total" values need a smaller font and a slightly inset
             # anchor, or a 5-char string overruns the panel's left/right edge.
             _long = max(len(str(h_disp)), len(str(a_disp))) > 3
@@ -5366,7 +5404,8 @@ def _draw_player_stats_pages(pdf, player_stats, info, visuals_dir):
     Dark.py creates figures 41 and 42 and orders them with the other visuals in
     SAVE_DIR.
     """
-    for side, color in (("home", C_HOME), ("away", C_AWAY)):
+    home_col, away_col = _fixture_colors(info)
+    for side, color in (("home", home_col), ("away", away_col)):
         df = player_stats.get(side, pd.DataFrame())
         team_name = info.get(f"{side}_name") or side.title()
         fig = draw_player_stats_table(df, team_name, team_color=color, save_path=None)
@@ -5479,11 +5518,11 @@ def run_analysis(
 
     info, events, _players_df = parse_all_fn(match_data)
 
-    global C_HOME, C_AWAY
-    C_HOME = "#7A3DFF"
-    C_AWAY = "#BEEA24"
-    info["home_color"] = C_HOME
-    info["away_color"] = C_AWAY
+    # Stamp the fixture's two display colours into info so every downstream
+    # visual inherits the same pair. In kit mode they are the teams' real
+    # colours (resolved, clash-checked, contrast-checked); in roles mode they
+    # are the fixed per-theme role pair.
+    info["home_color"], info["away_color"] = _fixture_colors(info)
 
     ppda = compute_ppda_both(info, events)
     goals_df = build_goals_log(events, info)
@@ -5795,7 +5834,8 @@ def run_analysis(
                 radar_data = _pr.build_report_radars(events, info, OUTPUT_DIR, top_n=5)
                 pg = radar_divider_page
                 for side in ("home", "away"):
-                    accent = C_HOME if side == "home" else C_AWAY
+                    _home_col, _away_col = _fixture_colors(info)
+                    accent = _home_col if side == "home" else _away_col
                     tname = radar_data.get(side, {}).get("name", "")
                     for player, pfig, prole, note in radar_data.get(side, {}).get(
                         "figs", []

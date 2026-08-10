@@ -34,6 +34,13 @@ from visualization_components import (
     BG_PANEL,
     BG_HEADER,
     BG_PITCH,
+    PITCH_LINE,
+    PITCH_LINE_ALPHA,
+    SHOT_BLOCKED,
+    SHOT_GOAL,
+    SHOT_MISS,
+    SHOT_POST,
+    SHOT_SAVED,
     GRID_COL,
     GRID_SOFT,
     TEXT_BR,
@@ -43,6 +50,7 @@ from visualization_components import (
     C_HOME,
     C_AWAY,
     C_GOLD,
+    USE_REAL_TEAM_KIT_COLORS,
     shadow,
     readable_on,
     readable_team_text,
@@ -64,13 +72,15 @@ from match_metrics import (
     team_advanced_metrics,
 )
 
-IS_LIGHT_THEME = BG_DARK.upper() in {"#FFFFFF", "WHITE"}
+from visualization_components import IS_LIGHT_THEME
+
 ROW_BG = "#FFFFFF" if IS_LIGHT_THEME else "#101010"
 MID_BG = "#FFFFFF" if IS_LIGHT_THEME else "#0a0a0a"
-PASS_ARROW = "#111827" if IS_LIGHT_THEME else "#F8FAFC"
-PASS_NEG = "#7F1D1D" if IS_LIGHT_THEME else "#FCA5A5"
+# Light values: charcoal (not black — team clash) and greys (no reds anywhere).
+PASS_ARROW = "#333333" if IS_LIGHT_THEME else "#F8FAFC"
+PASS_NEG = "#888888" if IS_LIGHT_THEME else "#FCA5A5"
 GOAL_ROW_HOME = "#FFFFFF" if IS_LIGHT_THEME else "#0d0d0d"
-GOAL_ROW_AWAY = "#F1F5F9" if IS_LIGHT_THEME else "#0d0d0d"
+GOAL_ROW_AWAY = "#EDEDED" if IS_LIGHT_THEME else "#0d0d0d"
 C_GREEN = "#3DDC84"
 
 
@@ -80,7 +90,7 @@ C_GREEN = "#3DDC84"
 VP_W = 54.0
 VP_L = 105.0
 XT_ARROW = C_HOME if not IS_LIGHT_THEME else "#62617A"
-XT_NEG_ARROW = C_AWAY if not IS_LIGHT_THEME else "#7F1D1D"  # negative-xT accent
+XT_NEG_ARROW = C_AWAY if not IS_LIGHT_THEME else "#666666"  # negative-xT accent (no reds)
 TEAM_COLOR_FALLBACK = C_HOME
 
 
@@ -156,8 +166,8 @@ def _draw_vertical_pitch(
     ax,
     *,
     attacking_only: bool = False,
-    line_color: str = "#3A3A3A",
-    line_alpha: float = 0.56,
+    line_color: str = PITCH_LINE,
+    line_alpha: float = PITCH_LINE_ALPHA,
 ):
     """Draw a narrow vertical pitch without touching visualization_components.themed_pitch."""
     ax.set_facecolor(BG_PITCH)
@@ -575,8 +585,8 @@ def _safe_team_text(color: str, bg: str = BG_PANEL) -> str:
 
 def _strong_number_text(color: str | None = None, bg: str = BG_MID) -> str:
     """Numbers above bars/cards should never appear dark on AMOLED backgrounds."""
-    if color:
-        return _safe_ui_text(color, bg, min_ratio=5.2)
+    # Values are neutral evidence. Team identity is carried by marks, fills,
+    # headers and labels; keeping every number white avoids accidental rank.
     return TEXT_BR
 
 
@@ -1347,7 +1357,7 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
     # of piling up in the top third of a full-length pitch. Brighter, thicker
     # markings than the shared default so it reads as a real pitch (crisp
     # penalty box, 6-yard box, spot and D-arc) rather than a faint outline.
-    _draw_vertical_pitch(ax, attacking_only=True, line_color="#6B7280", line_alpha=0.85)
+    _draw_vertical_pitch(ax, attacking_only=True, line_alpha=0.85)
     pax = _VerticalPitchProxy(ax)
 
     goals = [s for s in shots if s["is_goal"]]
@@ -1362,10 +1372,14 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
         for s in shots
         if (not s["is_goal"]) and (not s["is_on_target"]) and (not s.get("is_blocked"))
     ]
-    GOAL_RING = "#FFC23C"
-    SAVE_RING = "#3DDC84"
-    BLOCK_COL = "#6B7280"
-    OFF_RING = C_AWAY
+    # Outcome colours come from the shared shot palette so a reader learns one
+    # key across every shot map: red scored, blue saved, orange off target,
+    # grey blocked, violet woodwork.
+    GOAL_RING = SHOT_GOAL
+    SAVE_RING = SHOT_SAVED
+    BLOCK_COL = SHOT_BLOCKED
+    POST_RING = SHOT_POST
+    OFF_RING = SHOT_MISS
     PEN_RING = "#38BDF8"
 
     # Penalty-area depth shading + average shot-distance line (under the shots).
@@ -1392,6 +1406,8 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
             return GOAL_RING
         if s["is_on_target"]:
             return SAVE_RING
+        if s.get("is_post"):
+            return POST_RING
         if s.get("is_blocked"):
             return BLOCK_COL
         return OFF_RING
@@ -1497,8 +1513,9 @@ def render_shot_map_v2(team_name, opp_name, score, team_color, shots):
     chips = [
         ("Goal", GOAL_RING, "→"),
         ("Saved", SAVE_RING, "→"),
-        ("Blocked", BLOCK_COL, "→"),
         ("Off", OFF_RING, "→"),
+        ("Blocked", BLOCK_COL, "→"),
+        ("Post", POST_RING, "→"),
         ("Penalty", PEN_RING, "◌"),
     ]
     cx = PX + 0.010
@@ -1990,9 +2007,9 @@ def render_shot_breakdown_v2(hn, an, score, home, away, goals, hc=None, ac=None)
 # ═════════════════════════════════════════════════════════════════════════
 PASS_ROLE_COLORS = {
     "gk": "#FFC23C",  # goalkeeper — gold
-    "def": C_HOME,  # defender — canonical ultraviolet
+    "def": C_HOME,  # defender — canonical electric blue
     "mid": "#3DDC84",  # midfielder — green
-    "att": C_AWAY,  # forward — canonical chartreuse
+    "att": C_AWAY,  # forward — canonical true yellow
 }
 # Substituted players get one distinct fill colour, kept separate from the
 # four positional units so the eye reads "this player came on/off" instantly.
@@ -2498,7 +2515,7 @@ def _themed_pass_pitch_vertical(ax, *, line_alpha: float = 0.52):
         s.set_linewidth(1.0)
         s.set_alpha(1.0)
 
-    line_grey = "#3A3A3A"
+    line_grey = PITCH_LINE
     lc = dict(color=line_grey, lw=1.00, alpha=line_alpha * 0.86, zorder=2)
     w, l = PASS_PITCH_W, PASS_PITCH_L
     ax.plot([0, w, w, 0, 0], [0, 0, l, l, 0], **lc)
@@ -3720,9 +3737,65 @@ def _safe(v, default=0):
         return default
 
 
+def _valid_kit_color(value) -> str | None:
+    """Return the colour string unchanged if matplotlib can parse it, else None.
+
+    The string is returned verbatim rather than normalised so downstream code
+    comparing against the palette constants keeps matching on value.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        to_rgba(text)
+    except ValueError:
+        return None
+    return text
+
+
 def _match_colors(info):
-    """Return the canonical first-listed and second-listed team colours."""
-    return C_HOME, C_AWAY
+    """Return the first-listed and second-listed team colours for a fixture.
+
+    Kit mode uses the real colours already resolved onto ``info`` by
+    ``choose_matchup_colors``; both must be present, parseable and visibly
+    apart, otherwise the fixed role pair is used so the two sides can never
+    render in the same colour.
+    """
+    if not USE_REAL_TEAM_KIT_COLORS:
+        return C_HOME, C_AWAY
+    home = _valid_kit_color((info or {}).get("home_color"))
+    away = _valid_kit_color((info or {}).get("away_color"))
+    if not home or not away:
+        return C_HOME, C_AWAY
+    if _rgb_gap(home, away) < 0.22:
+        return C_HOME, C_AWAY
+    return home, away
+
+
+def _rgb_gap(first: str, second: str) -> float:
+    """Straight RGB distance, used only to reject two near-identical kits."""
+    try:
+        a = to_rgba(first)[:3]
+        b = to_rgba(second)[:3]
+    except ValueError:
+        return 1.0
+    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+
+
+def _team_identity_color(info, team_id, supplied=None):
+    """Resolve a single-team visual to that team's fixture colour.
+
+    Adapters used to trust the caller's colour. That allowed two separately
+    rendered team pages to receive the same fallback/accent. Resolve by the
+    fixture's ids at the rendering boundary instead, so the home and away
+    pages can never collide regardless of call order.
+    """
+    home_color, away_color = _match_colors(info)
+    if team_id == info.get("home_id"):
+        return home_color
+    if team_id == info.get("away_id"):
+        return away_color
+    return supplied or home_color
 
 
 def _shots_for_team(events, team_id):
@@ -3772,6 +3845,7 @@ def _shots_for_team(events, team_id):
                 "is_goal": bool(row.get("is_goal", False)),
                 "is_on_target": shot_type in ON_TARGET_TYPES,
                 "is_blocked": shot_type == "BlockedShot",
+                "is_post": shot_type == "ShotOnPost",
                 "is_penalty": is_pen,
                 "player": str(_safe(row.get("player"), "")),
                 "minute": int(_safe(row.get("minute"), 0) or 0),
@@ -3839,6 +3913,7 @@ def make_xg_flow_v2(events, info, xg_data=None):
 
 
 def make_shot_map_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -4017,6 +4092,7 @@ def make_pass_network_v2(events, info, team_id, team_color):
     Build players + edges by inferring receivers from the next same-team
     event (same approach as the legacy `build_pass_network`).
     """
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -4211,6 +4287,7 @@ def make_pass_network_v2(events, info, team_id, team_color):
 
 
 def make_xt_map_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -4400,10 +4477,9 @@ def render_pitch_overlay_v2(
             for j, (val, x) in enumerate(zip(row, xs)):
                 ha = "left" if j == 0 else ("right" if j == n_cols - 1 else "center")
                 is_last = j == n_cols - 1
-                # Keep identifiers and player names bright. Team colour is
-                # reserved for marks; the final value only uses it when WCAG
-                # contrast is sufficient, otherwise it falls back to white.
-                col = _safe_team_text(team_color) if is_last else TEXT_BR
+                # Team colour is reserved for marks and identity labels.
+                # All exact values stay white for stable comparison.
+                col = TEXT_BR
                 fs = 10.5 if j < n_cols - 1 else 11
                 fw = "bold"
                 fam = FONT_SANS if j < n_cols - 1 else FONT_MONO
@@ -4523,6 +4599,7 @@ def _defensive_events_for_team(events, info, team_id):
 
 
 def make_defensive_heatmap_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -4727,6 +4804,7 @@ def make_defensive_heatmap_v2(events, info, team_id, team_color):
 #  AVERAGE POSITIONS v2  (figs 29 / 30)
 # ═════════════════════════════════════════════════════════════════════════
 def make_avg_positions_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -5075,6 +5153,7 @@ def make_box_entries_v2(events, info, team_id, team_color):
     Box entry = pass or carry that ends inside the opponent box
     (end_x ≥ 83, 21 ≤ end_y ≤ 79) but starts outside.
     """
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -5205,6 +5284,7 @@ def make_box_entries_v2(events, info, team_id, team_color):
 #  HIGH TURNOVERS v2  (figs 36 / 37)
 # ═════════════════════════════════════════════════════════════════════════
 def make_high_turnovers_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -5306,6 +5386,7 @@ def make_high_turnovers_v2(events, info, team_id, team_color):
 #  DANGER CREATION v2  (figs 10 / 11)
 # ═════════════════════════════════════════════════════════════════════════
 def make_danger_creation_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -5594,6 +5675,7 @@ def make_danger_creation_v2(events, info, team_id, team_color):
 #  ZONE 14 + HALF-SPACES v2  (figs 14 / 15)
 # ═════════════════════════════════════════════════════════════════════════
 def make_zone14_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -5837,6 +5919,7 @@ def make_zone14_v2(events, info, team_id, team_color):
 #  CROSSES v2  (figs 24 / 25)
 # ═════════════════════════════════════════════════════════════════════════
 def make_crosses_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -5947,6 +6030,7 @@ def make_crosses_v2(events, info, team_id, team_color):
 #  PROGRESSIVE PASSES v2  (figs 22 / 23)
 # ═════════════════════════════════════════════════════════════════════════
 def make_progressive_passes_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -6044,6 +6128,7 @@ def make_progressive_passes_v2(events, info, team_id, team_color):
 #  PASS MAP BY THIRD v2  (figs 19 / 20)
 # ═════════════════════════════════════════════════════════════════════════
 def make_pass_thirds_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -6082,7 +6167,7 @@ def make_pass_thirds_v2(events, info, team_id, team_color):
 
     def draw_overlay(ax):
         def_col = "#475569" if IS_LIGHT_THEME else "#5A5A5A"
-        att_col = "#B45309" if IS_LIGHT_THEME else C_GOLD
+        att_col = "#14505C" if IS_LIGHT_THEME else C_GOLD  # petrol — clear of the away orange
         n_all = len(def_p) + len(mid_p) + len(att_p)
         # Scale opacity down as volume grows, so a busy match (40+ passes)
         # doesn't collapse into a solid mass of overlapping arrows. Each
@@ -6111,9 +6196,13 @@ def make_pass_thirds_v2(events, info, team_id, team_color):
                 )
         # Third dividers — drawn with a backing strip so they stay visible
         # even when arrows are densely packed against them.
-        div_col = "#3A3A3A" if IS_LIGHT_THEME else TEXT_DIM
-        ax.axvline(33, color=div_col, lw=1.1, ls=(0, (4, 3)), alpha=0.75, zorder=2)
-        ax.axvline(67, color=div_col, lw=1.1, ls=(0, (4, 3)), alpha=0.75, zorder=2)
+        # Dashed reference lines are mid-grey, never black (black = home team),
+        # and slightly heavier on paper so they don't wash out.
+        div_col = "#888888" if IS_LIGHT_THEME else TEXT_DIM
+        div_lw = 1.3 if IS_LIGHT_THEME else 1.1
+        div_alpha = 0.85 if IS_LIGHT_THEME else 0.75
+        ax.axvline(33, color=div_col, lw=div_lw, ls=(0, (4, 3)), alpha=div_alpha, zorder=2)
+        ax.axvline(67, color=div_col, lw=div_lw, ls=(0, (4, 3)), alpha=div_alpha, zorder=2)
         for tx, lbl in [(16.5, "DEF"), (50, "MID"), (83, "ATT")]:
             ax.text(
                 tx,
@@ -6174,6 +6263,7 @@ def make_pass_thirds_v2(events, info, team_id, team_color):
 #  PASS TARGET ZONES v2  (figs 38 / 39)
 # ═════════════════════════════════════════════════════════════════════════
 def make_pass_target_zones_v2(events, info, team_id, team_color):
+    team_color = _team_identity_color(info, team_id, team_color)
     hn = info.get("home_name") or "Home"
     an = info.get("away_name") or "Away"
     is_home = team_id == info.get("home_id")
@@ -7560,7 +7650,7 @@ def render_legacy_chart_v2(
             for j, (val, x) in enumerate(zip(row, xs)):
                 ha = "left" if j == 0 else ("right" if j == n_cols - 1 else "center")
                 is_last = j == n_cols - 1
-                col = TEXT_BR if j == 0 else (team_color if is_last else TEXT_DIM)
+                col = TEXT_BR
                 fam = FONT_SANS if j == 0 else FONT_MONO
                 ax2.text(
                     x,

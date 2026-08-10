@@ -56,11 +56,11 @@ The project uses a consistent AMOLED design system across all report pages:
 
 - True-black backgrounds with restrained panel borders.
 - A fixed two-role matchup palette on every fixture and every output:
-  first-listed/home `#7A3DFF`, second-listed/away `#BEEA24`.
-- Gold is reserved for decisive highlights; neutral low-priority paths are
+  first-listed/home `#2F5BFF`, second-listed/away `#FFD400`.
+- White is reserved for all exact values and decisive highlights; neutral low-priority paths are
   thin and dashed instead of competing with the main evidence.
-- Successful actions use ultraviolet; failed actions use chartreuse plus a dashed
-  line, so meaning remains readable without relying on colour alone.
+- Single-team maps keep that team's role colour for every main mark. Outcome
+  and event type are separated by line style, opacity and marker shape.
 - Passing links that always use a separate relationship palette from player
   nodes, so network strength cannot be confused with team identity.
 - Collision-aware labels with direct player names and leader lines.
@@ -131,8 +131,8 @@ python build_qa_contact_sheets.py
 ## Colour configuration
 
 Production exports intentionally use one stable visual language instead of kit
-colours. The first-listed/home side is always `#7A3DFF`; the second-listed/away
-side is always `#BEEA24`. The approved colours are rendered without automatic
+colours. The first-listed/home side is always `#2F5BFF`; the second-listed/away
+side is always `#FFD400`. The approved colours are rendered without automatic
 brightening, outlines or glow. Legacy kit configuration variables remain in the
 entry point for backwards compatibility, but they do not override the
 production renderer, PDF or QA dashboards.

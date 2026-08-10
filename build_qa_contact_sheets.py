@@ -17,57 +17,74 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent
 DEFAULT_OUT = ROOT / "output" / "France_vs_England_4-6"
 
-BG = "#000000"
-PANEL = "#08090B"
-GRID = "#252A31"
-TEXT = "#F5F7FA"
-MUTED = "#9BA3AE"
-NEUTRAL = "#626A75"
-HOME = "#7A3DFF"
-AWAY = "#BEEA24"
-FOCUS = "#FFD43B"
+# Sheet chrome follows the active theme so light-theme thumbnails sit on a
+# matching light page instead of floating on the AMOLED black.
+from visualization_components import (  # noqa: E402  (after matplotlib backend)
+    C_AWAY as _ROLE_AWAY,
+    C_HOME as _ROLE_HOME,
+    EVENT_HIGHLIGHT as _ROLE_FOCUS,
+    IS_LIGHT_THEME,
+)
+
+if IS_LIGHT_THEME:
+    BG = "#F5F5F5"
+    PANEL = "#FFFFFF"
+    GRID = "#CCCCCC"
+    TEXT = "#333333"
+    MUTED = "#666666"
+    NEUTRAL = "#888888"
+else:
+    BG = "#000000"
+    PANEL = "#08090B"
+    GRID = "#252A31"
+    TEXT = "#F5F7FA"
+    MUTED = "#9BA3AE"
+    NEUTRAL = "#626A75"
+HOME = _ROLE_HOME
+AWAY = _ROLE_AWAY
+FOCUS = _ROLE_FOCUS if IS_LIGHT_THEME else "#FFD43B"
 
 
 DASHBOARDS = [
     (
         "Match Story",
         "Result, chance rhythm and the effect of game state",
-        ["19_post_match_advanced_dashboard.png", "01_xg_flow.png", "04_goals_breakdown.png", "43_game_state_splits.png"],
+        ["14_post_match_advanced_dashboard.png", "01_xg_flow.png", "04_goals_breakdown.png", "33_game_state_splits.png"],
     ),
     (
         "Finishing and Shot Quality",
-        "Volume, location, post-shot execution and goalkeeper workload",
-        ["11_shot_profile.png", "02_shot_map_france.png", "03_shot_map_england.png", "14_goalkeeper_saves.png", "15_xg_summary.png"],
+        "Volume, location, post-shot placement and goalkeeper workload",
+        ["02_shot_map_france.png", "03_shot_map_england.png", "11_goalkeeper_saves.png", "15_xt_per_minute.png"],
     ),
     (
         "Chance Creation",
         "Final-third access, central occupation and penalty-area conversion",
-        ["12_danger_creation_france.png", "13_danger_creation_england.png", "16_zone14_france.png", "17_zone14_england.png", "34_box_entries_france.png", "35_box_entries_england.png"],
+        ["12_zone14_france.png", "13_zone14_england.png", "25_box_entries_france.png", "26_box_entries_england.png"],
     ),
     (
         "Possession Structure by Half",
         "Passing relationships and occupation before and after the interval",
-        ["05a_pass_network_france_1h.png", "05b_pass_network_france_2h.png", "06a_pass_network_england_1h.png", "06b_pass_network_england_2h.png", "31a_average_positions_france_1h.png", "31b_average_positions_france_2h.png", "32a_average_positions_england_1h.png", "32b_average_positions_england_2h.png"],
+        ["05a_pass_network_france_1h.png", "05b_pass_network_france_2h.png", "06a_pass_network_england_1h.png", "06b_pass_network_england_2h.png", "22a_average_positions_france_1h.png", "22b_average_positions_france_2h.png", "23a_average_positions_england_1h.png", "23b_average_positions_england_2h.png"],
     ),
     (
         "Progression and Territory",
         "Where possession started, landed and added threat",
-        ["07_xt_map_france.png", "08_xt_map_england.png", "09_pass_map_france.png", "10_pass_map_england.png", "21_pass_thirds_france.png", "22_pass_thirds_england.png", "33_dominating_zones.png", "20_ball_touches.png"],
+        ["07_xt_map_france.png", "08_xt_map_england.png", "09_pass_map_france.png", "10_pass_map_england.png", "24_dominating_zones.png", "29_pass_targets_france.png"],
     ),
     (
         "Final-Third Delivery",
         "Progressive passing, wide delivery and preferred receiving zones",
-        ["24_progressive_france.png", "25_progressive_england.png", "26_crosses_france.png", "27_crosses_england.png", "38_pass_targets_france.png", "39_pass_targets_england.png"],
+        ["16_progressive_france.png", "17_progressive_england.png", "18_crosses_france.png", "19_crosses_england.png", "29_pass_targets_france.png", "30_pass_targets_england.png"],
     ),
     (
         "Pressing and Defensive Control",
         "Engagement height, high regains and protection behind the press",
-        ["28_defensive_activity_france.png", "29_defensive_activity_england.png", "30_defensive_summary.png", "36_high_regains_france.png", "37_high_regains_england.png", "40_ppda_pressing.png"],
+        ["20_defensive_activity_france.png", "21_defensive_activity_england.png", "27_high_regains_france.png", "28_high_regains_england.png", "31_ppda_pressing.png"],
     ),
     (
         "Transitions and Final Verdict",
-        "Open-field efficiency, advanced team metrics and sequence leaders",
-        ["41_transition_outcomes.png", "42_advanced_metrics.png", "18_match_stats.png", "44_player_sequence_leaders.png"],
+        "Open-field efficiency and sequence leaders",
+        ["32_transition_outcomes.png", "34_player_sequence_leaders.png", "14_post_match_advanced_dashboard.png"],
     ),
 ]
 
@@ -100,7 +117,9 @@ def build_qa_contact_sheets(
     away_slug: str = "england",
 ) -> list[Path]:
     """Build exactly eight story-led QA dashboards from the strongest visuals."""
-    home_color, away_color = HOME, AWAY
+    # The sheet chrome must match the thumbnails it frames, so the caller's
+    # fixture colours are used as given. They default to the role pair, which
+    # is also what kit mode falls back to when two kits are too close.
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("qa_contact_sheet_*.png"):

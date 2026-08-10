@@ -15,7 +15,14 @@ from matplotlib.patches import Arc, Circle, FancyBboxPatch, Rectangle
 import matplotlib.patheffects as path_effects
 import numpy as np
 import pandas as pd
-from visualization_components import C_AWAY, C_HOME
+from visualization_components import (
+    C_AWAY,
+    C_HOME,
+    EVENT_HIGHLIGHT,
+    IS_LIGHT_THEME,
+    PITCH_LINE,
+    PITCH_LINE_ALPHA,
+)
 
 from match_metrics import (
     advanced_metrics_frames,
@@ -32,18 +39,32 @@ BASELINE_DIR = ROOT / "baseline_visuals"
 OUT_DIR = ROOT / "output" / MATCH_KEY
 COMPARE_DIR = OUT_DIR / "comparisons"
 
-BG = "#000000"
-PANEL = "#050505"
-PANEL_2 = "#080808"
-TEXT = "#F7F7F5"
-MUTED = "#A3A3A3"
-GRID = "#242424"
+# Page chrome follows the active theme. The AMOLED values stay byte-identical
+# so the dark package renders exactly as before; the light branch is the white
+# paper counterpart selected via MATCH_ANALYSIS_THEME=light.
+if IS_LIGHT_THEME:
+    BG = "#F5F5F5"
+    PANEL = "#FFFFFF"
+    PANEL_2 = "#FCFCFC"
+    TEXT = "#333333"
+    MUTED = "#666666"
+    GRID = "#CCCCCC"
+    VALUE = "#333333"
+    FOCUS = EVENT_HIGHLIGHT
+    NEUTRAL = "#888888"
+else:
+    BG = "#000000"
+    PANEL = "#050505"
+    PANEL_2 = "#080808"
+    TEXT = "#F7F7F5"
+    MUTED = "#A3A3A3"
+    GRID = "#242424"
+    VALUE = "#FFFFFF"
+    FOCUS = "#FFFFFF"
+    NEUTRAL = "#666666"
 # Stable role colours used by every fixture and every comparison visual.
 HOME = C_HOME
 AWAY = C_AWAY
-VALUE = "#B79CFF"
-FOCUS = "#FFD43B"
-NEUTRAL = "#666666"
 
 HOME_NAME = "France"
 AWAY_NAME = "England"
@@ -59,6 +80,25 @@ def _bool(series: pd.Series) -> pd.Series:
     if pd.api.types.is_bool_dtype(series):
         return series.fillna(False)
     return series.fillna(False).astype(str).str.lower().isin({"true", "1", "yes"})
+
+
+def credited_team(events: pd.DataFrame) -> pd.Series:
+    """Return the team each goal counts FOR, not the team that struck it.
+
+    An own goal is logged on the scorer's own ``team_id``; crediting it there
+    puts the goal on the wrong side of the scoreline, the wrong end of the
+    timeline and the wrong colour on the chart. The parser records the real
+    beneficiary in ``scoring_team``; where that is missing, an ``is_own_goal``
+    flag means the other team.
+    """
+    team = pd.to_numeric(events.get("team_id"), errors="coerce")
+    scoring = pd.to_numeric(
+        events.get("scoring_team", pd.Series(np.nan, index=events.index)),
+        errors="coerce",
+    )
+    own = _bool(events.get("is_own_goal", pd.Series(False, index=events.index)))
+    flipped = team.where(~own, np.where(team.eq(HOME_ID), AWAY_ID, HOME_ID))
+    return scoring.fillna(flipped)
 
 
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -184,19 +224,26 @@ def clean_ax(ax: plt.Axes) -> None:
     ax.tick_params(length=0)
 
 
-def draw_pitch(ax: plt.Axes, line_color=GRID, lw=1.25) -> None:
+def draw_pitch(ax: plt.Axes, line_color=None, lw=1.25, alpha=None) -> None:
+    # Both themes now draw the shared pitch line. On AMOLED the old GRID value
+    # (#242424) was almost invisible against the pure-black page; white held at
+    # PITCH_LINE_ALPHA outlines the pitch without covering heatmaps drawn under
+    # it. Call sites that used to pass their own slate grey get the same white.
+    if line_color is None or str(line_color).upper() in ("#738090", "#8290A0", GRID.upper()):
+        line_color = PITCH_LINE
+    a = PITCH_LINE_ALPHA if alpha is None else alpha
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
     ax.set_aspect("equal")
-    ax.add_patch(Rectangle((0, 0), 100, 100, fill=False, ec=line_color, lw=lw))
-    ax.plot([50, 50], [0, 100], color=line_color, lw=lw)
-    ax.add_patch(Circle((50, 50), 10, fill=False, ec=line_color, lw=lw))
-    ax.add_patch(Rectangle((0, 21), 16.5, 58, fill=False, ec=line_color, lw=lw))
-    ax.add_patch(Rectangle((83.5, 21), 16.5, 58, fill=False, ec=line_color, lw=lw))
-    ax.add_patch(Rectangle((0, 36), 5.5, 28, fill=False, ec=line_color, lw=lw))
-    ax.add_patch(Rectangle((94.5, 36), 5.5, 28, fill=False, ec=line_color, lw=lw))
-    ax.add_patch(Arc((11, 50), 18, 24, theta1=305, theta2=55, ec=line_color, lw=lw))
-    ax.add_patch(Arc((89, 50), 18, 24, theta1=125, theta2=235, ec=line_color, lw=lw))
+    ax.add_patch(Rectangle((0, 0), 100, 100, fill=False, ec=line_color, lw=lw, alpha=a))
+    ax.plot([50, 50], [0, 100], color=line_color, lw=lw, alpha=a)
+    ax.add_patch(Circle((50, 50), 10, fill=False, ec=line_color, lw=lw, alpha=a))
+    ax.add_patch(Rectangle((0, 21), 16.5, 58, fill=False, ec=line_color, lw=lw, alpha=a))
+    ax.add_patch(Rectangle((83.5, 21), 16.5, 58, fill=False, ec=line_color, lw=lw, alpha=a))
+    ax.add_patch(Rectangle((0, 36), 5.5, 28, fill=False, ec=line_color, lw=lw, alpha=a))
+    ax.add_patch(Rectangle((94.5, 36), 5.5, 28, fill=False, ec=line_color, lw=lw, alpha=a))
+    ax.add_patch(Arc((11, 50), 18, 24, theta1=305, theta2=55, ec=line_color, lw=lw, alpha=a))
+    ax.add_patch(Arc((89, 50), 18, 24, theta1=125, theta2=235, ec=line_color, lw=lw, alpha=a))
     ax.axis("off")
 
 
@@ -236,19 +283,24 @@ def row_dot_plot(
             facecolor=PANEL_2, edgecolor=GRID, linewidth=0.8, zorder=1,
         )
         ax.add_patch(outer)
+        # Light theme: value cells take the team colour at full strength so each
+        # side is unmistakably owned (black home / orange away) — a 0.17 wash on
+        # light paper collapses into indistinct grey/pink. Dark keeps the wash.
+        cell_alpha = 1.0 if IS_LIGHT_THEME else 0.17
+        value_color = "#FFFFFF" if IS_LIGHT_THEME else TEXT
         ax.add_patch(Rectangle((0.013, y - height / 2 + 0.01), 0.224, height - 0.02,
-                               facecolor=HOME, edgecolor="none", alpha=0.17, zorder=2))
+                               facecolor=HOME, edgecolor="none", alpha=cell_alpha, zorder=2))
         ax.add_patch(Rectangle((0.763, y - height / 2 + 0.01), 0.224, height - 0.02,
-                               facecolor=AWAY, edgecolor="none", alpha=0.17, zorder=2))
+                               facecolor=AWAY, edgecolor="none", alpha=cell_alpha, zorder=2))
         ax.plot([0.237, 0.237], [y - height / 2 + 0.05, y + height / 2 - 0.05],
                 color=HOME, lw=0.75, alpha=0.65, zorder=3)
         ax.plot([0.763, 0.763], [y - height / 2 + 0.05, y + height / 2 - 0.05],
                 color=AWAY, lw=0.75, alpha=0.65, zorder=3)
-        ax.text(0.125, y, fmt.format(home), color=TEXT, fontsize=value_size,
+        ax.text(0.125, y, fmt.format(home), color=value_color, fontsize=value_size,
                 fontweight="bold", ha="center", va="center", zorder=4)
         ax.text(0.500, y, label, color=TEXT, fontsize=label_size,
                 fontweight="bold", ha="center", va="center", zorder=4)
-        ax.text(0.875, y, fmt.format(away), color=TEXT, fontsize=value_size,
+        ax.text(0.875, y, fmt.format(away), color=value_color, fontsize=value_size,
                 fontweight="bold", ha="center", va="center", zorder=4)
 
 
@@ -365,9 +417,12 @@ def xg_flow(events: pd.DataFrame) -> Path:
     away_total = float(totals.get(AWAY_ID, 0.0))
     match_goals = shots[
         _bool(shots.get("is_goal", pd.Series(False, index=shots.index)))
-    ].sort_values(["minute", "second"])
-    home_goals = int(match_goals["team_id"].eq(HOME_ID).sum())
-    away_goals = int(match_goals["team_id"].eq(AWAY_ID).sum())
+    ].sort_values(["minute", "second"]).copy()
+    # Own goals count for the opponent, so the scoreline, the match-state band
+    # and the timeline all read from the credited team rather than team_id.
+    match_goals["_credited_team"] = credited_team(match_goals)
+    home_goals = int(match_goals["_credited_team"].eq(HOME_ID).sum())
+    away_goals = int(match_goals["_credited_team"].eq(AWAY_ID).sum())
 
     fig = plt.figure(figsize=(14, 8), facecolor=BG)
     header = FancyBboxPatch(
@@ -447,12 +502,12 @@ def xg_flow(events: pd.DataFrame) -> Path:
     )
 
     fig.text(0.385, 0.952, HOME_NAME.upper(), color=HOME, fontsize=7.2, fontweight="bold", ha="center", va="center", zorder=95)
-    fig.text(0.385, 0.913, f"{home_total:.2f}", color=HOME, fontsize=18, fontweight="bold", ha="center", va="center", zorder=95, path_effects=glow_text)
+    fig.text(0.385, 0.913, f"{home_total:.2f}", color=TEXT, fontsize=18, fontweight="bold", ha="center", va="center", zorder=95, path_effects=glow_text)
     fig.text(0.385, 0.882, f"xG  ·  {int(shot_counts.get(HOME_ID, 0))} SHOTS", color=MUTED, fontsize=6.4, ha="center", va="center", zorder=95)
     fig.text(0.520, 0.928, f"{home_goals} — {away_goals}", color=TEXT, fontsize=19, fontweight="bold", ha="center", va="center", zorder=95, path_effects=glow_text)
     fig.text(0.520, 0.888, "FULL TIME", color=MUTED, fontsize=6.2, fontweight="bold", ha="center", va="center", zorder=95)
     fig.text(0.655, 0.952, AWAY_NAME.upper(), color=AWAY, fontsize=7.2, fontweight="bold", ha="center", va="center", zorder=95)
-    fig.text(0.655, 0.913, f"{away_total:.2f}", color=AWAY, fontsize=18, fontweight="bold", ha="center", va="center", zorder=95, path_effects=glow_text)
+    fig.text(0.655, 0.913, f"{away_total:.2f}", color=TEXT, fontsize=18, fontweight="bold", ha="center", va="center", zorder=95, path_effects=glow_text)
     fig.text(0.655, 0.882, f"xG  ·  {int(shot_counts.get(AWAY_ID, 0))} SHOTS", color=MUTED, fontsize=6.4, ha="center", va="center", zorder=95)
     leader_name = HOME_NAME if home_total >= away_total else AWAY_NAME
     edge = abs(home_total - away_total)
@@ -463,7 +518,7 @@ def xg_flow(events: pd.DataFrame) -> Path:
         0.060,
         boxstyle="round,pad=0.006,rounding_size=0.010",
         transform=fig.transFigure,
-        facecolor="#0B0B0B",
+        facecolor=PANEL_2 if IS_LIGHT_THEME else "#0B0B0B",
         edgecolor=edge_color,
         linewidth=0.9,
         zorder=94,
@@ -498,14 +553,29 @@ def xg_flow(events: pd.DataFrame) -> Path:
         sizes = 20 + team["xG"].to_numpy() * 72
         ax.scatter(team["minute"], shot_y, s=sizes, marker=marker, facecolor=BG, edgecolor=color, linewidth=1.5, zorder=4)
         total = cumulative[-1]
-        ax.text(max_minute + 1.4, total, f"{TEAM_NAME[team_id].upper()}  ·  {total:.2f}", color=color, va="center", fontsize=8.5, fontweight="bold")
-        team_goals = team[_bool(team.get("is_goal", pd.Series(False, index=team.index)))]
+        ax.text(max_minute + 1.4, total, f"{TEAM_NAME[team_id].upper()}  ·  {total:.2f}", color=TEXT, va="center", fontsize=8.5, fontweight="bold")
+        # Only goals the team actually scored belong on its own xG curve: an
+        # own goal is struck by this team but counts for the opponent.
+        team_goals = team[
+            _bool(team.get("is_goal", pd.Series(False, index=team.index)))
+            & credited_team(team).eq(team_id)
+        ]
         for goal_idx, (_, goal) in enumerate(team_goals.iterrows()):
             upto = team[team["minute"].le(goal["minute"])]["xG"].sum()
             ax.scatter(goal["minute"], upto, s=130, facecolor=BG, edgecolor=FOCUS, linewidth=2.4, zorder=6)
             ax.scatter(goal["minute"], upto, s=40, facecolor=color, edgecolor=BG, linewidth=0.8, zorder=7)
-            offset = 10 if goal_idx % 2 == 0 else 16
-            ax.annotate(f"{int(goal['minute'])}′", (goal["minute"], upto), xytext=(0, offset), textcoords="offset points", ha="center", color=TEXT, fontsize=6.2, fontweight="bold", zorder=8)
+            # Name the scorer on the marker — a minute alone makes the reader
+            # cross-reference the timeline strip below to learn who scored.
+            surname = str(goal.get("player") or "").split()[-1][:12]
+            label = f"{surname} {int(goal['minute'])}′" if surname else f"{int(goal['minute'])}′"
+            offset = 13 if goal_idx % 2 == 0 else 22
+            ax.annotate(
+                label, (goal["minute"], upto), xytext=(0, offset),
+                textcoords="offset points", ha="center", color=TEXT, fontsize=6.4,
+                fontweight="bold", zorder=8,
+                bbox=dict(boxstyle="round,pad=0.22", facecolor=BG, edgecolor=color,
+                          linewidth=0.7, alpha=0.92),
+            )
     ax.axvline(45, color="#3A3A3A", lw=0.9, ls=(0, (3, 4)))
     ax.text(45, ymax * 0.975, "HT", color=MUTED, fontsize=6.2, ha="center", va="top", bbox=dict(boxstyle="round,pad=0.25", fc=PANEL, ec=GRID, lw=0.6))
 
@@ -522,7 +592,7 @@ def xg_flow(events: pd.DataFrame) -> Path:
         state_ax.add_patch(Rectangle((start, 0.15), max(end - start, 0.3), 0.55, facecolor=leader_color, edgecolor=GRID, lw=0.65, alpha=0.22))
         if end - start >= 5:
             state_ax.text((start + end) / 2, 0.425, f"{home_score}–{away_score}", color=TEXT, fontsize=5.8, fontweight="bold", ha="center", va="center")
-        if int(goal["team_id"]) == HOME_ID:
+        if int(goal["_credited_team"]) == HOME_ID:
             home_score += 1
         else:
             away_score += 1
@@ -540,12 +610,13 @@ def xg_flow(events: pd.DataFrame) -> Path:
     goals_ax.plot([0, max_minute], [0.50, 0.50], color=GRID, lw=0.7)
     for idx, (_, goal) in enumerate(match_goals.iterrows()):
         minute = float(goal["minute"])
-        color = TEAM_COLOR.get(int(goal["team_id"]), TEXT)
+        color = TEAM_COLOR.get(int(goal["_credited_team"]), TEXT)
         y = 0.78 if idx % 2 == 0 else 0.22
-        goals_ax.plot([minute, minute], [0.50, y], color=GRID, lw=0.65)
-        goals_ax.scatter([minute], [0.50], s=36, facecolor=FOCUS, edgecolor=BG, linewidth=0.7, zorder=3)
+        goals_ax.plot([minute, minute], [0.50, y], color=color, lw=0.65, alpha=0.8)
+        goals_ax.scatter([minute], [0.50], s=36, facecolor=color, edgecolor=BG, linewidth=0.7, zorder=3)
         surname = str(goal.get("player") or "Goal").split()[-1][:10].upper()
-        goals_ax.text(minute, y, f"{int(minute)}′  {surname}", color=color, fontsize=5.4, fontweight="bold", ha="center", va="center")
+        own = " (OG)" if _bool(pd.Series([goal.get("is_own_goal", False)])).iloc[0] else ""
+        goals_ax.text(minute, y, f"{int(minute)}′  {surname}{own}", color=TEXT, fontsize=5.4, fontweight="bold", ha="center", va="center")
     fig.text(0.945, 0.030, "PURE BLACK MATCH INTELLIGENCE · REAL EVENT DATA", ha="right", fontsize=6.5, color=NEUTRAL)
     fig._amoled_header_applied = True
     return save(fig, "03_xg_flow_redesign.png")
@@ -811,8 +882,8 @@ def summary_board(events: pd.DataFrame, team_metrics: pd.DataFrame, xg: pd.DataF
         hv = metric_lookup(team_metrics, "home", key)
         av = metric_lookup(team_metrics, "away", key)
         ax.text(0.05, 0.78, label, transform=ax.transAxes, color=MUTED, fontsize=8, fontweight="bold")
-        ax.text(0.05, 0.38, fmt.format(hv), transform=ax.transAxes, color=HOME, fontsize=19, fontweight="bold")
-        ax.text(0.55, 0.38, fmt.format(av), transform=ax.transAxes, color=AWAY, fontsize=19, fontweight="bold")
+        ax.text(0.05, 0.38, fmt.format(hv), transform=ax.transAxes, color=TEXT, fontsize=19, fontweight="bold")
+        ax.text(0.55, 0.38, fmt.format(av), transform=ax.transAxes, color=TEXT, fontsize=19, fontweight="bold")
         ax.text(0.05, 0.10, HOME_NAME, transform=ax.transAxes, color=MUTED, fontsize=7)
         ax.text(0.55, 0.10, AWAY_NAME, transform=ax.transAxes, color=MUTED, fontsize=7)
 

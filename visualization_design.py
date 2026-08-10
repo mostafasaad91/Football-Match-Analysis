@@ -30,17 +30,22 @@ BG_DARK = "#000000"
 BG_MID = "#0a0a0a"
 BG_PANEL = "#0a0a0a"
 BG_HEADER = "#101010"
-BG_PITCH = "#0a0a0a"
+BG_PITCH = "#000000"  # pitch surface is the page itself: pure black
 GRID_COL = "#1c1c1c"
 GRID_SOFT = "#141414"
+
+# Pitch markings: white at a controlled alpha, matching visualization_components.
+PITCH_LINE = "#FFFFFF"
+PITCH_LINE_ALPHA = 0.68
+PITCH_LINE_WIDTH = 1.25
 
 TEXT_MAIN = "#FFFFFF"
 TEXT_BRIGHT = "#FFFFFF"
 TEXT_DIM = "#9A9A9A"
 TEXT_FADED = "#5A5A5A"
 
-C_HOME = "#7A3DFF"
-C_AWAY = "#BEEA24"
+C_HOME = "#2F5BFF"
+C_AWAY = "#FFD400"
 C_GOLD = "#FFC23C"
 C_MAGENTA = "#E879F9"
 C_ACCENT = "#38BDF8"
@@ -376,14 +381,16 @@ def rebrand_figure(
 def themed_pitch(
     ax,
     attacking_only: bool = False,
-    line_color: str = "#3A3A3A",
-    line_alpha: float = 0.56,
+    line_color: str | None = None,
+    line_alpha: float | None = None,
 ):
     """
-    Draws a pitch in the report style: BG_PITCH background, hairline
-    grey markings, low intensity so the content (dots/arrows) reads
+    Draws a pitch in the report style: pure-black background with white
+    markings held at a low alpha, so the content (dots/arrows) still reads
     clearly on top.
     """
+    line_color = line_color or PITCH_LINE
+    line_alpha = PITCH_LINE_ALPHA if line_alpha is None else line_alpha
     ax.set_facecolor(BG_PITCH)
     ax.set_aspect("equal")
     ax.set_xlim(-2, 102)
@@ -391,14 +398,15 @@ def themed_pitch(
     ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
-    if line_color in ("#2A2A2A", "#A8B8CA", "#C4CEDD", GRID_COL):
-        line_color = "#3A3A3A"
+    # Legacy call sites pass near-black greys that vanish on pure black.
+    if line_color.upper() in ("#2A2A2A", "#3A3A3A", "#A8B8CA", "#C4CEDD", GRID_COL.upper()):
+        line_color = PITCH_LINE
     for s in ax.spines.values():
         s.set_edgecolor(GRID_COL)
         s.set_linewidth(1.0)
         s.set_alpha(1.0)
 
-    lc = dict(color=line_color, lw=1.05, alpha=line_alpha * 0.88, zorder=2)
+    lc = dict(color=line_color, lw=PITCH_LINE_WIDTH, alpha=line_alpha, zorder=2)
 
     # boundary + halfway lines
     ax.plot([0, 100, 100, 0, 0], [0, 0, 100, 100, 0], **lc)

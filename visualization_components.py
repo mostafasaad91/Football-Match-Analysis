@@ -83,27 +83,44 @@ _register_fonts()
 
 # ── Palette ─────────────────────────────────────────────────────────────
 _THEME = os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower()
-if _THEME == "light":
-    BG_DARK = "#FFFFFF"
-    BG_MID = "#F3F4F6"
-    BG_PANEL = "#FFFFFF"
-    BG_HEADER = "#E5E7EB"
-    BG_PITCH = "#EEF7EE"
-    GRID_COL = "#D1D5DB"
-    GRID_SOFT = "#F0F4FF"
+IS_LIGHT_THEME = _THEME == "light"
 
-    TEXT_BR = "#111827"
-    TEXT_MAIN = "#1F2937"
-    TEXT_DIM = "#4B5563"
-    TEXT_FAD = "#6B7280"
-    TEXT_FAINT = "#9CA3AF"
+# Team colour mode.
+#   "kit"   (default) — each side is drawn in its real home-kit colour, taken
+#                       from team_palettes.py. Two teams whose kits are too
+#                       close, or a kit that is unreadable on the page, fall
+#                       back to the fixed roles below.
+#   "roles"           — every fixture uses the same two role colours, so the
+#                       reader learns one visual language across all matches.
+TEAM_COLOR_MODE = os.environ.get("MATCH_ANALYSIS_TEAM_COLORS", "kit").strip().lower()
+USE_REAL_TEAM_KIT_COLORS = TEAM_COLOR_MODE != "roles"
+if IS_LIGHT_THEME:
+    # LIGHT_PALETTE — "Ink & Burnt Orange" print identity. This block is the
+    # single source of truth for the light theme; every light value used by the
+    # renderers derives from here.
+    #   background   #F5F5F5 · text #333333 (charcoal, never pure black so type
+    #   separates from the black team) · secondary text #666666 · pitch lines
+    #   #B0B0B0 · dashed reference lines #888888 (grey, never black).
+    BG_DARK = "#F5F5F5"
+    BG_MID = "#F5F5F5"
+    BG_PANEL = "#FFFFFF"
+    BG_HEADER = "#EDEDED"
+    BG_PITCH = "#F5F5F5"
+    GRID_COL = "#CCCCCC"
+    GRID_SOFT = "#E0E0E0"
+
+    TEXT_BR = "#333333"
+    TEXT_MAIN = "#333333"
+    TEXT_DIM = "#666666"
+    TEXT_FAD = "#999999"
+    TEXT_FAINT = "#BBBBBB"
 else:
     # "Pure Black" identity — matches the reference HTML dashboards exactly.
     BG_DARK = "#000000"  # true black page background
     BG_MID = "#0a0a0a"  # panel background
     BG_PANEL = "#0a0a0a"  # panel background (alias kept for compatibility)
     BG_HEADER = "#101010"  # panel header-strip background
-    BG_PITCH = "#0a0a0a"  # pitch surface sits on the same panel black
+    BG_PITCH = "#000000"  # pitch surface is the page itself: pure black
     GRID_COL = "#1c1c1c"  # hairline border
     GRID_SOFT = "#141414"  # softer divider/grid line
 
@@ -115,22 +132,83 @@ else:
 
 # Canonical production matchup palette. Every fixture uses the same two roles
 # so a reader learns one stable visual language instead of relearning kit
-# colours from match to match.
-C_HOME = "#7A3DFF"
-C_AWAY = "#BEEA24"
-C_GOLD = "#FFC23C"
-C_MAGENTA = "#E879F9"
-C_ACCENT = "#38BDF8"
-C_LIME = "#22C55E"
+# colours from match to match. Each theme carries its own pair because the
+# AMOLED roles (electric blue / true yellow) are unreadable on white paper.
+if IS_LIGHT_THEME:
+    C_HOME = "#0A0A0A"  # ink black — first-listed team role
+    C_AWAY = "#E76F51"  # burnt orange — second-listed team role (no reds)
+    C_GOLD = "#14505C"  # petrol accent — must stay far from the away orange
+    C_MAGENTA = "#86198F"
+    C_ACCENT = "#1D4ED8"
+    C_LIME = "#15803D"
+    PITCH_LINE = "#B0B0B0"
+    DASHED_LINE = "#888888"  # dashed refs are grey, never black (team clash)
+else:
+    C_HOME = "#2F5BFF"
+    C_AWAY = "#FFD400"
+    C_GOLD = "#FFC23C"
+    C_MAGENTA = "#E879F9"
+    C_ACCENT = "#38BDF8"
+    C_LIME = "#22C55E"
+    # Pitch markings are drawn in white on the pure-black page, the way a real
+    # broadcast pitch reads. Grey markings disappeared into the background and
+    # made every map look washed out; white lines at a controlled alpha give
+    # the outline without competing with the data layer on top of it.
+    PITCH_LINE = "#FFFFFF"
+    DASHED_LINE = "#3A3A3A"
+
+# Alpha applied to pitch markings so white lines frame the pitch without
+# out-shouting the marks plotted on them.
+PITCH_LINE_ALPHA = 0.42 if IS_LIGHT_THEME else 0.68
+PITCH_LINE_WIDTH = 1.25
+
+# ── Shot-outcome palette ────────────────────────────────────────────────
+# Outcome, not team, is what a shot map encodes: one fixed colour per result
+# so the reader learns the key once and it holds for every match and player.
+SHOT_GOAL = "#D62728"  # red
+SHOT_SAVED = "#2077B4"  # steel blue
+SHOT_MISS = "#F0A05A"  # sand orange
+SHOT_BLOCKED = "#B4B4B4"  # neutral grey
+SHOT_POST = "#8B5FBF"  # violet
+SHOT_OWN_GOAL = "#FF00FF"  # magenta — deliberately jarring, never ambiguous
+
+SHOT_OUTCOME_COLORS: dict[str, str] = {
+    "goal": SHOT_GOAL,
+    "saved": SHOT_SAVED,
+    "savedshot": SHOT_SAVED,
+    "attemptsaved": SHOT_SAVED,
+    "miss": SHOT_MISS,
+    "missed": SHOT_MISS,
+    "missedshots": SHOT_MISS,
+    "blocked": SHOT_BLOCKED,
+    "shotblocked": SHOT_BLOCKED,
+    "post": SHOT_POST,
+    "woodwork": SHOT_POST,
+    "shotonpost": SHOT_POST,
+    "owngoal": SHOT_OWN_GOAL,
+}
+
+
+def shot_outcome_color(outcome: str, fallback: str = SHOT_BLOCKED) -> str:
+    """Map any provider spelling of a shot outcome to its fixed colour."""
+    key = "".join(ch for ch in str(outcome or "").lower() if ch.isalnum())
+    return SHOT_OUTCOME_COLORS.get(key, fallback)
+
 
 # Shared semantic styles for path-heavy pitch visuals. Colour identifies the
 # event outcome; line style keeps the distinction available in grayscale.
 EVENT_SUCCESS = C_HOME
 EVENT_FAILURE = C_AWAY
-EVENT_NEUTRAL = "#B8BDC8"
-EVENT_HIGHLIGHT = C_GOLD
+EVENT_NEUTRAL = "#B8BDC8" if not IS_LIGHT_THEME else "#7A828C"
+# The highlight layer must contrast against the page AND against both team
+# colours. On paper that rules out white, charcoal (black team) and any warm
+# orange (away team) — deep petrol is the only remaining strong hue.
+EVENT_HIGHLIGHT = "#14505C" if IS_LIGHT_THEME else TEXT_BR
 QUIET_DASH = (0, (2.2, 3.2))
 FAILURE_DASH = (0, (4.0, 3.0))
+
+# Wording for the highlight layer, so legends stay truthful per theme.
+HIGHLIGHT_LABEL = "Petrol solid" if IS_LIGHT_THEME else "White solid"
 
 
 # ── Readability helpers ─────────────────────────────────────────────
@@ -170,6 +248,43 @@ def readable_on(
 def readable_team_text(team_color: str, bg: str = BG_PANEL) -> str:
     """Use the kit colour for labels only when it is legible; otherwise use white."""
     return readable_on(team_color, bg, min_ratio=5.0, fallback=TEXT_BR)
+
+
+# ── Text drawn on top of a coloured fill ────────────────────────────────
+# Three tiers rather than a fixed white, because the fill under a label is a
+# team colour and team colours run from near-black to near-white. A white
+# number on Juventus silver or on the top of a light heat ramp is invisible.
+TEXT_ON_LIGHT = "#0A0A0A"  # near-black, for light fills
+TEXT_ON_MID = "#111827"  # ink, for mid-value fills that still read dark
+TEXT_ON_DARK = "#FFFFFF"  # white, for dark fills
+
+
+def text_on_fill(fill: str) -> str:
+    """Return the most readable label colour for text drawn ON ``fill``.
+
+    Picks whichever tier gives the higher contrast ratio against the fill
+    itself — not against the page — so a label never inherits the page's white
+    and vanish into a light cell.
+    """
+    try:
+        candidates = (TEXT_ON_DARK, TEXT_ON_LIGHT, TEXT_ON_MID)
+        return max(candidates, key=lambda candidate: contrast_ratio(candidate, fill))
+    except Exception:
+        return TEXT_ON_DARK
+
+
+def label_outline(fill: str, linewidth: float = 1.6) -> list:
+    """Return a path-effect stroke for labels over mid-luminance fills.
+
+    Where no text colour clears a comfortable ratio on its own — mid greys and
+    mid-saturation kits — a thin stroke in the opposite tier keeps the digits
+    legible without changing their colour.
+    """
+    chosen = text_on_fill(fill)
+    if contrast_ratio(chosen, fill) >= 4.5:
+        return []
+    opposite = TEXT_ON_DARK if chosen != TEXT_ON_DARK else TEXT_ON_LIGHT
+    return [pe.withStroke(linewidth=linewidth, foreground=opposite)]
 
 
 def _rgb_distance(first: str, second: str) -> float:
@@ -458,7 +573,9 @@ def metric_card(fig, x, y, w, h, *, label: str, value, accent: str, big: bool = 
         str(value),
         ha="center",
         va="center",
-        color=readable_on(accent, BG_PANEL),
+        # Team identity belongs to the card accent/mark. Exact values remain
+        # white everywhere so neither team receives accidental emphasis.
+        color=TEXT_BR,
         fontsize=27 if big else 21,
         fontweight="bold",
         family=FONT_MONO,
@@ -570,13 +687,17 @@ def themed_pitch(
     ax,
     *,
     attacking_only: bool = False,
-    line_color: str = "#A8B8CA",
-    line_alpha: float = 0.56,
+    line_color: str | None = None,
+    line_alpha: float | None = None,
 ):
     import matplotlib.pyplot as plt
 
-    if line_color in ("#2A2A2A", GRID_COL):
-        line_color = "#3A3A3A"
+    line_color = line_color or PITCH_LINE
+    line_alpha = PITCH_LINE_ALPHA if line_alpha is None else line_alpha
+    # Legacy call sites pass their own near-black greys, which vanish on the
+    # pure-black page. Any such value is promoted to the shared pitch line.
+    if line_color.upper() in ("#2A2A2A", "#3A3A3A", "#5C6470", "#A8B8CA", GRID_COL.upper()):
+        line_color = PITCH_LINE
     ax.set_facecolor(BG_PITCH)
     ax.set_aspect("equal")
     ax.set_xlim(-2, 102)
@@ -586,7 +707,7 @@ def themed_pitch(
     ax.set_yticks([])
     for s in ax.spines.values():
         s.set_visible(False)
-    lc = dict(color=line_color, lw=1.05, alpha=line_alpha * 0.88, zorder=2)
+    lc = dict(color=line_color, lw=PITCH_LINE_WIDTH, alpha=line_alpha, zorder=2)
     # Boundaries + halfway
     ax.plot([0, 100, 100, 0, 0], [0, 0, 100, 100, 0], **lc)
     ax.plot([50, 50], [0, 100], **lc)
