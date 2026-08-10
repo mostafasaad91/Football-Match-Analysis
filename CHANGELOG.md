@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- 4,323 lines of unreachable code across five modules: 51 top-level
+  definitions that nothing in the tree referenced. Most were superseded rather
+  than abandoned — the `_rpt_*` and `_panel_*` families belonged to report
+  pages the redesigned renderer replaced, `render_pass_network_v2` and
+  `make_pass_target_zones_v2` to the v2 chart set, `draw_match_report` was a
+  self-described legacy stub, and `text_shadow` predates `label_outline()`.
+  Found by name-counting across every tracked file and re-run to a fixed point,
+  since deleting a caller orphans its helpers: four passes were needed, and the
+  three after the first accounted for 1,028 of the lines.
+- Eight imports bound but never used, an empty `.agents/` directory, and a
+  `tmp/` scratch directory of palette-review PNGs.
+- The import-time banner announcing that `tactical_visualizations` loaded
+  correctly. The stale-copy override it reported on is still in place and still
+  warns when it fires; only the healthy-path announcement is gone.
+
+Verified by rendering the sample package from the previous commit in a
+separate worktree and diffing: 65 files either way, none missing, none added,
+and all 64 non-PDF outputs byte-for-byte identical.
+
 ### Added
 
 - End-to-end golden test (`tests/test_metrics_golden.py`). The whole metric
@@ -154,6 +175,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Importing `football_match_analysis` crashed on Windows whenever stdout was a
+  pipe. The stale-copy guard printed its result through characters cp1252
+  cannot encode, so `UnicodeEncodeError` came out of the import itself. Both
+  messages are now ASCII.
 - `reportlab` was imported by `tactical_pdf_report.py` but absent from
   `requirements.txt`, so a fresh install produced every PNG and then failed at
   PDF assembly.

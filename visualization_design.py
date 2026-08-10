@@ -16,7 +16,6 @@ Every new visual uses:
 
 from __future__ import annotations
 from typing import Any
-import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
@@ -171,25 +170,6 @@ def _shadow(width: float = 0, fg: str = BG_DARK) -> list:
     if width <= 0:
         return []
     return [pe.withStroke(linewidth=width, foreground=fg)]
-
-
-def _raised_panel_backdrop(
-    fig,
-    x: float,
-    y: float,
-    w: float,
-    h: float,
-    *,
-    edge: str | None = None,
-    glow: str | None = None,
-    depth: float = 0.006,
-    radius: float = 0.010,
-    zorder: float = -4,
-):
-    """No-op in the Pure-Black identity: panels are flat with a single
-    1px hairline border, no drop shadow / glow ring. Kept for API
-    compatibility with existing call sites in match_report.py."""
-    return
 
 
 def _neon_backdrop(fig):
@@ -443,15 +423,6 @@ def themed_pitch(
         ax.set_xlim(48, 102)
 
 
-def themed_panel(ax, fill: str = BG_MID, lw: float = 1.0):
-    """Flat pure-black subplot panel: single hairline border, no glow."""
-    ax.set_facecolor(fill)
-    for s in ax.spines.values():
-        s.set_edgecolor(GRID_COL)
-        s.set_linewidth(max(lw, 1.0))
-        s.set_alpha(1.0)
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # 3) Metric strip — metric strip (like the one under the PPDA dial)
 # ═════════════════════════════════════════════════════════════════════════════
@@ -599,64 +570,6 @@ def legend_chips(
 # ═════════════════════════════════════════════════════════════════════════════
 # 5) Intensity bar — strength bar (colour-coded like a gauge)
 # ═════════════════════════════════════════════════════════════════════════════
-def intensity_bar(
-    fig,
-    x: float,
-    y: float,
-    w: float,
-    h: float,
-    value: float,
-    vmin: float,
-    vmax: float,
-    label: str,
-    color: str,
-    reverse: bool = False,
-):
-    """
-    Horizontal bar with value + label + tick marks. reverse=True = smaller is better.
-    """
-    ax = fig.add_axes([x, y, w, h])
-    ax.set_facecolor(BG_MID)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for s in ax.spines.values():
-        s.set_edgecolor(GRID_COL)
-
-    # background track
-    ax.barh(0, 1, color=GRID_SOFT, height=0.6, zorder=1)
-
-    ratio = max(0, min(1, (value - vmin) / (vmax - vmin)))
-    if reverse:
-        ratio = 1 - ratio
-    ax.barh(0, ratio, color=color, height=0.6, zorder=2, edgecolor=TEXT_BRIGHT, lw=0.6)
-
-    ax.set_xlim(0, 1)
-    ax.set_ylim(-0.6, 0.6)
-    ax.text(
-        0.01,
-        0,
-        label,
-        ha="left",
-        va="center",
-        color=TEXT_BRIGHT,
-        fontsize=10,
-        fontweight="bold",
-        family=FONT_SANS,
-        transform=ax.transAxes,
-        path_effects=_shadow(2),
-    )
-    ax.text(
-        0.99,
-        0,
-        f"{value:.2f}" if isinstance(value, float) else str(value),
-        ha="right",
-        va="center",
-        color=color,
-        fontsize=11,
-        fontweight="bold",
-        transform=ax.transAxes,
-        path_effects=_shadow(2),
-    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -5,14 +5,12 @@ from html import escape
 from pathlib import Path
 from typing import Iterable
 
-import numpy as np
 import pandas as pd
 from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 

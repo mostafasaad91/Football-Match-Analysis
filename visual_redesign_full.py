@@ -14,13 +14,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib import colors as mcolors
-from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Arc, Circle, Rectangle, Wedge
 import numpy as np
 import pandas as pd
-from PIL import Image
 from scipy.ndimage import gaussian_filter
 from visualization_components import (
     C_AWAY,
@@ -160,30 +158,6 @@ def _team_series_palette(team_color: str) -> tuple[str, str]:
     # separating origins from destinations on the pure-black background.
     secondary_rgb = primary_rgb * 0.58 + np.ones(3) * 0.42
     return mcolors.to_hex(primary_rgb), mcolors.to_hex(secondary_rgb)
-
-
-def _color_luminance(color: str) -> float:
-    rgb = np.asarray(mcolors.to_rgb(color), dtype=float)
-    linear = np.where(
-        rgb <= 0.04045,
-        rgb / 12.92,
-        ((rgb + 0.055) / 1.055) ** 2.4,
-    )
-    return float(np.dot(linear, [0.2126, 0.7152, 0.0722]))
-
-
-def _bright_visual_color(color: str, min_luminance: float = 0.32) -> str:
-    """Tint a dark identity colour until marks remain clear on AMOLED black."""
-    try:
-        rgb = np.asarray(mcolors.to_rgb(color), dtype=float)
-    except ValueError:
-        rgb = np.asarray(mcolors.to_rgb("#94A3B8"), dtype=float)
-    candidate = rgb.copy()
-    for amount in np.linspace(0.0, 0.72, 19):
-        candidate = rgb * (1.0 - amount) + np.ones(3) * amount
-        if _color_luminance(mcolors.to_hex(candidate)) >= min_luminance:
-            break
-    return mcolors.to_hex(candidate)
 
 
 def _team_mark_color(team_id: int) -> str:
@@ -420,39 +394,6 @@ def save(fig, filename: str) -> Path:
         plt.close(fig)
         gc.collect()
     return path
-
-
-def label_layout(points: list[tuple[float, float, str]], min_gap=5.4):
-    groups = {"left": [], "right": []}
-    for x, y, name in points:
-        groups["left" if x <= 0 else "right"].append([x, y, name, y])
-    placed = []
-    for side, items in groups.items():
-        items.sort(key=lambda item: item[1])
-        for idx in range(1, len(items)):
-            if items[idx][3] - items[idx - 1][3] < min_gap:
-                items[idx][3] = items[idx - 1][3] + min_gap
-        overflow = items[-1][3] - (PITCH_LENGTH - 3) if items else 0
-        if overflow > 0:
-            for item in items:
-                item[3] -= overflow
-        for idx in range(len(items) - 2, -1, -1):
-            if items[idx + 1][3] - items[idx][3] < min_gap:
-                items[idx][3] = items[idx + 1][3] - min_gap
-        under = 3 - items[0][3] if items else 0
-        if under > 0:
-            for item in items:
-                item[3] += under
-        for x, y, name, label_y in items:
-            label_x = -PITCH_WIDTH / 2 - 2.5 if side == "left" else PITCH_WIDTH / 2 + 2.5
-            placed.append((x, y, name, label_x, label_y, "right" if side == "left" else "left"))
-    return placed
-
-
-def place_player_labels(ax, points):
-    for x, y, name, lx, ly, ha in label_layout(points):
-        ax.plot([x, lx * 0.94], [y, ly], color=GRID, lw=0.7, zorder=4)
-        ax.text(lx, ly, name, color=TEXT, fontsize=7.5, ha=ha, va="center", zorder=5)
 
 
 def compact_player_label(name: str) -> str:

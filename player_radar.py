@@ -28,7 +28,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patheffects as pe
 import matplotlib.patches as mpatches
 import matplotlib.colors as mcolors
 from match_metrics import (
