@@ -143,6 +143,30 @@ GROUPS = [
 ]
 
 
+# Three metric keys were written with the line break inside the word so they
+# would fit the ring — they rendered as CLEAR/ANCES, RECOV/ERIES and
+# INTERCEP/TIONS, which reads as a typesetting fault rather than a label. The
+# keys are load-bearing (they index the metric dictionaries and the percentile
+# lookups), so the repair happens at draw time: same key, readable label.
+_LABEL_OVERRIDES = {
+    "Clear\nances": "CLEARANCES",
+    "Recov\neries": "RECOVERIES",
+    "Intercep\ntions": "INTERCEPTS",
+}
+
+
+def display_label(key: str) -> str:
+    """Return the drawn form of a metric key.
+
+    Any break that survives is at a space the label already had, never inside
+    a word.
+    """
+    override = _LABEL_OVERRIDES.get(key)
+    if override is not None:
+        return override
+    return str(key).upper()
+
+
 def _chip_text_color(color: str) -> str:
     """Keep metric values readable on the group-coloured chip fill.
 
@@ -1071,7 +1095,7 @@ def make_player_pizza(
         ax.text(
             a,
             RLAB,
-            lab.upper(),
+            display_label(lab),
             color=TEXT_BRIGHT,
             fontsize=8.6,
             fontweight="bold",

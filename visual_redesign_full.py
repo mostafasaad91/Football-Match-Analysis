@@ -16,7 +16,7 @@ import matplotlib.patheffects as path_effects
 from matplotlib import colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
-from matplotlib.patches import Arc, Circle, Rectangle, Wedge
+from matplotlib.patches import Arc, Circle, Patch, Rectangle, Wedge
 import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter
@@ -331,13 +331,56 @@ def side_title(ax, text: str):
     ax.plot([0.07, 0.93], [0.89, 0.89], color=GRID, lw=1)
 
 
-def side_kpis(ax, items: list[tuple[str, str]], start=0.82, gap=0.14):
+def side_kpis(ax, items: list[tuple[str, str]], start=0.82, gap=0.14) -> float:
+    """Draw the stacked KPI block and return the y its last value reaches.
+
+    Callers used to place the next section at a hand-picked y, which held only
+    for the number of KPIs they happened to have when it was written: a fourth
+    KPI pushed its 16pt value straight through the heading below it. Returning
+    the bottom lets the next block start from where this one actually ended.
+    """
+    bottom = start
     for idx, (label, value) in enumerate(items):
         y = start - idx * gap
         if y < 0.06:
             break
         ax.text(0.08, y, label.upper(), color=MUTED, fontsize=7.5, fontweight="bold", va="top")
         ax.text(0.08, y - 0.055, str(value), color=TEXT, fontsize=16, fontweight="bold", va="top")
+        bottom = y - 0.055 - 0.045  # value baseline plus its own height
+    return bottom
+
+
+def pitch_legend(ax, items, ncol: int | None = None, y: float = -0.075):
+    """Draw a key beneath a pitch for anything the marks encode.
+
+    ``items`` are (kind, colour, label) where kind is "patch" for a filled
+    swatch, or any matplotlib marker string for a point. Several visuals used
+    colour or shape to carry meaning and then never said what the meaning was —
+    a reader looking at Pitch Control had no way to learn that blue is one side,
+    silver the other, and dark the space neither held.
+    """
+    handles = []
+    for kind, colour, label in items:
+        if kind == "patch":
+            # A near-black swatch on a black page is invisible without an
+            # outline — the "contested" key read as a gap in the legend.
+            handles.append(Patch(facecolor=colour, edgecolor=EVENT_NEUTRAL,
+                                 linewidth=0.7, label=label))
+        else:
+            handles.append(Line2D([], [], linestyle="none", marker=kind,
+                                  markerfacecolor=colour, markeredgecolor=BG,
+                                  markeredgewidth=0.9, markersize=7, label=label))
+    ax.legend(
+        handles=handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, y),
+        ncol=ncol or min(len(handles), 4),
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=7.5,
+        handletextpad=0.6,
+        columnspacing=1.8,
+    )
 
 
 def side_rows(
@@ -396,10 +439,16 @@ def save(fig, filename: str) -> Path:
     return path
 
 
-def compact_player_label(name: str) -> str:
-    """Return a readable surname that still fits inside a network node."""
+def compact_player_label(name: str, limit: int = 7) -> str:
+    """Return a readable surname, shortened only as far as the space demands.
+
+    The default suits a name written next to a pitch marker, where anything
+    longer starts colliding with its neighbours. Side-panel rows have most of
+    a column to themselves and pass a larger limit — truncating "Locatelli" to
+    "Locate…" there threw away a legible name to save space nothing needed.
+    """
     surname = str(name).strip().split()[-1] if str(name).strip() else "?"
-    return surname if len(surname) <= 7 else f"{surname[:6]}…"
+    return surname if len(surname) <= limit else f"{surname[:limit - 1]}…"
 
 
 def shirt_number_map(players) -> dict[str, str]:
@@ -416,14 +465,31 @@ def shirt_number_map(players) -> dict[str, str]:
     return numbers
 
 
+# A name drawn at fontsize 5.9 on the long pitch measures about 0.48 pitch
+# units per character either side of centre, and roughly 1.4 units tall. Good
+# enough to keep a label off a neighbouring marker, which is all the placement
+# search below needs to decide.
+_LABEL_HALF_WIDTH_PER_CHAR = 0.48
+_LABEL_HALF_HEIGHT = 1.4
+
+
 def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch: float,
                     node_color: str | None = None, shirt: str | None = None,
-                    node_radius: float = 2.6):
-    """Put the shirt number inside the node and the player's name above it.
+                    node_radius: float = 2.6,
+                    neighbours: "tuple[tuple[float, float, float], ...]" = ()):
+    """Put the shirt number inside the node and the player's name beside it.
 
     A surname squeezed inside the marker has to shrink to fit and gets clipped
     on longer names. A number always fits at a readable size, and the name then
     has the space outside the node to be written in full.
+
+    ``neighbours`` carries every *other* node as (x, y, radius). Writing the
+    name above its own marker clears that marker but says nothing about the one
+    sitting just above it, which is how a midfield pair ends up with one man's
+    name printed across the other's circle. With the neighbours known, the four
+    sides are scored by how far the drawn label lands from any other marker and
+    the roomiest one wins; above still wins ties, so an uncrowded network looks
+    exactly as it did.
     """
     ratio = float(touches) / max(float(max_touch), 1.0)
     fill = node_color or BG
@@ -435,9 +501,44 @@ def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch
         number.set_path_effects([path_effects.withStroke(linewidth=1.6, foreground=fill, alpha=0.6)])
 
     label = compact_player_label(name) if not shirt else str(name).strip().split()[-1][:12]
+
+    # Offset, alignment, and where the label's centre ends up relative to the
+    # anchor — the last part is what makes the clearance test meaningful, since
+    # a centred label extends half its width to each side.
+    half_width = _LABEL_HALF_WIDTH_PER_CHAR * len(label)
+    placements = (
+        (0.0, node_radius, "center", "bottom", 0.0, _LABEL_HALF_HEIGHT),
+        (0.0, -node_radius, "center", "top", 0.0, -_LABEL_HALF_HEIGHT),
+        (node_radius, 0.0, "left", "center", half_width, 0.0),
+        (-node_radius, 0.0, "right", "center", -half_width, 0.0),
+    )
+
+    dx, dy, ha, va = placements[0][:4]
+    if neighbours:
+        best_score = None
+        for cand_dx, cand_dy, cand_ha, cand_va, box_dx, box_dy in placements:
+            centre_x = x + cand_dx + box_dx
+            centre_y = y + cand_dy + box_dy
+            score = min(
+                math.hypot(centre_x - other_x, centre_y - other_y) - other_r
+                for other_x, other_y, other_r in neighbours
+            )
+            # Clearing the neighbours is worthless if the label then runs off
+            # the pitch: the axis clips it and the name loses its first letter,
+            # which is how a wide player ended up labelled "ostic". Overflow is
+            # penalised rather than forbidden so a node with no clean side
+            # still gets the least bad one.
+            overflow = max(0.0, abs(centre_x) + half_width - PITCH_WIDTH / 2)
+            overflow += max(0.0, _LABEL_HALF_HEIGHT - centre_y)
+            overflow += max(0.0, centre_y + _LABEL_HALF_HEIGHT - PITCH_LENGTH)
+            score -= 10.0 * overflow
+            if best_score is None or score > best_score + 1e-9:
+                best_score = score
+                dx, dy, ha, va = cand_dx, cand_dy, cand_ha, cand_va
+
     name_text = ax.text(
-        x, y + node_radius, label, color=TEXT, fontsize=5.9, fontweight="bold",
-        ha="center", va="bottom", zorder=7, clip_on=True,
+        x + dx, y + dy, label, color=TEXT, fontsize=5.9, fontweight="bold",
+        ha=ha, va=va, zorder=7, clip_on=True,
     )
     name_text.set_path_effects([path_effects.withStroke(linewidth=2.2, foreground=BG, alpha=0.95)])
 
@@ -463,6 +564,27 @@ def _role_fallback_position(position: str) -> tuple[float, float]:
     elif "R" in role and "RC" not in role:
         y = 78.0
     return x, y
+
+
+def _network_node_radius(touches: float, max_touch: float) -> float:
+    """Marker radius in pitch units for a node sized by touches.
+
+    Marker area is set in points squared; the pitch axis runs at about 4.2
+    points per unit, so convert before using it as a pitch-space offset.
+    """
+    area = 260 + 640 * float(touches) / max(float(max_touch), 1.0)
+    return math.sqrt(area / math.pi) / 4.2 + 0.7
+
+
+def _node_neighbours(display: dict[str, tuple[float, float, float]],
+                     radii: dict[str, float], exclude: str):
+    """Every node except ``exclude``, as the (x, y, radius) triples the label
+    placement search needs."""
+    return tuple(
+        (float(x), float(y), radii[name])
+        for name, (x, y, _touches) in display.items()
+        if name != exclude
+    )
 
 
 def _separate_network_positions(display: dict[str, tuple[float, float, float]], min_gap=5.3):
@@ -544,16 +666,18 @@ def shot_map(events, xg, team_id, number):
     pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.08), ncol=3, frameon=False, labelcolor=TEXT, fontsize=7.5)
     xr = xg_row(xg, TEAM_NAME[team_id])
     side_title(side, "SHOT OUTPUT")
-    side_kpis(side, [("Shots", f"{len(shots)}"), ("xG", f"{float(xr.get('xG', 0)):.2f}"), ("xG / shot", f"{float(xr.get('xG_per_shot', 0)):.3f}"), ("On target", f"{int(float(xr.get('on_target', 0)))}")])
+    kpi_bottom = side_kpis(side, [("Shots", f"{len(shots)}"), ("xG", f"{float(xr.get('xG', 0)):.2f}"), ("xG / shot", f"{float(xr.get('xG_per_shot', 0)):.3f}"), ("On target", f"{int(float(xr.get('on_target', 0)))}")])
 
     # Shot location says where the chance came from; this says which part of
-    # the goal the keeper actually had to cover.
+    # the goal the keeper actually had to cover. Anchored under the KPI block
+    # rather than at a fixed 0.30, which the fourth KPI's value ran into.
     zones = shot_placement_zones(events, team_id)
     if sum(zones.values()):
-        side.text(0.08, 0.30, "GOAL FRAME TARGETED", color=MUTED, fontsize=7.5, fontweight="bold")
+        heading_y = kpi_bottom - 0.03
+        side.text(0.08, heading_y, "GOAL FRAME TARGETED", color=MUTED, fontsize=7.5, fontweight="bold")
         ranked = [item for item in sorted(zones.items(), key=lambda pair: -pair[1]) if item[1]][:3]
         for idx, (zone, count) in enumerate(ranked):
-            y = 0.25 - idx * 0.055
+            y = heading_y - 0.05 - idx * 0.055
             side.text(0.08, y, zone.replace("_", " ").title(), color=TEXT, fontsize=8, va="center")
             side.text(0.92, y, str(count), color=TEXT, fontsize=8.5, fontweight="bold",
                       ha="right", va="center")
@@ -705,7 +829,10 @@ def _half_network_data(events, players, team_id, half):
     pending_off = []
     for _, row in events_sorted.iterrows():
         minute = int(float(row.get("minute", 0) or 0))
-        name = compact_player_label(str(row.get("player", "")))
+        # These names are read in a side-panel row that spans most of the
+        # column, not next to a pitch marker, so the pitch default clipped
+        # "Marmoush" and "Aït-Nouri" for space that was never contested.
+        name = compact_player_label(str(row.get("player", "")), 12)
         if str(row.get("type")) == "SubstitutionOff":
             pending_off.append((minute, name))
         else:
@@ -741,26 +868,27 @@ def pass_network(events, players, team_id, number, half):
                    lw=0.75 + 4.4 * float(edge["passes"]) / max_edge, zorder=2)
     max_touch = max([value[2] for value in display.values()] or [1])
     shirts = shirt_number_map(players)
+    radii = {name: _network_node_radius(touches, max_touch)
+             for name, (_x, _y, touches) in display.items()}
     for name, (px, py, touches) in display.items():
         entered = name in sub_on
         left = name in sub_off
         pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
                       color=_team_mark_color(team_id), edgecolor=FOCUS if left else link_color,
                       linewidth=2.3 if left else 1.15, zorder=4)
-        # Node radius in pitch units, so the name clears the marker at any size.
-        # Marker area is in points^2; the pitch axis is about 4.2 points per
-        # unit, so convert before using it as a pitch-space offset.
-        radius = math.sqrt((260 + 640 * touches / max_touch) / math.pi) / 4.2 + 0.7
         draw_node_label(pitch, px, py, name, touches, max_touch,
                         node_color=_team_mark_color(team_id),
-                        shirt=shirts.get(str(name)), node_radius=radius)
+                        shirt=shirts.get(str(name)), node_radius=radii[name],
+                        neighbours=_node_neighbours(display, radii, name))
 
     side_title(side, "TOP HALF CONNECTIONS")
     side.text(0.92, 0.94, f"{len(positions)} players", color=TEXT, fontsize=8,
               fontweight="bold", ha="right", va="top")
     # Four link rows rather than five: the fifth was the weakest pair anyway,
     # and the space now carries the centrality read instead.
-    side_rows(side, [(f"{compact_player_label(r.player)} → {compact_player_label(r.next_player)}", str(int(r.passes))) for r in edges.head(4).itertuples()], start=0.81, gap=0.075)
+    # Two names share this row, so each gets less room than a single-name row
+    # further down — but still far more than the pitch-side default.
+    side_rows(side, [(f"{compact_player_label(r.player, 11)} → {compact_player_label(r.next_player, 11)}", str(int(r.passes))) for r in edges.head(4).itertuples()], start=0.81, gap=0.075)
 
     # Link volume names the busiest pair. Betweenness names the player the
     # network routes through — take them out and it splits in two.
@@ -775,25 +903,34 @@ def pass_network(events, players, team_id, number, half):
         side.text(0.08, 0.520, "CONNECTORS", color=MUTED, fontsize=7.5, fontweight="bold")
         for idx, row in enumerate(centrality.head(3).itertuples()):
             y = 0.472 - idx * 0.043
-            side.text(0.08, y, compact_player_label(row.player), color=TEXT, fontsize=8, va="center")
+            side.text(0.08, y, compact_player_label(row.player, 16), color=TEXT, fontsize=8, va="center")
             side.text(0.92, y, f"{row.betweenness:.3f}", color=TEXT, fontsize=8.5,
                       fontweight="bold", ha="right", va="center")
 
     side.text(0.08, 0.325, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
     if substitutions:
-        for idx, (minute, on_name, off_name) in enumerate(substitutions[:5]):
-            y = 0.278 - idx * 0.042
+        # A fixed 0.042 step fits four rows above the footer and puts a fifth
+        # exactly on top of it. Tighten the step only when the extra row needs
+        # it, so the common case keeps its existing spacing.
+        shown = substitutions[:5]
+        top, floor = 0.278, 0.150
+        gap = 0.042 if len(shown) < 2 else min(0.042, (top - floor) / (len(shown) - 1))
+        for idx, (minute, on_name, off_name) in enumerate(shown):
+            y = top - idx * gap
             side.text(0.08, y, f"{minute}′", color=TEXT, fontsize=7.5, fontweight="bold", va="center")
             change = f"{off_name} OFF AT INTERVAL" if on_name == "—" else f"{on_name} IN  ·  {off_name} OFF"
             side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
     else:
         side.text(0.08, 0.278, "No in-half changes", color=MUTED, fontsize=8)
     side.text(0.08, 0.105, f"Completed pass links: {completed_links}", color=TEXT, fontsize=8, fontweight="bold")
-    side.scatter([0.12, 0.31], [0.055, 0.055], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
-    side.scatter([0.50], [0.055], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
-    side.text(0.16, 0.055, "Began half", color=TEXT, fontsize=6.8, va="center")
-    side.text(0.35, 0.055, "Went off", color=TEXT, fontsize=6.8, va="center")
-    side.text(0.54, 0.055, "Came on", color=TEXT, fontsize=6.8, va="center")
+    # "Began half" is wider than the old 0.19 gap between markers, so it ran
+    # under the next swatch. Spaced to the widest label rather than to an
+    # eyeballed step.
+    side.scatter([0.06, 0.34], [0.055, 0.055], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
+    side.scatter([0.60], [0.055], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
+    side.text(0.10, 0.055, "Began half", color=TEXT, fontsize=6.8, va="center")
+    side.text(0.38, 0.055, "Went off", color=TEXT, fontsize=6.8, va="center")
+    side.text(0.64, 0.055, "Came on", color=TEXT, fontsize=6.8, va="center")
     suffix = "1h" if half == 1 else "2h"
     return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_pass_network_{_team_slug(team_id)}_{suffix}.png")
 
@@ -1574,25 +1711,24 @@ def average_positions(events, players, team_id, number, half):
     _link_low, outline_color, _link_strong = network_link_palette(TEAM_COLOR[team_id])
     max_touch = max([value[2] for value in display.values()] or [1])
     shirts = shirt_number_map(players)
+    radii = {name: _network_node_radius(touches, max_touch)
+             for name, (_x, _y, touches) in display.items()}
     for name, (px, py, touches) in display.items():
         entered = name in sub_on
         left = name in sub_off
         pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
                       color=_team_mark_color(team_id), edgecolor=FOCUS if left else outline_color,
                       linewidth=2.3 if left else 1.15, zorder=4)
-        # Node radius in pitch units, so the name clears the marker at any size.
-        # Marker area is in points^2; the pitch axis is about 4.2 points per
-        # unit, so convert before using it as a pitch-space offset.
-        radius = math.sqrt((260 + 640 * touches / max_touch) / math.pi) / 4.2 + 0.7
         draw_node_label(pitch, px, py, name, touches, max_touch,
                         node_color=_team_mark_color(team_id),
-                        shirt=shirts.get(str(name)), node_radius=radius)
+                        shirt=shirts.get(str(name)), node_radius=radii[name],
+                        neighbours=_node_neighbours(display, radii, name))
 
     side_title(side, "HALF PARTICIPATION")
     side.text(0.92, 0.94, f"{len(positions)} players", color=TEXT, fontsize=8,
               fontweight="bold", ha="right", va="top")
     active = positions.sort_values("touches", ascending=False).head(5)
-    side_rows(side, [(compact_player_label(name), str(int(row["touches"]))) for name, row in active.iterrows()], start=0.81, gap=0.075)
+    side_rows(side, [(compact_player_label(name, 16), str(int(row["touches"]))) for name, row in active.iterrows()], start=0.81, gap=0.075)
     side.text(0.08, 0.40, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
     if substitutions:
         for idx, (minute, on_name, off_name) in enumerate(substitutions[:5]):
@@ -1602,11 +1738,11 @@ def average_positions(events, players, team_id, number, half):
             side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
     else:
         side.text(0.08, 0.34, "No in-half changes", color=MUTED, fontsize=8)
-    side.scatter([0.12, 0.31], [0.075, 0.075], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
-    side.scatter([0.50], [0.075], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
-    side.text(0.16, 0.075, "Began half", color=TEXT, fontsize=6.8, va="center")
-    side.text(0.35, 0.075, "Went off", color=TEXT, fontsize=6.8, va="center")
-    side.text(0.54, 0.075, "Came on", color=TEXT, fontsize=6.8, va="center")
+    side.scatter([0.06, 0.34], [0.075, 0.075], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
+    side.scatter([0.60], [0.075], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
+    side.text(0.10, 0.075, "Began half", color=TEXT, fontsize=6.8, va="center")
+    side.text(0.38, 0.075, "Went off", color=TEXT, fontsize=6.8, va="center")
+    side.text(0.64, 0.075, "Came on", color=TEXT, fontsize=6.8, va="center")
     suffix = "1h" if half == 1 else "2h"
     return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_average_positions_{_team_slug(team_id)}_{suffix}.png")
 
@@ -2071,7 +2207,7 @@ def momentum(events):
     frame = xg_momentum(events, HOME_ID, AWAY_ID, window=5)
     fig, ax = base.page(
         "Match Momentum",
-        "Expected-goal difference per five-minute window \u00b7 the cumulative curve shows who finished ahead, this shows who was on top and when",
+        "Expected-goal difference per five-minute window \u00b7 the xG flow shows who finished ahead, this shows when",
     )
     base.clean_ax(ax)
     if frame.empty:
@@ -2436,6 +2572,15 @@ def control_surface(events):
         pitch.scatter(px, py, s=44, marker="o", facecolors=color,
                       edgecolors=BG, linewidths=1.0, zorder=6)
 
+    # Everything on this map is encoded: the field's colour is which side held
+    # the space, the dots are average positions. Neither was stated anywhere.
+    pitch_legend(pitch, [
+        ("patch", HOME, f"{HOME_NAME} holds"),
+        ("patch", PANEL_2, "Contested"),
+        ("patch", AWAY, f"{AWAY_NAME} holds"),
+        ("o", TEXT, "Average position"),
+    ], ncol=4)
+
     side_title(side, "TERRITORY")
     side_kpis(side, [
         (f"{HOME_NAME} control", f"{shares['home']:.0f}%"),
@@ -2588,6 +2733,12 @@ def unlocking_the_block(events, team_id, opponent_id, number):
                    color=EVENT_NEUTRAL, lw=1.1, ls=(0, (5, 4)), alpha=0.7, zorder=3)
         pitch.text(PITCH_WIDTH / 2, line_y + 0.8, "avg line", color=MUTED,
                    fontsize=6.4, ha="right", va="bottom")
+        # Neither mark said what it was: one dot is a single reception, and
+        # "avg line" alone does not tell the reader whose line it is.
+        pitch_legend(pitch, [
+            ("o", team_mark, "Reception in the pocket"),
+            ("_", EVENT_NEUTRAL, f"{TEAM_NAME[opponent_id]} average defensive line"),
+        ], ncol=2)
 
     side_title(side, "PLAYING THROUGH")
     side_kpis(side, [

@@ -181,7 +181,11 @@ def amoled_header(
              fontweight="bold", va="center", zorder=95, path_effects=glow)
     fig.text(0.055, 0.881, "STAT INFO", color=FOCUS, fontsize=6.3,
              fontweight="bold", va="center", zorder=95)
-    fig.text(0.113, 0.881, subtitle[:115], color=MUTED, fontsize=6.8,
+    # A bare slice cut "…this shows who was on top and when" to "…who was",
+    # which reads as a rendering fault rather than an abbreviation. Mark the
+    # cut so an over-long subtitle is obviously shortened, not broken.
+    trimmed = subtitle if len(subtitle) <= 115 else subtitle[:114].rstrip() + "…"
+    fig.text(0.113, 0.881, trimmed, color=MUTED, fontsize=6.8,
              va="center", zorder=95)
 
     fig.text(0.705, 0.954, HOME_NAME.upper(), color=HOME, fontsize=8.2,

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- One typeface across the PDF. The commentary was set in Times while every
+  embedded visual is sans, so 85.6% of the document's characters belonged to a
+  family none of its images used and each page read as two documents stapled
+  together. Weight and colour separate the commentary now, not a second family.
+- The amber accent is gone. At 1,398 characters against 648 for both kit
+  colours combined, a fixed colour was louder than the fixture — on a page whose
+  whole premise is that the two teams own the palette. Structural marks are
+  neutral; a brand cyan sampled from `assets/logo.jpg` is reserved for the
+  publisher's mark and never touches a value.
+- Six-step type scale replaces 23 ad-hoc font sizes, several within a fifth of
+  a point of each other. The cover's lead statistic keeps two deliberately
+  mismatched sizes, named so they stay a decision rather than drift.
+- Rebuilt cover: the publisher's badge, the fixture, a one-line verdict, and
+  the match's widest percentage split drawn at full width — the graphic *is* the
+  finding. Falls back to a scoreline layout when no split exceeds 25 points, so
+  an even match gets an opener that suits it. Blank space fell from 84.3% to
+  65%.
+- The commentary band shares the visual's pure-black ground instead of
+  `#0A0A0A`, removing the seam ruled across every visual page.
+- Embedded visuals use the same left margin as the text (42pt, was 4pt), so a
+  page has one edge rather than three.
+- Executive-summary cards follow their content instead of a fixed 135pt that
+  left each one nine tenths empty, and the freed space carries the four
+  headline splits.
+- Contents markers no longer alternate between the team colours by row number,
+  which encoded nothing; leader rules start where the title ends.
+
+### Fixed
+
+- Player-network labels are placed against every other node, not just their
+  own. A name cleared its own marker and landed across a neighbour's — one
+  midfielder's surname printed over another's circle. Placement now scores the
+  four sides for clearance and penalises any that would run off the pitch,
+  which is how "Kostic" came to render as "ostic".
+- `side_kpis` returns the height it consumed. The block below it was positioned
+  at a hand-picked y that held only for the number of KPIs present when it was
+  written, so a fourth KPI drove its value straight through the heading beneath.
+- A fifth substitution in one half landed exactly on the "Completed pass links"
+  footer; row spacing now tightens only when the extra row needs it.
+- Legends added where marks were encoded and never explained: Pitch Control
+  (colour is which side held the space) and Unlocking the Block (what a dot is,
+  and whose defensive line the dashed rule marks).
+- Radar labels no longer break inside a word. `CLEARANCES`, `RECOVERIES` and
+  `INTERCEPTIONS` were written with the line break mid-word to make them fit and
+  rendered as `CLEAR/ANCES`, `RECOV/ERIES`, `INTERCEP/TIONS`.
+- Names were shortened to seven characters even in side-panel rows with most of
+  a column to spare, turning Locatelli into `Locate…` and Aït-Nouri into
+  `Aït-No…`.
+- The "Began half" legend ran under the next swatch.
+- A subtitle over 115 characters was cut mid-sentence with no ellipsis, so
+  Match Momentum ended on "…this shows who was".
+
 ### Removed
 
 - 4,323 lines of unreachable code across five modules: 51 top-level
