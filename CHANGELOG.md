@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- QA contact sheet 01 is now a twelve-up match story, ordered result → rhythm
+  → goals → context → territory → mechanism → people, with a line under each
+  thumbnail carrying the narrative. A third row makes the sheet 14% taller
+  rather than shrinking every thumbnail by a third.
+- Every rendered visual now appears on a sheet. Fifteen reached none: the
+  dashboard list was written when the project produced thirty-four visuals and
+  was never revisited when it grew to forty-nine, so momentum, win probability,
+  pitch control, action value, goal origins, sequence types, set pieces, ball
+  losses, defensive shape, playing through, unlocking and press triggers were
+  generated on every run and shown on no sheet.
+- Thumbnails are letterboxed onto a common frame. The source visuals have
+  different aspect ratios, so each one sat at a different height inside its
+  cell and the titles stepped up and down across a row.
+- Two-row sheets are 9in rather than 11.25in. Measured on a rendered sheet that
+  was 39% empty, including a 222pt dead band between the two rows — taller than
+  a thumbnail. Now 25%.
+- Sheet header positions are given in inches rather than figure fractions, so
+  the block keeps its spacing at both sheet heights instead of the subtitle
+  closing on the team rule when the sheet got shorter.
+- The contact-sheet label is neutral, not amber — the same orphan accent the
+  report carried until it was measured against the kit colours.
 - One typeface across the PDF. The commentary was set in Times while every
   embedded visual is sans, so 85.6% of the document's characters belonged to a
   family none of its images used and each page read as two documents stapled

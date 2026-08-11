@@ -42,24 +42,46 @@ else:
     NEUTRAL = "#626A75"
 HOME = _ROLE_HOME
 AWAY = _ROLE_AWAY
-FOCUS = _ROLE_FOCUS if IS_LIGHT_THEME else "#FFD43B"
+# The sheet label used to be amber, the same orphan accent the report carried
+# until it was measured against the kit colours and lost. Neutral here too, so
+# the contact sheets and the PDF agree on what a structural mark looks like.
+FOCUS = _ROLE_FOCUS if IS_LIGHT_THEME else "#C8CDD4"
 
 
+# Each entry is a filename, or a (filename, note) pair. The note is the line
+# printed under the thumbnail's title: on the story sheet it carries the
+# narrative, which is what makes an ordered set of visuals a reading rather
+# than a grid.
 DASHBOARDS = [
     (
-        "Match Story",
-        "Result, chance rhythm and the effect of game state",
-        ["14_post_match_advanced_dashboard.png", "01_xg_flow.png", "04_goals_breakdown.png", "33_game_state_splits.png"],
+        "The Match Story",
+        "Result, rhythm, goals, territory and the players who moved them",
+        [
+            ("14_post_match_advanced_dashboard.png", "The result in 32 indicators"),
+            ("01_xg_flow.png", "How danger accumulated"),
+            ("35_match_momentum.png", "Who was on top, and when"),
+            ("40_win_probability.png", "When the result became likely"),
+            ("04_goals_breakdown.png", "What the goals were"),
+            ("46_goal_origins.png", "Where they came from"),
+            ("33_game_state_splits.png", "How the scoreline changed behaviour"),
+            ("44_pitch_control.png", "Who held the space"),
+            ("45_sequence_types.png", "How the danger was built"),
+            ("32_transition_outcomes.png", "What the open field produced"),
+            ("43_action_value.png", "Who moved the needle"),
+            ("34_player_sequence_leaders.png", "Who connected the valuable attacks"),
+        ],
     ),
     (
         "Finishing and Shot Quality",
-        "Volume, location, post-shot placement and goalkeeper workload",
-        ["02_shot_map_france.png", "03_shot_map_england.png", "11_goalkeeper_saves.png", "15_xt_per_minute.png"],
+        "Volume, location, post-shot placement, set plays and goalkeeper workload",
+        ["02_shot_map_france.png", "03_shot_map_england.png", "11_goalkeeper_saves.png", "15_xt_per_minute.png", "36_set_pieces.png"],
     ),
     (
         "Chance Creation",
-        "Final-third access, central occupation and penalty-area conversion",
-        ["12_zone14_france.png", "13_zone14_england.png", "25_box_entries_france.png", "26_box_entries_england.png"],
+        "Final-third access, central occupation, playing through a block and penalty-area conversion",
+        ["12_zone14_france.png", "13_zone14_england.png", "25_box_entries_france.png", "26_box_entries_england.png",
+         "41_playing_through_france.png", "42_playing_through_england.png",
+         "47_unlocking_france.png", "48_unlocking_england.png"],
     ),
     (
         "Possession Structure by Half",
@@ -68,8 +90,9 @@ DASHBOARDS = [
     ),
     (
         "Progression and Territory",
-        "Where possession started, landed and added threat",
-        ["07_xt_map_france.png", "08_xt_map_england.png", "09_pass_map_france.png", "10_pass_map_england.png", "24_dominating_zones.png", "29_pass_targets_france.png"],
+        "Where possession started, landed, added threat and was surrendered",
+        ["07_xt_map_france.png", "08_xt_map_england.png", "09_pass_map_france.png", "10_pass_map_england.png",
+         "24_dominating_zones.png", "37_ball_losses_france.png", "38_ball_losses_england.png"],
     ),
     (
         "Final-Third Delivery",
@@ -78,8 +101,9 @@ DASHBOARDS = [
     ),
     (
         "Pressing and Defensive Control",
-        "Engagement height, high regains and protection behind the press",
-        ["20_defensive_activity_france.png", "21_defensive_activity_england.png", "27_high_regains_france.png", "28_high_regains_england.png", "31_ppda_pressing.png"],
+        "Engagement height, what triggered the press, high regains and the shape behind it",
+        ["20_defensive_activity_france.png", "21_defensive_activity_england.png", "27_high_regains_france.png", "28_high_regains_england.png",
+         "31_ppda_pressing.png", "49_press_triggers.png", "39_defensive_shape.png"],
     ),
     (
         "Transitions and Final Verdict",
@@ -102,7 +126,43 @@ def _layout(count: int) -> tuple[int, int]:
         return 2, 2
     if count <= 6:
         return 2, 3
-    return 2, 4
+    if count <= 8:
+        return 2, 4
+    return 3, 4
+
+
+# The thumbnail box, in pixels. Every visual is letterboxed onto it before it
+# is drawn: the source visuals have different aspect ratios, so at their
+# natural shape each one sat at a different height inside its cell and the
+# titles stepped up and down across a row.
+CELL = (1180, 720)
+# Height of the sheet in inches, by row count. A third row makes the page
+# taller rather than the thumbnails smaller — squeezing twelve into the
+# two-row canvas would have cost a third of every thumbnail's height.
+#
+# The two-row sheets were 11.25in, sized before the thumbnails were letterboxed
+# to a common frame. Measured on a rendered sheet that left 39% of the page
+# empty, including a 222pt band between the two rows — taller than a thumbnail.
+_SHEET_HEIGHT = {2: 9.0, 3: 12.8}
+
+
+def _framed(path: Path) -> np.ndarray:
+    """Return the visual centred on a constant-size panel."""
+    with Image.open(path) as source:
+        source = source.convert("RGB")
+        source.thumbnail(CELL, Image.Resampling.LANCZOS)
+        canvas = Image.new("RGB", CELL, PANEL)
+        canvas.paste(source, ((CELL[0] - source.width) // 2,
+                              (CELL[1] - source.height) // 2))
+        return np.asarray(canvas, dtype=np.uint8)
+
+
+def _split_entry(entry) -> tuple[str, str]:
+    """Accept either a bare filename or a (filename, note) pair."""
+    if isinstance(entry, str):
+        return entry, ""
+    name, note = entry
+    return name, note
 
 
 def build_qa_contact_sheets(
@@ -116,7 +176,14 @@ def build_qa_contact_sheets(
     home_slug: str = "france",
     away_slug: str = "england",
 ) -> list[Path]:
-    """Build exactly eight story-led QA dashboards from the strongest visuals."""
+    """Build the story-led QA dashboards from the strongest visuals.
+
+    The set opens with a twelve-up narrative sheet and continues with the
+    thematic reviews. Every rendered visual appears on at least one sheet —
+    fifteen of them used to reach none, because the list was written when the
+    project produced thirty-four and was never revisited when it grew to
+    forty-nine.
+    """
     # The sheet chrome must match the thumbnails it frames, so the caller's
     # fixture colours are used as given. They default to the role pair, which
     # is also what kit mode falls back to when two kits are too close.
@@ -125,27 +192,26 @@ def build_qa_contact_sheets(
     for old in out.glob("qa_contact_sheet_*.png"):
         old.unlink(missing_ok=True)
 
-    dashboards = [
-        (
-            title,
-            subtitle,
-            [
-                name.replace("france", home_slug).replace("england", away_slug)
-                for name in filenames
-            ],
-        )
-        for title, subtitle, filenames in DASHBOARDS
-    ]
+    dashboards = []
+    for title, subtitle, entries in DASHBOARDS:
+        resolved = []
+        for entry in entries:
+            name, note = _split_entry(entry)
+            resolved.append(
+                (name.replace("france", home_slug).replace("england", away_slug), note)
+            )
+        dashboards.append((title, subtitle, resolved))
+    total = len(dashboards)
 
     generated: list[Path] = []
-    for sheet_index, (title, subtitle, filenames) in enumerate(dashboards, start=1):
-        paths = [out / name for name in filenames if (out / name).exists()]
-        missing = [name for name in filenames if not (out / name).exists()]
-        if not paths:
+    for sheet_index, (title, subtitle, entries) in enumerate(dashboards, start=1):
+        present = [(out / name, note) for name, note in entries if (out / name).exists()]
+        missing = [name for name, _ in entries if not (out / name).exists()]
+        if not present:
             raise FileNotFoundError(f"Dashboard {sheet_index} has no source visuals. Missing: {missing}")
 
-        rows, cols = _layout(len(paths))
-        fig, axes = plt.subplots(rows, cols, figsize=(20, 11.25), facecolor=BG)
+        rows, cols = _layout(len(present))
+        fig, axes = plt.subplots(rows, cols, figsize=(20, _SHEET_HEIGHT[rows]), facecolor=BG)
         axes = np.atleast_1d(axes).ravel()
         for ax in axes:
             ax.set_facecolor(PANEL)
@@ -154,32 +220,46 @@ def build_qa_contact_sheets(
             for spine in ax.spines.values():
                 spine.set_visible(False)
 
-        for item_index, (ax, path) in enumerate(zip(axes, paths), start=1):
-            with Image.open(path) as source:
-                source = source.convert("RGB")
-                source.thumbnail((1180, 720), Image.Resampling.LANCZOS)
-                image = np.asarray(source, dtype=np.uint8)
-            ax.imshow(image)
+        # A taller sheet needs its grid pushed further down, or the team rule
+        # closing the header lands on the first row of titles.
+        top = 1.0 - 1.62 / _SHEET_HEIGHT[rows]
+        title_pad = 16 if rows == 3 else 6
+
+        for item_index, ((path, note), ax) in enumerate(zip(present, axes), start=1):
+            ax.imshow(_framed(path))
             ax.add_patch(Rectangle((0, 0), 1, 1, transform=ax.transAxes, fill=False, edgecolor=GRID, linewidth=0.9))
-            ax.set_title(f"{item_index:02d}  {_friendly_title(path)}", fontsize=8.8, color=TEXT, pad=6, loc="left", fontweight="bold")
+            ax.set_title(f"{item_index:02d}  {_friendly_title(path)}", fontsize=8.8, color=TEXT, pad=title_pad, loc="left", fontweight="bold")
+            if note:
+                ax.text(0, 1.012, note.upper(), transform=ax.transAxes, color=MUTED,
+                        fontsize=6.6, fontweight="bold", va="bottom")
             ax.axis("off")
 
-        for ax in axes[len(paths):]:
+        for ax in axes[len(present):]:
             ax.axis("off")
 
-        fig.subplots_adjust(left=0.018, right=0.982, top=0.845, bottom=0.055, wspace=0.028, hspace=0.095)
-        fig.text(0.025, 0.958, "POST-MATCH VISUAL REVIEW", color=FOCUS, fontsize=8.5, fontweight="bold", va="top")
-        fig.text(0.025, 0.923, title, color=TEXT, fontsize=22, fontweight="bold", va="top")
-        fig.text(0.025, 0.885, subtitle, color=MUTED, fontsize=10, va="top")
-        fig.text(0.735, 0.928, home_name.upper(), color=home_color, fontsize=11, fontweight="bold", ha="right")
-        fig.text(0.79, 0.925, score, color=TEXT, fontsize=18, fontweight="bold", ha="center")
-        fig.text(0.845, 0.928, away_name.upper(), color=away_color, fontsize=11, fontweight="bold", ha="left")
-        fig.text(0.975, 0.958, f"DASHBOARD {sheet_index:02d} / 08", color=NEUTRAL, fontsize=7.5, fontweight="bold", ha="right", va="top")
-        fig.add_artist(Line2D([0.025, 0.50], [0.862, 0.862], transform=fig.transFigure, color=home_color, lw=2.2))
-        fig.add_artist(Line2D([0.50, 0.975], [0.862, 0.862], transform=fig.transFigure, color=away_color, lw=2.2))
-        fig.text(0.025, 0.021, "CURATED FROM REAL MATCH EVENTS · QA + STORY SELECTION", color=NEUTRAL, fontsize=7)
+        # Header positions are given in inches from the top and converted, so
+        # the block keeps its spacing on both sheet heights. As figure
+        # fractions the subtitle closed on the team rule as soon as the
+        # two-row sheet got shorter.
+        height = _SHEET_HEIGHT[rows]
+
+        def from_top(inches: float) -> float:
+            return 1.0 - inches / height
+
+        fig.subplots_adjust(left=0.018, right=0.982, top=top, bottom=0.046, wspace=0.028, hspace=0.10)
+        fig.text(0.025, from_top(0.30), "POST-MATCH VISUAL REVIEW", color=FOCUS, fontsize=8.5, fontweight="bold", va="top")
+        fig.text(0.025, from_top(0.62), title, color=TEXT, fontsize=22, fontweight="bold", va="top")
+        fig.text(0.025, from_top(1.00), subtitle, color=MUTED, fontsize=10, va="top")
+        fig.text(0.735, from_top(0.60), home_name.upper(), color=home_color, fontsize=11, fontweight="bold", ha="right")
+        fig.text(0.79, from_top(0.64), score, color=TEXT, fontsize=18, fontweight="bold", ha="center")
+        fig.text(0.845, from_top(0.60), away_name.upper(), color=away_color, fontsize=11, fontweight="bold", ha="left")
+        fig.text(0.975, from_top(0.30), f"DASHBOARD {sheet_index:02d} / {total:02d}", color=NEUTRAL, fontsize=7.5, fontweight="bold", ha="right", va="top")
+        rule_y = from_top(1.28)
+        fig.add_artist(Line2D([0.025, 0.50], [rule_y, rule_y], transform=fig.transFigure, color=home_color, lw=2.2))
+        fig.add_artist(Line2D([0.50, 0.975], [rule_y, rule_y], transform=fig.transFigure, color=away_color, lw=2.2))
+        fig.text(0.025, 0.018, "CURATED FROM REAL MATCH EVENTS · QA + STORY SELECTION", color=NEUTRAL, fontsize=7)
         if missing:
-            fig.text(0.975, 0.021, f"Missing {len(missing)} optional source visual(s)", color=away_color, fontsize=7, ha="right")
+            fig.text(0.975, 0.018, f"Missing {len(missing)} optional source visual(s)", color=away_color, fontsize=7, ha="right")
 
         path = out / f"qa_contact_sheet_{sheet_index:02d}.png"
         fig.savefig(path, dpi=135, facecolor=BG)
