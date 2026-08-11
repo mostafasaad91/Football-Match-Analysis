@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The cover and Executive Summary asserted that the winner had won the
+  execution battle and that the loser's activity never became shot quality —
+  regardless of whether the winner had actually created more. Fulham lost 0-1
+  having led expected goals 1.58 to 0.81, shots 14 to 10, box entries 10 to 6
+  and field tilt 62.6% to 37.4%, under a headline saying their activity had not
+  become control of shot quality, printed directly above the numbers
+  disproving it. The sentence is now derived from the two xG totals, with
+  separate readings for a winner who created less and for a draw.
 - Player-network labels are placed against every other node, not just their
   own. A name cleared its own marker and landed across a neighbour's — one
   midfielder's surname printed over another's circle. Placement now scores the

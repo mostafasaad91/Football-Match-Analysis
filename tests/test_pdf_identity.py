@@ -124,6 +124,60 @@ def test_the_embedded_visual_uses_the_text_margin():
     assert pdf.TEXT_MARGIN == 42
 
 
+# ── the verdict must agree with the numbers ──────────────────────────────────
+
+class _Verdict:
+    """Just enough of the report to exercise the sentence logic."""
+
+    def __init__(self, **context):
+        self.context = context
+
+    verdict = pdf.TacticalPDF._verdict
+
+
+def _ctx(home_xg, away_xg, winner, loser):
+    return _Verdict(home="Fulham", away="Bournemouth", winner=winner, loser=loser,
+                    home_xG=home_xg, away_xG=away_xg)
+
+
+def test_the_winner_who_also_created_more_wins_the_execution_battle():
+    text = _ctx(0.61, 2.89, "Bournemouth", "Fulham").verdict()
+    assert "Bournemouth won the execution battle" in text
+
+
+def test_a_winner_who_created_less_is_not_credited_with_the_better_chances():
+    """Fulham lost 0-1 having led xG 1.58 to 0.81; the old sentence said their
+    activity never became shot quality, directly under the numbers proving it
+    had."""
+    text = _ctx(1.58, 0.81, "Bournemouth", "Fulham").verdict()
+    assert "Fulham created the better chances and lost" in text
+    assert "Fulham's activity never became" not in text
+
+
+def test_the_sentence_never_contradicts_the_expected_goals():
+    """Whoever led xG must never be the side described as failing to create."""
+    for home_xg, away_xg, winner, loser in (
+        (2.4, 0.5, "Fulham", "Bournemouth"),
+        (0.5, 2.4, "Bournemouth", "Fulham"),
+        (1.58, 0.81, "Bournemouth", "Fulham"),
+        (0.81, 1.58, "Fulham", "Bournemouth"),
+    ):
+        text = _ctx(home_xg, away_xg, winner, loser).verdict()
+        leader = "Fulham" if home_xg > away_xg else "Bournemouth"
+        assert f"{leader}'s activity never became" not in text, text
+
+
+def test_a_draw_gets_its_own_sentence():
+    text = _ctx(1.2, 0.4, "Fulham", "Fulham").verdict()
+    assert "draw" in text.lower()
+
+
+def test_missing_expected_goals_does_not_invent_a_claim():
+    text = _ctx(None, None, "Bournemouth", "Fulham").verdict()
+    assert "execution battle" not in text
+    assert "Bournemouth took the result" in text
+
+
 # ── score glyph ───────────────────────────────────────────────────────────────
 
 def test_the_score_uses_the_same_dash_as_the_visuals():

@@ -1350,6 +1350,43 @@ class TacticalPDF:
     # worth a page, and the cover leads with the scoreline instead.
     COVER_LEAD_MIN_GAP = 25.0
 
+    def _verdict(self) -> str:
+        """One sentence on how the result related to the chances created.
+
+        This used to assert that the winner had won the execution battle and
+        that the loser's activity never became shot quality. That reads well
+        when the winner also created more — and contradicts the numbers printed
+        beside it when they did not. Fulham lost 0-1 having led xG 1.58 to 0.81,
+        shots 14 to 10 and field tilt 62.6% to 37.4%, under a sentence saying
+        their activity had not become control of shot quality.
+        """
+        winner, loser = self.context.get("winner"), self.context.get("loser")
+        home, away = self.context["home"], self.context["away"]
+
+        def xg_for(team):
+            side = "home" if team == home else "away"
+            try:
+                return float(self.context.get(f"{side}_xG"))
+            except (TypeError, ValueError):
+                return None
+
+        if not winner or winner == loser:
+            leader, trailer = home, away
+            lead_xg, trail_xg = xg_for(home), xg_for(away)
+            if lead_xg is not None and trail_xg is not None and trail_xg > lead_xg:
+                leader, trailer = away, home
+            return (f"The draw flattered neither side equally: {leader} created "
+                    f"the better share of the chances {trailer} had to survive.")
+
+        winner_xg, loser_xg = xg_for(winner), xg_for(loser)
+        if winner_xg is None or loser_xg is None:
+            return f"{winner} took the result; the process behind it is what the report examines."
+        if winner_xg >= loser_xg:
+            return (f"{winner} won the execution battle. "
+                    f"{loser}'s activity never became control of shot quality.")
+        return (f"{loser} created the better chances and lost. "
+                f"{winner} needed fewer of them and took them.")
+
     def _cover_lead(self):
         """Return the widest percentage split, or None if the match was even."""
         best = None
@@ -1417,10 +1454,7 @@ class TacticalPDF:
         c.drawString(x + home_w + gap + score_w + gap, baseline, away.upper())
 
         lead = self._cover_lead()
-        thesis = (
-            f"{self.context['winner']} won the execution battle. "
-            f"{self.context['loser']}'s activity never became control of shot quality."
-        )
+        thesis = self._verdict()
         c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
         c.drawCentredString(centre, baseline - 54, thesis[:104])
 
@@ -1511,8 +1545,9 @@ class TacticalPDF:
         self._header("Executive Summary", "The result, the mechanism and the main coaching implications", "REPORT OPEN")
         c = self.canvas
         c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
-        headline = f"{self.context['winner']} won the execution battle; the losing side's activity did not translate into equal control of shot quality."
-        c.drawString(42, PAGE_H - 132, headline[:118])
+        # Same sentence as the cover, from the same numbers — the summary used
+        # to assert the winner had created more regardless of whether they had.
+        c.drawString(42, PAGE_H - 132, self._verdict()[:132])
         bullets = [
             sections["Match Story"]["data"][1],
             sections["Chance Creation"]["data"][0],
