@@ -48,67 +48,143 @@ AWAY = _ROLE_AWAY
 FOCUS = _ROLE_FOCUS if IS_LIGHT_THEME else "#C8CDD4"
 
 
-# Each entry is a filename, or a (filename, note) pair. The note is the line
-# printed under the thumbnail's title: on the story sheet it carries the
-# narrative, which is what makes an ordered set of visuals a reading rather
-# than a grid.
+# Twelve sheets of four, in order: the set is written to be posted as a thread,
+# one sheet per post, so the sequence has to carry the match on its own without
+# the report around it. Each entry is a filename or a (filename, note) pair;
+# the note is the line printed under the thumbnail and is what makes an ordered
+# set of visuals a reading rather than a grid.
+#
+# Forty-eight of the fifty-three rendered visuals appear here. A thread is
+# edited, not exhaustive — the five below are in the PDF and deliberately not
+# in the thread, each because something already in it tells the same story.
+THREAD_OMISSIONS = {
+    "22a_average_positions_france_1h.png": "the first-half pass network shows the same shape, with the links",
+    "22b_average_positions_france_2h.png": "the second-half pass network shows the same shape, with the links",
+    "23a_average_positions_england_1h.png": "the first-half pass network shows the same shape, with the links",
+    "23b_average_positions_england_2h.png": "the second-half pass network shows the same shape, with the links",
+    "15_xt_per_minute.png": "match momentum answers when the threat came, on one axis",
+}
+
 DASHBOARDS = [
     (
-        "The Match Story",
-        "Result, rhythm, goals, territory and the players who moved them",
+        "The Result",
+        "What happened, and what the goals were worth",
         [
-            ("14_post_match_advanced_dashboard.png", "The result in 32 indicators"),
-            ("01_xg_flow.png", "How danger accumulated"),
-            ("35_match_momentum.png", "Who was on top, and when"),
-            ("40_win_probability.png", "When the result became likely"),
-            ("04_goals_breakdown.png", "What the goals were"),
-            ("46_goal_origins.png", "Where they came from"),
-            ("33_game_state_splits.png", "How the scoreline changed behaviour"),
-            ("44_pitch_control.png", "Who held the space"),
-            ("45_sequence_types.png", "How the danger was built"),
-            ("32_transition_outcomes.png", "What the open field produced"),
-            ("43_action_value.png", "Who moved the needle"),
-            ("34_player_sequence_leaders.png", "Who connected the valuable attacks"),
+            ("14_post_match_advanced_dashboard.png", "The match in 32 indicators"),
+            ("01_xg_flow.png", "How the danger accumulated"),
+            ("04_goals_breakdown.png", "Every goal, and who made it"),
+            ("46_goal_origins.png", "The move each goal came from"),
         ],
     ),
     (
-        "Finishing and Shot Quality",
-        "Volume, location, post-shot placement, set plays and goalkeeper workload",
-        ["02_shot_map_france.png", "03_shot_map_england.png", "11_goalkeeper_saves.png", "15_xt_per_minute.png", "36_set_pieces.png"],
+        "The Rhythm",
+        "When each side was on top, and when the result stopped being in doubt",
+        [
+            ("35_match_momentum.png", "Who was on top, five minutes at a time"),
+            ("40_win_probability.png", "When the result became likely"),
+            ("33_game_state_splits.png", "How the scoreline changed behaviour"),
+            ("45_sequence_types.png", "How the danger was built"),
+        ],
     ),
     (
-        "Chance Creation",
-        "Final-third access, central occupation, playing through a block and penalty-area conversion",
-        ["12_zone14_france.png", "13_zone14_england.png", "25_box_entries_france.png", "26_box_entries_england.png",
-         "41_playing_through_france.png", "42_playing_through_england.png",
-         "47_unlocking_france.png", "48_unlocking_england.png"],
+        "The Shots",
+        "Where the chances came from and what the keepers had to do",
+        [
+            ("02_shot_map_france.png", "Every shot, sized by chance quality"),
+            ("03_shot_map_england.png", "Every shot, sized by chance quality"),
+            ("11_goalkeeper_saves.png", "What each keeper faced, on the goal frame"),
+            ("36_set_pieces.png", "What the restarts produced"),
+        ],
     ),
     (
-        "Possession Structure by Half",
-        "Passing relationships and occupation before and after the interval",
-        ["05a_pass_network_france_1h.png", "05b_pass_network_france_2h.png", "06a_pass_network_england_1h.png", "06b_pass_network_england_2h.png", "22a_average_positions_france_1h.png", "22b_average_positions_france_2h.png", "23a_average_positions_england_1h.png", "23b_average_positions_england_2h.png"],
+        "The Territory",
+        "Who held the pitch, and where the threat lived",
+        [
+            ("44_pitch_control.png", "Who held which space"),
+            ("24_dominating_zones.png", "The zones each side dominated"),
+            ("07_xt_map_france.png", "Where possession added threat"),
+            ("08_xt_map_england.png", "Where possession added threat"),
+        ],
     ),
     (
-        "Progression and Territory",
-        "Where possession started, landed, added threat and was surrendered",
-        ["07_xt_map_france.png", "08_xt_map_england.png", "09_pass_map_france.png", "10_pass_map_england.png",
-         "24_dominating_zones.png", "37_ball_losses_france.png", "38_ball_losses_england.png"],
+        "The Networks",
+        "Who passed to whom, before and after the interval",
+        [
+            ("05a_pass_network_france_1h.png", "First half"),
+            ("05b_pass_network_france_2h.png", "Second half"),
+            ("06a_pass_network_england_1h.png", "First half"),
+            ("06b_pass_network_england_2h.png", "Second half"),
+        ],
     ),
     (
-        "Final-Third Delivery",
-        "Progressive passing, wide delivery and preferred receiving zones",
-        ["16_progressive_france.png", "17_progressive_england.png", "18_crosses_france.png", "19_crosses_england.png", "29_pass_targets_france.png", "30_pass_targets_england.png"],
+        "How They Passed",
+        "The full passing picture and the zones each side aimed at",
+        [
+            ("09_pass_map_france.png", "Every pass, completed and not"),
+            ("10_pass_map_england.png", "Every pass, completed and not"),
+            ("29_pass_targets_france.png", "Where the passes were aimed"),
+            ("30_pass_targets_england.png", "Where the passes were aimed"),
+        ],
     ),
     (
-        "Pressing and Defensive Control",
-        "Engagement height, what triggered the press, high regains and the shape behind it",
-        ["20_defensive_activity_france.png", "21_defensive_activity_england.png", "27_high_regains_france.png", "28_high_regains_england.png",
-         "31_ppda_pressing.png", "49_press_triggers.png", "39_defensive_shape.png"],
+        "Progression",
+        "Moving the ball forward, and doing it through the opponent",
+        [
+            ("16_progressive_france.png", "Passes that moved play forward"),
+            ("17_progressive_england.png", "Passes that moved play forward"),
+            ("41_playing_through_france.png", "Passes that broke a line"),
+            ("42_playing_through_england.png", "Passes that broke a line"),
+        ],
     ),
     (
-        "Transitions and Final Verdict",
-        "Open-field efficiency and sequence leaders",
-        ["32_transition_outcomes.png", "34_player_sequence_leaders.png", "14_post_match_advanced_dashboard.png"],
+        "Central Access",
+        "Getting into the middle, where a block is hardest to move",
+        [
+            ("12_zone14_france.png", "Zone 14 and the five lanes"),
+            ("13_zone14_england.png", "Zone 14 and the five lanes"),
+            ("47_unlocking_france.png", "Receptions in front of the defensive line"),
+            ("48_unlocking_england.png", "Receptions in front of the defensive line"),
+        ],
+    ),
+    (
+        "Into the Box",
+        "The last pass before a shot was possible",
+        [
+            ("25_box_entries_france.png", "How the penalty area was entered"),
+            ("26_box_entries_england.png", "How the penalty area was entered"),
+            ("18_crosses_france.png", "Delivery from wide"),
+            ("19_crosses_england.png", "Delivery from wide"),
+        ],
+    ),
+    (
+        "The Press",
+        "How hard each side pressed, what set it off, and what it won",
+        [
+            ("31_ppda_pressing.png", "Passes allowed per defensive action"),
+            ("49_press_triggers.png", "What the press was waiting for"),
+            ("27_high_regains_france.png", "Regains in the opponent's half"),
+            ("28_high_regains_england.png", "Regains in the opponent's half"),
+        ],
+    ),
+    (
+        "Defending",
+        "The work behind the ball, and what happened when it broke",
+        [
+            ("20_defensive_activity_france.png", "Where the defensive work happened"),
+            ("21_defensive_activity_england.png", "Where the defensive work happened"),
+            ("39_defensive_shape.png", "The shape held out of possession"),
+            ("32_transition_outcomes.png", "What the open field produced"),
+        ],
+    ),
+    (
+        "The Difference",
+        "Where possession was surrendered, and who actually moved the result",
+        [
+            ("37_ball_losses_france.png", "Where the ball was given away"),
+            ("38_ball_losses_england.png", "Where the ball was given away"),
+            ("43_action_value.png", "Every action priced in goals"),
+            ("34_player_sequence_leaders.png", "Who connected the valuable attacks"),
+        ],
     ),
 ]
 
@@ -122,6 +198,11 @@ def _friendly_title(path: Path) -> str:
 
 
 def _layout(count: int) -> tuple[int, int]:
+    """Rows and columns for a sheet of ``count`` visuals.
+
+    Four sits in a square, which is what a thread post wants: a 1x4 strip is
+    unreadable on a phone and a 4x1 column is scrolled past.
+    """
     if count <= 4:
         return 2, 2
     if count <= 6:
@@ -144,6 +225,12 @@ CELL = (1180, 720)
 # to a common frame. Measured on a rendered sheet that left 39% of the page
 # empty, including a 222pt band between the two rows — taller than a thumbnail.
 _SHEET_HEIGHT = {2: 9.0, 3: 12.8}
+
+# A two-by-two sheet is the thread post, so it is sized to the visuals rather
+# than to the eight-up grid: two columns of a 1.64-wide visual want a taller
+# page than two columns of four. 2700x1936 lands near 7:5, which a timeline
+# shows almost whole where a 2.2-wide sheet is cropped to a letterbox strip.
+_SQUARE_SHEET_HEIGHT = 14.34
 
 
 def _framed(path: Path) -> np.ndarray:
@@ -211,7 +298,8 @@ def build_qa_contact_sheets(
             raise FileNotFoundError(f"Dashboard {sheet_index} has no source visuals. Missing: {missing}")
 
         rows, cols = _layout(len(present))
-        fig, axes = plt.subplots(rows, cols, figsize=(20, _SHEET_HEIGHT[rows]), facecolor=BG)
+        sheet_height = _SQUARE_SHEET_HEIGHT if (rows, cols) == (2, 2) else _SHEET_HEIGHT[rows]
+        fig, axes = plt.subplots(rows, cols, figsize=(20, sheet_height), facecolor=BG)
         axes = np.atleast_1d(axes).ravel()
         for ax in axes:
             ax.set_facecolor(PANEL)
@@ -222,8 +310,12 @@ def build_qa_contact_sheets(
 
         # A taller sheet needs its grid pushed further down, or the team rule
         # closing the header lands on the first row of titles.
-        top = 1.0 - 1.62 / _SHEET_HEIGHT[rows]
-        title_pad = 16 if rows == 3 else 6
+        top = 1.0 - 1.62 / sheet_height
+        # The narrative line is drawn just above the axes, so the title has to
+        # be lifted clear of it. Tying the padding to the row count instead
+        # printed the two on top of each other on any two-row sheet with notes.
+        has_notes = any(note for _path, note in present)
+        title_pad = 16 if has_notes else 6
 
         for item_index, ((path, note), ax) in enumerate(zip(present, axes), start=1):
             ax.imshow(_framed(path))
@@ -241,7 +333,7 @@ def build_qa_contact_sheets(
         # the block keeps its spacing on both sheet heights. As figure
         # fractions the subtitle closed on the team rule as soon as the
         # two-row sheet got shorter.
-        height = _SHEET_HEIGHT[rows]
+        height = sheet_height
 
         def from_top(inches: float) -> float:
             return 1.0 - inches / height

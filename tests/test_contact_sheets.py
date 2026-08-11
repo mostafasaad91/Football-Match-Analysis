@@ -14,6 +14,7 @@ import pytest
 from build_qa_contact_sheets import (
     CELL,
     DASHBOARDS,
+    THREAD_OMISSIONS,
     _SHEET_HEIGHT,
     _layout,
     _split_entry,
@@ -57,28 +58,52 @@ def rendered_slots() -> set[str]:
     return slots
 
 
-def test_every_rendered_visual_reaches_a_sheet():
+def omitted_slots() -> set[str]:
+    return {re.sub(r"_(france|england)", "_team", name.lower())
+            for name in THREAD_OMISSIONS}
+
+
+def test_every_rendered_visual_is_either_in_the_thread_or_deliberately_out():
+    """Fifteen visuals once reached no sheet at all. A visual may now be left
+    out of the thread, but only by being named with a reason."""
     produced = rendered_slots()
     if not produced:
         pytest.skip("no rendered fixture on disk to check coverage against")
-    wanted = referenced_slots()
-    orphans = sorted(produced - wanted)
-    assert not orphans, f"visuals rendered but on no contact sheet: {orphans}"
+    accounted = referenced_slots() | omitted_slots()
+    orphans = sorted(produced - accounted)
+    assert not orphans, f"visuals neither in the thread nor listed as omitted: {orphans}"
 
 
-def test_the_story_sheet_comes_first_and_carries_twelve():
-    title, _subtitle, entries = DASHBOARDS[0]
-    assert title == "The Match Story"
-    assert len(entries) == 12
+def test_no_omission_is_left_unexplained():
+    for name, reason in THREAD_OMISSIONS.items():
+        assert reason and len(reason) > 15, f"{name}: omission has no real reason"
 
 
-def test_every_story_entry_has_a_narrative_note():
-    """The note is what makes an ordered set of visuals a reading."""
-    _title, _subtitle, entries = DASHBOARDS[0]
-    for entry in entries:
-        name, note = _split_entry(entry)
-        assert note, f"{name} has no note"
-        assert not note.endswith("."), f"{name}: note is a label, not a sentence"
+def test_nothing_is_both_omitted_and_used():
+    overlap = omitted_slots() & referenced_slots()
+    assert not overlap, f"listed as omitted but still on a sheet: {sorted(overlap)}"
+
+
+def test_the_thread_is_twelve_posts_of_four():
+    """One sheet per post, four visuals per post."""
+    assert len(DASHBOARDS) == 12
+    for title, _subtitle, entries in DASHBOARDS:
+        assert len(entries) == 4, f"{title} has {len(entries)} visuals, not 4"
+
+
+def test_every_entry_carries_a_narrative_note():
+    """Without the notes the thread is a set of images that happens to be in
+    an order; the note is what states the order is doing something."""
+    for title, _subtitle, entries in DASHBOARDS:
+        for entry in entries:
+            name, note = _split_entry(entry)
+            assert note, f"{title}: {name} has no note"
+            assert not note.endswith("."), f"{title}: {name} note reads as a sentence fragment"
+
+
+def test_the_thread_opens_on_the_result_and_closes_on_the_players():
+    assert DASHBOARDS[0][0] == "The Result"
+    assert DASHBOARDS[-1][0] == "The Difference"
 
 
 def test_no_sheet_asks_for_more_than_its_grid_holds():
@@ -105,6 +130,46 @@ def test_a_third_row_makes_the_sheet_taller_not_the_thumbnails_smaller():
 def test_the_thumbnail_frame_is_wider_than_it_is_tall():
     """The visuals are landscape; a portrait cell would letterbox every one."""
     assert CELL[0] > CELL[1]
+
+
+def sheet_contents() -> list[tuple[str, list[str]]]:
+    return [
+        (title, [_split_entry(entry)[0] for entry in entries])
+        for title, _subtitle, entries in DASHBOARDS
+    ]
+
+
+def test_no_sheet_is_made_entirely_of_visuals_shown_elsewhere():
+    """Adding the story sheet emptied "Transitions and Final Verdict" of its
+    own content: all three of its visuals moved into the story, and it stayed
+    in the set showing the same three images a second time."""
+    sheets = sheet_contents()
+    counts = {}
+    for _title, names in sheets:
+        for name in names:
+            counts[name] = counts.get(name, 0) + 1
+
+    hollow = [
+        title for title, names in sheets
+        if names and all(counts[name] > 1 for name in names)
+    ]
+    assert not hollow, f"sheets with nothing of their own: {hollow}"
+
+
+def test_a_sheet_never_repeats_a_visual_within_itself():
+    for title, names in sheet_contents():
+        assert len(names) == len(set(names)), f"{title} repeats a visual"
+
+
+def test_duplication_across_sheets_stays_the_exception():
+    """A visual may earn a place on two sheets; most should not."""
+    sheets = sheet_contents()
+    counts = {}
+    for _title, names in sheets:
+        for name in names:
+            counts[name] = counts.get(name, 0) + 1
+    repeated = [name for name, n in counts.items() if n > 1]
+    assert len(repeated) <= len(counts) * 0.1, f"too much repetition: {sorted(repeated)}"
 
 
 def test_no_sheet_is_empty_and_every_title_is_distinct():
