@@ -1059,16 +1059,21 @@ def pass_map(events, team_id, number):
     # The same completion rate means different things at 13 m and at 25 m, so
     # length and long-ball survival sit next to the raw totals.
     side.text(0.08, 0.335, "LENGTH & DIRECTION", color=MUTED, fontsize=7.5, fontweight="bold")
-    for idx, (label, value) in enumerate([
+    stat_rows = [
         ("Average length", f"{profile['avg_length_m']:.1f} m"),
         ("Long balls", f"{profile['long_ball_share']:.0f}%"),
         ("Long-ball completion", f"{profile['long_ball_completion']:.0f}%"),
-    ]):
+    ]
+    for idx, (label, value) in enumerate(stat_rows):
         y = 0.29 - idx * 0.05
         side.text(0.08, y, label, color=TEXT, fontsize=8, va="center")
         side.text(0.92, y, value, color=TEXT, fontsize=8.5, fontweight="bold",
                   ha="right", va="center")
-    legend_y = [0.235, 0.165, 0.095]
+    # The key sat at a fixed 0.235/0.165/0.095 while the rows above it ran to
+    # 0.19, so the "Completed pass" swatch was drawn through the "Long balls"
+    # figure. Anchored under the last row instead.
+    legend_top = 0.29 - (len(stat_rows) - 1) * 0.05 - 0.06
+    legend_y = [legend_top - index * 0.058 for index in range(3)]
     legend_items = [
         ("Completed pass", team_mark, "-", "o"),
         ("Incomplete pass", team_mark, FAILURE_DASH, "o"),
@@ -2429,7 +2434,7 @@ def playing_through(events, team_id, opponent_id, number):
     breaks = line_breaking_passes(events, team_id, opponent_id)
     fig, pitch, side = pitch_axes(
         f"Playing Through \u00b7 {TEAM_NAME[team_id]}",
-        "Passes that started behind the opponent's defensive line and finished beyond it \u00b7 line height estimated per five-minute window",
+        "Passes starting behind the opponent's defensive line and finishing beyond it \u00b7 line height per five-minute window",
     )
     draw_long_pitch(pitch)
     team_mark = _team_mark_color(team_id)
@@ -2717,7 +2722,7 @@ def unlocking_the_block(events, team_id, opponent_id, number):
 
     fig, pitch, side = pitch_axes(
         f"Unlocking the Block \u00b7 {TEAM_NAME[team_id]}",
-        "Passes received in the band just in front of the opponent's defensive line \u00b7 playing through a block, not around it",
+        "Passes received just in front of the opponent's defensive line \u00b7 through a block, not around it",
     )
     draw_long_pitch(pitch)
     team_mark = _team_mark_color(team_id)

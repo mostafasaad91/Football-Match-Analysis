@@ -248,3 +248,29 @@ def pdf_overrides():
     from player_radar import _LABEL_OVERRIDES
 
     return _LABEL_OVERRIDES
+
+
+# ── header subtitles ──────────────────────────────────────────────────────────
+
+SUBTITLE_LIMIT = 115
+
+
+def test_no_visual_subtitle_overflows_its_header():
+    """A bare slice cut Match Momentum to "…this shows who was". The renderer
+    ellipsizes now, but a subtitle that needs ellipsizing is one nobody edited."""
+    import re
+
+    offenders = []
+    for name in ("visual_redesign_full.py", "visual_redesign_preview.py"):
+        source = (pdf.Path(pdf.__file__).parent / name).read_text(encoding="utf-8")
+        for title, subtitle in re.findall(
+            r'(?:base\.page|pitch_axes|page)\(\s*\n?\s*f?"([^"]*)",\s*\n?\s*"([^"]*)"',
+            source,
+        ):
+            # A "·" escape is six characters in the source and one on the
+            # page; measuring the source would over-count every subtitle that
+            # uses the separator.
+            rendered = subtitle.encode().decode("unicode_escape")
+            if len(rendered) > SUBTITLE_LIMIT:
+                offenders.append((title, len(rendered)))
+    assert not offenders, f"subtitles past {SUBTITLE_LIMIT} chars: {offenders}"

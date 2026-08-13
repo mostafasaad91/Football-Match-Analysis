@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1990721/live/england-league-cup-2026-2027-plymouth-exeter",
+    "https://www.whoscored.com/matches/1980554/live/europe-uefa-super-cup-2025-2026-paris-saint-germain-aston-villa",
 ).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
