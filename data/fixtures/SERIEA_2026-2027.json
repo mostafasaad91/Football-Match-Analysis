@@ -1,0 +1,2286 @@
+{
+ "competition": "SERIEA",
+ "season": "2026-2027",
+ "fixtures": [
+  {
+   "kickoff_utc": "2026-08-22T16:30:00+00:00",
+   "home": "inter",
+   "away": "monza",
+   "whoscored_id": "1980886"
+  },
+  {
+   "kickoff_utc": "2026-08-22T16:30:00+00:00",
+   "home": "udinese",
+   "away": "como",
+   "whoscored_id": "1980897"
+  },
+  {
+   "kickoff_utc": "2026-08-22T18:45:00+00:00",
+   "home": "genoa",
+   "away": "napoli",
+   "whoscored_id": "1980882"
+  },
+  {
+   "kickoff_utc": "2026-08-22T18:45:00+00:00",
+   "home": "parma",
+   "away": "cagliari",
+   "whoscored_id": "1980890"
+  },
+  {
+   "kickoff_utc": "2026-08-23T16:30:00+00:00",
+   "home": "frosinone",
+   "away": "juventus",
+   "whoscored_id": "1980891"
+  },
+  {
+   "kickoff_utc": "2026-08-23T16:30:00+00:00",
+   "home": "venezia",
+   "away": "lecce",
+   "whoscored_id": "1980900"
+  },
+  {
+   "kickoff_utc": "2026-08-23T18:45:00+00:00",
+   "home": "atalanta",
+   "away": "sassuolo",
+   "whoscored_id": "1980883"
+  },
+  {
+   "kickoff_utc": "2026-08-23T18:45:00+00:00",
+   "home": "torino",
+   "away": "milan",
+   "whoscored_id": "1980894"
+  },
+  {
+   "kickoff_utc": "2026-08-24T16:30:00+00:00",
+   "home": "bologna",
+   "away": "lazio",
+   "whoscored_id": "1980887"
+  },
+  {
+   "kickoff_utc": "2026-08-24T18:45:00+00:00",
+   "home": "roma",
+   "away": "fiorentina",
+   "whoscored_id": "1980879"
+  },
+  {
+   "kickoff_utc": "2026-08-28T18:45:00+00:00",
+   "home": "milan",
+   "away": "venezia",
+   "whoscored_id": "1980881"
+  },
+  {
+   "kickoff_utc": "2026-08-29T16:30:00+00:00",
+   "home": "fiorentina",
+   "away": "frosinone",
+   "whoscored_id": "1980893"
+  },
+  {
+   "kickoff_utc": "2026-08-29T16:30:00+00:00",
+   "home": "monza",
+   "away": "udinese",
+   "whoscored_id": "1980903"
+  },
+  {
+   "kickoff_utc": "2026-08-29T16:30:00+00:00",
+   "home": "sassuolo",
+   "away": "torino",
+   "whoscored_id": "1980884"
+  },
+  {
+   "kickoff_utc": "2026-08-29T18:45:00+00:00",
+   "home": "juventus",
+   "away": "parma",
+   "whoscored_id": "1980896"
+  },
+  {
+   "kickoff_utc": "2026-08-30T16:30:00+00:00",
+   "home": "napoli",
+   "away": "como",
+   "whoscored_id": "1980880"
+  },
+  {
+   "kickoff_utc": "2026-08-30T18:45:00+00:00",
+   "home": "cagliari",
+   "away": "inter",
+   "whoscored_id": "1980889"
+  },
+  {
+   "kickoff_utc": "2026-08-30T18:45:00+00:00",
+   "home": "lazio",
+   "away": "genoa",
+   "whoscored_id": "1980899"
+  },
+  {
+   "kickoff_utc": "2026-08-31T16:30:00+00:00",
+   "home": "lecce",
+   "away": "roma",
+   "whoscored_id": "1980902"
+  },
+  {
+   "kickoff_utc": "2026-08-31T18:45:00+00:00",
+   "home": "atalanta",
+   "away": "bologna",
+   "whoscored_id": "1980885"
+  },
+  {
+   "kickoff_utc": "2026-09-04T18:45:00+00:00",
+   "home": "genoa",
+   "away": "como",
+   "whoscored_id": "1980905"
+  },
+  {
+   "kickoff_utc": "2026-09-05T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "torino",
+   "whoscored_id": "1980898"
+  },
+  {
+   "kickoff_utc": "2026-09-05T16:00:00+00:00",
+   "home": "inter",
+   "away": "napoli",
+   "whoscored_id": "1980909"
+  },
+  {
+   "kickoff_utc": "2026-09-05T18:45:00+00:00",
+   "home": "roma",
+   "away": "atalanta",
+   "whoscored_id": "1980888"
+  },
+  {
+   "kickoff_utc": "2026-09-06T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "venezia",
+   "whoscored_id": "1980901"
+  },
+  {
+   "kickoff_utc": "2026-09-06T13:00:00+00:00",
+   "home": "parma",
+   "away": "monza",
+   "whoscored_id": "1980921"
+  },
+  {
+   "kickoff_utc": "2026-09-06T16:00:00+00:00",
+   "home": "bologna",
+   "away": "sassuolo",
+   "whoscored_id": "1980892"
+  },
+  {
+   "kickoff_utc": "2026-09-06T18:45:00+00:00",
+   "home": "juventus",
+   "away": "milan",
+   "whoscored_id": "1980918"
+  },
+  {
+   "kickoff_utc": "2026-09-07T16:00:00+00:00",
+   "home": "cagliari",
+   "away": "lecce",
+   "whoscored_id": "1980895"
+  },
+  {
+   "kickoff_utc": "2026-09-07T18:45:00+00:00",
+   "home": "udinese",
+   "away": "lazio",
+   "whoscored_id": "1980924"
+  },
+  {
+   "kickoff_utc": "2026-09-11T18:45:00+00:00",
+   "home": "venezia",
+   "away": "fiorentina",
+   "whoscored_id": "1980955"
+  },
+  {
+   "kickoff_utc": "2026-09-12T13:00:00+00:00",
+   "home": "genoa",
+   "away": "frosinone",
+   "whoscored_id": "1980933"
+  },
+  {
+   "kickoff_utc": "2026-09-12T16:00:00+00:00",
+   "home": "sassuolo",
+   "away": "juventus",
+   "whoscored_id": "1980949"
+  },
+  {
+   "kickoff_utc": "2026-09-12T18:45:00+00:00",
+   "home": "atalanta",
+   "away": "cagliari",
+   "whoscored_id": "1980927"
+  },
+  {
+   "kickoff_utc": "2026-09-13T10:30:00+00:00",
+   "home": "torino",
+   "away": "roma",
+   "whoscored_id": "1980952"
+  },
+  {
+   "kickoff_utc": "2026-09-13T13:00:00+00:00",
+   "home": "como",
+   "away": "parma",
+   "whoscored_id": "1980930"
+  },
+  {
+   "kickoff_utc": "2026-09-13T13:00:00+00:00",
+   "home": "lecce",
+   "away": "monza",
+   "whoscored_id": "1980942"
+  },
+  {
+   "kickoff_utc": "2026-09-13T16:00:00+00:00",
+   "home": "napoli",
+   "away": "bologna",
+   "whoscored_id": "1980946"
+  },
+  {
+   "kickoff_utc": "2026-09-13T18:45:00+00:00",
+   "home": "lazio",
+   "away": "milan",
+   "whoscored_id": "1980938"
+  },
+  {
+   "kickoff_utc": "2026-09-14T18:45:00+00:00",
+   "home": "inter",
+   "away": "udinese",
+   "whoscored_id": "1980936"
+  },
+  {
+   "kickoff_utc": "2026-09-18T18:45:00+00:00",
+   "home": "monza",
+   "away": "sassuolo",
+   "whoscored_id": "1980976"
+  },
+  {
+   "kickoff_utc": "2026-09-19T13:00:00+00:00",
+   "home": "bologna",
+   "away": "torino",
+   "whoscored_id": "1980964"
+  },
+  {
+   "kickoff_utc": "2026-09-19T13:00:00+00:00",
+   "home": "udinese",
+   "away": "cagliari",
+   "whoscored_id": "1980980"
+  },
+  {
+   "kickoff_utc": "2026-09-19T16:00:00+00:00",
+   "home": "roma",
+   "away": "inter",
+   "whoscored_id": "1980961"
+  },
+  {
+   "kickoff_utc": "2026-09-19T18:45:00+00:00",
+   "home": "venezia",
+   "away": "lazio",
+   "whoscored_id": "1980981"
+  },
+  {
+   "kickoff_utc": "2026-09-20T10:30:00+00:00",
+   "home": "fiorentina",
+   "away": "napoli",
+   "whoscored_id": "1980967"
+  },
+  {
+   "kickoff_utc": "2026-09-20T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "como",
+   "whoscored_id": "1980970"
+  },
+  {
+   "kickoff_utc": "2026-09-20T13:00:00+00:00",
+   "home": "parma",
+   "away": "genoa",
+   "whoscored_id": "1980978"
+  },
+  {
+   "kickoff_utc": "2026-09-20T16:00:00+00:00",
+   "home": "juventus",
+   "away": "atalanta",
+   "whoscored_id": "1980973"
+  },
+  {
+   "kickoff_utc": "2026-09-20T18:45:00+00:00",
+   "home": "milan",
+   "away": "lecce",
+   "whoscored_id": "1980958"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "venezia",
+   "whoscored_id": "1980983"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "juventus",
+   "whoscored_id": "1980985"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "como",
+   "away": "roma",
+   "whoscored_id": "1980987"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "genoa",
+   "away": "fiorentina",
+   "whoscored_id": "1980989"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "inter",
+   "away": "parma",
+   "whoscored_id": "1980991"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "lazio",
+   "away": "monza",
+   "whoscored_id": "1980993"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "lecce",
+   "away": "bologna",
+   "whoscored_id": "1980995"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "napoli",
+   "away": "frosinone",
+   "whoscored_id": "1980997"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "milan",
+   "whoscored_id": "1980999"
+  },
+  {
+   "kickoff_utc": "2026-10-10T13:00:00+00:00",
+   "home": "torino",
+   "away": "udinese",
+   "whoscored_id": "1981001"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "bologna",
+   "away": "inter",
+   "whoscored_id": "1981006"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "como",
+   "whoscored_id": "1981008"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "sassuolo",
+   "whoscored_id": "1981010"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "juventus",
+   "away": "lazio",
+   "whoscored_id": "1981013"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "milan",
+   "away": "atalanta",
+   "whoscored_id": "1981002"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "monza",
+   "away": "cagliari",
+   "whoscored_id": "1981015"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "parma",
+   "away": "torino",
+   "whoscored_id": "1981017"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "roma",
+   "away": "genoa",
+   "whoscored_id": "1981004"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "udinese",
+   "away": "lecce",
+   "whoscored_id": "1981019"
+  },
+  {
+   "kickoff_utc": "2026-10-17T13:00:00+00:00",
+   "home": "venezia",
+   "away": "napoli",
+   "whoscored_id": "1981021"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "frosinone",
+   "whoscored_id": "1981023"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "bologna",
+   "whoscored_id": "1981025"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "como",
+   "away": "sassuolo",
+   "whoscored_id": "1981027"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "genoa",
+   "away": "venezia",
+   "whoscored_id": "1981029"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "inter",
+   "away": "fiorentina",
+   "whoscored_id": "1981031"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "lazio",
+   "away": "parma",
+   "whoscored_id": "1981033"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "lecce",
+   "away": "juventus",
+   "whoscored_id": "1981034"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "napoli",
+   "away": "roma",
+   "whoscored_id": "1981036"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "torino",
+   "away": "monza",
+   "whoscored_id": "1981038"
+  },
+  {
+   "kickoff_utc": "2026-10-24T13:00:00+00:00",
+   "home": "udinese",
+   "away": "milan",
+   "whoscored_id": "1981040"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "atalanta",
+   "whoscored_id": "1981046"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "lecce",
+   "whoscored_id": "1981048"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "genoa",
+   "away": "juventus",
+   "whoscored_id": "1981050"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "milan",
+   "away": "bologna",
+   "whoscored_id": "1981042"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "monza",
+   "away": "napoli",
+   "whoscored_id": "1981052"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "parma",
+   "away": "udinese",
+   "whoscored_id": "1981054"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "roma",
+   "away": "cagliari",
+   "whoscored_id": "1981044"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "lazio",
+   "whoscored_id": "1981056"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "torino",
+   "away": "como",
+   "whoscored_id": "1980906"
+  },
+  {
+   "kickoff_utc": "2026-10-27T13:00:00+00:00",
+   "home": "venezia",
+   "away": "inter",
+   "whoscored_id": "1980907"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "parma",
+   "whoscored_id": "1980912"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "bologna",
+   "away": "monza",
+   "whoscored_id": "1980914"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "como",
+   "away": "venezia",
+   "whoscored_id": "1980916"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "torino",
+   "whoscored_id": "1980919"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "juventus",
+   "away": "napoli",
+   "whoscored_id": "1980922"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "lazio",
+   "away": "cagliari",
+   "whoscored_id": "1980925"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "lecce",
+   "away": "genoa",
+   "whoscored_id": "1980928"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "milan",
+   "away": "inter",
+   "whoscored_id": "1980910"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "fiorentina",
+   "whoscored_id": "1980931"
+  },
+  {
+   "kickoff_utc": "2026-10-31T13:00:00+00:00",
+   "home": "udinese",
+   "away": "roma",
+   "whoscored_id": "1980934"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "frosinone",
+   "whoscored_id": "1980940"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "juventus",
+   "whoscored_id": "1980943"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "genoa",
+   "away": "milan",
+   "whoscored_id": "1980945"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "inter",
+   "away": "como",
+   "whoscored_id": "1980948"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "monza",
+   "away": "atalanta",
+   "whoscored_id": "1980950"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "napoli",
+   "away": "lazio",
+   "whoscored_id": "1980954"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "parma",
+   "away": "bologna",
+   "whoscored_id": "1980957"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "roma",
+   "away": "sassuolo",
+   "whoscored_id": "1980937"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "torino",
+   "away": "lecce",
+   "whoscored_id": "1980960"
+  },
+  {
+   "kickoff_utc": "2026-11-07T13:00:00+00:00",
+   "home": "venezia",
+   "away": "udinese",
+   "whoscored_id": "1980963"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "inter",
+   "whoscored_id": "1980969"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "bologna",
+   "away": "udinese",
+   "whoscored_id": "1980972"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "como",
+   "away": "cagliari",
+   "whoscored_id": "1980975"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "juventus",
+   "away": "venezia",
+   "whoscored_id": "1980904"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "lazio",
+   "away": "lecce",
+   "whoscored_id": "1980908"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "milan",
+   "away": "frosinone",
+   "whoscored_id": "1980966"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "monza",
+   "away": "fiorentina",
+   "whoscored_id": "1980911"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "napoli",
+   "away": "torino",
+   "whoscored_id": "1980913"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "parma",
+   "away": "roma",
+   "whoscored_id": "1980915"
+  },
+  {
+   "kickoff_utc": "2026-11-21T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "genoa",
+   "whoscored_id": "1980917"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "milan",
+   "whoscored_id": "1980923"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "como",
+   "away": "juventus",
+   "whoscored_id": "1980926"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "parma",
+   "whoscored_id": "1980929"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "inter",
+   "away": "genoa",
+   "whoscored_id": "1980932"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "lecce",
+   "away": "atalanta",
+   "whoscored_id": "1980935"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "roma",
+   "away": "monza",
+   "whoscored_id": "1980920"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "napoli",
+   "whoscored_id": "1980939"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "torino",
+   "away": "lazio",
+   "whoscored_id": "1980941"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "udinese",
+   "away": "fiorentina",
+   "whoscored_id": "1980944"
+  },
+  {
+   "kickoff_utc": "2026-11-28T13:00:00+00:00",
+   "home": "venezia",
+   "away": "bologna",
+   "whoscored_id": "1980947"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "bologna",
+   "away": "roma",
+   "whoscored_id": "1980953"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "cagliari",
+   "whoscored_id": "1980956"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "inter",
+   "whoscored_id": "1980959"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "genoa",
+   "away": "torino",
+   "whoscored_id": "1980962"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "juventus",
+   "away": "udinese",
+   "whoscored_id": "1980965"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "lazio",
+   "away": "atalanta",
+   "whoscored_id": "1980968"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "milan",
+   "away": "parma",
+   "whoscored_id": "1980951"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "monza",
+   "away": "como",
+   "whoscored_id": "1980971"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "napoli",
+   "away": "lecce",
+   "whoscored_id": "1980974"
+  },
+  {
+   "kickoff_utc": "2026-12-05T13:00:00+00:00",
+   "home": "venezia",
+   "away": "sassuolo",
+   "whoscored_id": "1980977"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "genoa",
+   "whoscored_id": "1980979"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "venezia",
+   "whoscored_id": "1980982"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "como",
+   "away": "bologna",
+   "whoscored_id": "1980984"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "inter",
+   "away": "torino",
+   "whoscored_id": "1980986"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "juventus",
+   "away": "monza",
+   "whoscored_id": "1980988"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "lazio",
+   "away": "roma",
+   "whoscored_id": "1980990"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "lecce",
+   "away": "sassuolo",
+   "whoscored_id": "1980992"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "napoli",
+   "away": "milan",
+   "whoscored_id": "1980994"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "parma",
+   "away": "fiorentina",
+   "whoscored_id": "1980996"
+  },
+  {
+   "kickoff_utc": "2026-12-12T13:00:00+00:00",
+   "home": "udinese",
+   "away": "frosinone",
+   "whoscored_id": "1980998"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "napoli",
+   "whoscored_id": "1981005"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "bologna",
+   "whoscored_id": "1981007"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "lazio",
+   "whoscored_id": "1981009"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "genoa",
+   "away": "udinese",
+   "whoscored_id": "1981011"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "lecce",
+   "away": "inter",
+   "whoscored_id": "1981012"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "milan",
+   "away": "como",
+   "whoscored_id": "1981000"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "roma",
+   "away": "juventus",
+   "whoscored_id": "1981003"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "parma",
+   "whoscored_id": "1981014"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "torino",
+   "away": "cagliari",
+   "whoscored_id": "1981016"
+  },
+  {
+   "kickoff_utc": "2026-12-19T13:00:00+00:00",
+   "home": "venezia",
+   "away": "monza",
+   "whoscored_id": "1981018"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "bologna",
+   "away": "juventus",
+   "whoscored_id": "1981022"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "genoa",
+   "whoscored_id": "1981024"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "como",
+   "away": "lecce",
+   "whoscored_id": "1981026"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "lazio",
+   "whoscored_id": "1981028"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "inter",
+   "away": "sassuolo",
+   "whoscored_id": "1981030"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "monza",
+   "away": "milan",
+   "whoscored_id": "1981032"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "parma",
+   "away": "napoli",
+   "whoscored_id": "1981035"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "roma",
+   "away": "frosinone",
+   "whoscored_id": "1981020"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "torino",
+   "away": "venezia",
+   "whoscored_id": "1981037"
+  },
+  {
+   "kickoff_utc": "2027-01-02T13:00:00+00:00",
+   "home": "udinese",
+   "away": "atalanta",
+   "whoscored_id": "1981039"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "como",
+   "whoscored_id": "1981043"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "bologna",
+   "whoscored_id": "1981045"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "genoa",
+   "away": "monza",
+   "whoscored_id": "1981047"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "juventus",
+   "away": "torino",
+   "whoscored_id": "1981049"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "lazio",
+   "away": "inter",
+   "whoscored_id": "1981051"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "lecce",
+   "away": "parma",
+   "whoscored_id": "1981053"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "milan",
+   "away": "fiorentina",
+   "whoscored_id": "1981041"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "napoli",
+   "away": "cagliari",
+   "whoscored_id": "1981055"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "udinese",
+   "whoscored_id": "1981057"
+  },
+  {
+   "kickoff_utc": "2027-01-05T13:00:00+00:00",
+   "home": "venezia",
+   "away": "roma",
+   "whoscored_id": "1981058"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "bologna",
+   "away": "genoa",
+   "whoscored_id": "1981060"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "sassuolo",
+   "whoscored_id": "1981061"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "como",
+   "away": "lazio",
+   "whoscored_id": "1981062"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "lecce",
+   "whoscored_id": "1981063"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "inter",
+   "away": "juventus",
+   "whoscored_id": "1981064"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "monza",
+   "away": "frosinone",
+   "whoscored_id": "1981065"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "parma",
+   "away": "venezia",
+   "whoscored_id": "1981066"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "roma",
+   "away": "milan",
+   "whoscored_id": "1981059"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "torino",
+   "away": "atalanta",
+   "whoscored_id": "1981067"
+  },
+  {
+   "kickoff_utc": "2027-01-09T13:00:00+00:00",
+   "home": "udinese",
+   "away": "napoli",
+   "whoscored_id": "1981068"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "roma",
+   "whoscored_id": "1981070"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "como",
+   "whoscored_id": "1981071"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "juventus",
+   "away": "genoa",
+   "whoscored_id": "1981072"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "lazio",
+   "away": "bologna",
+   "whoscored_id": "1981073"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "lecce",
+   "away": "udinese",
+   "whoscored_id": "1981074"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "milan",
+   "away": "torino",
+   "whoscored_id": "1981069"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "napoli",
+   "away": "fiorentina",
+   "whoscored_id": "1981075"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "parma",
+   "away": "inter",
+   "whoscored_id": "1981076"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "monza",
+   "whoscored_id": "1981077"
+  },
+  {
+   "kickoff_utc": "2027-01-16T13:00:00+00:00",
+   "home": "venezia",
+   "away": "frosinone",
+   "whoscored_id": "1981094"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "bologna",
+   "away": "atalanta",
+   "whoscored_id": "1981099"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "como",
+   "away": "napoli",
+   "whoscored_id": "1981101"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "sassuolo",
+   "whoscored_id": "1981104"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "milan",
+   "whoscored_id": "1981106"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "genoa",
+   "away": "parma",
+   "whoscored_id": "1981110"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "inter",
+   "away": "venezia",
+   "whoscored_id": "1981112"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "juventus",
+   "away": "cagliari",
+   "whoscored_id": "1981115"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "lecce",
+   "away": "torino",
+   "whoscored_id": "1981118"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "monza",
+   "away": "lazio",
+   "whoscored_id": "1981121"
+  },
+  {
+   "kickoff_utc": "2027-01-23T13:00:00+00:00",
+   "home": "roma",
+   "away": "udinese",
+   "whoscored_id": "1981096"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "fiorentina",
+   "whoscored_id": "1981126"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "parma",
+   "whoscored_id": "1981129"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "genoa",
+   "away": "lecce",
+   "whoscored_id": "1981134"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "lazio",
+   "away": "venezia",
+   "whoscored_id": "1981137"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "milan",
+   "away": "juventus",
+   "whoscored_id": "1981124"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "monza",
+   "away": "roma",
+   "whoscored_id": "1981140"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "napoli",
+   "away": "inter",
+   "whoscored_id": "1981142"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "como",
+   "whoscored_id": "1981088"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "torino",
+   "away": "frosinone",
+   "whoscored_id": "1981090"
+  },
+  {
+   "kickoff_utc": "2027-01-30T13:00:00+00:00",
+   "home": "udinese",
+   "away": "bologna",
+   "whoscored_id": "1981092"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "lazio",
+   "whoscored_id": "1981095"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "bologna",
+   "away": "milan",
+   "whoscored_id": "1981098"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "como",
+   "away": "monza",
+   "whoscored_id": "1981100"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "udinese",
+   "whoscored_id": "1981103"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "inter",
+   "away": "cagliari",
+   "whoscored_id": "1981107"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "juventus",
+   "away": "sassuolo",
+   "whoscored_id": "1981113"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "lecce",
+   "away": "napoli",
+   "whoscored_id": "1981116"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "parma",
+   "away": "frosinone",
+   "whoscored_id": "1981119"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "roma",
+   "away": "torino",
+   "whoscored_id": "1981093"
+  },
+  {
+   "kickoff_utc": "2027-02-06T13:00:00+00:00",
+   "home": "venezia",
+   "away": "genoa",
+   "whoscored_id": "1981122"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "bologna",
+   "away": "como",
+   "whoscored_id": "1981128"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "lazio",
+   "whoscored_id": "1981131"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "fiorentina",
+   "whoscored_id": "1981133"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "genoa",
+   "away": "atalanta",
+   "whoscored_id": "1981138"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "inter",
+   "away": "milan",
+   "whoscored_id": "1981139"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "monza",
+   "away": "lecce",
+   "whoscored_id": "1981141"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "napoli",
+   "away": "juventus",
+   "whoscored_id": "1981143"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "roma",
+   "away": "parma",
+   "whoscored_id": "1981125"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "torino",
+   "away": "sassuolo",
+   "whoscored_id": "1981146"
+  },
+  {
+   "kickoff_utc": "2027-02-13T13:00:00+00:00",
+   "home": "udinese",
+   "away": "venezia",
+   "whoscored_id": "1981149"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "monza",
+   "whoscored_id": "1981156"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "como",
+   "away": "torino",
+   "whoscored_id": "1981159"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "inter",
+   "whoscored_id": "1981162"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "juventus",
+   "away": "bologna",
+   "whoscored_id": "1981148"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "lazio",
+   "away": "napoli",
+   "whoscored_id": "1981078"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "lecce",
+   "away": "frosinone",
+   "whoscored_id": "1981079"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "milan",
+   "away": "genoa",
+   "whoscored_id": "1981153"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "roma",
+   "whoscored_id": "1981080"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "udinese",
+   "away": "parma",
+   "whoscored_id": "1981081"
+  },
+  {
+   "kickoff_utc": "2027-02-20T13:00:00+00:00",
+   "home": "venezia",
+   "away": "cagliari",
+   "whoscored_id": "1981082"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "bologna",
+   "away": "lecce",
+   "whoscored_id": "1981084"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "udinese",
+   "whoscored_id": "1981085"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "como",
+   "away": "milan",
+   "whoscored_id": "1981086"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "napoli",
+   "whoscored_id": "1981087"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "genoa",
+   "away": "lazio",
+   "whoscored_id": "1981089"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "inter",
+   "away": "atalanta",
+   "whoscored_id": "1981091"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "monza",
+   "away": "juventus",
+   "whoscored_id": "1981097"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "parma",
+   "away": "sassuolo",
+   "whoscored_id": "1981102"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "roma",
+   "away": "venezia",
+   "whoscored_id": "1981083"
+  },
+  {
+   "kickoff_utc": "2027-02-27T13:00:00+00:00",
+   "home": "torino",
+   "away": "fiorentina",
+   "whoscored_id": "1981105"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "torino",
+   "whoscored_id": "1981109"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "venezia",
+   "whoscored_id": "1981111"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "juventus",
+   "away": "roma",
+   "whoscored_id": "1981114"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "lazio",
+   "away": "frosinone",
+   "whoscored_id": "1981117"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "lecce",
+   "away": "como",
+   "whoscored_id": "1981120"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "milan",
+   "away": "cagliari",
+   "whoscored_id": "1981108"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "monza",
+   "away": "genoa",
+   "whoscored_id": "1981123"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "napoli",
+   "away": "parma",
+   "whoscored_id": "1981127"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "bologna",
+   "whoscored_id": "1981130"
+  },
+  {
+   "kickoff_utc": "2027-03-06T13:00:00+00:00",
+   "home": "udinese",
+   "away": "inter",
+   "whoscored_id": "1981132"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "bologna",
+   "away": "napoli",
+   "whoscored_id": "1981136"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "fiorentina",
+   "whoscored_id": "1981144"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "como",
+   "away": "udinese",
+   "whoscored_id": "1981150"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "monza",
+   "whoscored_id": "1981151"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "genoa",
+   "away": "roma",
+   "whoscored_id": "1981154"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "lazio",
+   "away": "juventus",
+   "whoscored_id": "1981157"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "milan",
+   "away": "sassuolo",
+   "whoscored_id": "1981135"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "parma",
+   "away": "lecce",
+   "whoscored_id": "1981161"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "torino",
+   "away": "inter",
+   "whoscored_id": "1981188"
+  },
+  {
+   "kickoff_utc": "2027-03-13T13:00:00+00:00",
+   "home": "venezia",
+   "away": "atalanta",
+   "whoscored_id": "1981191"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "milan",
+   "whoscored_id": "1981198"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "genoa",
+   "whoscored_id": "1981205"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "inter",
+   "away": "frosinone",
+   "whoscored_id": "1981208"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "juventus",
+   "away": "como",
+   "whoscored_id": "1981210"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "monza",
+   "away": "bologna",
+   "whoscored_id": "1981213"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "napoli",
+   "away": "venezia",
+   "whoscored_id": "1981216"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "parma",
+   "away": "lazio",
+   "whoscored_id": "1981226"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "roma",
+   "away": "lecce",
+   "whoscored_id": "1981193"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "cagliari",
+   "whoscored_id": "1981145"
+  },
+  {
+   "kickoff_utc": "2027-03-20T13:00:00+00:00",
+   "home": "udinese",
+   "away": "torino",
+   "whoscored_id": "1981147"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "napoli",
+   "whoscored_id": "1981158"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "como",
+   "away": "fiorentina",
+   "whoscored_id": "1981160"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "udinese",
+   "whoscored_id": "1981163"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "genoa",
+   "away": "inter",
+   "whoscored_id": "1981164"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "lecce",
+   "away": "lazio",
+   "whoscored_id": "1981166"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "milan",
+   "away": "monza",
+   "whoscored_id": "1981152"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "roma",
+   "away": "bologna",
+   "whoscored_id": "1981155"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "atalanta",
+   "whoscored_id": "1981168"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "torino",
+   "away": "juventus",
+   "whoscored_id": "1981170"
+  },
+  {
+   "kickoff_utc": "2027-04-03T13:00:00+00:00",
+   "home": "venezia",
+   "away": "parma",
+   "whoscored_id": "1981172"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "bologna",
+   "away": "venezia",
+   "whoscored_id": "1981174"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "atalanta",
+   "whoscored_id": "1981176"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "milan",
+   "whoscored_id": "1981178"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "genoa",
+   "whoscored_id": "1981180"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "inter",
+   "away": "roma",
+   "whoscored_id": "1981183"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "juventus",
+   "away": "lecce",
+   "whoscored_id": "1981185"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "lazio",
+   "away": "torino",
+   "whoscored_id": "1981186"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "napoli",
+   "away": "sassuolo",
+   "whoscored_id": "1981190"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "parma",
+   "away": "como",
+   "whoscored_id": "1981195"
+  },
+  {
+   "kickoff_utc": "2027-04-10T13:00:00+00:00",
+   "home": "udinese",
+   "away": "monza",
+   "whoscored_id": "1981197"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "udinese",
+   "whoscored_id": "1981204"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "bologna",
+   "away": "cagliari",
+   "whoscored_id": "1981207"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "como",
+   "away": "frosinone",
+   "whoscored_id": "1981211"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "parma",
+   "whoscored_id": "1981214"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "milan",
+   "away": "napoli",
+   "whoscored_id": "1981200"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "monza",
+   "away": "inter",
+   "whoscored_id": "1981218"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "roma",
+   "away": "lazio",
+   "whoscored_id": "1981202"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "lecce",
+   "whoscored_id": "1981220"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "torino",
+   "away": "genoa",
+   "whoscored_id": "1981222"
+  },
+  {
+   "kickoff_utc": "2027-04-17T13:00:00+00:00",
+   "home": "venezia",
+   "away": "juventus",
+   "whoscored_id": "1981224"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "monza",
+   "whoscored_id": "1981227"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "roma",
+   "whoscored_id": "1981229"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "genoa",
+   "away": "sassuolo",
+   "whoscored_id": "1981231"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "inter",
+   "away": "bologna",
+   "whoscored_id": "1981233"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "juventus",
+   "away": "fiorentina",
+   "whoscored_id": "1981235"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "lazio",
+   "away": "como",
+   "whoscored_id": "1981237"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "lecce",
+   "away": "milan",
+   "whoscored_id": "1981238"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "napoli",
+   "away": "udinese",
+   "whoscored_id": "1981240"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "parma",
+   "away": "atalanta",
+   "whoscored_id": "1981243"
+  },
+  {
+   "kickoff_utc": "2027-04-24T13:00:00+00:00",
+   "home": "venezia",
+   "away": "torino",
+   "whoscored_id": "1981245"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "juventus",
+   "whoscored_id": "1981251"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "bologna",
+   "away": "fiorentina",
+   "whoscored_id": "1981252"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "como",
+   "away": "inter",
+   "whoscored_id": "1981255"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "lecce",
+   "away": "cagliari",
+   "whoscored_id": "1981165"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "milan",
+   "away": "lazio",
+   "whoscored_id": "1981247"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "monza",
+   "away": "venezia",
+   "whoscored_id": "1981167"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "roma",
+   "away": "napoli",
+   "whoscored_id": "1981249"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "frosinone",
+   "whoscored_id": "1981169"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "torino",
+   "away": "parma",
+   "whoscored_id": "1981171"
+  },
+  {
+   "kickoff_utc": "2027-05-01T13:00:00+00:00",
+   "home": "udinese",
+   "away": "genoa",
+   "whoscored_id": "1981173"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "roma",
+   "whoscored_id": "1981175"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "atalanta",
+   "whoscored_id": "1981177"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "genoa",
+   "away": "cagliari",
+   "whoscored_id": "1981179"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "inter",
+   "away": "lecce",
+   "whoscored_id": "1981181"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "lazio",
+   "away": "sassuolo",
+   "whoscored_id": "1981182"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "napoli",
+   "away": "monza",
+   "whoscored_id": "1981184"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "parma",
+   "away": "milan",
+   "whoscored_id": "1981187"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "torino",
+   "away": "bologna",
+   "whoscored_id": "1981189"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "udinese",
+   "away": "juventus",
+   "whoscored_id": "1981192"
+  },
+  {
+   "kickoff_utc": "2027-05-08T13:00:00+00:00",
+   "home": "venezia",
+   "away": "como",
+   "whoscored_id": "1981194"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "bologna",
+   "away": "frosinone",
+   "whoscored_id": "1981199"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "torino",
+   "whoscored_id": "1981201"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "como",
+   "away": "atalanta",
+   "whoscored_id": "1981203"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "juventus",
+   "away": "inter",
+   "whoscored_id": "1981206"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "lazio",
+   "away": "udinese",
+   "whoscored_id": "1981209"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "lecce",
+   "away": "fiorentina",
+   "whoscored_id": "1981212"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "milan",
+   "away": "roma",
+   "whoscored_id": "1981196"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "monza",
+   "away": "parma",
+   "whoscored_id": "1981215"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "napoli",
+   "away": "genoa",
+   "whoscored_id": "1981217"
+  },
+  {
+   "kickoff_utc": "2027-05-15T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "venezia",
+   "whoscored_id": "1981219"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "atalanta",
+   "away": "lecce",
+   "whoscored_id": "1981223"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "fiorentina",
+   "away": "monza",
+   "whoscored_id": "1981225"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "frosinone",
+   "away": "cagliari",
+   "whoscored_id": "1981228"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "genoa",
+   "away": "bologna",
+   "whoscored_id": "1981230"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "inter",
+   "away": "lazio",
+   "whoscored_id": "1981232"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "parma",
+   "away": "juventus",
+   "whoscored_id": "1981234"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "roma",
+   "away": "como",
+   "whoscored_id": "1981221"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "torino",
+   "away": "napoli",
+   "whoscored_id": "1981236"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "udinese",
+   "away": "sassuolo",
+   "whoscored_id": "1981239"
+  },
+  {
+   "kickoff_utc": "2027-05-22T13:00:00+00:00",
+   "home": "venezia",
+   "away": "milan",
+   "whoscored_id": "1981241"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "bologna",
+   "away": "parma",
+   "whoscored_id": "1981244"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "cagliari",
+   "away": "roma",
+   "whoscored_id": "1981246"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "como",
+   "away": "genoa",
+   "whoscored_id": "1981248"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "juventus",
+   "away": "frosinone",
+   "whoscored_id": "1981250"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "lazio",
+   "away": "fiorentina",
+   "whoscored_id": "1981253"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "lecce",
+   "away": "venezia",
+   "whoscored_id": "1981254"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "milan",
+   "away": "udinese",
+   "whoscored_id": "1981242"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "monza",
+   "away": "torino",
+   "whoscored_id": "1981256"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "napoli",
+   "away": "atalanta",
+   "whoscored_id": "1981257"
+  },
+  {
+   "kickoff_utc": "2027-05-29T13:00:00+00:00",
+   "home": "sassuolo",
+   "away": "inter",
+   "whoscored_id": "1981258"
+  }
+ ]
+}

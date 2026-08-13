@@ -21,6 +21,19 @@ Install the required packages:
 #  IMPORTS
 # ══════════════════════════════════════════════════════
 import ast, json, math, os, re, sys, time, random, warnings, shutil, tempfile, hashlib
+
+# The console output uses arrows, box drawing and status glyphs throughout. On
+# Windows a redirected stdout defaults to cp1252, which cannot encode any of
+# them, so the first status line raises UnicodeEncodeError and takes the whole
+# run down after the match has already been fetched and parsed. Ask for UTF-8
+# and fall back to replacing the odd unmappable glyph, so a cosmetic character
+# can never again cost a completed analysis.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # not a reconfigurable text stream
+        pass
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -43,7 +56,9 @@ from rich.console import Console
 from rich.table import Table
 from matplotlib.backends.backend_pdf import PdfPages
 
-os.environ["MATCH_ANALYSIS_THEME"] = "dark"
+# Default to the AMOLED identity, but honour an explicit theme choice
+# (MATCH_ANALYSIS_THEME=light renders the white "Ink & Petrol" package).
+os.environ.setdefault("MATCH_ANALYSIS_THEME", "dark")
 SOFASCORE_PLAYER_TABLES = False
 SOFASCORE_AUTO_SEARCH = False
 SOFASCORE_EVENT_ID = 15186710
@@ -66,7 +81,6 @@ from match_metrics import (
 )
 
 # v2 redesigned visuals (xG flow, shot map, shot breakdown, pass network, xT map)
-os.environ["MATCH_ANALYSIS_THEME"] = "dark"
 try:
     from tactical_visualizations import (
         make_xg_flow_v2,
@@ -128,20 +142,19 @@ if _V2_AVAILABLE:
     except Exception:
         pass
 
+    # Only the stale case is worth a line of output: it names a file the user
+    # has to go and delete. Announcing the healthy case on every import was
+    # noise, and both messages used characters the Windows console's cp1252
+    # encoding cannot represent, so printing either one crashed the import on
+    # a piped stdout.
     _is_stale = ('p.get("y"' in _existing_src) or ("p.get('y'" in _existing_src)
     if _is_stale:
         print(
-            "⚠️  WARNING: tactical_visualizations._infer_position_bucket was loaded from "
+            "WARNING: tactical_visualizations._infer_position_bucket was loaded from "
             f"{getattr(_vc_runtime, '__file__', '?')} using the OLD (y-as-depth) "
             "logic. Forcing the corrected (x-as-depth) version for this run. "
-            "You should find and remove/update the stale copy of "
-            "tactical_visualizations.py at that path so this override isn't needed."
-        )
-    else:
-        print(
-            f"✅ tactical_visualizations loaded from {getattr(_vc_runtime, '__file__', '?')} "
-            "— bucket logic already correct (x-as-depth); applying override "
-            "anyway as a guarantee."
+            "Remove or update the stale copy of tactical_visualizations.py at "
+            "that path so this override isn't needed."
         )
 
     _vc_runtime._infer_position_bucket = _infer_position_bucket_FORCED
@@ -153,7 +166,11 @@ console = Console()
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
-MATCH_URL = "https://www.whoscored.com/matches/1995348/live/international-fifa-world-cup-2026-usa-belgium"
+# Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
+MATCH_URL = os.environ.get(
+    "MATCH_ANALYSIS_URL",
+    "https://www.whoscored.com/matches/1980554/live/europe-uefa-super-cup-2025-2026-paris-saint-germain-aston-villa",
+).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -210,7 +227,15 @@ CHROME_PROFILE_NAME = "Default"
 
 BROWSER_USE_REAL_PROFILE = False
 BROWSER_HEADLESS = True
-BROWSER_DOM_FALLBACK_ENABLED = True
+# WhoScored renders the official stats table client-side, so capturing it needs
+# a real browser. On a machine where Chrome startup fails, that attempt still
+# costs around four minutes before giving up — and the run then completes on
+# matchCentreData counts anyway, so the wait buys nothing. Off by default; set
+# MATCH_ANALYSIS_BROWSER_STATS=1 to retry it where Chrome does work.
+BROWSER_DOM_FALLBACK_ENABLED = (
+    os.environ.get("MATCH_ANALYSIS_BROWSER_STATS", "").strip().lower()
+    in {"1", "true", "yes"}
+)
 
 
 LAST_PAGE_HTML = ""
@@ -272,8 +297,13 @@ GROUP_BOARD_MAX_VISUALS = 6
 # ══════════════════════════════════════════════════════
 #  COLORS & CONSTANTS
 # ══════════════════════════════════════════════════════
-FIXED_HOME_COLOR = "#7A3DFF"
-FIXED_AWAY_COLOR = "#BEEA24"
+# Role colours come from the shared theme palette: AMOLED blue/yellow by
+# default, ink/petrol when MATCH_ANALYSIS_THEME=light.
+from visualization_components import (  # noqa: E402
+    C_AWAY as FIXED_AWAY_COLOR,
+    C_HOME as FIXED_HOME_COLOR,
+    USE_REAL_TEAM_KIT_COLORS,
+)
 C_BLUE = FIXED_AWAY_COLOR
 C_RED = FIXED_HOME_COLOR
 C_GREEN = "#22c55e"
@@ -844,6 +874,22 @@ EXTRA_TEAM_PALETTES = {
 }
 TOP5_2025_26_TEAM_PALETTES.update(EXTRA_TEAM_PALETTES)
 
+# ── Bulk kit-colour database ─────────────────────────────────────────────
+# team_palettes.py carries the real home-kit colours for every club that can
+# reach the Champions League, Europa League or Conference League league phase
+# (organised by domestic league so the table does not go stale each season),
+# the non-UEFA continental competitions (CAF, AFC, CONMEBOL, CONCACAF), and
+# every FIFA national team. It is merged non-destructively: the hand-picked
+# entries above always win, the bulk table only fills the gaps.
+try:
+    import team_palettes as _team_palettes
+
+    _added_palettes, _added_aliases = _team_palettes.merge_into(
+        TOP5_2025_26_TEAM_PALETTES, TEAM_ALIASES, overwrite=False
+    )
+except Exception:  # pragma: no cover - the report must still render without it
+    _added_palettes = _added_aliases = 0
+
 # Make the primary colour table cover all new teams while preserving earlier explicit values.
 for _club_name, _palette in TOP5_2025_26_TEAM_PALETTES.items():
     if _palette:
@@ -940,6 +986,11 @@ DEFAULT_HOME = FIXED_HOME_COLOR
 DEFAULT_AWAY = FIXED_AWAY_COLOR
 
 
+# Names the palette could not resolve without guessing, reported at the end of
+# a run so they can be added to TEAM_ALIASES instead of silently drifting.
+UNRESOLVED_TEAM_NAMES: dict[str, str] = {}
+
+
 def get_team_color(team_name: str, fallback: str) -> str:
     """
     Return a team color from TEAM_COLORS.
@@ -961,10 +1012,22 @@ def get_team_color(team_name: str, fallback: str) -> str:
         alias_target = TEAM_ALIASES[name_lc]
         return TEAM_COLORS.get(alias_target, fallback)
 
-    for key, color in TEAM_COLORS.items():
-        key_lc = key.lower()
-        if key_lc in name_lc or name_lc in key_lc:
-            return color
+    # Partial matching only when it is unambiguous. The old loop returned the
+    # first overlapping key, so a two-letter fragment such as "Al " resolved to
+    # Arsenal and any "United" took whichever United came first in the table.
+    if len(name_lc) >= 4:
+        candidates = {
+            key
+            for key in TEAM_COLORS
+            if key.lower() in name_lc or name_lc in key.lower()
+        }
+        if len(candidates) == 1:
+            return TEAM_COLORS[candidates.pop()]
+        if len(candidates) > 1:
+            UNRESOLVED_TEAM_NAMES.setdefault(
+                team_name,
+                f"ambiguous between {len(candidates)}: {', '.join(sorted(candidates)[:4])}",
+            )
 
     return fallback
 
@@ -1089,18 +1152,44 @@ def _canonical_team_name(team_name: str) -> str:
     return raw
 
 
+def _partial_palette_matches(canonical: str) -> list[str]:
+    """Return every palette key a shortened provider name could refer to."""
+    low = (canonical or "").strip().lower()
+    if len(low) < 4:
+        # Two- and three-letter fragments match half the table; treat them as
+        # no information rather than as a lookup.
+        return []
+    return [
+        key
+        for key in TOP5_2025_26_TEAM_PALETTES
+        if low in key.lower() or key.lower() in low
+    ]
+
+
 def _team_palette(team_name: str, fallback: str) -> list[str]:
-    """Return the kit palette for a team; always at least one colour."""
+    """Return the kit palette for a team; always at least one colour.
+
+    Partial matching used to take the first key that overlapped the name, which
+    with ~975 teams in the table quietly resolved "Al Ahli" to Al Ahli Saudi's
+    green and "America" to Club América's yellow. A wrong colour attributed
+    with full confidence is worse than an obviously unknown one, so an
+    ambiguous name is now refused and recorded for review rather than guessed.
+    """
     canonical = _canonical_team_name(team_name)
     pal = TOP5_2025_26_TEAM_PALETTES.get(canonical)
     if not pal:
-        # Try loose matching for shortened provider names.
-        low = canonical.lower()
-        for key, vals in TOP5_2025_26_TEAM_PALETTES.items():
-            k = key.lower()
-            if low and (low in k or k in low):
-                pal = vals
-                break
+        candidates = _partial_palette_matches(canonical)
+        if len(candidates) == 1:
+            pal = TOP5_2025_26_TEAM_PALETTES[candidates[0]]
+            if candidates[0].lower() != canonical.lower():
+                UNRESOLVED_TEAM_NAMES.setdefault(
+                    team_name, f"matched on partial name -> {candidates[0]}"
+                )
+        elif len(candidates) > 1:
+            shortlist = ", ".join(sorted(candidates)[:4])
+            UNRESOLVED_TEAM_NAMES.setdefault(
+                team_name, f"ambiguous between {len(candidates)}: {shortlist}"
+            )
     if not pal:
         looked_up = get_team_color(canonical or team_name, fallback)
         if looked_up == fallback:
@@ -1221,6 +1310,11 @@ def _readable_kit_candidate(
     return best
 
 
+# Stand-in for a white home shirt. Distinct from the pure #FFFFFF used by pitch
+# markings and the highlight layer, still unmistakably "the white team".
+WHITE_KIT_SILVER = "#DCE3EC"
+
+
 def _usable_on_dark(hex_color: str, fallback: str = "#9CA3AF") -> str:
     """
     Avoid invisible black/near-black on the dark visual background.
@@ -1262,12 +1356,16 @@ def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") 
             team_name, pal[1:] + pal[:1], fallback, allow_light=False
         )
 
-    # Pure white / off-white kits only (keep yellows/golds as visible bar colours)
+    # Pure white / off-white kits (keep yellows/golds as visible bar colours).
+    #
+    # These used to fall through to the next palette entry, which sent a
+    # white-shirted side to a colour it does not play in — Juventus came out
+    # gold, Real Madrid came out gold. On the pure-black page white is the most
+    # readable colour there is, and it is also the honest one. Substitute a soft
+    # silver instead: it still reads as "the white kit team", but stays clear of
+    # pure #FFFFFF, which the highlight layer and pitch markings already own.
     if lum >= 0.80:
-        pal = _team_palette(team_name, fallback)
-        return _readable_kit_candidate(
-            team_name, pal[1:] + pal[:1], fallback, allow_light=False
-        )
+        return WHITE_KIT_SILVER
 
     return hex_color
 
@@ -1309,13 +1407,18 @@ def choose_matchup_colors(
     home_name: str, away_name: str, home_kit_type=None, away_kit_type=None
 ):
     """
-    Return the canonical production role colours for every fixture.
+    Return the two display colours for a fixture.
 
-    Team names, kits and competition do not alter this mapping: the first-listed
-    (home) side is always ultraviolet and the second-listed (away) side is
-    always chartreuse. This keeps every chart, report and QA sheet visually stable.
+    With ``USE_REAL_TEAM_KIT_COLORS`` (the default, set
+    ``MATCH_ANALYSIS_TEAM_COLORS=roles`` to turn it off) each side is drawn in
+    its real home-kit colour resolved through ``TOP5_2025_26_TEAM_PALETTES``
+    and the bulk table in ``team_palettes.py``, with the clash- and
+    contrast-resolution passes below. In ``roles`` mode team names, kits and
+    competition do not alter the mapping: the first-listed (home) side is
+    always electric blue and the second-listed (away) side is always true
+    yellow, which keeps every chart, report and QA sheet visually stable.
 
-    v6 fix:
+    Kit-colour resolution:
       - White/off-white primary kits are replaced with the team's accent or
         alternate colour so visuals remain readable on the dark background.
       - Home team uses a visible version of their HOME kit colour.
@@ -1326,7 +1429,8 @@ def choose_matchup_colors(
       - Very light alternates are avoided when a readable non-light alternate is
         available with enough contrast.
     """
-    return FIXED_HOME_COLOR, FIXED_AWAY_COLOR
+    if not USE_REAL_TEAM_KIT_COLORS:
+        return FIXED_HOME_COLOR, FIXED_AWAY_COLOR
 
     custom_home = (CUSTOM_KIT_COLORS or {}).get("home")
     custom_away = (CUSTOM_KIT_COLORS or {}).get("away")
@@ -1413,18 +1517,30 @@ def choose_matchup_colors(
         return home_primary, away_primary
 
     # ── Step 3: Try away palette colours for better contrast ───────
+    # Preference order matters more than raw distance here. A generic neutral
+    # is always the furthest colour from a saturated home kit, so a pure
+    # "maximise distance" search hands every red-v-red derby a grey away team
+    # and throws the away side's identity away. Walk the away team's own kit
+    # colours in order — accent/stripe, then alternate, then primary — and take
+    # the first one that already separates cleanly from the home colour.
+    away_candidates = []
+    if len(away_palette) >= 2:
+        away_candidates.append(away_palette[1])  # accent/stripe
+    if len(away_palette) >= 3:
+        away_candidates.append(away_palette[2])  # alternate/away kit
+    away_candidates += away_palette
+
+    for ac in away_candidates:
+        ac = _usable_on_dark(ac, "#9CA3AF")
+        if _color_distance(home_primary, ac) >= 0.34 and _light_penalty(ac) == 0.0:
+            return home_primary, ac
+
+    # No kit colour separated cleanly: fall back to the widest-separation
+    # search, neutrals included.
     best_away = away_primary
     best_score = _color_distance(home_primary, away_primary) - _light_penalty(
         away_primary
     )
-    # Prefer alternate/away colours first, then the rest
-    away_candidates = []
-    if len(away_palette) >= 3:
-        away_candidates.append(away_palette[2])  # alternate/away kit
-    if len(away_palette) >= 2:
-        away_candidates.append(away_palette[1])  # accent/stripe
-    away_candidates += away_palette
-
     for ac in away_candidates:
         ac = _usable_on_dark(ac, "#9CA3AF")
         score = _color_distance(home_primary, ac) - _light_penalty(ac)
@@ -1470,12 +1586,28 @@ HOME_COLOR = DEFAULT_HOME
 AWAY_COLOR = DEFAULT_AWAY
 
 BG_DARK = "#000000"
-BG_MID = "#020202"
-PITCH_COL = "#030303"
+BG_MID = "#000000"
+PITCH_COL = "#000000"
 GRID_COL = "#2A2A2A"
 TEXT_MAIN = "#F4F8FF"
 TEXT_DIM = "#D6DEE8"
 TEXT_BRIGHT = "#FFFFFF"
+
+# Pitch markings for the legacy renderer. These used to be green (#3d8a3d),
+# which read as a faint grass tint on the black page and clashed with any team
+# playing in green. White at a controlled alpha matches the rest of the report.
+from visualization_components import (  # noqa: E402
+    PITCH_LINE,
+    PITCH_LINE_ALPHA,
+    PITCH_LINE_WIDTH,
+    SHOT_BLOCKED,
+    SHOT_GOAL,
+    SHOT_MISS,
+    SHOT_OWN_GOAL,
+    SHOT_POST,
+    SHOT_SAVED,
+    shot_outcome_color,
+)
 
 
 def _relative_luminance_hex(color: str) -> float:
@@ -1545,11 +1677,6 @@ TEXT_SHADOW = [pe.withStroke(linewidth=2.6, foreground="#000000")]
 TEXT_SHADOW_STRONG = [pe.withStroke(linewidth=3.4, foreground="#000000")]
 
 
-def text_shadow(strong: bool = False) -> list:
-    """Reusable black outline for labels placed over charts, maps, or team colours."""
-    return TEXT_SHADOW_STRONG if strong else TEXT_SHADOW
-
-
 def _apply_neon_backdrop(fig):
     """Apply the shared teal/purple neon backdrop when available."""
     try:
@@ -1586,12 +1713,16 @@ SHOT_FAMILY = {
     "ShotOnPost": "Off Target",
 }
 
+# Outcome colours come from the shared shot palette (visualization_components)
+# so every shot map in the report — legacy and v2 — uses one key: red scored,
+# blue saved, orange off target, grey blocked, violet woodwork. Marker shape is
+# kept as the secondary, colour-blind-safe encoding of the same outcome.
 SHOT_STYLE_RAW = {
-    "Goal": ("*", "#FFD700", "#ffffff", 520, 8, "Goal"),
-    "SavedShot": ("o", "#00FF87", "#a7f3d0", 220, 6, "SavedShot"),
-    "MissedShots": ("X", "#FF6B6B", "#fca5a5", 180, 5, "MissedShots"),
-    "BlockedShot": ("s", "#FFE66D", "#fed7aa", 180, 5, "BlockedShot"),
-    "ShotOnPost": ("D", "#A855F7", "#d8b4fe", 200, 6, "ShotOnPost"),
+    "Goal": ("*", SHOT_GOAL, "#ffffff", 520, 8, "Goal"),
+    "SavedShot": ("o", SHOT_SAVED, "#a7c8e8", 220, 6, "SavedShot"),
+    "MissedShots": ("X", SHOT_MISS, "#f7cfa8", 180, 5, "MissedShots"),
+    "BlockedShot": ("s", SHOT_BLOCKED, "#dcdcdc", 180, 5, "BlockedShot"),
+    "ShotOnPost": ("D", SHOT_POST, "#d8b4fe", 200, 6, "ShotOnPost"),
 }
 
 SHOT_BREAKDOWN_KEYS = ["shots", "post", "on_target", "off_target", "blocked"]
@@ -1643,17 +1774,6 @@ def _is_penalty_shootout_period(period_raw=None, period_code=None) -> bool:
         "shootout",
         "penalties",
     }
-
-
-def _is_penalty_shootout_row(row) -> bool:
-    """Identify shootout rows from parsed event fields or raw qualifier names."""
-    if _is_penalty_shootout_period(row.get("period"), row.get("period_code")):
-        return True
-    qnames = row.get("qualifier_names", [])
-    if isinstance(qnames, str):
-        qnames = [qnames]
-    joined = " ".join(str(q) for q in qnames).lower().replace(" ", "")
-    return "penaltyshootout" in joined or "shootout" in joined
 
 
 STATUS_BADGE = {
@@ -1964,6 +2084,46 @@ _HEADERS_POOL = [
 ]
 
 
+def _try_curl_impersonate(url: str) -> dict:
+    """Fetch the match page with a browser-shaped TLS fingerprint.
+
+    WhoScored refuses a stock Python HTTP client during the TLS handshake,
+    before a single header is read, which is why changing the User-Agent never
+    helped and the pipeline fell through to driving a real Chrome. ``curl_cffi``
+    reproduces Chrome's TLS and HTTP/2 fingerprint, so the same page returns 200
+    over a plain GET — under a second, against minutes for the browser path.
+
+    The browser attempts are kept behind this one as a fallback: if the
+    impersonation profile goes stale, the report still gets built.
+    """
+    try:
+        from curl_cffi import requests as curl_requests
+    except ImportError:
+        raise RuntimeError("curl-cffi is not installed; run: pip install curl-cffi")
+
+    console.print("[cyan]  [1/4] Trying curl-cffi (browser TLS fingerprint)...[/cyan]")
+    session = curl_requests.Session(
+        impersonate="chrome",
+        headers={
+            "Referer": "https://www.whoscored.com/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-GB,en;q=0.9",
+        },
+    )
+    try:
+        resp = session.get(url, timeout=45)
+        if resp.status_code != 200:
+            raise RuntimeError(f"HTTP {resp.status_code}")
+        if "matchCentreData" not in resp.text:
+            raise RuntimeError("matchCentreData not found — challenge page or layout change")
+
+        _capture_scraped_page(resp.text)
+        console.print("[green]  curl-cffi succeeded![/green]")
+        return _extract_match_data(resp.text)
+    finally:
+        session.close()
+
+
 def _try_cloudscraper(url: str) -> dict:
     """
     Attempt 1: use cloudscraper to bypass Cloudflare without a browser.
@@ -1976,7 +2136,7 @@ def _try_cloudscraper(url: str) -> dict:
             "cloudscraper is not installed; run: pip install cloudscraper"
         )
 
-    console.print("[cyan]  [1/3] Trying cloudscraper...[/cyan]")
+    console.print("[cyan]  [2/4] Trying cloudscraper...[/cyan]")
     scraper = cloudscraper.create_scraper(
         browser={"browser": "chrome", "platform": "windows", "mobile": False}
     )
@@ -2003,7 +2163,7 @@ def _try_requests(url: str) -> dict:
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
 
-    console.print("[cyan]  [2/3] Trying requests + session...[/cyan]")
+    console.print("[cyan]  [3/4] Trying requests + session...[/cyan]")
 
     session = requests.Session()
     retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
@@ -2050,7 +2210,7 @@ def _try_chrome(
 
     from selenium.webdriver.support.ui import WebDriverWait
 
-    console.print("[cyan]  [3/3] Trying Chrome + stealth...[/cyan]")
+    console.print("[cyan]  [4/4] Trying Chrome + stealth...[/cyan]")
 
     opts = uc.ChromeOptions()
     opts.add_argument("--no-sandbox")
@@ -2200,9 +2360,21 @@ def scrape_match(
     profile_name: str = "Default",
 ) -> dict:
     """
-    Try three methods in order and raise a clear exception if all fail.
+    Try four methods in order and raise a clear exception if all fail.
+
+    curl-cffi goes first because it is the only one that answers in under a
+    second: it wins on the TLS fingerprint rather than by driving a browser.
+    The older attempts stay behind it so a stale impersonation profile degrades
+    to the slow path instead of failing the run.
     """
     errors = []
+
+    try:
+        return _try_curl_impersonate(url)
+    except Exception as e:
+        msg = f"curl-cffi: {e}"
+        errors.append(msg)
+        console.print(f"[yellow]  ✗ {msg}[/yellow]")
 
     try:
         return _try_cloudscraper(url)
@@ -2379,254 +2551,11 @@ def _to_my(y):
     return _clamp(_safe_float(y) * PITCH_WID / 100.0, 0.0, PITCH_WID)
 
 
-def _period_id(period_code: str) -> int:
-    return {"1h": 1, "2h": 2, "et1": 3, "et2": 4, "pso": 5}.get(period_code, 1)
-
-
-def _overall_seconds(minute, second):
-    return _safe_float(minute, 0.0) * 60.0 + _safe_float(second, 0.0)
-
-
-def _bodypart_id_from_row(row) -> int:
-    raw_body = row.get("body_part", "") if hasattr(row, "get") else ""
-    if raw_body is None:
-        body = ""
-    elif isinstance(raw_body, str):
-        body = raw_body.strip().lower()
-    else:
-        try:
-            body = "" if pd.isna(raw_body) else str(raw_body).strip().lower()
-        except Exception:
-            body = str(raw_body).strip().lower()
-
-    q = _qnames(row)
-    if body in {"head", "header"} or "head" in body or "Head" in q:
-        return BODY_PART_IDS["head"]
-    if body in {"rightfoot", "leftfoot", "foot", "right foot", "left foot"}:
-        return BODY_PART_IDS["foot"]
-    if {"RightFoot", "LeftFoot"} & q:
-        return BODY_PART_IDS["foot"]
-    return BODY_PART_IDS["other"]
-
-
 def _is_direct_freekick_row(row) -> bool:
     q = _qnames(row)
     return bool({"DirectFreekick", "FreekickShot", "Direct free kick"} & q) or bool(
         row.get("is_direct_fk", False)
     )
-
-
-def _who_to_spadl_type(row) -> int | None:
-    etype = row.get("type")
-    q = _qnames(row)
-    if etype in {
-        "Goal",
-        "SavedShot",
-        "MissedShots",
-        "BlockedShot",
-        "ShotOnPost",
-        "OwnGoal",
-    } or row.get("is_shot"):
-        if row.get("is_penalty") or ("Penalty" in q):
-            return ACTION_TYPE_IDS["shot_penalty"]
-        if _is_direct_freekick_row(row):
-            return ACTION_TYPE_IDS["shot_freekick"]
-        return ACTION_TYPE_IDS["shot"]
-    if etype in {"Pass", "OffsidePass", "OffsidPass", "KeyPass"}:
-        if "ThrowIn" in q:
-            return ACTION_TYPE_IDS["throw_in"]
-        if "GoalKick" in q:
-            return ACTION_TYPE_IDS["goalkick"]
-        if "CornerTaken" in q:
-            return (
-                ACTION_TYPE_IDS["corner_crossed"]
-                if row.get("is_cross")
-                else ACTION_TYPE_IDS["corner_short"]
-            )
-        if {"FreekickTaken", "SetPiece"} & q:
-            return (
-                ACTION_TYPE_IDS["freekick_crossed"]
-                if row.get("is_cross")
-                else ACTION_TYPE_IDS["freekick_short"]
-            )
-        return (
-            ACTION_TYPE_IDS["cross"] if row.get("is_cross") else ACTION_TYPE_IDS["pass"]
-        )
-    if etype in {"TakeOn"}:
-        return ACTION_TYPE_IDS["take_on"]
-    if etype in {"Dribble"}:
-        return ACTION_TYPE_IDS["dribble"]
-    if etype in {"Foul", "FoulGiven", "FoulCommitted"}:
-        return ACTION_TYPE_IDS["foul"]
-    if etype in {"Tackle"}:
-        return ACTION_TYPE_IDS["tackle"]
-    if etype in {"Interception"}:
-        return ACTION_TYPE_IDS["interception"]
-    if etype in {"Clearance"}:
-        return ACTION_TYPE_IDS["clearance"]
-    if etype in {"KeeperSave"}:
-        return ACTION_TYPE_IDS["keeper_save"]
-    if etype in {"KeeperClaim"}:
-        return ACTION_TYPE_IDS["keeper_claim"]
-    if etype in {"KeeperPunch"}:
-        return ACTION_TYPE_IDS["keeper_punch"]
-    if etype in {"KeeperPickup", "KeeperPickUp"}:
-        return ACTION_TYPE_IDS["keeper_pick_up"]
-    if etype in {"BallTouch", "Dispossessed", "Error"}:
-        return ACTION_TYPE_IDS["bad_touch"]
-    return None
-
-
-def _result_id_from_row(row) -> int:
-    etype = row.get("type")
-    outcome = row.get("outcome")
-    if row.get("is_own_goal"):
-        return RESULT_IDS["owngoal"]
-    if etype == "Card":
-        if "Red" in _qnames(row):
-            return RESULT_IDS["red_card"]
-        return RESULT_IDS["yellow_card"]
-    if row.get("is_goal") or etype == "Goal":
-        return RESULT_IDS["success"]
-    if outcome == "Successful":
-        return RESULT_IDS["success"]
-    if outcome == "Offside":
-        return RESULT_IDS["offside"]
-    return RESULT_IDS["fail"]
-
-
-def _flip_lr(df: pd.DataFrame, away_mask: pd.Series) -> pd.DataFrame:
-    out = df.copy()
-    for col in [
-        c for c in out.columns if c.startswith("start_x") or c.startswith("end_x")
-    ]:
-        out.loc[away_mask, col] = PITCH_LEN - out.loc[away_mask, col].values
-    for col in [
-        c for c in out.columns if c.startswith("start_y") or c.startswith("end_y")
-    ]:
-        out.loc[away_mask, col] = PITCH_WID - out.loc[away_mask, col].values
-    return out
-
-
-def _polar_dist_angle(x_ser, y_ser, prefix: str) -> pd.DataFrame:
-    dx = (PITCH_LEN - x_ser).abs()
-    dy = (PITCH_WID / 2.0 - y_ser).abs()
-    out = pd.DataFrame(index=x_ser.index)
-    out[f"{prefix}_dist_to_goal"] = np.sqrt(dx**2 + dy**2)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        out[f"{prefix}_angle_to_goal"] = np.nan_to_num(np.arctan(dy / dx))
-    return out
-
-
-def _goal_angle_series(x_ser, y_ser) -> pd.Series:
-    dx = PITCH_LEN - x_ser
-    dy = PITCH_WID / 2.0 - y_ser
-    denom = dx**2 + dy**2 - (GOAL_WIDTH / 2.0) ** 2
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ang = np.arctan((GOAL_WIDTH * dx) / denom)
-    ang = pd.Series(np.nan_to_num(ang), index=x_ser.index)
-    ang.loc[ang < 0] += np.pi
-    ang.loc[x_ser >= PITCH_LEN] = 0.0
-    on_line = (x_ser == PITCH_LEN) & y_ser.between(
-        PITCH_WID / 2.0 - GOAL_WIDTH / 2.0, PITCH_WID / 2.0 + GOAL_WIDTH / 2.0
-    )
-    ang.loc[on_line] = np.pi
-    return ang
-
-
-def _build_spadl_like_actions(events: pd.DataFrame) -> pd.DataFrame:
-    if events is None or events.empty:
-        return pd.DataFrame()
-    df = events.copy().reset_index().rename(columns={"index": "orig_event_index"})
-    df["type_id"] = df.apply(_who_to_spadl_type, axis=1)
-    df = df[df["type_id"].notna()].copy()
-    if df.empty:
-        return df
-    df["type_id"] = df["type_id"].astype(int)
-    df["bodypart_id"] = df.apply(_bodypart_id_from_row, axis=1).astype(int)
-    df["result_id"] = df.apply(_result_id_from_row, axis=1).astype(int)
-    df["period_id"] = df["period_code"].map(_period_id).fillna(1).astype(int)
-    df["time_seconds"] = [
-        _overall_seconds(m, s) for m, s in zip(df["minute"], df["second"])
-    ]
-    df["start_x"] = df["x"].apply(_to_mx)
-    df["start_y"] = df["y"].apply(_to_my)
-    df["end_x"] = df["end_x"].apply(_to_mx)
-    df["end_y"] = df["end_y"].apply(_to_my)
-    df = df.sort_values(
-        ["minute", "second", "orig_event_index"], kind="stable"
-    ).reset_index(drop=True)
-    return df
-
-
-def _build_soccer_xg_feature_frame(
-    actions: pd.DataFrame, home_team_id: int
-) -> pd.DataFrame:
-    if actions is None or actions.empty:
-        return pd.DataFrame()
-
-    def _prev(df, n):
-        p = df.shift(n)
-        if n > 0:
-            p.iloc[:n] = df.iloc[[0] * n].values
-        return p
-
-    a0 = actions.copy()
-    a1 = _prev(actions, 1)
-    a2 = _prev(actions, 2)
-    away_mask = a0["team_id"] != home_team_id
-    a0 = _flip_lr(a0, away_mask)
-    a1 = _flip_lr(a1, away_mask)
-    a2 = _flip_lr(a2, away_mask)
-
-    X = pd.DataFrame(index=actions.index)
-    X["bodypart_id_a0"] = a0["bodypart_id"].astype(int)
-    X["type_id_a1"] = a1["type_id"].astype(int)
-    X["type_id_a2"] = a2["type_id"].astype(int)
-    X["bodypart_id_a1"] = a1["bodypart_id"].astype(int)
-    X["bodypart_id_a2"] = a2["bodypart_id"].astype(int)
-    X["result_id_a1"] = a1["result_id"].astype(int)
-    X["result_id_a2"] = a2["result_id"].astype(int)
-
-    for nm, df_ in [("a0", a0), ("a1", a1), ("a2", a2)]:
-        X[f"start_x_{nm}"] = df_["start_x"]
-        X[f"start_y_{nm}"] = df_["start_y"]
-    for nm, df_ in [("a1", a1), ("a2", a2)]:
-        X[f"end_x_{nm}"] = df_["end_x"]
-        X[f"end_y_{nm}"] = df_["end_y"]
-        X[f"dx_{nm}"] = df_["end_x"] - df_["start_x"]
-        X[f"dy_{nm}"] = df_["end_y"] - df_["start_y"]
-        X[f"movement_{nm}"] = np.sqrt(X[f"dx_{nm}"] ** 2 + X[f"dy_{nm}"] ** 2)
-
-    X["dx_a01"] = a1["end_x"] - a0["start_x"]
-    X["dy_a01"] = a1["end_y"] - a0["start_y"]
-    X["mov_a01"] = np.sqrt(X["dx_a01"] ** 2 + X["dy_a01"] ** 2)
-    X["dx_a02"] = a2["end_x"] - a0["start_x"]
-    X["dy_a02"] = a2["end_y"] - a0["start_y"]
-    X["mov_a02"] = np.sqrt(X["dx_a02"] ** 2 + X["dy_a02"] ** 2)
-
-    for nm, df_ in [("a0", a0), ("a1", a1), ("a2", a2)]:
-        pol = _polar_dist_angle(df_["start_x"], df_["start_y"], "start")
-        X[f"start_dist_to_goal_{nm}"] = pol["start_dist_to_goal"]
-        X[f"start_angle_to_goal_{nm}"] = pol["start_angle_to_goal"]
-        X[f"shot_angle_{nm}"] = _goal_angle_series(df_["start_x"], df_["start_y"])
-    for nm, df_ in [("a1", a1), ("a2", a2)]:
-        pol = _polar_dist_angle(df_["end_x"], df_["end_y"], "end")
-        X[f"end_dist_to_goal_{nm}"] = pol["end_dist_to_goal"]
-        X[f"end_angle_to_goal_{nm}"] = pol["end_angle_to_goal"]
-
-    X["time_delta_1"] = (a0["time_seconds"] - a1["time_seconds"]).clip(lower=0)
-    X["time_delta_2"] = (a0["time_seconds"] - a2["time_seconds"]).clip(lower=0)
-    dt1 = X["time_delta_1"].replace(0, 1)
-    dt2 = X["time_delta_2"].replace(0, 1)
-    X["speedx_a01"] = X["dx_a01"].abs() / dt1
-    X["speedy_a01"] = X["dy_a01"].abs() / dt1
-    X["speed_a01"] = X["mov_a01"] / dt1
-    X["speedx_a02"] = X["dx_a02"].abs() / dt2
-    X["speedy_a02"] = X["dy_a02"].abs() / dt2
-    X["speed_a02"] = X["mov_a02"] / dt2
-
-    return X.replace([np.inf, -np.inf], 0).fillna(0)
 
 
 def _sigmoid(z: float) -> float:
@@ -2944,11 +2873,6 @@ def _opta_like_local_xg_from_row(row) -> float:
     return round(float(_clamp(xg, 0.001, XG_SINGLE_SHOT_CAP)), 4)
 
 
-def _open_event_xg_from_row(row) -> float:
-    """Backward-compatible name; now routes to the v2 submodel xG engine."""
-    return _opta_like_local_xg_from_row(row)
-
-
 def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
     global XG_MODEL_USED
     if events is None or events.empty:
@@ -2987,77 +2911,6 @@ def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
 
     XG_MODEL_USED = XG_LOCAL_MODEL_VERSION
     return out
-
-
-def compute_xg(shot: dict) -> float:
-    return _open_event_xg_from_row(shot)
-
-
-def summarise_shots(events: list, team_id: int) -> dict:
-    """
-    Aggregate shot statistics using WhoScored's definitions:
-      Goal + SavedShot           => On Target
-      MissedShots + ShotOnPost   => Off Target
-      BlockedShot                => Blocked
-    Keep woodwork as a separate count as well.
-    """
-    summary = {k: 0 for k in SHOT_SUMMARY_KEYS}
-    summary["xG"] = 0.0
-
-    for ev in events:
-        if ev.get("teamId") != team_id:
-            continue
-        raw_type = ev.get("type", {}).get("displayName", "")
-        if raw_type not in SHOT_TYPES:
-            continue
-
-        summary["Total Shots"] += 1
-
-        if raw_type == "Goal":
-            summary["Goals"] += 1
-            summary["On Target"] += 1
-        elif raw_type == "SavedShot":
-            summary["On Target"] += 1
-        elif raw_type == "MissedShots":
-            summary["Off Target"] += 1
-        elif raw_type == "BlockedShot":
-            summary["Blocked"] += 1
-        elif raw_type == "ShotOnPost":
-            summary["Off Target"] += 1
-            summary["Woodwork"] += 1
-
-        summary["xG"] += compute_xg(ev)
-
-    summary["xG"] = round(summary["xG"], 2)
-    summary["xG_per_shot"] = (
-        round(summary["xG"] / summary["Total Shots"], 3)
-        if summary["Total Shots"] > 0
-        else 0.0
-    )
-    return summary
-
-
-def calc_xg(
-    x,
-    y,
-    header=False,
-    penalty=False,
-    big_chance=False,
-    body_part=None,
-    is_counter=False,
-    is_direct_fk=False,
-) -> float:
-    shot = {
-        "x": x,
-        "y": y,
-        "is_header": header,
-        "is_penalty": penalty,
-        "big_chance": big_chance,
-        "body_part": body_part,
-        "is_direct_fk": is_direct_fk,
-        "qualifier_names": ["FastBreak"] if is_counter else [],
-    }
-    return compute_xg(shot)
 
 
 # ══════════════════════════════════════════════════════
@@ -3115,6 +2968,25 @@ def has_q(quals, name: str) -> bool:
     )
 
 
+def q_value(quals, name: str) -> float | None:
+    """Return a qualifier's numeric value, or None when absent/unparseable.
+
+    ``has_q`` only answers whether a qualifier is present. Shot placement needs
+    the value: GoalMouthY is the crossing point across the goal line and
+    GoalMouthZ is its height, and both are what a goal-frame plot is drawn from.
+    """
+    if not isinstance(quals, list):
+        return None
+    for q in quals:
+        if q.get("type", {}).get("displayName") != name:
+            continue
+        try:
+            return float(q.get("value"))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def get_shot_family(raw_type: str) -> str | None:
     return SHOT_FAMILY.get(raw_type)
 
@@ -3166,12 +3038,6 @@ def get_shot_counts(df: pd.DataFrame) -> dict:
 # ══════════════════════════════════════════════════════
 #  OFFICIAL WHOSCORED STATS
 # ══════════════════════════════════════════════════════
-def _norm_team_name(name: str) -> str:
-    s = (name or "").strip().lower()
-    s = s.replace("manchester", "man")
-    s = s.replace("utd", "united")
-    s = re.sub(r"[^a-z0-9]+", "", s)
-    return s
 
 
 def _parse_lr_stat(text: str, label_patterns: list[str], as_float: bool = False):
@@ -3403,17 +3269,33 @@ def _candidate_official_urls(url: str) -> list[str]:
 def _fetch_html_via_http(url: str) -> tuple[str, str]:
     html = ""
     text = ""
+    # curl-cffi first for the same reason as the match page: WhoScored refuses
+    # a stock client at the TLS handshake, and cloudscraper's retries are what
+    # made this path take minutes when it was going to fail anyway.
     try:
-        import cloudscraper
+        from curl_cffi import requests as curl_requests
 
-        scraper = cloudscraper.create_scraper(
-            browser={"browser": "chrome", "platform": "windows", "mobile": False}
-        )
-        resp = scraper.get(url, timeout=60)
-        if resp is not None and getattr(resp, "status_code", None) == 200:
-            html = resp.text or ""
+        with curl_requests.Session(
+            impersonate="chrome",
+            headers={"Referer": "https://www.whoscored.com/"},
+        ) as session:
+            resp = session.get(url, timeout=25)
+            if resp is not None and getattr(resp, "status_code", None) == 200:
+                html = resp.text or ""
     except Exception:
         pass
+    if not html:
+        try:
+            import cloudscraper
+
+            scraper = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "windows", "mobile": False}
+            )
+            resp = scraper.get(url, timeout=60)
+            if resp is not None and getattr(resp, "status_code", None) == 200:
+                html = resp.text or ""
+        except Exception:
+            pass
     if not html:
         try:
             import requests
@@ -4632,6 +4514,20 @@ def parse_all(md: dict):
                 "is_header": has_q(quals, "Head"),
                 "is_penalty": has_q(quals, "Penalty"),
                 "is_penalty_shootout": is_penalty_shootout,
+                # Where the shot crossed the goal line: Y across the width,
+                # Z its height. Feeds the goalkeeper goal-frame plot; absent on
+                # blocked shots and on wild misses the provider does not track.
+                "goal_mouth_y": q_value(quals, "GoalMouthY") if is_shot else None,
+                "goal_mouth_z": q_value(quals, "GoalMouthZ") if is_shot else None,
+                # Where a blocked shot was stopped, for block geometry.
+                "blocked_x": q_value(quals, "BlockedX") if is_shot else None,
+                "blocked_y": q_value(quals, "BlockedY") if is_shot else None,
+                # Provider pass length/angle. Both are also derivable from the
+                # coordinates, so the metrics layer falls back to geometry when
+                # these are absent — but the provider values are the truth when
+                # present, and cost nothing to carry.
+                "pass_length": q_value(quals, "Length") if is_pass else None,
+                "pass_angle": q_value(quals, "Angle") if is_pass else None,
                 "big_chance": has_q(quals, "BigChance"),
                 "body_part": next(
                     (
@@ -4921,12 +4817,13 @@ def _player_role_badge(pid, sub_in, sub_out, red_cards):
 # ══════════════════════════════════════════════════════
 #  PITCH
 # ══════════════════════════════════════════════════════
-def draw_pitch(ax, pitch_color=None, line_color=None, line_alpha=0.82):
+def draw_pitch(ax, pitch_color=None, line_color=None, line_alpha=None):
     pc = pitch_color or PITCH_COL
     ax.set_facecolor(pc)
     is_light = pc in ("white", "#ffffff", "#f5f5f5", "#fafafa")
-    lc = line_color or ("black" if is_light else "#3d8a3d")
-    lw = 1.15
+    lc = line_color or ("black" if is_light else PITCH_LINE)
+    line_alpha = PITCH_LINE_ALPHA if line_alpha is None else line_alpha
+    lw = PITCH_LINE_WIDTH
 
     def L(*args, **kw):
         a = kw.pop("alpha", line_alpha)
@@ -4972,31 +4869,6 @@ def draw_pitch(ax, pitch_color=None, line_color=None, line_alpha=0.82):
 # ══════════════════════════════════════════════════════
 #  PASS ZONE HELPERS
 # ══════════════════════════════════════════════════════
-def _pass_zone(end_x, end_y):
-    in_pen = (
-        end_x is not None
-        and end_y is not None
-        and end_x >= PENALTY_BOX_X
-        and PENALTY_BOX_Y1 <= end_y <= PENALTY_BOX_Y2
-    )
-    in_fin = end_x is not None and end_x >= FINAL_THIRD_X
-    if in_pen:
-        return "penalty"
-    if in_fin:
-        return "final_third"
-    return "other"
-
-
-def _pass_color(zone, successful):
-    tbl = {
-        ("penalty", True): (C_GREEN, 0.95, 5),
-        ("penalty", False): (C_GOLD, 0.86, 4),
-        ("final_third", True): (C_BLUE, 0.84, 3),
-        ("final_third", False): (C_RED, 0.78, 2),
-        ("other", True): ("#cbd5e1", 0.38, 1),
-        ("other", False): ("#94a3b8", 0.30, 1),
-    }
-    return tbl.get((zone, successful), ("#888888", 0.2, 1))
 
 
 # ══════════════════════════════════════════════════════
@@ -5747,253 +5619,6 @@ def draw_breakdown_goals(fig, events, info, xg_data):
 # ══════════════════════════════════════════════════════
 #  FIG 5 & 6 — PASS MAP
 # ══════════════════════════════════════════════════════
-def draw_pass_map_full(fig, events, team_id, team_name, team_color):
-    fig.clear()
-    fig.patch.set_facecolor(BG_DARK)
-    ax = fig.add_subplot(111)
-    draw_pitch(ax, pitch_color=PITCH_COL)
-
-    passes = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == team_id)
-        & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
-    ].copy()
-    if passes.empty:
-        ax.text(
-            50,
-            50,
-            "No pass data",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=14,
-            style="italic",
-        )
-        fig.text(
-            0.50,
-            0.975,
-            f"Pass Map — {team_name}",
-            ha="center",
-            va="top",
-            color=TEXT_BRIGHT,
-            fontsize=15,
-            fontweight="bold",
-            transform=fig.transFigure,
-        )
-        return
-
-    passes["zone"] = passes.apply(lambda r: _pass_zone(r["end_x"], r["end_y"]), axis=1)
-    passes["successful"] = passes["outcome"] == "Successful"
-    passes["is_key"] = passes["is_key_pass"] == True
-
-    for zone, succ in [
-        ("other", False),
-        ("other", True),
-        ("final_third", False),
-        ("final_third", True),
-        ("penalty", False),
-        ("penalty", True),
-    ]:
-        sub = passes[
-            ~passes["is_key"]
-            & (passes["zone"] == zone)
-            & (passes["successful"] == succ)
-        ]
-        if sub.empty:
-            continue
-        color, alpha, zord = _pass_color(zone, succ)
-        for _, row in sub.iterrows():
-            ax.annotate(
-                "",
-                xy=(row["end_x"], row["end_y"]),
-                xytext=(row["x"], row["y"]),
-                arrowprops=dict(
-                    arrowstyle="-|>",
-                    color="#ffffff",
-                    lw=2.8,
-                    alpha=0.10,
-                    mutation_scale=8,
-                ),
-                zorder=zord,
-            )
-            ax.annotate(
-                "",
-                xy=(row["end_x"], row["end_y"]),
-                xytext=(row["x"], row["y"]),
-                arrowprops=dict(
-                    arrowstyle="-|>",
-                    color=color,
-                    lw=1.55,
-                    alpha=alpha,
-                    mutation_scale=8,
-                ),
-                zorder=zord + 1,
-            )
-    for _, row in passes[passes["is_key"]].iterrows():
-        ax.annotate(
-            "",
-            xy=(row["end_x"], row["end_y"]),
-            xytext=(row["x"], row["y"]),
-            arrowprops=dict(
-                arrowstyle="-|>", color="#ffffff", lw=5.5, alpha=0.15, mutation_scale=12
-            ),
-            zorder=10,
-        )
-        ax.annotate(
-            "",
-            xy=(row["end_x"], row["end_y"]),
-            xytext=(row["x"], row["y"]),
-            arrowprops=dict(
-                arrowstyle="-|>", color="#facc15", lw=2.8, alpha=0.97, mutation_scale=11
-            ),
-            zorder=11,
-        )
-        ax.scatter(
-            row["x"], row["y"], c="#facc15", s=55, edgecolors="white", lw=1.2, zorder=12
-        )
-        ax.scatter(
-            row["end_x"],
-            row["end_y"],
-            c="#facc15",
-            s=90,
-            marker="*",
-            edgecolors="white",
-            lw=1.0,
-            zorder=12,
-        )
-        ps = _short(row.get("player", ""))
-        if ps:
-            ax.text(
-                row["end_x"],
-                row["end_y"] + 3.5,
-                ps,
-                ha="center",
-                va="bottom",
-                color="#facc15",
-                fontsize=8,
-                fontweight="bold",
-                zorder=13,
-                bbox=dict(
-                    boxstyle="round,pad=0.25",
-                    facecolor="#000000",
-                    alpha=0.72,
-                    edgecolor="#facc15",
-                    lw=0.8,
-                ),
-            )
-
-    ax.axvline(FINAL_THIRD_X, color="#94a3b8", lw=1.5, ls="--", alpha=0.55, zorder=6)
-    ax.axvline(PENALTY_BOX_X, color="#94a3b8", lw=1.2, ls="--", alpha=0.45, zorder=6)
-
-    total = len(passes)
-    success = int(passes["successful"].sum())
-    acc = round(success / total * 100, 1) if total else 0
-    key_n = int(passes["is_key"].sum())
-    pen_s = int(((passes["zone"] == "penalty") & passes["successful"]).sum())
-    pen_f = int(((passes["zone"] == "penalty") & ~passes["successful"]).sum())
-    ft_s = int(((passes["zone"] == "final_third") & passes["successful"]).sum())
-    ft_f = int(((passes["zone"] == "final_third") & ~passes["successful"]).sum())
-    xt_sum = (
-        round(passes[passes["successful"] & passes["xT"].notna()]["xT"].sum(), 3)
-        if "xT" in passes.columns
-        else "—"
-    )
-
-    ax.legend(
-        handles=[
-            mpatches.Patch(
-                facecolor=C_BLUE,
-                edgecolor="none",
-                label=f"Successful — Final Third  ({ft_s})",
-            ),
-            mpatches.Patch(
-                facecolor=C_GREEN,
-                edgecolor="none",
-                label=f"Successful — Penalty Box  ({pen_s})",
-            ),
-            mpatches.Patch(
-                facecolor=C_RED,
-                edgecolor="none",
-                label=f"Failed — Final Third  ({ft_f})",
-            ),
-            mpatches.Patch(
-                facecolor=C_GOLD,
-                edgecolor="none",
-                label=f"Failed — Penalty Box  ({pen_f})",
-            ),
-            mpatches.Patch(
-                facecolor="#facc15",
-                edgecolor="white",
-                lw=1.0,
-                label=f"⭐ Key Pass  ({key_n})",
-            ),
-        ],
-        fontsize=10.5,
-        ncol=3,
-        facecolor=BG_MID,
-        edgecolor=GRID_COL,
-        labelcolor=TEXT_MAIN,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.06),
-        framealpha=0.95,
-    )
-    # ── Team colour bar ───────────────────────────────────────────
-    _hdr = fig.add_axes([0.0, 0.980, 1.0, 0.020])
-    _hdr.set_xlim(0, 1)
-    _hdr.set_ylim(0, 1)
-    _hdr.axis("off")
-    _hdr.add_patch(
-        plt.Rectangle((0, 0), 1.0, 1, facecolor=team_color, alpha=0.93, zorder=0)
-    )
-    _hdr.add_patch(
-        plt.Rectangle((0, 0.82), 1.0, 0.18, facecolor="white", alpha=0.07, zorder=1)
-    )
-    _hdr.text(
-        0.015,
-        0.50,
-        f"● {team_name}",
-        ha="left",
-        va="center",
-        color=_text_on_color(team_color),
-        fontsize=8.5,
-        fontweight="bold",
-        zorder=3,
-    )
-    _hdr.text(
-        0.50,
-        0.50,
-        "Created by Mostafa Saad",
-        ha="center",
-        va="center",
-        color=_accent_on_color(team_color),
-        fontsize=8,
-        fontweight="bold",
-        fontstyle="italic",
-        zorder=3,
-    )
-    fig.text(
-        0.50,
-        0.975,
-        f"Pass Map — {team_name}",
-        ha="center",
-        va="top",
-        color=TEXT_BRIGHT,
-        fontsize=15,
-        fontweight="bold",
-        transform=fig.transFigure,
-        path_effects=[pe.withStroke(linewidth=3, foreground="#000000")],
-    )
-    fig.text(
-        0.50,
-        0.951,
-        f"Total: {total}   Completed: {success} ({acc}%)   "
-        f"⭐ Key Passes: {key_n}   🎯 xT: {xt_sum}",
-        ha="center",
-        va="top",
-        color=TEXT_DIM,
-        fontsize=9,
-        transform=fig.transFigure,
-    )
 
 
 # ══════════════════════════════════════════════════════
@@ -6835,900 +6460,6 @@ def _lbl(ax, txt, col=TEXT_BRIGHT, size=8.5):
     )
 
 
-def _rpt_pass_network(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Pass Network — {name}", tc)
-    p = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == tid)
-        & (events["outcome"] == "Successful")
-        & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
-    ].copy()
-    if p.empty:
-        return
-    avg = p.groupby("player")[["x", "y"]].mean()
-    cnt = p.groupby("player").size().rename("n")
-    avg = avg.join(cnt)
-    mx_n = avg["n"].max() if not avg.empty else 1
-    for pl, row in avg.iterrows():
-        s = 18 + row["n"] / mx_n * 85
-        ax.scatter(row["x"], row["y"], c=tc, s=s, edgecolors="white", lw=0.7, zorder=5)
-        nm = pl.split()[-1][:7] if pl else ""
-        ax.text(
-            row["x"],
-            row["y"] + 3.5,
-            nm,
-            ha="center",
-            va="bottom",
-            color="white",
-            fontsize=5.5,
-            zorder=6,
-            bbox=dict(
-                boxstyle="round,pad=0.15",
-                facecolor="#000000",
-                alpha=0.70,
-                edgecolor="none",
-            ),
-        )
-
-
-def _rpt_shot_table(ax, events, info, xg_data):
-    ax.set_facecolor(BG_MID)
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    hn, an = info["home_name"], info["away_name"]
-    hd, ad = xg_data.get(hn, {}), xg_data.get(an, {})
-    hs = events[(events["is_shot"] == True) & (events["team_id"] == info["home_id"])]
-    as_ = events[(events["is_shot"] == True) & (events["team_id"] == info["away_id"])]
-    hxgot = round(
-        hs[
-            (
-                hs.get("shot_whoscored_type", hs["shot_category"]).isin(
-                    ["Goal", "SavedShot", "On Target"]
-                )
-            )
-        ]["xG"].sum(),
-        2,
-    )
-    axgot = round(
-        as_[
-            (
-                as_.get("shot_whoscored_type", as_["shot_category"]).isin(
-                    ["Goal", "SavedShot", "On Target"]
-                )
-            )
-        ]["xG"].sum(),
-        2,
-    )
-    rows_ = [
-        ("Goals", hd.get("goals", 0), ad.get("goals", 0), C_GOLD),
-        ("xG", hd.get("xG", 0), ad.get("xG", 0), "#a855f7"),
-        ("xGoT", hxgot, axgot, "#F5C542"),
-        ("Shots", hd.get("shots", 0), ad.get("shots", 0), "#94a3b8"),
-        ("On Tgt", hd.get("on_target", 0), ad.get("on_target", 0), C_GREEN),
-        ("Blocked", hd.get("blocked", 0), ad.get("blocked", 0), C_GOLD),
-        ("Off Target", hd.get("missed", 0), ad.get("missed", 0), "#64748b"),
-        ("Big Ch.", hd.get("big_chances", 0), ad.get("big_chances", 0), "#f43f5e"),
-    ]
-    ax.text(
-        0.10,
-        0.97,
-        hn[:10],
-        ha="left",
-        va="top",
-        color=C_RED,
-        fontsize=8.5,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.text(
-        0.50,
-        0.97,
-        "SHOTS",
-        ha="center",
-        va="top",
-        color=TEXT_DIM,
-        fontsize=7.5,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.text(
-        0.90,
-        0.97,
-        an[:10],
-        ha="right",
-        va="top",
-        color=C_BLUE,
-        fontsize=8.5,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.plot([0.03, 0.97], [0.93, 0.93], color=GRID_COL, lw=0.8, transform=ax.transAxes)
-    y = 0.875
-    for lbl_, hv, av, col in rows_:
-        tot = (float(hv) + float(av)) or 1
-        hr = float(hv) / tot
-        ax.barh(
-            y,
-            hr * 0.22,
-            height=0.055,
-            left=0.03,
-            color=C_RED,
-            alpha=0.55,
-            transform=ax.transAxes,
-            zorder=2,
-        )
-        ax.barh(
-            y,
-            (1 - hr) * 0.22,
-            height=0.055,
-            left=0.75,
-            color=C_BLUE,
-            alpha=0.55,
-            transform=ax.transAxes,
-            zorder=2,
-        )
-        ax.text(
-            0.27,
-            y,
-            str(hv),
-            ha="right",
-            va="center",
-            color=C_RED,
-            fontsize=10,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-        ax.text(
-            0.50,
-            y,
-            lbl_,
-            ha="center",
-            va="center",
-            color=col,
-            fontsize=7.5,
-            fontweight="bold",
-            transform=ax.transAxes,
-            bbox=dict(
-                boxstyle="round,pad=0.20",
-                facecolor=BG_DARK,
-                alpha=0.85,
-                edgecolor=col,
-                lw=0.8,
-            ),
-        )
-        ax.text(
-            0.73,
-            y,
-            str(av),
-            ha="left",
-            va="center",
-            color=C_BLUE,
-            fontsize=10,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-        y -= 0.102
-    _lbl(ax, "Shot Statistics", TEXT_DIM)
-
-
-def _rpt_avg_position(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Avg Positions — {name}", tc)
-    ev = events[
-        (events["team_id"] == tid) & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    if ev.empty:
-        return
-    avg = ev.groupby("player")[["x", "y"]].mean()
-    cnt = ev.groupby("player").size()
-    mx = cnt.max() if not cnt.empty else 1
-    for pl, row in avg.iterrows():
-        n = cnt.get(pl, 1)
-        ax.scatter(
-            row["x"],
-            row["y"],
-            c=tc,
-            s=25 + n / mx * 80,
-            edgecolors="white",
-            lw=0.7,
-            alpha=0.85,
-            zorder=4,
-        )
-        nm = pl.split()[-1][:6] if pl else ""
-        ax.text(
-            row["x"],
-            row["y"] + 3.2,
-            nm,
-            ha="center",
-            va="bottom",
-            color="white",
-            fontsize=5.2,
-            zorder=5,
-            bbox=dict(
-                boxstyle="round,pad=0.12",
-                facecolor="#000000",
-                alpha=0.68,
-                edgecolor="none",
-            ),
-        )
-
-
-def _rpt_gk_saves(ax, events, info):
-    ax.set_facecolor(BG_DARK)
-    ax.axis("off")
-    ax.set_xlim(0, 100)
-    ax.set_ylim(0, 100)
-    _lbl(ax, "Goalkeeper Saves", TEXT_DIM)
-
-    def goal_box(cx, cy, w, h, col, lbl_, n):
-        ax.plot(
-            [cx - w / 2, cx + w / 2, cx + w / 2, cx - w / 2, cx - w / 2],
-            [cy, cy, cy + h, cy + h, cy],
-            color="white",
-            lw=1.5,
-            alpha=0.8,
-            zorder=3,
-        )
-        ax.text(
-            cx,
-            cy - 6,
-            f"{lbl_[:9]}\n{n} saves",
-            ha="center",
-            va="top",
-            color=col,
-            fontsize=7,
-            fontweight="bold",
-        )
-
-    goal_box(
-        25,
-        30,
-        36,
-        30,
-        C_RED,
-        info["home_name"],
-        len(
-            events[
-                (events["team_id"] == info["away_id"])
-                & (events["shot_category"] == "On Target")
-            ]
-        ),
-    )
-    goal_box(
-        75,
-        30,
-        36,
-        30,
-        C_BLUE,
-        info["away_name"],
-        len(
-            events[
-                (events["team_id"] == info["home_id"])
-                & (events["shot_category"] == "On Target")
-            ]
-        ),
-    )
-    for tid, cx, col in [(info["away_id"], 25, C_RED), (info["home_id"], 75, C_BLUE)]:
-        sv = events[
-            (events["team_id"] == tid)
-            & (events["shot_category"] == "On Target")
-            & events[["end_x", "end_y"]].notna().all(axis=1)
-        ]
-        if sv.empty:
-            continue
-        sx = cx + (sv["end_y"] - 50) * 0.36
-        sy = 30 + (sv["end_x"].clip(83.5, 100) - 83.5) / 16.5 * 30
-        ax.scatter(
-            sx, sy, c=col, s=55, edgecolors="white", lw=0.8, alpha=0.88, zorder=5
-        )
-
-
-def _rpt_progressive(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    p = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == tid)
-        & (events["outcome"] == "Successful")
-        & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
-    ].copy()
-    prog = p[(p["end_x"] - p["x"]) >= 10].copy() if not p.empty else p
-    n = len(prog)
-    _lbl(ax, f"{name}: {n} Progressive Passes", tc)
-    if prog.empty:
-        return
-
-    def zc(x):
-        if x < 33:
-            return "#64748b"
-        if x < 66:
-            return C_GOLD
-        return C_GREEN
-
-    for _, r in prog.iterrows():
-        ax.annotate(
-            "",
-            xy=(r["end_x"], r["end_y"]),
-            xytext=(r["x"], r["y"]),
-            arrowprops=dict(
-                arrowstyle="-|>", color=zc(r["x"]), lw=0.9, alpha=0.55, mutation_scale=5
-            ),
-            zorder=3,
-        )
-    n1 = int((prog["x"] < 33).sum())
-    n2 = int(((prog["x"] >= 33) & (prog["x"] < 66)).sum())
-    n3 = int((prog["x"] >= 66).sum())
-    for i, (lv, cl) in enumerate(
-        [
-            (f"Own 3rd  {n1}({int(n1/n*100) if n else 0}%)", "#64748b"),
-            (f"Middle   {n2}({int(n2/n*100) if n else 0}%)", C_GOLD),
-            (f"Final 3rd {n3}({int(n3/n*100) if n else 0}%)", C_GREEN),
-        ]
-    ):
-        ax.text(
-            1,
-            99 - i * 9,
-            lv,
-            ha="right",
-            va="top",
-            color=cl,
-            fontsize=6.5,
-            fontweight="bold",
-            zorder=7,
-            bbox=dict(
-                boxstyle="round,pad=0.18",
-                facecolor=BG_DARK,
-                alpha=0.80,
-                edgecolor="none",
-            ),
-        )
-
-
-def _rpt_xt_minute(ax, events, info):
-    ax.set_facecolor(BG_DARK)
-    _lbl(ax, "xT — Match Dominance per Minute", TEXT_DIM)
-    if "xT" not in events.columns:
-        ax.text(
-            0.5,
-            0.5,
-            "No xT data",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            transform=ax.transAxes,
-        )
-        return
-    xt = events[
-        (events["xT"].notna())
-        & (events["xT"] > 0)
-        & (events["outcome"] == "Successful")
-    ].copy()
-    hxt = xt[xt["team_id"] == info["home_id"]].groupby("minute")["xT"].sum()
-    axt = xt[xt["team_id"] == info["away_id"]].groupby("minute")["xT"].sum()
-    mins = list(range(1, 96))
-    ax.bar(mins, [hxt.get(m, 0) for m in mins], color=C_RED, alpha=0.75, width=0.8)
-    ax.bar(mins, [-axt.get(m, 0) for m in mins], color=C_BLUE, alpha=0.75, width=0.8)
-    ax.axhline(0, color="white", lw=0.8, alpha=0.5)
-    for xp, lb in [(45, "HT"), (90, "FT")]:
-        ax.axvline(xp, color=C_GOLD, lw=1.0, ls="--", alpha=0.60)
-        ax.text(xp + 0.5, ax.get_ylim()[1] * 0.85, lb, color=TEXT_BRIGHT, fontsize=6)
-    ht = round(xt[xt["team_id"] == info["home_id"]]["xT"].sum(), 3)
-    at = round(xt[xt["team_id"] == info["away_id"]]["xT"].sum(), 3)
-    for pos, name, col, ha_ in [
-        (0.02, info["home_name"], C_RED, "left"),
-        (0.98, info["away_name"], C_BLUE, "right"),
-    ]:
-        ax.text(
-            pos,
-            0.97,
-            f"{name[:10]}  xT:{ht if col==C_RED else at}",
-            transform=ax.transAxes,
-            ha=ha_,
-            va="top",
-            color=col,
-            fontsize=7.5,
-            fontweight="bold",
-            bbox=dict(
-                boxstyle="round,pad=0.22",
-                facecolor=BG_MID,
-                alpha=0.85,
-                edgecolor="none",
-            ),
-        )
-    ax.tick_params(colors=TEXT_DIM, labelsize=7)
-    ax.set_xlabel("Minute", color=TEXT_DIM, fontsize=7, labelpad=2)
-    ax.set_ylabel("xT / min", color=TEXT_DIM, fontsize=7, labelpad=2)
-    for sp in ["top", "right"]:
-        ax.spines[sp].set_visible(False)
-    for sp in ["bottom", "left"]:
-        ax.spines[sp].set_color(GRID_COL)
-    ax.grid(alpha=0.07, color=GRID_COL)
-
-
-def _rpt_zone14(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Zone 14 & Half-Spaces — {name}", tc)
-    ev = events[
-        (events["team_id"] == tid) & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    from matplotlib.patches import Rectangle as Rect
-
-    ax.add_patch(
-        Rect((66, 33), 17, 34, facecolor=tc, alpha=0.22, edgecolor=tc, lw=1.5, zorder=2)
-    )
-    ax.add_patch(
-        Rect(
-            (66, 67),
-            17,
-            13,
-            facecolor="#a855f7",
-            alpha=0.22,
-            edgecolor="#a855f7",
-            lw=1.2,
-            zorder=2,
-        )
-    )
-    ax.add_patch(
-        Rect(
-            (66, 20),
-            17,
-            13,
-            facecolor="#a855f7",
-            alpha=0.22,
-            edgecolor="#a855f7",
-            lw=1.2,
-            zorder=2,
-        )
-    )
-    if ev.empty:
-        return
-    z14 = ev[ev["x"].between(66, 83) & ev["y"].between(33, 67)]
-    lhs = ev[ev["x"].between(66, 83) & ev["y"].between(67, 80)]
-    rhs = ev[ev["x"].between(66, 83) & ev["y"].between(20, 33)]
-    if not z14.empty:
-        ax.scatter(
-            z14["x"], z14["y"], c=tc, s=12, alpha=0.60, zorder=4, edgecolors="none"
-        )
-    for val, yx, yy, col in [
-        (len(z14), 74.5, 50, tc),
-        (len(lhs), 74.5, 73.5, "#a855f7"),
-        (len(rhs), 74.5, 26.5, "#a855f7"),
-    ]:
-        ax.text(
-            yx,
-            yy,
-            str(val),
-            ha="center",
-            va="center",
-            color="white",
-            fontsize=10,
-            fontweight="bold",
-            zorder=6,
-            bbox=dict(
-                boxstyle="circle,pad=0.35",
-                facecolor=col,
-                alpha=0.88,
-                edgecolor="white",
-                lw=0.9,
-            ),
-        )
-    ax.text(
-        50,
-        -4.5,
-        f"Zone14:{len(z14)}  L.Half-Space:{len(lhs)}  R.Half-Space:{len(rhs)}",
-        ha="center",
-        va="top",
-        color=tc,
-        fontsize=6.5,
-        fontweight="bold",
-    )
-
-
-def _rpt_stats_table(ax, events, info, xg_data):
-    ax.set_facecolor(BG_DARK)
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    hn, an = info["home_name"], info["away_name"]
-    hid, aid = info["home_id"], info["away_id"]
-    hd, ad = xg_data.get(hn, {}), xg_data.get(an, {})
-    hp = int(events[(events["is_pass"] == True) & (events["team_id"] == hid)].shape[0])
-    ap = int(events[(events["is_pass"] == True) & (events["team_id"] == aid)].shape[0])
-    tot_p = (hp + ap) or 1
-    hps = int(
-        events[
-            (events["is_pass"] == True)
-            & (events["team_id"] == hid)
-            & (events["outcome"] == "Successful")
-        ].shape[0]
-    )
-    aps = int(
-        events[
-            (events["is_pass"] == True)
-            & (events["team_id"] == aid)
-            & (events["outcome"] == "Successful")
-        ].shape[0]
-    )
-    hkp = int(
-        events[(events["is_key_pass"] == True) & (events["team_id"] == hid)].shape[0]
-    )
-    akp = int(
-        events[(events["is_key_pass"] == True) & (events["team_id"] == aid)].shape[0]
-    )
-    if "xT" in events.columns:
-        hxt = round(
-            events[(events["team_id"] == hid) & events["xT"].notna()]["xT"].sum(), 2
-        )
-        axt = round(
-            events[(events["team_id"] == aid) & events["xT"].notna()]["xT"].sum(), 2
-        )
-    else:
-        hxt, axt = 0, 0
-    stats = [
-        (
-            "Possession",
-            f"{round(hp/tot_p*100,1)}%",
-            f"{round(ap/tot_p*100,1)}%",
-            hp / tot_p,
-            C_GOLD,
-        ),
-        (
-            "Passes (Acc)",
-            f"{hp}({hps})",
-            f"{ap}({aps})",
-            hp / ((hp + ap) or 1),
-            "#94a3b8",
-        ),
-        (
-            "Shots (OnTgt)",
-            f"{hd.get('shots',0)}({hd.get('on_target',0)})",
-            f"{ad.get('shots',0)}({ad.get('on_target',0)})",
-            hd.get("shots", 0) / ((hd.get("shots", 0) + ad.get("shots", 0)) or 1),
-            "#64748b",
-        ),
-        (
-            "xG",
-            str(hd.get("xG", 0)),
-            str(ad.get("xG", 0)),
-            hd.get("xG", 0) / ((hd.get("xG", 0) + ad.get("xG", 0)) or 1),
-            "#a855f7",
-        ),
-        ("xT", str(hxt), str(axt), hxt / ((hxt + axt) or 1), "#22c55e"),
-        ("Key Passes", str(hkp), str(akp), hkp / ((hkp + akp) or 1), "#F5C542"),
-        (
-            "Big Chances",
-            str(hd.get("big_chances", 0)),
-            str(ad.get("big_chances", 0)),
-            hd.get("big_chances", 0)
-            / ((hd.get("big_chances", 0) + ad.get("big_chances", 0)) or 1),
-            "#f43f5e",
-        ),
-    ]
-    ax.text(
-        0.50,
-        0.99,
-        "MATCH STATISTICS",
-        ha="center",
-        va="top",
-        color=TEXT_BRIGHT,
-        fontsize=9.5,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.text(
-        0.10,
-        0.94,
-        hn[:12],
-        ha="left",
-        va="top",
-        color=C_RED,
-        fontsize=8,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.text(
-        0.90,
-        0.94,
-        an[:12],
-        ha="right",
-        va="top",
-        color=C_BLUE,
-        fontsize=8,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.plot([0.02, 0.98], [0.90, 0.90], color=GRID_COL, lw=0.8, transform=ax.transAxes)
-    y = 0.85
-    step = 0.118
-    for lbl_, hv, av, hr, col in stats:
-        ax.add_patch(
-            plt.Rectangle(
-                (0.02, y - 0.048),
-                hr * 0.96,
-                0.050,
-                facecolor=C_RED,
-                alpha=0.18,
-                transform=ax.transAxes,
-                zorder=1,
-            )
-        )
-        ax.add_patch(
-            plt.Rectangle(
-                (0.02 + hr * 0.96, y - 0.048),
-                (1 - hr) * 0.96,
-                0.050,
-                facecolor=C_BLUE,
-                alpha=0.18,
-                transform=ax.transAxes,
-                zorder=1,
-            )
-        )
-        ax.text(
-            0.06,
-            y,
-            str(hv),
-            ha="left",
-            va="center",
-            color=C_RED,
-            fontsize=9,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-        ax.text(
-            0.50,
-            y,
-            lbl_,
-            ha="center",
-            va="center",
-            color=col,
-            fontsize=7.8,
-            fontweight="bold",
-            transform=ax.transAxes,
-            bbox=dict(
-                boxstyle="round,pad=0.22",
-                facecolor=BG_MID,
-                alpha=0.92,
-                edgecolor=col,
-                lw=0.8,
-            ),
-        )
-        ax.text(
-            0.94,
-            y,
-            str(av),
-            ha="right",
-            va="center",
-            color=C_BLUE,
-            fontsize=9,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-        y -= step
-
-
-def _rpt_pass_zones(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Pass Zones — {name}", tc)
-    p = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == tid)
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    if p.empty:
-        return
-    tot = len(p)
-    col_e = [0, 20, 40, 60, 80, 100]
-    row_e = [0, 34, 67, 100]
-    for ci in range(5):
-        for ri in range(3):
-            x0, x1 = col_e[ci], col_e[ci + 1]
-            y0, y1 = row_e[ri], row_e[ri + 1]
-            n = int(
-                p[
-                    (p["x"] >= x0) & (p["x"] < x1) & (p["y"] >= y0) & (p["y"] < y1)
-                ].shape[0]
-            )
-            if n == 0:
-                continue
-            pct = round(n / tot * 100, 0)
-            inten = min(pct / 12, 1.0)
-            ax.add_patch(
-                plt.Rectangle(
-                    (x0 + 0.5, y0 + 0.5),
-                    x1 - x0 - 1,
-                    y1 - y0 - 1,
-                    facecolor=tc,
-                    alpha=inten * 0.58,
-                    edgecolor="none",
-                    zorder=2,
-                )
-            )
-            ax.text(
-                (x0 + x1) / 2,
-                (y0 + y1) / 2,
-                f"{int(pct)}%",
-                ha="center",
-                va="center",
-                color=_text_on_color(tc),
-                fontsize=7.5,
-                fontweight="bold",
-                zorder=3,
-                path_effects=[
-                    pe.withStroke(linewidth=1.8, foreground=_stroke_on_color(tc))
-                ],
-            )
-
-
-def _rpt_crosses(ax, events, info):
-    _mini_pitch(ax)
-    _lbl(ax, "Crosses", TEXT_DIM)
-    if "is_cross" not in events.columns:
-        ax.text(
-            50,
-            50,
-            "No cross data",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8,
-            style="italic",
-        )
-        return
-    crs = events[
-        (events["is_cross"] == True)
-        & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
-    ].copy()
-    if crs.empty:
-        ax.text(
-            50,
-            50,
-            "No crosses recorded",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8,
-            style="italic",
-        )
-        return
-    for tid, col in [(info["home_id"], C_RED), (info["away_id"], C_BLUE)]:
-        tc = crs[crs["team_id"] == tid]
-        for _, r in tc.iterrows():
-            succ = r.get("outcome", "") == "Successful"
-            ax.annotate(
-                "",
-                xy=(r["end_x"], r["end_y"]),
-                xytext=(r["x"], r["y"]),
-                arrowprops=dict(
-                    arrowstyle="-|>",
-                    color=col,
-                    lw=1.3 if succ else 0.6,
-                    alpha=0.82 if succ else 0.30,
-                    mutation_scale=6,
-                ),
-                zorder=4,
-            )
-        eff = int(tc[tc["outcome"] == "Successful"].shape[0])
-        nm = info["home_name"][:8] if tid == info["home_id"] else info["away_name"][:8]
-        xp = 2 if tid == info["home_id"] else 98
-        ax.text(
-            xp,
-            -4.5,
-            f"{nm}: {len(tc)} ({eff} eff.)",
-            ha="left" if tid == info["home_id"] else "right",
-            va="top",
-            color=col,
-            fontsize=6.5,
-            fontweight="bold",
-        )
-
-
-def _rpt_danger_zones(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Danger Creation — {name}", tc)
-    dng = events[
-        ((events["is_shot"] == True) | (events["is_key_pass"] == True))
-        & (events["team_id"] == tid)
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    if dng.empty:
-        return
-    shots = dng[dng["is_shot"] == True]
-    kp = dng[dng["is_key_pass"] == True]
-    goals = shots[shots["is_goal"] == True] if not shots.empty else shots
-    if not dng.empty:
-        ax.scatter(
-            dng["x"], dng["y"], c=tc, s=120, alpha=0.08, zorder=2, edgecolors="none"
-        )
-        ax.scatter(
-            dng["x"], dng["y"], c=tc, s=40, alpha=0.12, zorder=2, edgecolors="none"
-        )
-    if not kp.empty:
-        ax.scatter(
-            kp["x"],
-            kp["y"],
-            c="#facc15",
-            s=22,
-            marker="^",
-            alpha=0.78,
-            zorder=4,
-            edgecolors="none",
-        )
-    if not shots.empty:
-        ax.scatter(
-            shots["x"],
-            shots["y"],
-            c=tc,
-            s=28,
-            alpha=0.75,
-            zorder=4,
-            edgecolors="white",
-            lw=0.5,
-        )
-    if not goals.empty:
-        ax.scatter(
-            goals["x"],
-            goals["y"],
-            c="#FFD700",
-            s=90,
-            marker="*",
-            zorder=6,
-            edgecolors="white",
-            lw=0.8,
-        )
-    ax.text(
-        50,
-        -4.5,
-        f"Shots:{len(shots)}  Key Pass:{len(kp)}  Goals:{len(goals)}",
-        ha="center",
-        va="top",
-        color=tc,
-        fontsize=6.5,
-        fontweight="bold",
-    )
-    ax.legend(
-        handles=[
-            Line2D(
-                [0],
-                [0],
-                marker="^",
-                color="w",
-                markerfacecolor="#facc15",
-                markersize=6,
-                linestyle="None",
-                label="Key Pass",
-            ),
-            Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor=tc,
-                markersize=6,
-                linestyle="None",
-                label="Shot",
-            ),
-            Line2D(
-                [0],
-                [0],
-                marker="*",
-                color="w",
-                markerfacecolor="#FFD700",
-                markersize=8,
-                linestyle="None",
-                label="Goal",
-            ),
-        ],
-        fontsize=5.5,
-        facecolor=BG_MID,
-        edgecolor="none",
-        labelcolor="white",
-        loc="upper left",
-        markerscale=0.9,
-        framealpha=0.80,
-    )
-
-
 # ═══════════════════════════════════════════════════════════════════
 #  WATERMARK & PAGE INFRASTRUCTURE
 # ═══════════════════════════════════════════════════════════════════
@@ -7797,120 +6528,6 @@ def _watermark(fig):
         fontsize=6.5,
         fontstyle="italic",
         transform=fig.transFigure,
-    )
-
-
-def _page_header(
-    fig, hn, an, hg, ag, hxg, axg, hform, aform, venue, status, page_num, page_title
-):
-    from matplotlib.patches import FancyBboxPatch
-
-    fig.patch.set_facecolor(BG_DARK)
-
-    # coloured title bar
-    ax = fig.add_axes([0.0, 0.968, 1.0, 0.032])
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
-    ax.add_patch(
-        FancyBboxPatch(
-            (0, 0),
-            0.470,
-            1,
-            boxstyle="square,pad=0",
-            facecolor=C_RED,
-            alpha=0.90,
-            zorder=0,
-        )
-    )
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.530, 0),
-            0.470,
-            1,
-            boxstyle="square,pad=0",
-            facecolor=C_BLUE,
-            alpha=0.90,
-            zorder=0,
-        )
-    )
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.415, 0),
-            0.170,
-            1,
-            boxstyle="square,pad=0",
-            facecolor=BG_DARK,
-            alpha=0.95,
-            zorder=1,
-        )
-    )
-    ax.text(
-        0.235,
-        0.52,
-        hn,
-        ha="center",
-        va="center",
-        color=_text_on_color(C_RED),
-        fontsize=12,
-        fontweight="bold",
-    )
-    ax.text(
-        0.765,
-        0.52,
-        an,
-        ha="center",
-        va="center",
-        color=_text_on_color(C_BLUE),
-        fontsize=12,
-        fontweight="bold",
-    )
-    ax.text(
-        0.500,
-        0.52,
-        f"{hg}  —  {ag}",
-        ha="center",
-        va="center",
-        color="#FFD700",
-        fontsize=20,
-        fontweight="bold",
-    )
-
-    # info bar
-    ax2 = fig.add_axes([0.0, 0.952, 1.0, 0.016])
-    ax2.set_xlim(0, 1)
-    ax2.set_ylim(0, 1)
-    ax2.axis("off")
-    ax2.set_facecolor("#07090f")
-    sl, sc = STATUS_BADGE.get(status, ("■ Full Time", "#64748b"))
-    ax2.text(
-        0.012,
-        0.50,
-        f"xG: {hxg}  •  {hform}",
-        ha="left",
-        va="center",
-        color=C_RED,
-        fontsize=8.5,
-        fontweight="bold",
-    )
-    ax2.text(
-        0.500,
-        0.50,
-        f"{sl}   •   {venue}   •   {page_title}   •   Page {page_num}/2",
-        ha="center",
-        va="center",
-        color=TEXT_DIM,
-        fontsize=8,
-    )
-    ax2.text(
-        0.988,
-        0.50,
-        f"{aform}  •  xG: {axg}",
-        ha="right",
-        va="center",
-        color=C_BLUE,
-        fontsize=8.5,
-        fontweight="bold",
     )
 
 
@@ -8177,190 +6794,9 @@ def _panel_danger(ax, events, tid, tc, name):
 
 
 # ── C: Goals & Assists table ───────────────────────────────────────
-def _panel_goals_table(ax, events, info):
-    ax.set_facecolor(BG_MID)
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    _lbl(ax, "Goals & Assists", TEXT_BRIGHT)
-    gdf = events[events["is_goal"] == True].copy()
-    if gdf.empty:
-        ax.text(
-            0.50,
-            0.50,
-            "No goals recorded",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=10,
-            style="italic",
-            transform=ax.transAxes,
-        )
-        return
-    rows = []
-    for _, r in gdf.sort_values("minute").iterrows():
-        is_og = bool(r.get("is_own_goal", False))
-        ben_id = r.get("scoring_team", r["team_id"])
-        col = OG_COLOR if is_og else (C_RED if ben_id == info["home_id"] else C_BLUE)
-        from match_report import (
-            classify_goal_type as _classify_goal_type,
-            goal_body_part_label as _goal_body_part_label,
-        )
-
-        if is_og:
-            gtype = "OG"
-        else:
-            cat, sub = _classify_goal_type(r, events)
-            body = _goal_body_part_label(r)
-            gtype = (
-                f"{cat} - {body}"
-                if cat != "Set Piece"
-                else f"Set Piece - {sub} - {body}"
-            )
-        rows.append(
-            (r["minute"], r["player"], r["assist_player"], gtype, r["xG"], col, is_og)
-        )
-    row_h = min(0.78 / max(len(rows), 1), 0.14)
-    y = 0.87
-    for x_, lbl_, ha_ in [
-        (0.07, "MIN", "center"),
-        (0.35, "SCORER", "left"),
-        (0.62, "ASSIST", "left"),
-        (0.82, "TYPE", "center"),
-        (0.95, "xG", "right"),
-    ]:
-        ax.text(
-            x_,
-            y,
-            lbl_,
-            ha=ha_,
-            va="center",
-            color=TEXT_DIM,
-            fontsize=7.5,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-    y -= 0.025
-    ax.plot([0.01, 0.99], [y, y], color=GRID_COL, lw=0.8, transform=ax.transAxes)
-    y -= 0.008
-    for min_, scorer, assist, gtype, xg, col, is_og in rows:
-        bg = "#1e0a2e" if is_og else ("#1a0a0a" if col == C_RED else "#090909")
-        ax.add_patch(
-            plt.Rectangle(
-                (0.01, y - row_h * 0.85),
-                0.98,
-                row_h * 0.82,
-                facecolor=bg,
-                edgecolor=col,
-                lw=0.6,
-                alpha=0.9,
-                transform=ax.transAxes,
-            )
-        )
-        cy = y - row_h * 0.42
-        ax.text(
-            0.07,
-            cy,
-            f"{int(min_)}'",
-            ha="center",
-            va="center",
-            color="white",
-            fontsize=8.5,
-            fontweight="bold",
-            transform=ax.transAxes,
-            bbox=dict(
-                boxstyle="round,pad=0.22", facecolor=col, alpha=0.88, edgecolor="none"
-            ),
-        )
-        ax.text(
-            0.35,
-            cy,
-            _short(str(scorer)) if scorer else "—",
-            ha="left",
-            va="center",
-            color=col,
-            fontsize=9,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-        ax.text(
-            0.62,
-            cy,
-            _short(str(assist)) if assist else "—",
-            ha="left",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8.5,
-            transform=ax.transAxes,
-        )
-        ax.text(
-            0.82,
-            cy,
-            gtype,
-            ha="center",
-            va="center",
-            color=col,
-            fontsize=9,
-            transform=ax.transAxes,
-        )
-        ax.text(
-            0.97,
-            cy,
-            f"{xg:.2f}" if xg else "—",
-            ha="right",
-            va="center",
-            color="#facc15",
-            fontsize=8.5,
-            transform=ax.transAxes,
-        )
-        y -= row_h
 
 
 # ── D: Mini Shot Map (single team) ────────────────────────────────
-def _panel_shot_mini(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Shot Map — {name}", tc)
-    shots = events[
-        (events["is_shot"] == True)
-        & (events["team_id"] == tid)
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    if shots.empty:
-        return
-    raw_col = (
-        "shot_whoscored_type"
-        if "shot_whoscored_type" in shots.columns
-        else "shot_category"
-    )
-    for raw_type, (marker, fc, ec, sz, z, _) in SHOT_STYLE_RAW.items():
-        sub = shots[shots[raw_col] == raw_type]
-        if sub.empty:
-            continue
-        ax.scatter(
-            sub["x"],
-            sub["y"],
-            c=fc,
-            s=sz * 0.15,
-            marker=marker,
-            edgecolors=ec,
-            linewidths=0.8,
-            alpha=0.92,
-            zorder=z,
-        )
-    shot_counts = get_shot_counts(shots)
-    n_tot = shot_counts["shots"]
-    n_sot = shot_counts["on_target"]
-    xg_t = round(float(shots["xG"].sum()), 2)
-    ax.text(
-        50,
-        -4.5,
-        f"Shots:{n_tot}  SoT:{n_sot}  xG:{xg_t}",
-        ha="center",
-        va="top",
-        color=tc,
-        fontsize=6.5,
-        fontweight="bold",
-    )
 
 
 # ── E: xG / xGoT tiles (full-width summary) ───────────────────────
@@ -8826,65 +7262,6 @@ def _panel_defensive_heatmap(ax, events, tid, tc, name, info=None):
 
 
 # ── I: Pass Network (single team, mini) ───────────────────────────
-def _panel_pass_network(ax, events, tid, tc, name):
-    _mini_pitch(ax)
-    _lbl(ax, f"Pass Network — {name}", tc)
-    p = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == tid)
-        & (events["outcome"] == "Successful")
-        & events["player_id"].notna()
-        & events[["x", "y"]].notna().all(axis=1)
-    ].copy()
-    if p.empty:
-        return
-    avg = p.groupby(["player_id", "player"], dropna=True)[["x", "y"]].mean()
-    cnt = p.groupby(["player_id", "player"], dropna=True).size().rename("n")
-    roles = (
-        p.groupby(["player_id", "player"], dropna=True)["player_role"].first()
-        if "player_role" in p.columns
-        else None
-    )
-    avg = avg.join(cnt)
-    if roles is not None:
-        avg = avg.join(roles.rename("role"))
-    mx_n = avg["n"].max() if not avg.empty else 1
-    for key, row in avg.iterrows():
-        pl = key[1] if isinstance(key, tuple) else key
-        s = 18 + row["n"] / mx_n * 90
-        role = row.get("role", "") if hasattr(row, "get") else ""
-        c = tc
-        if role == "sub_in":
-            c = COLOR_SUB_IN
-        elif role == "sub_out":
-            c = COLOR_SUB_OUT
-        elif role == "both_sub":
-            c = COLOR_BOTH_SUB
-        elif role == "red_card":
-            c = COLOR_RED_CARD
-        badge = {"sub_in": "↑", "sub_out": "↓", "both_sub": "↕", "red_card": "RC"}.get(
-            role, ""
-        )
-        ax.scatter(row["x"], row["y"], c=c, s=s, edgecolors="white", lw=0.7, zorder=5)
-        nm = pl.split()[-1][:8] if pl else ""
-        if badge:
-            nm = f"{nm} {badge}"
-        ax.text(
-            row["x"],
-            row["y"] + 3.5,
-            nm,
-            ha="center",
-            va="bottom",
-            color="white",
-            fontsize=5.5,
-            zorder=6,
-            bbox=dict(
-                boxstyle="round,pad=0.14",
-                facecolor="#000",
-                alpha=0.68,
-                edgecolor="none",
-            ),
-        )
 
 
 # ── J: Avg Positions (single team) ────────────────────────────────
@@ -9283,67 +7660,6 @@ def _panel_xt_minute(ax, events, info):
 
 
 # ── M: Crosses (both teams) ────────────────────────────────────────
-def _panel_crosses(ax, events, info):
-    _mini_pitch(ax)
-    _lbl(ax, "Crosses", TEXT_DIM)
-    if "is_cross" not in events.columns:
-        ax.text(
-            50,
-            50,
-            "No cross data",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8,
-            style="italic",
-        )
-        return
-    crs = events[
-        (events["is_cross"] == True)
-        & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
-    ].copy()
-    if crs.empty:
-        ax.text(
-            50,
-            50,
-            "No crosses recorded",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8,
-            style="italic",
-        )
-        return
-    for tid, col in [(info["home_id"], C_RED), (info["away_id"], C_BLUE)]:
-        tc_ = crs[crs["team_id"] == tid]
-        for _, r in tc_.iterrows():
-            succ = r.get("outcome", "") == "Successful"
-            ax.annotate(
-                "",
-                xy=(r["end_x"], r["end_y"]),
-                xytext=(r["x"], r["y"]),
-                arrowprops=dict(
-                    arrowstyle="-|>",
-                    color=col,
-                    lw=1.3 if succ else 0.6,
-                    alpha=0.82 if succ else 0.30,
-                    mutation_scale=6,
-                ),
-                zorder=4,
-            )
-        eff = int(tc_[tc_["outcome"] == "Successful"].shape[0])
-        nm = info["home_name"][:8] if tid == info["home_id"] else info["away_name"][:8]
-        xp = 2 if tid == info["home_id"] else 98
-        ax.text(
-            xp,
-            -4.5,
-            f"{nm}: {len(tc_)} ({eff} eff.)",
-            ha="left" if tid == info["home_id"] else "right",
-            va="top",
-            color=col,
-            fontsize=6.5,
-            fontweight="bold",
-        )
 
 
 # ── M2: Crosses — single team ──────────────────────────────────────
@@ -9493,157 +7809,9 @@ def _panel_crosses_team(ax, events, tid, tc, name):
 
 
 # ── N: Territorial Control bar ────────────────────────────────────
-def _panel_territorial(ax, events, info):
-    """
-    Horizontal stacked bar per zone.
-    Home (red) = left portion; Away (blue) = right portion.
-    Team names at top; percentages and counts labelled on bars.
-    """
-    ax.set_facecolor(BG_MID)
-    hn, an = info["home_name"], info["away_name"]
-    hid, aid = info["home_id"], info["away_id"]
-
-    # ── Team name headers ─────────────────────────────────────────
-    ax.text(
-        0.20,
-        1.08,
-        hn[:14],
-        ha="center",
-        va="bottom",
-        transform=ax.transAxes,
-        color=C_RED,
-        fontsize=9,
-        fontweight="bold",
-    )
-    ax.text(
-        0.80,
-        1.08,
-        an[:14],
-        ha="center",
-        va="bottom",
-        transform=ax.transAxes,
-        color=C_BLUE,
-        fontsize=9,
-        fontweight="bold",
-    )
-    ax.text(
-        0.50,
-        1.08,
-        "Territorial Control",
-        ha="center",
-        va="bottom",
-        transform=ax.transAxes,
-        color=TEXT_DIM,
-        fontsize=8,
-        fontstyle="italic",
-    )
-
-    zones = [
-        ("Own Third", (0, 33)),
-        ("Mid Third", (33, 66)),
-        ("Final Third", (66, 100)),
-    ]
-    ev = events[events["x"].notna()].copy()
-
-    for i, (zlbl, (x0, x1)) in enumerate(zones):
-        hev = ev[(ev["team_id"] == hid) & (ev["x"] >= x0) & (ev["x"] < x1)]
-        aev = ev[(ev["team_id"] == aid) & (ev["x"] >= x0) & (ev["x"] < x1)]
-        h_n = len(hev)
-        a_n = len(aev)
-        tot = (h_n + a_n) or 1
-        hr = h_n / tot
-
-        # bars — with slight glow edge
-        ax.barh(
-            i,
-            hr,
-            height=0.64,
-            color=C_RED,
-            alpha=0.85,
-            left=0,
-            edgecolor="#ff6b7a",
-            linewidth=0.6,
-        )
-        ax.barh(
-            i,
-            1 - hr,
-            height=0.64,
-            color=C_BLUE,
-            alpha=0.85,
-            left=hr,
-            edgecolor="#5ba3ff",
-            linewidth=0.6,
-        )
-
-        # % inside bar — dynamic text contrast
-        if hr > 0.08:
-            _h_txt = _text_on_color(C_RED)
-            _h_stroke = "#000000" if _h_txt == "#ffffff" else "#ffffff"
-            ax.text(
-                hr / 2,
-                i,
-                f"{h_n}  ({hr*100:.0f}%)",
-                ha="center",
-                va="center",
-                color=_h_txt,
-                fontsize=8.5,
-                fontweight="bold",
-                path_effects=[pe.withStroke(linewidth=2.0, foreground=_h_stroke)],
-            )
-        if (1 - hr) > 0.08:
-            _a_txt = _text_on_color(C_BLUE)
-            _a_stroke = "#000000" if _a_txt == "#ffffff" else "#ffffff"
-            ax.text(
-                hr + (1 - hr) / 2,
-                i,
-                f"({(1-hr)*100:.0f}%)  {a_n}",
-                ha="center",
-                va="center",
-                color=_a_txt,
-                fontsize=8.5,
-                fontweight="bold",
-                path_effects=[pe.withStroke(linewidth=2.0, foreground=_a_stroke)],
-            )
-
-    ax.set_yticks(range(len(zones)))
-    ax.set_yticklabels(
-        [z[0] for z in zones], color=TEXT_BRIGHT, fontsize=9, fontweight="bold"
-    )
-    ax.set_xlim(0, 1)
-    ax.set_xticks([])
-    ax.tick_params(left=False)
-    ax.set_ylim(-0.5, len(zones) - 0.4)
-    for sp in ["top", "right", "bottom", "left"]:
-        ax.spines[sp].set_visible(False)
-    ax.set_facecolor(BG_MID)
 
 
 # ── O: Possession Donut (single team) ─────────────────────────────
-def _panel_possession_donut(ax, events, tid, tc, name):
-    ax.set_facecolor(BG_MID)
-    _lbl(ax, f"Ball Touches — {name}", tc)
-    ev = events[events[["x", "y"]].notna().all(axis=1)].copy()
-    total = len(ev)
-    team = int((ev["team_id"] == tid).sum())
-    pct = round(team / total * 100, 1) if total else 0
-    ax.pie(
-        [pct, 100 - pct],
-        colors=[tc, "#0A0A0A"],
-        startangle=90,
-        wedgeprops=dict(width=0.42, edgecolor=BG_DARK, lw=1.5),
-    )
-    ax.text(
-        0,
-        0,
-        f"{pct}%",
-        ha="center",
-        va="center",
-        color="white",
-        fontsize=14,
-        fontweight="bold",
-    )
-    ax.set_xlim(-1.3, 1.3)
-    ax.set_ylim(-1.3, 1.3)
 
 
 # ── P: GK Saves ───────────────────────────────────────────────────
@@ -9953,68 +8121,6 @@ def _panel_gk_saves(ax, events, info):
 # ═══════════════════════════════════════════════════════════════════
 
 
-def draw_match_report_p1(fig, events, info, xg_data, status):
-    fig.clear()
-    fig.patch.set_facecolor(BG_DARK)
-    hn, an = info["home_name"], info["away_name"]
-    hid, aid = info["home_id"], info["away_id"]
-    hg = xg_data.get(hn, {}).get("goals", 0)
-    ag = xg_data.get(an, {}).get("goals", 0)
-    hxg = xg_data.get(hn, {}).get("xG", 0.0)
-    axg = xg_data.get(an, {}).get("xG", 0.0)
-
-    _page_header(
-        fig,
-        hn,
-        an,
-        hg,
-        ag,
-        hxg,
-        axg,
-        info["home_form"],
-        info["away_form"],
-        info["venue"],
-        status,
-        1,
-        "⚽ ATTACK REPORT",
-    )
-
-    gs = GridSpec(
-        4,
-        3,
-        figure=fig,
-        left=0.04,
-        right=0.97,
-        top=0.945,
-        bottom=0.030,
-        hspace=0.65,
-        wspace=0.13,
-        height_ratios=[0.70, 1.15, 1.00, 0.55],
-    )
-
-    # ── Row 0: Shot Comparison tiles (full width) ──────────────────
-    # ✅ UNIQUE — Fig 4 uses bar chart; these are per-metric tiles
-    _panel_shot_comparison(fig.add_subplot(gs[0, :]), events, info, xg_data)
-
-    # ── Row 1: Danger Home | GK Saves | Danger Away ────────────────
-    # ✅ UNIQUE — none of these exist in Figs 1-10
-    _panel_danger(fig.add_subplot(gs[1, 0]), events, hid, C_RED, hn)
-    _panel_gk_saves(fig.add_subplot(gs[1, 1]), events, info)
-    _panel_danger(fig.add_subplot(gs[1, 2]), events, aid, C_BLUE, an)
-
-    # ── Row 2: Zone 14 Home | Avg Position Home+Away | Zone 14 Away ─
-    # ✅ UNIQUE — not in 1-10
-    _panel_zone14(fig.add_subplot(gs[2, 0]), events, hid, C_RED, hn)
-    _panel_avg_pos_dual(fig.add_subplot(gs[2, 1]), events, info)  # both teams
-    _panel_zone14(fig.add_subplot(gs[2, 2]), events, aid, C_BLUE, an)
-
-    # ── Row 3: xG / xGoT / OnTarget tiles (full width) ─────────────
-    # ✅ UNIQUE FORMAT — Fig 4 has bar chart; tiles show absolute values per metric
-    _panel_xg_tiles(fig.add_subplot(gs[3, :]), events, info, xg_data)
-
-    _watermark(fig)
-
-
 # ═══════════════════════════════════════════════════════════════════
 #  PAGE 2 — POSSESSION & DEFENSE REPORT
 #  Panels kept after deduplication vs Figs 1-10:
@@ -10034,83 +8140,6 @@ def draw_match_report_p1(fig, events, info, xg_data, status):
 #    ❌ Pass Network mini Home  → REMOVED (= Fig 7)
 #    ❌ Pass Network mini Away  → REMOVED (= Fig 8)
 # ═══════════════════════════════════════════════════════════════════
-
-
-def draw_match_report_p2(fig, events, info, xg_data, status):
-    fig.clear()
-    fig.patch.set_facecolor(BG_DARK)
-    hn, an = info["home_name"], info["away_name"]
-    hid, aid = info["home_id"], info["away_id"]
-    hg = xg_data.get(hn, {}).get("goals", 0)
-    ag = xg_data.get(an, {}).get("goals", 0)
-    hxg = xg_data.get(hn, {}).get("xG", 0.0)
-    axg = xg_data.get(an, {}).get("xG", 0.0)
-
-    _page_header(
-        fig,
-        hn,
-        an,
-        hg,
-        ag,
-        hxg,
-        axg,
-        info["home_form"],
-        info["away_form"],
-        info["venue"],
-        status,
-        2,
-        "🔵 POSSESSION & DEFENSE REPORT",
-    )
-
-    gs = GridSpec(
-        5,
-        3,
-        figure=fig,
-        left=0.04,
-        right=0.97,
-        top=0.945,
-        bottom=0.030,
-        hspace=0.60,
-        wspace=0.13,
-        height_ratios=[0.80, 1.0, 1.0, 1.0, 1.0],
-    )
-
-    # ── Row 0: Match Stats | Territorial Control | Possession Donuts ──
-    # ✅ All UNIQUE — not in 1-10
-    _panel_match_stats(fig.add_subplot(gs[0, 0]), events, info, xg_data)
-    _panel_territorial(fig.add_subplot(gs[0, 1]), events, info)
-    _panel_donut_dual(fig.add_subplot(gs[0, 2]), events, info)
-
-    # ── Row 1: Pass Map/Thirds Home | Pass Map/Thirds Away ────────────
-    # ✅ Pass thirds = NEW (Figs 5-6 have no third breakdown)
-    # NOTE: xT/min panel removed by request — pass thirds now span the row equally.
-
-    from matplotlib.gridspec import GridSpecFromSubplotSpec
-
-    row1_gs = GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[1, :], wspace=0.18)
-    _panel_pass_thirds(fig.add_subplot(row1_gs[0, 0]), events, hid, C_RED, hn)
-    _panel_pass_thirds(fig.add_subplot(row1_gs[0, 1]), events, aid, C_BLUE, an)
-
-    # ── Row 2: Progressive Home | Crosses (split) | Progressive Away ──
-    # ✅ All UNIQUE — crosses now shown per team in side panels
-    _panel_crosses_team(fig.add_subplot(gs[2, 0]), events, hid, C_RED, hn)
-    _panel_progressive(fig.add_subplot(gs[2, 1]), events, hid, C_RED, hn)
-    _panel_crosses_team(fig.add_subplot(gs[2, 2]), events, aid, C_BLUE, an)
-
-    # ── Row 3: Defensive HM Home | (legend) | Defensive HM Away ──────
-    # ✅ UNIQUE
-    _panel_defensive_heatmap(fig.add_subplot(gs[3, 0]), events, hid, C_RED, hn, info)
-    _panel_def_legend(fig.add_subplot(gs[3, 1]))
-    _panel_defensive_heatmap(fig.add_subplot(gs[3, 2]), events, aid, C_BLUE, an, info)
-
-    # ── Row 4: Avg Position Home | (separator) | Avg Position Away ────
-    # ✅ UNIQUE
-    _panel_avg_position(fig.add_subplot(gs[4, 0]), events, hid, C_RED, hn)
-    _panel_avg_position(fig.add_subplot(gs[4, 2]), events, aid, C_BLUE, an)
-    # centre: defensive action counts table
-    _panel_def_counts(fig.add_subplot(gs[4, 1]), events, info)
-
-    _watermark(fig)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -10198,33 +8227,6 @@ def _panel_zone14(ax, events, tid, tc, name):
     )
 
 
-def _panel_avg_pos_dual(ax, events, info):
-    """Average positions — both teams on same mini-pitch (overview)."""
-    _mini_pitch(ax)
-    _lbl(ax, "Avg Positions (Both Teams)", TEXT_DIM)
-    for tid, tc in [(info["home_id"], C_RED), (info["away_id"], C_BLUE)]:
-        ev = events[
-            (events["team_id"] == tid) & events[["x", "y"]].notna().all(axis=1)
-        ].copy()
-        if ev.empty:
-            continue
-        avg = ev.groupby("player")[["x", "y"]].mean()
-        cnt = ev.groupby("player").size()
-        mx = cnt.max() if not cnt.empty else 1
-        for pl, row in avg.iterrows():
-            n = cnt.get(pl, 1)
-            ax.scatter(
-                row["x"],
-                row["y"],
-                c=tc,
-                s=20 + n / mx * 55,
-                edgecolors="white",
-                lw=0.5,
-                alpha=0.88,
-                zorder=4,
-            )
-
-
 def _panel_donut_dual(ax, events, info):
     """Two possession donuts side-by-side inside one axes."""
     ax.set_facecolor(BG_MID)
@@ -10286,64 +8288,6 @@ def _panel_donut_dual(ax, events, info):
             fontsize=7.5,
             transform=ax.transAxes,
         )
-
-
-def _panel_def_legend(ax):
-    """Legend for defensive heatmap types."""
-    ax.set_facecolor(BG_MID)
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.text(
-        0.50,
-        0.97,
-        "Defensive Actions",
-        ha="center",
-        va="top",
-        color=TEXT_BRIGHT,
-        fontsize=9,
-        fontweight="bold",
-        transform=ax.transAxes,
-    )
-    ax.text(
-        0.50,
-        0.88,
-        "Legend",
-        ha="center",
-        va="top",
-        color=TEXT_DIM,
-        fontsize=8,
-        transform=ax.transAxes,
-    )
-    items = list(DEFENSIVE_TYPES.items())
-    y = 0.78
-    for dtype, (col, short) in items:
-        ax.add_patch(
-            plt.Circle((0.12, y), 0.04, facecolor=col, transform=ax.transAxes, zorder=3)
-        )
-        ax.text(
-            0.20,
-            y,
-            dtype,
-            ha="left",
-            va="center",
-            color=col,
-            fontsize=8,
-            fontweight="bold",
-            transform=ax.transAxes,
-        )
-        y -= 0.11
-    ax.text(
-        0.50,
-        0.08,
-        "Hot = High density\nCool = Low density",
-        ha="center",
-        va="bottom",
-        color=TEXT_DIM,
-        fontsize=7.5,
-        transform=ax.transAxes,
-        style="italic",
-    )
 
 
 def _panel_def_counts(ax, events, info):
@@ -10504,11 +8448,6 @@ def _panel_def_counts(ax, events, info):
         )
 
         y -= ROW_STEP
-
-
-def draw_match_report(fig, events, info, xg_data, status):
-    """Legacy stub — calls page 1."""
-    draw_match_report_p1(fig, events, info, xg_data, status)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -10886,154 +8825,6 @@ def _panel_box_entries(ax, events, tid, tc, name):
 # ══════════════════════════════════════════════════════════════════════
 #  PANEL 3 — Progressive Carries  (single team, vertical pitch)
 # ══════════════════════════════════════════════════════════════════════
-def _panel_prog_carries(ax, events, tid, tc, name):
-    """
-    Carries that advance the ball ≥10 yards (~9.5 units) toward goal.
-    Exclude own defensive third (event.x < 33).
-    """
-    _vert_pitch(ax)
-    _lbl(ax, f"Progressive Carries — {name}", tc)
-
-    carries = pd.DataFrame()
-    if "type" in events.columns:
-        carries = events[
-            (events["type"] == "Carry")
-            & (events["team_id"] == tid)
-            & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
-        ].copy()
-
-    if carries.empty:
-        # Fallback: approximate from consecutive same-player touch sequences
-        ax.text(
-            50,
-            50,
-            "No carry data\nin this match",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8,
-            style="italic",
-        )
-        return
-
-    # Progressive: forward distance ≥ 9.5 units, not from own defensive third
-    carries["fwd"] = carries["end_x"] - carries["x"]
-    prog = carries[(carries["fwd"] >= 9.5) & (carries["x"] >= 33)].copy()
-
-    if prog.empty:
-        ax.text(
-            50,
-            50,
-            "No progressive\ncarries found",
-            ha="center",
-            va="center",
-            color=TEXT_DIM,
-            fontsize=8,
-            style="italic",
-        )
-        return
-
-    def _vx(ey):
-        return float(ey)
-
-    def _vy(ex):
-        return float(ex)
-
-    # Zone colours by origin third
-    def zone_col(ex):
-        if ex < 50:
-            return "#64748b"
-        if ex < 66:
-            return C_GOLD
-        return C_GREEN
-
-    for _, r in prog.iterrows():
-        col_ = zone_col(r["x"])
-        # Glow
-        ax.annotate(
-            "",
-            xy=(_vx(r["end_y"]), _vy(r["end_x"])),
-            xytext=(_vx(r["y"]), _vy(r["x"])),
-            arrowprops=dict(
-                arrowstyle="-|>", color="white", lw=3.5, alpha=0.06, mutation_scale=10
-            ),
-            zorder=3,
-        )
-        ax.annotate(
-            "",
-            xy=(_vx(r["end_y"]), _vy(r["end_x"])),
-            xytext=(_vx(r["y"]), _vy(r["x"])),
-            arrowprops=dict(
-                arrowstyle="-|>",
-                color=col_,
-                lw=1.4,
-                alpha=0.78,
-                linestyle=(0, (4, 2)),
-                mutation_scale=7,
-            ),
-            zorder=4,
-        )
-        ax.scatter(
-            _vx(r["y"]),
-            _vy(r["x"]),
-            c=col_,
-            s=12,
-            alpha=0.75,
-            edgecolors="none",
-            zorder=5,
-        )
-
-    # Top-5 carries — player label
-    if "player" in prog.columns:
-        top_player = prog.groupby("player").size().idxmax()
-        top_n = prog.groupby("player").size().max()
-        ax.text(
-            50,
-            106,
-            f"Most by: {_short(top_player)} ({top_n})",
-            ha="center",
-            va="bottom",
-            color="#facc15",
-            fontsize=7.5,
-            fontweight="bold",
-        )
-
-    # From left / mid / right (based on event.y)
-    n_left = int((prog["y"] < 33).sum())
-    n_right = int((prog["y"] > 67).sum())
-    n_mid = len(prog) - n_left - n_right
-    tot = len(prog)
-
-    for xp, lbl_, n, col_ in [
-        (10, "From Left", n_left, tc),
-        (50, "From Mid", n_mid, TEXT_DIM),
-        (90, "From Right", n_right, tc),
-    ]:
-        ax.text(
-            xp,
-            -3.5,
-            f"{lbl_}\n{n}",
-            ha="center",
-            va="top",
-            color=col_,
-            fontsize=7,
-            fontweight="bold",
-        )
-
-    ax.legend(
-        handles=[
-            mpatches.Patch(facecolor="#64748b", label="Own Half"),
-            mpatches.Patch(facecolor=C_GOLD, label="Mid Third"),
-            mpatches.Patch(facecolor=C_GREEN, label="Final Third"),
-        ],
-        fontsize=6.5,
-        facecolor=BG_MID,
-        edgecolor="none",
-        labelcolor="white",
-        loc="lower right",
-        ncol=1,
-        framealpha=0.85,
-    )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -11070,8 +8861,6 @@ def _panel_high_turnovers(ax, events, tid, tc, name):
     # Hexagon stat badges
     def _hex(ax, cx, cy, txt, val, col, size=0.085):
         """Draw a hexagon badge with label."""
-        import matplotlib.patches as mp
-
         theta = np.linspace(0, 2 * np.pi, 7)
         hx = cx + size * np.cos(theta + np.pi / 6)
         hy = cy + size * np.sin(theta + np.pi / 6)
@@ -11511,388 +9300,6 @@ def _ensure_match_stats_defaults(stats: dict) -> dict:
     return out
 
 
-def _w(team, other, key, higher_is_better=True):
-    """Return 'dominant'/'stronger'/'weaker' label based on stat comparison."""
-    tv = team.get(key, 0)
-    ov = other.get(key, 0)
-    if tv == ov:
-        return "equal"
-    if higher_is_better:
-        return "superior" if tv > ov else "inferior"
-    return "superior" if tv < ov else "inferior"
-
-
-def generate_tactical_analysis(info, events, xg_data):
-    """
-    Build a full publication-ready tactical report purely from match stats.
-    No external API required.
-    """
-    stats = _ensure_match_stats_defaults(_collect_match_stats(info, events, xg_data))
-    hn, an = stats["home_name"], stats["away_name"]
-    h, a = stats["home"], stats["away"]
-
-    score_parts = stats["score"].split("-")
-    hg = int(score_parts[0].strip()) if len(score_parts) >= 2 else h["goals"]
-    ag = int(score_parts[1].strip()) if len(score_parts) >= 2 else a["goals"]
-
-    winner = hn if hg > ag else (an if ag > hg else None)
-    loser = an if hg > ag else (hn if ag > hg else None)
-    margin = abs(hg - ag)
-    draw = hg == ag
-
-    def _dom(hv, av, unit=""):
-        """Return e.g. 'Arsenal (28) vs Chelsea (15)' string."""
-        return f"{hn} ({hv}{unit}) vs {an} ({av}{unit})"
-
-    def _better(hv, av, hn_=hn, an_=an):
-        return hn_ if hv > av else (an_ if av > hv else "Both sides equally")
-
-    def _pct_diff(a_, b_):
-        if b_ == 0:
-            return 0
-        return round((a_ - b_) / b_ * 100)
-
-    # ── MATCH OVERVIEW ─────────────────────────────────────────────
-    if draw:
-        result_line = (
-            f"The match between {hn} and {an} ended in a {hg}–{ag} draw, "
-            "a scoreline that suggested relative parity between the two sides over 90 minutes."
-        )
-    else:
-        result_line = (
-            f"{winner} defeated {loser} {hg}–{ag}"
-            f"{' in a comprehensive victory' if margin >= 3 else ' in a hard-fought contest' if margin == 1 else ''}."
-        )
-
-    xg_narrative = ""
-    if h["xG"] > 0 or a["xG"] > 0:
-        xg_winner = _better(h["xG"], a["xG"])
-        xg_narrative = (
-            f" The xG figures — {hn}: {h['xG']}, {an}: {a['xG']} — "
-            f"indicate that {xg_winner} created the higher-quality opportunities."
-        )
-
-    pass_narrative = (
-        f" In terms of ball circulation, {hn} recorded {h['pass_accuracy']}% pass accuracy "
-        f"versus {an}'s {a['pass_accuracy']}%, "
-        f"with {_better(h['prog_passes'], a['prog_passes'])} generating more forward momentum "
-        f"through progressive passes ({_dom(h['prog_passes'], a['prog_passes'])})."
-    )
-
-    overview = (
-        f"{result_line}{xg_narrative}{pass_narrative}\n\n"
-        f"Territorially, both teams showed distinct patterns of play. "
-        f"{_better(h['touch_att_pct'], a['touch_att_pct'])} operated with greater presence in the attacking "
-        f"third ({_dom(h['touch_att_pct'], a['touch_att_pct'], unit='%')} of touches), "
-        f"while {_better(h['defensive_acts'], a['defensive_acts'])} recorded more defensive interventions "
-        f"({_dom(h['defensive_acts'], a['defensive_acts'])}).\n\n"
-        f"The tactical battle was shaped by pressing intensity, positional discipline, and the ability "
-        f"to exploit transitional moments. "
-        f"{'High turnovers were a key feature, with ' + _better(h['high_turnovers'], a['high_turnovers']) + ' winning the ball higher up the pitch more frequently.' if max(h['high_turnovers'], a['high_turnovers']) > 2 else 'Both sides were largely organised in their defensive structure, limiting high-press opportunities.'}"
-    )
-
-    # ── xG & SHOOTING ANALYSIS ─────────────────────────────────────
-    conv_h = round(h["goals"] / h["shots"] * 100) if h["shots"] else 0
-    conv_a = round(a["goals"] / a["shots"] * 100) if a["shots"] else 0
-    acc_h = round(h["on_target"] / h["shots"] * 100) if h["shots"] else 0
-    acc_a = round(a["on_target"] / a["shots"] * 100) if a["shots"] else 0
-
-    xg_shooting = (
-        f"{hn} generated an xG of {h['xG']} from {h['shots']} shots, with {h['on_target']} on target "
-        f"(accuracy: {acc_h}%) and a conversion rate of {conv_h}%. "
-        f"{an} registered {a['shots']} shots producing {a['xG']} xG, with {a['on_target']} on target "
-        f"(accuracy: {acc_a}%) and a conversion of {conv_a}%.\n\n"
-        f"In terms of xGoT (expected goals on target), {hn} recorded {h['xGoT']} versus {an}'s {a['xGoT']}. "
-        f"{'This suggests ' + hn + ' generated better-quality shots that troubled the goalkeeper more.' if h['xGoT'] > a['xGoT'] else 'This indicates ' + an + ' posed a greater threat on shots that hit the target.' if a['xGoT'] > h['xGoT'] else 'Both teams posed similar threat on their shots on target.'}\n\n"
-        f"{'Finishing was the decisive factor — ' + winner + ' converted their chances efficiently, punishing ' + loser + ' for wastefulness.' if not draw and winner else 'Neither side was able to convert their xG advantage into goals consistently, contributing to the drawn outcome.' if draw else ''}"
-    ).strip()
-
-    # ── PASSING & BALL PROGRESSION ─────────────────────────────────
-    passing = (
-        f"{hn} completed {h['passes_total']} passes at {h['pass_accuracy']}% accuracy, with {h['fwd_pct']}% "
-        f"directed forward. {an} attempted {a['passes_total']} passes at {a['pass_accuracy']}%, "
-        f"with {a['fwd_pct']}% forward.\n\n"
-        f"Progressive passing was a key differentiator: {_dom(h['prog_passes'], a['prog_passes'])} passes "
-        f"advanced the ball at least 10 yards into the opponent's half. "
-        f"{_better(h['prog_passes'], a['prog_passes'])} were more effective at pushing the ball into dangerous "
-        f"areas through direct, purposeful distribution.\n\n"
-        f"Back-pass volume ({_dom(h['back_passes'], a['back_passes'])}) further reveals each team's "
-        f"willingness to recycle possession. "
-        f"{'A high back-pass count from ' + (hn if h['back_passes'] > a['back_passes'] else an) + ' points to a more cautious, patient build-up approach.' if abs(h['back_passes'] - a['back_passes']) > 10 else 'Both teams showed broadly similar recycling tendencies.'}"
-    )
-
-    # ── PASS NETWORKS ──────────────────────────────────────────────
-    pass_networks = (
-        f"The pass network visualisations reveal how each team structured their ball circulation. "
-        f"{_better(h['pass_accuracy'], a['pass_accuracy'])} maintained tighter positional connections, "
-        f"evidenced by their superior pass completion rate ({_dom(h['pass_accuracy'], a['pass_accuracy'], unit='%')}).\n\n"
-        f"Teams with compact midfield triangles and clear vertical passing lanes are typically more "
-        f"effective at breaking defensive lines. "
-        f"{'With ' + str(h['prog_passes']) + ' progressive passes, ' + hn + ' appeared to have more incisive midfield connectors.' if h['prog_passes'] > a['prog_passes'] else 'With ' + str(a['prog_passes']) + ' progressive passes, ' + an + ' appeared to have the more dynamic midfield engine.'}\n\n"
-        f"Pass network density in the central zones highlights the key playmakers for each side. "
-        f"Teams that funnelled the ball through central midfield — rather than relying on wide recycling — "
-        f"tended to generate more dangerous entries into the final third."
-    )
-
-    # ── xT ANALYSIS ────────────────────────────────────────────────
-    xt_analysis = (
-        f"Expected Threat (xT) measures the likelihood of scoring from each ball action, rewarding passes "
-        f"and carries that advance into more dangerous zones. "
-        f"The xT per-minute chart captures momentum shifts throughout the match.\n\n"
-        f"{_better(h['prog_passes'], a['prog_passes'])} accumulated higher xT through a greater number of "
-        f"progressive ball actions ({_dom(h['prog_passes'], a['prog_passes'])} progressive passes). "
-        f"This translates to sustained threatening presence in advanced areas.\n\n"
-        f"Spikes in the xT-per-minute chart often correlate with periods of sustained pressure, set-piece sequences, "
-        f"or transition moments. Identifying these windows is critical for understanding when each team was most "
-        f"dangerous and which tactical adjustments — including substitutions — altered the game's flow."
-    )
-
-    # ── SHOT COMPARISON ────────────────────────────────────────────
-    shot_cmp = (
-        f"A detailed comparison of shooting metrics underlines the attacking efficiency gap between the sides. "
-        f"{hn} fired {h['shots']} attempts ({h['on_target']} on target, xG {h['xG']}), while {an} managed "
-        f"{a['shots']} shots ({a['on_target']} on target, xG {a['xG']}).\n\n"
-        f"Shot location quality is a key component: xG values above 0.15 per shot typically indicate "
-        f"attempts from high-danger zones (inside the box, central positions). "
-        f"{'With an average xG of ' + str(round(h['xG']/h['shots'],2) if h['shots'] else 0) + ' per shot, ' + hn + ' generated predominantly high-quality attempts.' if h['shots'] and h['xG']/h['shots'] > 0.12 else ''}"
-        f"{'With an average xG of ' + str(round(a['xG']/a['shots'],2) if a['shots'] else 0) + ' per shot, ' + an + ' generated predominantly high-quality attempts.' if a['shots'] and a['xG']/a['shots'] > 0.12 else ''}\n\n"
-        f"Blocked shots ({_dom(h['blocked_shots'], a['blocked_shots'])}) reflect how well each defence "
-        f"managed to intercept shooting lanes, reducing the volume of clean strikes on goal."
-    ).strip()
-
-    # ── DANGER CREATION ────────────────────────────────────────────
-    danger = (
-        f"Danger creation encompasses the full range of actions that generate high-threat situations — "
-        f"passes into the final third, cutbacks, through balls, and set-piece delivery.\n\n"
-        f"Zone 14 touches ({_dom(h['zone14_touches'], a['zone14_touches'])}) and half-space penetration "
-        f"are closely correlated with goal-scoring opportunities. "
-        f"{_better(h['zone14_touches'], a['zone14_touches'])} was more active in these pivotal areas.\n\n"
-        f"Box entry data ({hn} vs {an}) reveals how many times each team reached the opponent's "
-        f"penalty area — the most direct measure of attacking intent converting into genuine danger."
-    )
-
-    # ── ZONE 14 & HALF-SPACES ──────────────────────────────────────
-    z14_analysis = (
-        f"Zone 14 — the central area directly outside the penalty box — is statistically one of the most "
-        f"productive zones on the pitch for shot assists and key passes.\n\n"
-        f"{hn} accumulated {h['zone14_touches']} touches in Zone 14 and the half-spaces, compared to "
-        f"{an}'s {a['zone14_touches']}. "
-        f"{'This represents a significant advantage for ' + _better(h['zone14_touches'], a['zone14_touches']) + ', who consistently exploited the pockets between the opposition lines.' if abs(h['zone14_touches'] - a['zone14_touches']) > 5 else 'Both teams were relatively evenly matched in their occupation of these central zones.'}\n\n"
-        f"Teams that dominate Zone 14 tend to create more shooting opportunities from central positions, "
-        f"where xG values are highest. Half-space penetration via overlapping runs or third-man combinations "
-        f"adds an additional dimension of unpredictability to attacking play."
-    )
-
-    # ── TERRITORIAL CONTROL ────────────────────────────────────────
-    territorial = (
-        f"Territorial domination — measured by open-play touches in each zone — reveals each team's "
-        f"positional strategy over 90 minutes.\n\n"
-        f"Touch distribution by third: {hn}: {h['touch_def_pct']}% defensive / {h['touch_mid_pct']}% midfield / "
-        f"{h['touch_att_pct']}% attacking. {an}: {a['touch_def_pct']}% / {a['touch_mid_pct']}% / {a['touch_att_pct']}%.\n\n"
-        f"{'A high defensive-third touch percentage for ' + (hn if h['touch_def_pct'] > a['touch_def_pct'] else an) + ' may indicate sustained pressure from the opposition, or a deliberate low-block defensive strategy.' if abs(h['touch_def_pct'] - a['touch_def_pct']) > 8 else 'Both teams maintained broadly similar territorial footprints, suggesting a more balanced contest.'}"
-    )
-
-    # ── POSSESSION & TOUCHES ───────────────────────────────────────
-    poss_analysis = (
-        f"Ball touch maps provide a spatial picture of each team's positional tendencies. "
-        f"Total touch counts — {hn}: {h['touches']} vs {an}: {a['touches']} — reflect overall ball involvement.\n\n"
-        f"{_better(h['touches'], a['touches'])} demonstrated greater control of possession cycles, "
-        f"recycling the ball more frequently and sustaining longer periods of ball retention.\n\n"
-        f"The distribution of touches across the width of the pitch indicates tactical width. "
-        f"Teams that spread touches evenly across all five channels are typically more difficult to press "
-        f"and harder to defend against, as they force the opposition to cover more ground."
-    )
-
-    # ── PASS MAP BY THIRD ──────────────────────────────────────────
-    pass_thirds = (
-        f"Passing maps divided by pitch thirds reveal each team's build-up philosophy and the depth "
-        f"at which they chose to circulate the ball.\n\n"
-        f"A high volume of passes in the defensive third indicates comfort playing out from the back "
-        f"under pressure. {hn}'s {h['touch_def_pct']}% defensive-third touch share versus {an}'s "
-        f"{a['touch_def_pct']}% suggests {'a contrast in pressing line acceptance.' if abs(h['touch_def_pct'] - a['touch_def_pct']) > 5 else 'similar depth of possession.'}\n\n"
-        f"The final-third pass volume — mirroring attacking-third touch percentages ({hn}: {h['touch_att_pct']}%, "
-        f"{an}: {a['touch_att_pct']}%) — shows who was more aggressive in pushing ball circulation into "
-        f"dangerous areas. {_better(h['touch_att_pct'], a['touch_att_pct'])} committed to a higher, "
-        f"more intensive press line and delivery into the attacking zone."
-    )
-
-    # ── CROSSES ────────────────────────────────────────────────────
-    cross_analysis = (
-        f"Wide delivery was {'a feature of the game' if max(h['crosses_total'], a['crosses_total']) > 8 else 'less prominent in this match'}. "
-        f"{hn} attempted {h['crosses_total']} crosses (success rate: {h['cross_pct']}%), while {an} delivered "
-        f"{a['crosses_total']} (success rate: {a['cross_pct']}%).\n\n"
-        f"{'Cross accuracy was notably higher for ' + _better(h['cross_pct'], a['cross_pct']) + ', suggesting better delivery quality or superior movement in the box.' if abs(h['cross_pct'] - a['cross_pct']) > 10 else 'Both sides showed similar crossing accuracy, reflecting comparable wide delivery quality.'}\n\n"
-        f"The origin zones of crosses — left flank, central cutback, right flank — are critical context. "
-        f"Teams delivering primarily from the right flank may expose left-back vulnerabilities in "
-        f"the opposition, while cutback crosses from the byline generate statistically higher xG than "
-        f"swinging crosses from deep."
-    )
-
-    # ── DEFENSIVE HEATMAP ──────────────────────────────────────────
-    def_heatmap = (
-        f"The defensive heatmap illustrates where each team won the ball back, providing a clear "
-        f"picture of pressing intensity and defensive line height.\n\n"
-        f"High-intensity pressing sides tend to cluster their defensive actions in the opponent's half "
-        f"or midfield, while deeper defensive blocks show concentration in their own half. "
-        f"{_better(h['high_turnovers'], a['high_turnovers'])} registered more high regains "
-        f"({_dom(h['high_turnovers'], a['high_turnovers'])}), indicating a more proactive pressing strategy.\n\n"
-        f"Defensive shape can also be inferred from action type distribution. A high tackle count "
-        f"({_dom(h['tackles'], a['tackles'])}) relative to interceptions ({_dom(h['interceptions'], a['interceptions'])}) "
-        f"may suggest reactive defending rather than anticipatory positioning."
-    )
-
-    # ── DEFENSIVE SUMMARY ──────────────────────────────────────────
-    def_summary = (
-        f"Defensive performance metrics: {hn} recorded {h['tackles']} tackles, {h['interceptions']} interceptions, "
-        f"{h['clearances']} clearances, {h['blocked_shots']} blocked shots, and {h['recoveries']} provider recovery events. "
-        f"{an} posted {a['tackles']} / {a['interceptions']} / {a['clearances']} / {a['blocked_shots']} / {a['recoveries']} respectively.\n\n"
-        f"The possession model inferred {h['possession_regains']} regains for {hn} and "
-        f"{a['possession_regains']} for {an}; these are intentionally separate from the provider's BallRecovery count.\n\n"
-        f"Total defensive actions: {_dom(h['defensive_acts'], a['defensive_acts'])}. "
-        f"{'A higher defensive action count for ' + _better(h['defensive_acts'], a['defensive_acts']) + ' could indicate sustained pressure absorbed, or alternatively a more aggressive pressing style.' if abs(h['defensive_acts'] - a['defensive_acts']) > 15 else 'Both teams were relatively balanced in their defensive work-rate.'}\n\n"
-        f"Fouls committed ({_dom(h['fouls'], a['fouls'])}) add another dimension — "
-        f"{'excessive fouls from ' + (hn if h['fouls'] > a['fouls'] else an) + ' may reflect defensive desperation or difficulty tracking runners.' if max(h['fouls'], a['fouls']) > 12 else 'foul counts were manageable for both sides, suggesting disciplined defensive approach.'}"
-    )
-
-    # ── AVERAGE POSITIONS ──────────────────────────────────────────
-    avg_pos = (
-        f"Average position maps provide a tactical blueprint of each team's shape and structure "
-        f"across the 90 minutes. They reveal team width, defensive line height, and the compactness "
-        f"of the midfield block.\n\n"
-        f"Teams that maintain a high defensive line — evident from centre-backs positioned above the "
-        f"halfway line in the average position map — demonstrate a desire to compress space and play "
-        f"an offside trap. A low block shows as defenders clustered near their own box.\n\n"
-        f"Attacking players whose average positions are deep may indicate a pressing responsibility "
-        f"in the team's structure, while wide forwards positioned high and narrow suggest an inverted "
-        f"winger role. The spatial gaps between units — especially between defensive and midfield lines — "
-        f"often reveal where the opposition chose to attack."
-    )
-
-    # ── DOMINATING ZONE ────────────────────────────────────────────
-    dom_zone = (
-        f"Zone domination — where a team holds over 55% of open-play touches in a given area — "
-        f"reveals which side controlled the tactical landscape of the match.\n\n"
-        f"{'A higher total touch count (' + str(h['touches']) + ' vs ' + str(a['touches']) + ') gave ' + _better(h['touches'], a['touches']) + ' an advantage in zone domination across multiple areas.' if abs(h['touches'] - a['touches']) > 50 else 'The relatively even touch distribution suggests a balanced contest with neither team fully dominating large areas of the pitch.'}\n\n"
-        f"Domination in wide defensive areas can indicate a team's pressing triggers, while central "
-        f"midfield control reflects the ability to dictate tempo. Control of the central attacking zone "
-        f"— directly in front of goal — is the clearest indicator of sustained threat generation."
-    )
-
-    # ── BOX ENTRIES ────────────────────────────────────────────────
-    box_entries = (
-        f"Penalty box entries — passes and carries that originate outside the box and end inside it — "
-        f"are one of the most direct measures of attacking penetration.\n\n"
-        f"The entry channel breakdown (left / central / right) reveals directional attacking intent. "
-        f"Left-channel dominance suggests exploitation of an opponent's right-back or a left-winger "
-        f"excelling in carry runs into the box. Central entries typically derive from combination play "
-        f"through Zone 14 and half-space movement.\n\n"
-        f"Cross-referencing box entries with xG and shot volume provides a complete picture: high box "
-        f"entries with low xG may indicate a lack of clinical finishing or poor shot selection once inside; "
-        f"low box entries with high xG points to efficient but infrequent penetration — counter-attack efficiency."
-    )
-
-    # ── HIGH REGAINS AND TRANSITIONS ───────────────────────────────
-    high_to = (
-        f"A high regain is an inferred open-play change of control beginning at x ≥ 60; "
-        f"restarts and administrative events are excluded. {hn} recorded "
-        f"{h['high_regains']} high regains versus {an}'s {a['high_regains']}.\n\n"
-        f"An attacking transition must stay in the same possession and, within 12 seconds, "
-        f"advance at least 20 pitch units, reach the final third or box, or produce a shot. "
-        f"{hn} generated {h['transitions']} transitions and {h['transition_shots']} shots; "
-        f"{an} generated {a['transitions']} and {a['transition_shots']} shots.\n\n"
-        f"This same-possession rule replaces the old three-minute look-ahead, which could "
-        f"incorrectly credit a later shot after possession had already changed."
-    )
-
-    # ── PASS TARGET ZONES ──────────────────────────────────────────
-    pass_target = (
-        f"Pass target zone maps display where each team directed their successful passes — "
-        f"revealing attacking intent, preferred delivery channels, and how deeply they targeted "
-        f"ball-receivers in dangerous areas.\n\n"
-        f"High concentrations in the central attacking third indicate a direct, central-focused "
-        f"attack. Heavy weighting in wide zones suggests reliance on wide combinations or "
-        f"overlapping fullbacks. Deep targeting — heavy zone use near the opposition box — reflects "
-        f"an aggressive, vertical passing style.\n\n"
-        f"Comparing {hn}'s pass target distribution with {an}'s highlights the tactical contrast: "
-        f"{'the more direct side was ' + _better(h['fwd_pct'], a['fwd_pct']) + ' (' + _dom(h['fwd_pct'], a['fwd_pct'], unit='% forward pass rate') + ').' if abs(h['fwd_pct'] - a['fwd_pct']) > 5 else 'both teams showed similar forward pass tendencies, suggesting comparable directness in their approach play.'}"
-    )
-
-    # ── TACTICAL VERDICT ───────────────────────────────────────────
-    if draw:
-        verdict_opener = f"This {hg}–{ag} draw was a fair reflection of a competitive, evenly-matched contest."
-    else:
-        verdict_opener = (
-            f"{winner} were the deserved winners of this {hg}–{ag} encounter"
-            f"{', controlling large phases of the game and converting their dominance into goals' if margin >= 2 else ', edging a tight contest through greater clinical efficiency'}."
-        )
-
-    ht_winner = _better(h["high_turnovers"], a["high_turnovers"])
-    ht_max = max(h["high_turnovers"], a["high_turnovers"])
-    ht_sentence = (
-        f"The pressing game was a decisive factor — {ht_winner}'s {ht_max} high turnovers "
-        f"disrupted the opponent and created additional transitional opportunities."
-        if ht_max > 3
-        else "High pressing was not a decisive factor, with both teams showing adequate composure under pressure."
-    )
-    ultimately = (
-        f"the result accurately reflects the statistical superiority of {winner}"
-        if not draw
-        else "neither team managed to translate statistical advantages into a winning goal"
-    )
-    match_type = (
-        "a convincing display of modern tactical football."
-        if not draw and margin >= 3
-        else (
-            "a tight tactical contest settled by fine margins."
-            if not draw
-            else "a balanced tactical encounter."
-        )
-    )
-    pp_diff = abs(h["prog_passes"] - a["prog_passes"])
-    pp_note = (
-        f"ball progression ({_dom(h['prog_passes'], a['prog_passes'])} progressive passes)"
-        if pp_diff > 5
-        else "a competitive midfield battle"
-    )
-    phases_intro = f"by {winner or 'the leading side'} " if not draw else ""
-    phases_kind = "multiple" if not draw and margin >= 2 else "critical"
-    verdict = (
-        f"{verdict_opener} "
-        f"The key tactical battles were won {phases_intro}in {phases_kind} phases: "
-        f"{pp_note},"
-        f" zone 14 occupation ({_dom(h['zone14_touches'], a['zone14_touches'])} touches),"
-        f" and defensive organisation ({_dom(h['defensive_acts'], a['defensive_acts'])} defensive actions).\n\n"
-        f"{ht_sentence} "
-        f"Ultimately, {ultimately}, "
-        f"making this {match_type}"
-    )
-
-    console.print("  [green]✅ Tactical analysis generated from match data.[/green]")
-
-    return {
-        "MATCH OVERVIEW": overview,
-        "xG & SHOOTING ANALYSIS": xg_shooting,
-        "PASSING & BALL PROGRESSION": passing,
-        "PASS NETWORKS": pass_networks,
-        "xT (EXPECTED THREAT)": xt_analysis,
-        "SHOT COMPARISON": shot_cmp,
-        "DANGER CREATION": danger,
-        "ZONE 14 & HALF-SPACES": z14_analysis,
-        "TERRITORIAL CONTROL": territorial,
-        "POSSESSION & TOUCHES": poss_analysis,
-        "PASS MAP BY THIRD": pass_thirds,
-        "CROSSES": cross_analysis,
-        "DEFENSIVE HEATMAP": def_heatmap,
-        "DEFENSIVE SUMMARY": def_summary,
-        "AVERAGE POSITIONS": avg_pos,
-        "DOMINATING ZONE": dom_zone,
-        "BOX ENTRIES": box_entries,
-        "HIGH TURNOVERS": high_to,
-        "PASS TARGET ZONES": pass_target,
-        "TACTICAL VERDICT": verdict,
-    }
-
-
 # ══════════════════════════════════════════════════════════════════════
 #  PDF BUILDER  (tactical report)
 # ══════════════════════════════════════════════════════════════════════
@@ -12027,63 +9434,6 @@ def _xt_total(events, tid):
     return round(float(subset["xT"].sum()), 2) if not subset.empty else 0.0
 
 
-def _pass_third_profile(events, tid):
-    passes = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == tid)
-        & events[["x", "end_x"]].notna().all(axis=1)
-    ].copy()
-
-    profile = {
-        "total": len(passes),
-        "def": 0,
-        "mid": 0,
-        "att": 0,
-        "succ_def": 0,
-        "succ_mid": 0,
-        "succ_att": 0,
-    }
-    if passes.empty:
-        return profile
-
-    zones = {
-        "def": passes[passes["x"] < 33],
-        "mid": passes[(passes["x"] >= 33) & (passes["x"] < 66)],
-        "att": passes[passes["x"] >= 66],
-    }
-    for key, df_ in zones.items():
-        profile[key] = len(df_)
-        profile[f"succ_{key}"] = (
-            int((df_["outcome"] == "Successful").sum())
-            if "outcome" in df_.columns
-            else 0
-        )
-    return profile
-
-
-def _progressive_profile(events, tid):
-    passes = events[
-        (events["is_pass"] == True)
-        & (events["team_id"] == tid)
-        & (events["outcome"] == "Successful")
-        & events[["x", "end_x"]].notna().all(axis=1)
-    ].copy()
-    passes = (
-        passes[(passes["end_x"] - passes["x"]) >= 10].copy()
-        if not passes.empty
-        else passes
-    )
-
-    profile = {"total": len(passes), "def": 0, "mid": 0, "att": 0}
-    if passes.empty:
-        return profile
-
-    profile["def"] = int((passes["x"] < 33).sum())
-    profile["mid"] = int(((passes["x"] >= 33) & (passes["x"] < 66)).sum())
-    profile["att"] = int((passes["x"] >= 66).sum())
-    return profile
-
-
 def _cross_profile(events, tid):
     if "is_cross" not in events.columns:
         return {"total": 0, "succ": 0, "left": 0, "middle": 0, "right": 0}
@@ -12111,22 +9461,6 @@ def _cross_profile(events, tid):
         "middle": middle,
         "right": right,
     }
-
-
-def _dominant_lane(left, middle, right):
-    values = {"left": left, "middle": middle, "right": right}
-    top_val = max(values.values()) if values else 0
-    if top_val == 0:
-        return "without a clear preferred lane"
-    winners = [k for k, v in values.items() if v == top_val]
-    if len(winners) > 1:
-        return "without a single dominant lane"
-    labels = {
-        "left": "down the left",
-        "middle": "through the central lane",
-        "right": "down the right",
-    }
-    return labels[winners[0]]
 
 
 def _box_entry_profile(events, tid):
@@ -15311,6 +12645,13 @@ def main():
         f"[dim]  Fixed visual roles: {info.get('home_name', '?')} = {home_col}  |  "
         f"{info.get('away_name', '?')} = {away_col}[/dim]"
     )
+    # A name the palette could not pin down produced a placeholder colour, not
+    # the club's. Say so, rather than let a wrong kit ship looking deliberate.
+    for unresolved, reason in UNRESOLVED_TEAM_NAMES.items():
+        console.print(
+            f"[yellow]  Team name not resolved: {unresolved!r} — {reason}. "
+            f"Add it to TEAM_ALIASES to fix the colour.[/yellow]"
+        )
 
     # First try the official team stats already embedded in matchCentreData.
     # This is the most stable path and avoids Selenium completely when available.
@@ -15400,6 +12741,25 @@ def main():
         index=False,
         encoding="utf-8-sig",
     )
+
+    # Append this fixture to the persistent history so questions spanning more
+    # than one match are answerable. Re-analysing the same fixture replaces its
+    # earlier rows rather than double-counting it. A storage failure must never
+    # cost the caller the report they just waited for.
+    try:
+        from match_store import DEFAULT_DB, save_match, save_snapshot
+
+        stored_id = save_match(
+            info, team_advanced_frame, player_sequence_frame, url=MATCH_URL
+        )
+        # Keep the provider payload verbatim so a metric added next month can be
+        # computed across every stored match without fetching a page again.
+        save_snapshot(stored_id, md)
+        console.print(
+            f"[dim]  History → {DEFAULT_DB.name}  (match {stored_id}, raw snapshot kept)[/dim]"
+        )
+    except Exception as error:  # pragma: no cover - never block the report
+        console.print(f"[yellow]  Could not write match history: {error}[/yellow]")
 
     print_summary(info, xg_data, events)
 

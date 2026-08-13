@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import re
 from html import escape
 from pathlib import Path
 from typing import Iterable
 
-import numpy as np
 import pandas as pd
 from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
@@ -23,16 +22,65 @@ PAGE_H = 12.0 * 72
 BASE_PAGE_H = 9 * 72
 VISUAL_NOTE_H = PAGE_H - BASE_PAGE_H
 
+# Aligned to the values the rendered visuals use, so the page chrome and the
+# images sitting on it are the same black rather than two near-blacks.
 BG = colors.HexColor("#000000")
-PANEL = colors.HexColor("#08090B")
-PANEL_2 = colors.HexColor("#0D0F12")
-GRID = colors.HexColor("#252A31")
-TEXT = colors.HexColor("#F5F7FA")
-MUTED = colors.HexColor("#9BA3AE")
-NEUTRAL = colors.HexColor("#626A75")
-HOME = colors.HexColor("#7A3DFF")
-AWAY = colors.HexColor("#BEEA24")
-FOCUS = colors.HexColor("#FFD43B")
+PANEL = colors.HexColor("#0A0A0A")
+PANEL_2 = colors.HexColor("#101010")
+GRID = colors.HexColor("#1C1C1C")
+TEXT = colors.HexColor("#FFFFFF")
+MUTED = colors.HexColor("#9A9A9A")
+NEUTRAL = colors.HexColor("#5A5A5A")
+HOME = colors.HexColor("#2F5BFF")
+AWAY = colors.HexColor("#FFD400")
+
+# Structural marks — section numbers, card rules, the spine label. These name
+# parts of the report, not parts of the match, so they must not wear a colour
+# that competes with the two teams. The previous amber did: it ran to 1,398
+# characters against 648 for both kit colours combined, which made a fixed
+# accent, rather than the fixture, the loudest thing in the document.
+FOCUS = colors.HexColor("#C8CDD4")
+
+# Text sits on this margin everywhere: headers, commentary, cards and the
+# embedded visuals. One number, so a page has one left edge.
+TEXT_MARGIN = 42
+
+# The report had grown 23 distinct font sizes, several within a fifth of a
+# point of each other, which is what a document looks like when every element
+# was sized on its own. Six steps, each clearly different from its neighbour.
+#
+#   DISPLAY  the cover score
+#   TITLE    page and commentary headings
+#   SECTION  card titles, column headings
+#   BODY     running text
+#   CAPTION  subtitles, table values
+#   MICRO    eyebrows, footers, legends
+TYPE_DISPLAY, TYPE_TITLE, TYPE_SECTION = 34, 17, 11
+TYPE_BODY, TYPE_CAPTION, TYPE_MICRO = 9, 7.5, 6.5
+
+# One deliberate exception. On the cover the two halves of the lead statistic
+# are set at different sizes because the gap between them is the finding —
+# 8.8 against 91.2 should look as lopsided as it reads. Named rather than
+# left as bare numbers so it stays a decision instead of becoming drift.
+TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR = 40, 62
+
+# Sampled from the publisher's mark in assets/logo.jpg. Brand elements only —
+# never a value, a bar, or anything a reader could mistake for a team. It reads
+# teal against Manchester City's bluer #6CABDD, but the rule is what keeps them
+# apart: the brand colour is never placed next to a number.
+BRAND = colors.HexColor("#6BCAD6")
+
+# The publisher's badge. Absent on a fresh clone, so every use is guarded and
+# the cover falls back to a typographic wordmark rather than failing.
+LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.jpg"
+
+
+def _as_pdf_color(value, fallback):
+    """Return a reportlab colour for a hex string, or the fallback if unusable."""
+    try:
+        return colors.HexColor(str(value).strip())
+    except (ValueError, AttributeError, TypeError):
+        return fallback
 VALUE = colors.HexColor("#9A7CF2")
 
 
@@ -196,7 +244,10 @@ def build_context(
         "away_id": away_id,
         "home_goals": home_goals,
         "away_goals": away_goals,
-        "score": f"{home_goals} - {away_goals}",
+        # Em-dash, matching the score printed in every rendered visual. A
+        # hyphen here made the same fixture look typeset by two different hands
+        # depending on whether you were reading a page or an image on it.
+        "score": f"{home_goals} — {away_goals}",
         "winner": winner,
         "loser": loser,
         "goal_rows": goal_rows,
@@ -651,9 +702,20 @@ def visual_explanation(path: Path, context: dict) -> str:
             "Treat this page as the tactical problem statement; the following visuals isolate whether the separation came from timing, occupation, progression, pressing or transition protection."
         )
     if "post_match_advanced" in stem:
+        # Which side held territory and which produced the cleaner shot has to
+        # come from the values. Naming home as the territorial side and away as
+        # the efficient one was fixed text, so in any match where that was the
+        # other way round the paragraph contradicted its own numbers.
+        territory = home if context["home_field_tilt"] >= context["away_field_tilt"] else away
+        quality = home if context["home_xG_per_shot"] >= context["away_xG_per_shot"] else away
+        secure = (
+            home
+            if context["home_rest_defence_vulnerability"] <= context["away_rest_defence_vulnerability"]
+            else away
+        )
         return (
-            f"This dashboard joins the two sides of the same tactical plan. {home} controlled more advanced territory and reached the final third more often, but that attacking commitment also left more demanding rest-defence situations. "
-            f"{away} created the cleaner average shot and converted transitions more efficiently while allowing fewer dangerous counters. The useful interpretation is therefore not attack versus defence as separate departments: spacing during possession determined both the quality of the next attack and the security of the next defensive action."
+            f"This dashboard joins the two sides of the same tactical plan. {territory} controlled more advanced territory and reached the final third more often, but that attacking commitment also left more demanding rest-defence situations. "
+            f"{quality} created the cleaner average shot, and {secure} protected its attacking possessions more securely. The useful interpretation is therefore not attack versus defence as separate departments: spacing during possession determined both the quality of the next attack and the security of the next defensive action."
         )
     if "xt_per_minute" in stem:
         return (
@@ -883,6 +945,95 @@ def visual_commentary_title(path: Path, context: dict) -> str:
     return "What this visual adds to the match story"
 
 
+def _join_sentences(*parts: str) -> str:
+    """Join analyst sentences into continuous prose.
+
+    Each source paragraph already ends in a full stop, so joining is mostly a
+    matter of collapsing whitespace and making sure a missing terminator does
+    not run two sentences together.
+    """
+    cleaned = []
+    for part in parts:
+        text = " ".join(str(part or "").split())
+        if not text:
+            continue
+        if text[-1] not in ".!?":
+            text += "."
+        cleaned.append(text)
+    return " ".join(cleaned)
+
+
+# Connective openers for the evidence and the conclusion. Picked per visual by
+# a hash of the filename so the report does not repeat the same two phrases on
+# every page, but a given page always reads the same way between runs.
+# Each lead ends in a colon so the sentence that follows keeps its own
+# capitalisation — lower-casing the first character mangled proper nouns and
+# produced lines like "put numbers to it and juventus led field tilt".
+_EVIDENCE_LEADS = (
+    "The numbers behind that:",
+    "Against the event record:",
+    "The data supports the picture:",
+    "Put numbers to it:",
+    "The underlying record agrees:",
+)
+_CONCLUSION_LEADS = (
+    "What that means in practice:",
+    "The practical read:",
+    "Taken together:",
+    "For the coaching follow-up:",
+    "The takeaway:",
+)
+
+
+def _split_for_columns(text: str) -> tuple[str, str]:
+    """Split a paragraph into two balanced columns at a sentence boundary.
+
+    Splitting mid-sentence would leave a clause hanging at the foot of the
+    first column, so the break is taken at whichever full stop sits closest to
+    the halfway mark.
+    """
+    # Split only where a terminator is followed by a space and a capital. A
+    # plain [.!?] rule broke inside every decimal the commentary quotes, so
+    # "field tilt 91.2%-8.8%" became two "sentences" and the second column
+    # opened mid-number with "8%, and Man City led...".
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9‘“\"'])", text.strip())
+    sentences = [part for part in parts if part]
+    if len(sentences) < 2:
+        return text.strip(), ""
+
+    target = len(text) / 2
+    best_index, best_gap = 1, None
+    running = 0
+    for index, sentence in enumerate(sentences[:-1], start=1):
+        running += len(sentence) + 1
+        gap = abs(running - target)
+        if best_gap is None or gap < best_gap:
+            best_index, best_gap = index, gap
+    return " ".join(sentences[:best_index]).strip(), " ".join(sentences[best_index:]).strip()
+
+
+def visual_narrative(path: Path, context: dict) -> str:
+    """Return one continuous analyst paragraph for a visual.
+
+    The report used to print three labelled blocks — PERFORMANCE ANALYST,
+    DATA ANALYST, INTEGRATED READ — under every page. That reads as a form
+    being filled in rather than as somebody explaining the match, so the three
+    strands are now written as one paragraph: what happened, what the data
+    says about it, and what to do with that.
+    """
+    mechanism = visual_explanation(path, context)
+    evidence = visual_data_read(path, context)
+    conclusion = visual_implication(path, context)
+
+    seed = sum(ord(character) for character in path.stem)
+    evidence_lead = _EVIDENCE_LEADS[seed % len(_EVIDENCE_LEADS)]
+    conclusion_lead = _CONCLUSION_LEADS[(seed // 7) % len(_CONCLUSION_LEADS)]
+
+    evidence = f"{evidence_lead} {evidence}" if evidence else ""
+    conclusion = f"{conclusion_lead} {conclusion}" if conclusion else ""
+    return _join_sentences(mechanism, evidence, conclusion)
+
+
 def visual_data_read(path: Path, context: dict) -> str:
     """A concise data-analyst paragraph that validates or qualifies the tactical read."""
     stem = path.stem.lower()
@@ -922,9 +1073,32 @@ def visual_data_read(path: Path, context: dict) -> str:
             f"Yet xG finished {context['home_xG']:.2f}-{context['away_xG']:.2f}, showing that territorial presence and final-action efficiency pointed in different directions."
         )
     if "post_match_advanced" in stem:
+        # Who "led" a metric has to be read off the values. This block used to
+        # hard-code the home side as the territory leader and the away side as
+        # the efficiency leader, so a match where that was reversed printed a
+        # sentence that contradicted the numbers printed beside it.
+        def _leader(home_value: float, away_value: float, higher_is_better: bool = True) -> tuple[str, float, float]:
+            home_first = (home_value >= away_value) if higher_is_better else (home_value <= away_value)
+            if home_first:
+                return home, home_value, away_value
+            return away, away_value, home_value
+
+        tilt_team, tilt_top, tilt_other = _leader(
+            context["home_field_tilt"], context["away_field_tilt"]
+        )
+        entry_team, entry_top, entry_other = _leader(
+            context["home_final_third_entries"], context["away_final_third_entries"]
+        )
+        quality_team, quality_top, quality_other = _leader(
+            context["home_xG_per_shot"], context["away_xG_per_shot"]
+        )
+        transition_team, transition_top, transition_other = _leader(
+            context["home_transition_shot_rate"], context["away_transition_shot_rate"]
+        )
         return (
-            f"{home} led field tilt {context['home_field_tilt']:.1f}%-{context['away_field_tilt']:.1f}% and final-third entries {int(context['home_final_third_entries'])}-{int(context['away_final_third_entries'])}. "
-            f"{away} led xG per shot {context['away_xG_per_shot']:.3f}-{context['home_xG_per_shot']:.3f} and transition shot rate {context['away_transition_shot_rate']:.1f}%-{context['home_transition_shot_rate']:.1f}%, while rest-defence vulnerability was {context['away_rest_defence_vulnerability']:.1f}% versus {context['home_rest_defence_vulnerability']:.1f}%."
+            f"{tilt_team} led field tilt {tilt_top:.1f}%-{tilt_other:.1f}%, and {entry_team} led final-third entries {int(entry_top)}-{int(entry_other)}. "
+            f"{quality_team} led xG per shot {quality_top:.3f}-{quality_other:.3f} and {transition_team} led transition shot rate {transition_top:.1f}%-{transition_other:.1f}%, "
+            f"while rest-defence vulnerability was {context['home_rest_defence_vulnerability']:.1f}% for {home} against {context['away_rest_defence_vulnerability']:.1f}% for {away}."
         )
     if "xt_per_minute" in stem:
         return (
@@ -1087,15 +1261,24 @@ class TacticalPDF:
         self.canvas.setTitle(f"{context['home']} vs {context['away']} - Detailed Tactical and Data Report")
         self.canvas.setAuthor("Mostafa Saad")
         self.canvas.setSubject("Football performance analysis and match data report")
-        self.body = ParagraphStyle("body", fontName="Helvetica", fontSize=9.2, leading=13.2, textColor=TEXT, alignment=TA_LEFT)
-        self.small = ParagraphStyle("small", fontName="Helvetica", fontSize=7.6, leading=10.5, textColor=MUTED, alignment=TA_LEFT)
-        self.card = ParagraphStyle("card", fontName="Helvetica", fontSize=8.7, leading=12.3, textColor=TEXT, alignment=TA_LEFT)
-        self.analysis = ParagraphStyle("analysis", fontName="Helvetica", fontSize=8.15, leading=11.25, textColor=TEXT, alignment=TA_LEFT)
-        self.implication = ParagraphStyle("implication", fontName="Helvetica", fontSize=7.85, leading=10.7, textColor=TEXT, alignment=TA_LEFT)
-        self.next_step = ParagraphStyle("next_step", fontName="Helvetica", fontSize=7.55, leading=10.1, textColor=MUTED, alignment=TA_LEFT)
-        self.commentary_title = ParagraphStyle("commentary_title", fontName="Times-Bold", fontSize=16.5, leading=18.5, textColor=TEXT, alignment=TA_LEFT)
-        self.commentary_body = ParagraphStyle("commentary_body", fontName="Times-Roman", fontSize=9.15, leading=11.35, textColor=TEXT, alignment=TA_LEFT)
-        self.commentary_next = ParagraphStyle("commentary_next", fontName="Times-Italic", fontSize=8.4, leading=10.2, textColor=MUTED, alignment=TA_LEFT)
+        # The chrome carries the fixture's own colours. It used to be a fixed
+        # blue/yellow pair, so every page framed images drawn in the teams'
+        # real kit colours with a border belonging to neither of them.
+        self.home_color = _as_pdf_color(context.get("home_color"), HOME)
+        self.away_color = _as_pdf_color(context.get("away_color"), AWAY)
+        self.body = ParagraphStyle("body", fontName="Helvetica", fontSize=TYPE_BODY, leading=13.2, textColor=TEXT, alignment=TA_LEFT)
+        self.small = ParagraphStyle("small", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=10.5, textColor=MUTED, alignment=TA_LEFT)
+        self.card = ParagraphStyle("card", fontName="Helvetica", fontSize=TYPE_BODY, leading=12.3, textColor=TEXT, alignment=TA_LEFT)
+        self.analysis = ParagraphStyle("analysis", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=11.25, textColor=TEXT, alignment=TA_LEFT)
+        self.implication = ParagraphStyle("implication", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=10.7, textColor=TEXT, alignment=TA_LEFT)
+        self.next_step = ParagraphStyle("next_step", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=10.1, textColor=MUTED, alignment=TA_LEFT)
+        # The commentary used to be set in Times while every embedded visual is
+        # sans, so each page carried two unrelated type families and read as two
+        # documents stapled together. One family throughout; the commentary is
+        # separated from the chrome by weight and colour instead.
+        self.commentary_title = ParagraphStyle("commentary_title", fontName="Helvetica-Bold", fontSize=TYPE_TITLE, leading=19.5, textColor=TEXT, alignment=TA_LEFT)
+        self.commentary_body = ParagraphStyle("commentary_body", fontName="Helvetica", fontSize=TYPE_BODY, leading=13.2, textColor=TEXT, alignment=TA_LEFT)
+        self.commentary_next = ParagraphStyle("commentary_next", fontName="Helvetica-Oblique", fontSize=TYPE_CAPTION, leading=11.0, textColor=MUTED, alignment=TA_LEFT)
 
     def _start(self, bookmark: str | None = None, outline: str | None = None, level: int = 0):
         self.page += 1
@@ -1108,7 +1291,7 @@ class TacticalPDF:
 
     def _finish(self):
         self.canvas.setFillColor(NEUTRAL)
-        self.canvas.setFont("Helvetica-Bold", 6.8)
+        self.canvas.setFont("Helvetica-Bold", TYPE_MICRO)
         self.canvas.drawRightString(PAGE_W - 24, 14, f"PAGE {self.page:02d}  |  REAL MATCH EVENTS")
         self.canvas.saveState()
         self.canvas.setStrokeColor(GRID)
@@ -1119,17 +1302,23 @@ class TacticalPDF:
 
     def _header(self, title: str, subtitle: str, section: str):
         c = self.canvas
+        # 86pt of panel rather than 70: the section label, the title and the
+        # subtitle used to be stacked so tightly that the subtitle's descenders
+        # touched the team-colour rule closing the panel.
+        top = PAGE_H - 24
+        panel_h = 86
+        base = top - panel_h
         c.setFillColor(PANEL_2)
-        c.roundRect(24, PAGE_H - 98, PAGE_W - 48, 70, 9, fill=1, stroke=0)
-        c.setFillColor(HOME); c.rect(28, PAGE_H - 96, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
-        c.setFillColor(AWAY); c.rect(PAGE_W / 2, PAGE_H - 96, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
-        c.setFillColor(FOCUS); c.circle(43, PAGE_H - 49, 3.2, fill=1, stroke=0)
-        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", 7); c.drawString(54, PAGE_H - 52, section.upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", 19); c.drawString(42, PAGE_H - 78, title)
-        c.setFillColor(MUTED); c.setFont("Helvetica", 7.5); c.drawString(42, PAGE_H - 91, subtitle[:125])
-        c.setFillColor(HOME); c.setFont("Helvetica-Bold", 9); c.drawRightString(PAGE_W - 300, PAGE_H - 50, self.context["home"].upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", 14); c.drawCentredString(PAGE_W - 245, PAGE_H - 50, self.context["score"])
-        c.setFillColor(AWAY); c.setFont("Helvetica-Bold", 9); c.drawString(PAGE_W - 190, PAGE_H - 50, self.context["away"].upper())
+        c.roundRect(24, base, PAGE_W - 48, panel_h, 9, fill=1, stroke=0)
+        c.setFillColor(self.home_color); c.rect(28, base + 2, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
+        c.setFillColor(self.away_color); c.rect(PAGE_W / 2, base + 2, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
+        c.setFillColor(BRAND); c.circle(43, top - 21, 3.2, fill=1, stroke=0)
+        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_MICRO); c.drawString(54, top - 24, section.upper())
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE); c.drawString(42, top - 50, title)
+        c.setFillColor(MUTED); c.setFont("Helvetica", TYPE_CAPTION); c.drawString(42, top - 68, subtitle[:125])
+        c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", TYPE_BODY); c.drawRightString(PAGE_W - 300, PAGE_H - 50, self.context["home"].upper())
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE); c.drawCentredString(PAGE_W - 245, PAGE_H - 50, self.context["score"])
+        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_BODY); c.drawString(PAGE_W - 190, PAGE_H - 50, self.context["away"].upper())
 
     def _paragraph(self, text: str, x: float, top: float, width: float, max_height: float, style: ParagraphStyle | None = None) -> float:
         paragraph = Paragraph(text, style or self.body)
@@ -1145,38 +1334,220 @@ class TacticalPDF:
         c.roundRect(x, y, w, h, 7, fill=1, stroke=1)
         c.setFillColor(accent)
         c.rect(x, y + h - 3, w, 3, fill=1, stroke=0)
-        c.setFont("Helvetica-Bold", 8.2)
+        c.setFont("Helvetica-Bold", TYPE_CAPTION)
         c.drawString(x + 14, y + h - 22, title.upper())
+
+    # Metrics the cover may lead with, as (context key, printed name, unit).
+    # Each is a percentage split that sums to 100 across the two sides, so one
+    # number states the whole balance and the bar underneath is honest.
+    COVER_LEADS = (
+        ("field_tilt", "Field tilt", "share of completed passes reaching the final third"),
+        ("possession_share", "Possession", "share of the match in controlled possession"),
+        ("pass_share", "Pass share", "share of all completed passes"),
+    )
+
+    # Below this gap the two sides are close enough that no single number is
+    # worth a page, and the cover leads with the scoreline instead.
+    COVER_LEAD_MIN_GAP = 25.0
+
+    def _verdict(self) -> str:
+        """One sentence on how the result related to the chances created.
+
+        This used to assert that the winner had won the execution battle and
+        that the loser's activity never became shot quality. That reads well
+        when the winner also created more — and contradicts the numbers printed
+        beside it when they did not. Fulham lost 0-1 having led xG 1.58 to 0.81,
+        shots 14 to 10 and field tilt 62.6% to 37.4%, under a sentence saying
+        their activity had not become control of shot quality.
+        """
+        winner, loser = self.context.get("winner"), self.context.get("loser")
+        home, away = self.context["home"], self.context["away"]
+
+        def xg_for(team):
+            side = "home" if team == home else "away"
+            try:
+                return float(self.context.get(f"{side}_xG"))
+            except (TypeError, ValueError):
+                return None
+
+        if not winner or winner == loser:
+            leader, trailer = home, away
+            lead_xg, trail_xg = xg_for(home), xg_for(away)
+            if lead_xg is not None and trail_xg is not None and trail_xg > lead_xg:
+                leader, trailer = away, home
+            return (f"The draw flattered neither side equally: {leader} created "
+                    f"the better share of the chances {trailer} had to survive.")
+
+        winner_xg, loser_xg = xg_for(winner), xg_for(loser)
+        if winner_xg is None or loser_xg is None:
+            return f"{winner} took the result; the process behind it is what the report examines."
+        if winner_xg >= loser_xg:
+            return (f"{winner} won the execution battle. "
+                    f"{loser}'s activity never became control of shot quality.")
+        return (f"{loser} created the better chances and lost. "
+                f"{winner} needed fewer of them and took them.")
+
+    def _cover_lead(self):
+        """Return the widest percentage split, or None if the match was even."""
+        best = None
+        for key, name, note in self.COVER_LEADS:
+            home = self.context.get(f"home_{key}")
+            away = self.context.get(f"away_{key}")
+            try:
+                home, away = float(home), float(away)
+            except (TypeError, ValueError):
+                continue
+            if not 95.0 <= home + away <= 105.0:
+                continue  # not a two-way split; the bar would misrepresent it
+            gap = abs(home - away)
+            if best is None or gap > best[0]:
+                best = (gap, name, note, home, away)
+        if best is None or best[0] < self.COVER_LEAD_MIN_GAP:
+            return None
+        return best
+
+    def _cover_logo(self, cx: float, top: float, size: float) -> float:
+        """Draw the publisher's badge centred on ``cx``; return its bottom edge.
+
+        Falls back to the wordmark when the file is absent, so a fresh clone
+        still produces a finished cover rather than a hole where a logo was.
+        """
+        c = self.canvas
+        if LOGO_PATH.exists():
+            try:
+                c.drawImage(str(LOGO_PATH), cx - size / 2, top - size, size, size,
+                            mask=None, preserveAspectRatio=True, anchor="c")
+                return top - size
+            except Exception:
+                pass  # unreadable image: fall through to the wordmark
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_DISPLAY)
+        c.drawCentredString(cx, top - 34, "TACTICAL")
+        c.setFillColor(BRAND); c.setFont("Helvetica-Bold", TYPE_BODY)
+        c.drawCentredString(cx, top - 50, "F O O T B A L L   D A T A   &   A N A L Y S I S")
+        return top - 62
 
     def cover(self):
         self._start("cover", "Cover")
         c = self.canvas
-        c.setFillColor(PANEL_2)
-        c.roundRect(42, 70, PAGE_W - 84, PAGE_H - 140, 18, fill=1, stroke=0)
-        c.setFillColor(HOME); c.rect(42, 70, (PAGE_W - 84) / 2, 5, fill=1, stroke=0)
-        c.setFillColor(AWAY); c.rect(PAGE_W / 2, 70, (PAGE_W - 84) / 2, 5, fill=1, stroke=0)
-        c.setFillColor(FOCUS); c.circle(73, PAGE_H - 108, 5, fill=1, stroke=0)
-        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", 9); c.drawString(91, PAGE_H - 112, "MATCH INTELLIGENCE REPORT")
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", 30); c.drawString(72, PAGE_H - 185, "DETAILED TACTICAL")
-        c.drawString(72, PAGE_H - 222, "AND DATA ANALYSIS")
-        c.setFillColor(MUTED); c.setFont("Helvetica", 12)
-        c.drawString(74, PAGE_H - 250, "A connected performance-analysis narrative supported by real match events")
-        c.setFillColor(HOME); c.setFont("Helvetica-Bold", 22); c.drawRightString(PAGE_W / 2 - 72, 287, self.context["home"].upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", 42); c.drawCentredString(PAGE_W / 2, 277, self.context["score"])
-        c.setFillColor(AWAY); c.setFont("Helvetica-Bold", 22); c.drawString(PAGE_W / 2 + 72, 287, self.context["away"].upper())
-        c.setFillColor(FOCUS); c.setFont("Helvetica-Bold", 9); c.drawString(74, 174, "REPORT SPINE")
-        c.setFillColor(MUTED); c.setFont("Helvetica", 9)
-        c.drawString(74, 154, "MATCH STORY  |  CHANCE CREATION  |  POSSESSION  |  PRESSING  |  TRANSITIONS  |  PLAYER IMPACT")
-        c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", 7); c.drawRightString(PAGE_W - 72, 130, "CREATED BY MOSTAFA SAAD")
+        centre = PAGE_W / 2
+        home, away = self.context["home"], self.context["away"]
+
+        bottom = self._cover_logo(centre, PAGE_H - 58, 148)
+
+        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
+        c.drawCentredString(centre, bottom - 26, "M A T C H   I N T E L L I G E N C E   R E P O R T")
+
+        # Fixture line. One score, one glyph, each side in its own colour.
+        c.setFont("Helvetica-Bold", TYPE_TITLE)
+        score = self.context["score"]
+        score_w = c.stringWidth(score, "Helvetica-Bold", 34)
+        home_w = c.stringWidth(home.upper(), "Helvetica-Bold", 17)
+        away_w = c.stringWidth(away.upper(), "Helvetica-Bold", 17)
+        gap = 22
+        total = home_w + gap + score_w + gap + away_w
+        x = centre - total / 2
+        baseline = bottom - 76
+        c.setFillColor(self.home_color); c.drawString(x, baseline, home.upper())
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_DISPLAY)
+        c.drawString(x + home_w + gap, baseline - 6, score)
+        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_TITLE)
+        c.drawString(x + home_w + gap + score_w + gap, baseline, away.upper())
+
+        lead = self._cover_lead()
+        thesis = self._verdict()
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
+        c.drawCentredString(centre, baseline - 54, thesis[:104])
+
+        if lead:
+            # Hero number high enough to close the gap under the thesis, with
+            # the supporting splits filling the space beneath it. Leaving the
+            # bar at the foot of the page opened a dead band across the middle
+            # a quarter of the sheet deep.
+            _gap, name, note, home_value, away_value = lead
+            self._cover_lead_bar(name, note, home_value, away_value, y=352)
+            self._cover_strip(y=150, exclude=name)
+        else:
+            # An even match: no single number earns the hero treatment, so the
+            # cover carries the supporting splits alone, centred.
+            self._cover_strip(y=280)
+
+        c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO)
+        c.drawString(56, 42, "WHOSCORED / OPTA EVENT DATA")
+        c.drawRightString(PAGE_W - 56, 42, "CREATED BY MOSTAFA SAAD")
         self._finish()
+
+    def _cover_lead_bar(self, name: str, note: str, home_value: float, away_value: float, y: float):
+        """The match's widest split, at full width. The graphic is the finding."""
+        c = self.canvas
+        left, width = 56, PAGE_W - 112
+        total = max(home_value + away_value, 1e-6)
+        home_w = width * home_value / total
+
+        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
+        c.drawString(left, y + 92, f"{name.upper()}  ·  {note.upper()}")
+
+        # Deliberately mismatched: the side that lost the battle is set smaller
+        # so the pair reads as lopsided before either number is parsed.
+        minor, major = ((TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR) if away_value >= home_value
+                        else (TYPE_LEAD_MAJOR, TYPE_LEAD_MINOR))
+        c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", minor)
+        c.drawString(left, y + 40, f"{home_value:.1f}%")
+        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", major)
+        c.drawRightString(left + width, y + 30, f"{away_value:.1f}%")
+
+        c.setFillColor(self.home_color); c.rect(left, y, home_w, 14, fill=1, stroke=0)
+        c.setFillColor(self.away_color); c.rect(left + home_w, y, width - home_w, 14, fill=1, stroke=0)
+
+        c.setFont("Helvetica-Bold", TYPE_BODY)
+        c.setFillColor(self.home_color); c.drawString(left, y - 18, self.context["home"])
+        c.setFillColor(self.away_color); c.drawRightString(left + width, y - 18, self.context["away"])
+
+    def _cover_strip(self, y: float, exclude: str | None = None):
+        """Supporting splits under the lead statistic.
+
+        ``exclude`` drops whichever metric the hero bar already carries —
+        printing FIELD TILT as the headline and again in the strip below spent
+        a cell restating a number the reader had just been shown.
+        """
+        c = self.canvas
+        left, width = 56, PAGE_W - 112
+        cells = [
+            ("Expected goals", self.context.get("home_xG"), self.context.get("away_xG"), "{:.2f}"),
+            ("Shots", self.context.get("home_shots"), self.context.get("away_shots"), "{:.0f}"),
+            ("Box entries", self.context.get("home_box_entries"), self.context.get("away_box_entries"), "{:.0f}"),
+            ("Field tilt", self.context.get("home_field_tilt"), self.context.get("away_field_tilt"), "{:.1f}"),
+            ("Possession", self.context.get("home_possession_share"), self.context.get("away_possession_share"), "{:.1f}"),
+        ]
+        if exclude:
+            cells = [cell for cell in cells if cell[0].lower() != exclude.lower()]
+        cells = cells[:4]
+        step = width / len(cells)
+        for idx, (label, home_value, away_value, fmt) in enumerate(cells):
+            x = left + idx * step
+            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.drawString(x, y + 34, label.upper())
+            try:
+                home_text, away_text = fmt.format(float(home_value)), fmt.format(float(away_value))
+            except (TypeError, ValueError):
+                continue
+            c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", TYPE_TITLE)
+            c.drawString(x, y + 10, home_text)
+            offset = c.stringWidth(home_text, "Helvetica-Bold", 19)
+            c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_SECTION)
+            c.drawString(x + offset + 6, y + 10, "/")
+            c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_TITLE)
+            c.drawString(x + offset + 18, y + 10, away_text)
+        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.line(left, y - 12, left + width, y - 12)
 
     def executive_summary(self, sections: dict[str, dict]):
         self._start("executive_summary", "Executive Summary")
         self._header("Executive Summary", "The result, the mechanism and the main coaching implications", "REPORT OPEN")
         c = self.canvas
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", 15)
-        headline = f"{self.context['winner']} won the execution battle; the losing side's activity did not translate into equal control of shot quality."
-        c.drawString(42, PAGE_H - 132, headline[:118])
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
+        # Same sentence as the cover, from the same numbers — the summary used
+        # to assert the winner had created more regardless of whether they had.
+        c.drawString(42, PAGE_H - 132, self._verdict()[:132])
         bullets = [
             sections["Match Story"]["data"][1],
             sections["Chance Creation"]["data"][0],
@@ -1184,30 +1555,89 @@ class TacticalPDF:
             sections["Pressing and Rest Defence"]["data"][3],
             sections["Transitions and Efficiency"]["data"][0],
         ]
-        positions = [(42, 385, 444, 135), (522, 385, 444, 135), (42, 227, 444, 135), (522, 227, 444, 135)]
-        for idx, ((title, body), (x, y, w, h)) in enumerate(zip(bullets[:4], positions), start=1):
-            self._card_box(x, y, w, h, f"0{idx} - {title}", HOME if idx % 2 else AWAY)
-            self._paragraph(escape(body), x + 14, y + h - 38, w - 28, h - 50, self.card)
+        # Every card used to be a fixed 135pt tall for one line of text, which
+        # left each one about nine tenths empty and pushed the block into the
+        # bottom half of an otherwise blank page. Height now follows the text.
+        column_w = 444
+        wide_w = PAGE_W - 84
+        top = PAGE_H - 190
+        row_gap, col_gap = 18, 36
+
+        def card_height(text: str, width: float) -> float:
+            paragraph = Paragraph(escape(text), self.card)
+            _, text_h = paragraph.wrap(width - 28, PAGE_H)
+            return max(text_h + 52, 74)
+
+        pairs = list(zip(bullets[:4], range(1, 5)))
+        row_heights = [
+            max(card_height(body, column_w) for (_t, body), _i in pairs[start:start + 2])
+            for start in (0, 2)
+        ]
+        wide_preview = card_height(bullets[4][1], wide_w)
+
+        # Cards sized to their text leave slack on a page this tall. Spend it on
+        # the gaps between them rather than letting it pool into one hole at the
+        # foot of the page — the block then reads as laid out, not as stranded.
+        strip_block = 100
+        content = sum(row_heights) + wide_preview + strip_block
+        slack = (top - 150) - content - (2 * row_gap + 46)
+        if slack > 0:
+            row_gap += min(slack / 3, 34)
+
+        y = top
+        for row_start in (0, 2):
+            row = pairs[row_start:row_start + 2]
+            row_h = row_heights[row_start // 2]
+            for column, ((title, body), idx) in enumerate(row):
+                x = 42 + column * (column_w + col_gap)
+                accent = self.home_color if idx % 2 else self.away_color
+                self._card_box(x, y - row_h, column_w, row_h, f"{idx:02d} - {title}", accent)
+                self._paragraph(escape(body), x + 14, y - 38, column_w - 28, row_h - 50, self.card)
+            y -= row_h + row_gap
+
         title, body = bullets[4]
-        self._card_box(42, 82, PAGE_W - 84, 112, f"05 - {title}", FOCUS)
-        self._paragraph(escape(body), 56, 161, PAGE_W - 112, 70, self.card)
+        wide_h = card_height(body, wide_w)
+        self._card_box(42, y - wide_h, wide_w, wide_h, f"05 - {title}", FOCUS)
+        self._paragraph(escape(body), 56, y - 38, wide_w - 28, wide_h - 50, self.card)
+        y -= wide_h + 46
+
+        # Sizing the cards to their text freed most of the lower half. The most
+        # read page in the report should spend that on evidence rather than on
+        # air, so the headline splits go underneath — the same four the cover
+        # uses, which is what a reader arriving from page 01 expects to see.
+        if y > 150:
+            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.drawString(42, y, "THE FOUR SPLITS BEHIND THE VERDICT")
+            self._cover_strip(y=y - 52)
         self._finish()
 
     def toc(self, entries: list[tuple[str, int, str]]):
         self._start("contents", "Contents")
         self._header("Report Contents", "A performance-analysis reading path followed by the complete player appendix", "NAVIGATION")
-        y = PAGE_H - 140
+        c = self.canvas
+        y = PAGE_H - 150
         for idx, (title, page, subtitle) in enumerate(entries, start=1):
-            accent = HOME if idx % 2 else AWAY
-            self.canvas.setFillColor(accent)
-            self.canvas.circle(56, y + 5, 4, fill=1, stroke=0)
-            self.canvas.setFillColor(TEXT); self.canvas.setFont("Helvetica-Bold", 11)
-            self.canvas.drawString(74, y, f"{idx:02d}  {title}")
-            self.canvas.setFillColor(MUTED); self.canvas.setFont("Helvetica", 7.5)
-            self.canvas.drawString(74, y - 15, subtitle[:106])
-            self.canvas.setStrokeColor(GRID); self.canvas.line(510, y + 2, PAGE_W - 86, y + 2)
-            self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", 10)
-            self.canvas.drawRightString(PAGE_W - 55, y, f"PAGE {page:02d}")
+            # The marker used to alternate between the two team colours by row
+            # number, which encoded nothing at all — section 02 is not "the away
+            # team's section". One neutral rule per row instead.
+            c.setFillColor(NEUTRAL)
+            c.rect(56, y - 12, 2, 26, fill=1, stroke=0)
+            c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_SECTION)
+            label = f"{idx:02d}  {title}"
+            c.drawString(74, y, label)
+            c.setFillColor(MUTED); c.setFont("Helvetica", TYPE_CAPTION)
+            c.drawString(74, y - 15, subtitle[:106])
+
+            # Leader rule starts where the title ends rather than at a fixed
+            # x, so it joins the two sides of the row instead of floating.
+            rule_start = 74 + c.stringWidth(label, "Helvetica-Bold", 11) + 12
+            page_label = f"PAGE {page:02d}"
+            rule_end = PAGE_W - 55 - c.stringWidth(page_label, "Helvetica-Bold", 10) - 12
+            if rule_end > rule_start:
+                c.setStrokeColor(GRID); c.setLineWidth(0.6)
+                c.line(rule_start, y + 3, rule_end, y + 3)
+            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_SECTION)
+            c.drawRightString(PAGE_W - 55, y, page_label)
             y -= 57
         self._finish()
 
@@ -1220,13 +1650,13 @@ class TacticalPDF:
         for x, rows in [(42, copy["performance"]), (522, copy["data"])]:
             top = 520
             for idx, (label, body) in enumerate(rows, start=1):
-                self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", 7.5)
+                self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", TYPE_CAPTION)
                 self.canvas.drawString(x + 14, top, f"{idx:02d}  {label.upper()}")
                 height = self._paragraph(escape(body), x + 14, top - 10, 416, 55, self.small)
                 top -= max(62, height + 29)
         self._card_box(42, 97, PAGE_W - 84, 140, "Tactical Implication", FOCUS)
         self._paragraph(escape(copy["implication"]), 60, 202, PAGE_W - 120, 75, self.body)
-        self.canvas.setFillColor(NEUTRAL); self.canvas.setFont("Helvetica", 7)
+        self.canvas.setFillColor(NEUTRAL); self.canvas.setFont("Helvetica", TYPE_MICRO)
         self.canvas.drawString(60, 118, "Use the following visuals as evidence for this section. Read the explanation and next analytical step below every chart.")
         self._finish()
 
@@ -1235,7 +1665,7 @@ class TacticalPDF:
         self._header("Final Tactical Verdict", "A joined performance and data conclusion", "SYNTHESIS")
         c = self.canvas
         home, away = self.context["home"], self.context["away"]
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", 18)
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
         c.drawString(42, PAGE_H - 142, f"{self.context['winner']} controlled the decisive moments, not every phase of the match.")
         self._card_box(42, 365, 444, 170, "Why the winner won", AWAY if self.context["winner"] == away else HOME)
         winner_side = "home" if self.context["winner"] == home else "away"
@@ -1281,7 +1711,7 @@ class TacticalPDF:
             self._card_box(x, 162, 444, 390, title, accent)
             top = 512
             for label, body in rows:
-                self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", 8)
+                self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", TYPE_CAPTION)
                 self.canvas.drawString(x + 16, top, label.upper())
                 self._paragraph(escape(body), x + 16, top - 12, 410, 55, self.card)
                 top -= 83
@@ -1292,35 +1722,51 @@ class TacticalPDF:
         c = self.canvas
         with Image.open(path) as image:
             iw, ih = image.size
-        margin_x = 4
+        # The image used to bleed to 4pt from the page edge while the
+        # commentary underneath began at 42pt, so a wide visual and its own
+        # analysis sat on two different left edges. Sharing the text margin
+        # costs a wide dashboard about 76pt of width and buys a page that
+        # lines up. A tall visual is still centred — nothing can align an
+        # image whose shape does not match the column.
+        margin_x = TEXT_MARGIN
         image_region_h = PAGE_H - VISUAL_NOTE_H
         scale = min((PAGE_W - 2 * margin_x) / iw, image_region_h / ih)
         width, height = iw * scale, ih * scale
         x = (PAGE_W - width) / 2
         y = VISUAL_NOTE_H + (image_region_h - height) / 2
         c.drawImage(ImageReader(str(path)), x, y, width=width, height=height, preserveAspectRatio=True, mask="auto")
-        c.setFillColor(PANEL_2)
+        # Pure black, matching the visual sitting above it. Filling this band
+        # with PANEL put #0A0A0A against the image's #000000 and drew a visible
+        # horizontal seam across every visual page; the team rule below is what
+        # separates the two areas, not a change of ground.
+        c.setFillColor(BG)
         c.rect(0, 0, PAGE_W, VISUAL_NOTE_H, fill=1, stroke=0)
-        c.setStrokeColor(GRID); c.setLineWidth(0.7); c.line(0, VISUAL_NOTE_H, PAGE_W, VISUAL_NOTE_H)
-        c.setFillColor(FOCUS); c.setFont("Helvetica-Bold", 6.8); c.drawString(42, VISUAL_NOTE_H - 18, "TACTICAL COMMENTARY")
-        title = visual_commentary_title(path, self.context)
-        self._paragraph(escape(title), 42, VISUAL_NOTE_H - 28, PAGE_W - 84, 24, self.commentary_title)
-        c.setStrokeColor(FOCUS); c.setLineWidth(1.2); c.line(42, VISUAL_NOTE_H - 51, PAGE_W - 42, VISUAL_NOTE_H - 51)
+        # The same two-tone team rule that tops every rendered visual, repeated
+        # here so the commentary band reads as part of the same document rather
+        # than as a caption bolted underneath it.
+        c.setFillColor(self.home_color); c.rect(0, VISUAL_NOTE_H - 2.5, PAGE_W / 2, 2.5, fill=1, stroke=0)
+        c.setFillColor(self.away_color); c.rect(PAGE_W / 2, VISUAL_NOTE_H - 2.5, PAGE_W / 2, 2.5, fill=1, stroke=0)
 
-        performance = escape(visual_explanation(path, self.context))
-        evidence = escape(visual_data_read(path, self.context))
-        integrated = escape(visual_implication(path, self.context))
-        x, width = 42, PAGE_W - 84
-        top = VISUAL_NOTE_H - 62
-        h1 = self._paragraph(f'<b><font color="{self.context["home_color"]}">PERFORMANCE ANALYST.</font></b> {performance}', x, top, width, 72, self.commentary_body)
-        top -= h1 + 6
-        h2 = self._paragraph(f'<b><font color="{self.context["away_color"]}">DATA ANALYST.</font></b> {evidence}', x, top, width, 53, self.commentary_body)
-        top -= h2 + 6
-        self._paragraph(f'<b><font color="#FFD43B">INTEGRATED READ.</font></b> {integrated}', x, top, width, 42, self.commentary_body)
+        title = visual_commentary_title(path, self.context)
+        self._paragraph(escape(title), 42, VISUAL_NOTE_H - 24, PAGE_W - 84, 24, self.commentary_title)
+
+        # Two columns. The page is 14 inches wide, so a single measure ran to
+        # roughly 830pt at 9pt type — far past the length an eye can track back
+        # from. Splitting at a sentence boundary halves the measure.
+        narrative = visual_narrative(path, self.context)
+        left_text, right_text = _split_for_columns(narrative)
+        gutter = 34
+        column_w = (PAGE_W - 84 - gutter) / 2
+        top = VISUAL_NOTE_H - 52
+        self._paragraph(escape(left_text), 42, top, column_w, 165, self.commentary_body)
+        if right_text:
+            self._paragraph(escape(right_text), 42 + column_w + gutter, top, column_w, 165, self.commentary_body)
+            c.setStrokeColor(GRID); c.setLineWidth(0.6)
+            c.line(42 + column_w + gutter / 2, top - 158, 42 + column_w + gutter / 2, top + 4)
 
         c.setStrokeColor(GRID); c.setLineWidth(0.5); c.line(42, 31, PAGE_W - 42, 31)
         self._paragraph(escape(next_visual_step(next_path)), 42, 25, PAGE_W - 250, 18, self.commentary_next)
-        c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", 6.0); c.drawRightString(PAGE_W - 24, 10, f"{section.upper()}  |  PAGE {self.page:02d}")
+        c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO); c.drawRightString(PAGE_W - 24, 10, f"{section.upper()}  |  PAGE {self.page:02d}")
         c.showPage()
 
     def save(self):
@@ -1354,10 +1800,13 @@ def build_tactical_pdf(
     match_info: dict,
 ) -> Path:
     global HOME, AWAY
-    home_hex = "#7A3DFF"
-    away_hex = "#BEEA24"
-    HOME = colors.HexColor(home_hex)
-    AWAY = colors.HexColor(away_hex)
+    # Use the fixture's resolved kit colours. These were hard-coded to the role
+    # pair, so the PDF framed images drawn in the teams' real colours with a
+    # blue/yellow border belonging to neither side.
+    home_hex = str((match_info or {}).get("home_color") or "").strip() or "#2F5BFF"
+    away_hex = str((match_info or {}).get("away_color") or "").strip() or "#FFD400"
+    HOME = _as_pdf_color(home_hex, colors.HexColor("#2F5BFF"))
+    AWAY = _as_pdf_color(away_hex, colors.HexColor("#FFD400"))
     output.parent.mkdir(parents=True, exist_ok=True)
     valid_paths = [Path(path).resolve() for path in paths if Path(path).exists()]
     context = build_context(events, xg, team_metrics, player_metrics, match_info)

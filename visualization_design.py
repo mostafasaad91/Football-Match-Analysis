@@ -16,7 +16,6 @@ Every new visual uses:
 
 from __future__ import annotations
 from typing import Any
-import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
@@ -30,17 +29,22 @@ BG_DARK = "#000000"
 BG_MID = "#0a0a0a"
 BG_PANEL = "#0a0a0a"
 BG_HEADER = "#101010"
-BG_PITCH = "#0a0a0a"
+BG_PITCH = "#000000"  # pitch surface is the page itself: pure black
 GRID_COL = "#1c1c1c"
 GRID_SOFT = "#141414"
+
+# Pitch markings: white at a controlled alpha, matching visualization_components.
+PITCH_LINE = "#FFFFFF"
+PITCH_LINE_ALPHA = 0.68
+PITCH_LINE_WIDTH = 1.25
 
 TEXT_MAIN = "#FFFFFF"
 TEXT_BRIGHT = "#FFFFFF"
 TEXT_DIM = "#9A9A9A"
 TEXT_FADED = "#5A5A5A"
 
-C_HOME = "#7A3DFF"
-C_AWAY = "#BEEA24"
+C_HOME = "#2F5BFF"
+C_AWAY = "#FFD400"
 C_GOLD = "#FFC23C"
 C_MAGENTA = "#E879F9"
 C_ACCENT = "#38BDF8"
@@ -166,25 +170,6 @@ def _shadow(width: float = 0, fg: str = BG_DARK) -> list:
     if width <= 0:
         return []
     return [pe.withStroke(linewidth=width, foreground=fg)]
-
-
-def _raised_panel_backdrop(
-    fig,
-    x: float,
-    y: float,
-    w: float,
-    h: float,
-    *,
-    edge: str | None = None,
-    glow: str | None = None,
-    depth: float = 0.006,
-    radius: float = 0.010,
-    zorder: float = -4,
-):
-    """No-op in the Pure-Black identity: panels are flat with a single
-    1px hairline border, no drop shadow / glow ring. Kept for API
-    compatibility with existing call sites in match_report.py."""
-    return
 
 
 def _neon_backdrop(fig):
@@ -376,14 +361,16 @@ def rebrand_figure(
 def themed_pitch(
     ax,
     attacking_only: bool = False,
-    line_color: str = "#3A3A3A",
-    line_alpha: float = 0.56,
+    line_color: str | None = None,
+    line_alpha: float | None = None,
 ):
     """
-    Draws a pitch in the report style: BG_PITCH background, hairline
-    grey markings, low intensity so the content (dots/arrows) reads
+    Draws a pitch in the report style: pure-black background with white
+    markings held at a low alpha, so the content (dots/arrows) still reads
     clearly on top.
     """
+    line_color = line_color or PITCH_LINE
+    line_alpha = PITCH_LINE_ALPHA if line_alpha is None else line_alpha
     ax.set_facecolor(BG_PITCH)
     ax.set_aspect("equal")
     ax.set_xlim(-2, 102)
@@ -391,14 +378,15 @@ def themed_pitch(
     ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
-    if line_color in ("#2A2A2A", "#A8B8CA", "#C4CEDD", GRID_COL):
-        line_color = "#3A3A3A"
+    # Legacy call sites pass near-black greys that vanish on pure black.
+    if line_color.upper() in ("#2A2A2A", "#3A3A3A", "#A8B8CA", "#C4CEDD", GRID_COL.upper()):
+        line_color = PITCH_LINE
     for s in ax.spines.values():
         s.set_edgecolor(GRID_COL)
         s.set_linewidth(1.0)
         s.set_alpha(1.0)
 
-    lc = dict(color=line_color, lw=1.05, alpha=line_alpha * 0.88, zorder=2)
+    lc = dict(color=line_color, lw=PITCH_LINE_WIDTH, alpha=line_alpha, zorder=2)
 
     # boundary + halfway lines
     ax.plot([0, 100, 100, 0, 0], [0, 0, 100, 100, 0], **lc)
@@ -433,15 +421,6 @@ def themed_pitch(
 
     if attacking_only:
         ax.set_xlim(48, 102)
-
-
-def themed_panel(ax, fill: str = BG_MID, lw: float = 1.0):
-    """Flat pure-black subplot panel: single hairline border, no glow."""
-    ax.set_facecolor(fill)
-    for s in ax.spines.values():
-        s.set_edgecolor(GRID_COL)
-        s.set_linewidth(max(lw, 1.0))
-        s.set_alpha(1.0)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -591,64 +570,6 @@ def legend_chips(
 # ═════════════════════════════════════════════════════════════════════════════
 # 5) Intensity bar — strength bar (colour-coded like a gauge)
 # ═════════════════════════════════════════════════════════════════════════════
-def intensity_bar(
-    fig,
-    x: float,
-    y: float,
-    w: float,
-    h: float,
-    value: float,
-    vmin: float,
-    vmax: float,
-    label: str,
-    color: str,
-    reverse: bool = False,
-):
-    """
-    Horizontal bar with value + label + tick marks. reverse=True = smaller is better.
-    """
-    ax = fig.add_axes([x, y, w, h])
-    ax.set_facecolor(BG_MID)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for s in ax.spines.values():
-        s.set_edgecolor(GRID_COL)
-
-    # background track
-    ax.barh(0, 1, color=GRID_SOFT, height=0.6, zorder=1)
-
-    ratio = max(0, min(1, (value - vmin) / (vmax - vmin)))
-    if reverse:
-        ratio = 1 - ratio
-    ax.barh(0, ratio, color=color, height=0.6, zorder=2, edgecolor=TEXT_BRIGHT, lw=0.6)
-
-    ax.set_xlim(0, 1)
-    ax.set_ylim(-0.6, 0.6)
-    ax.text(
-        0.01,
-        0,
-        label,
-        ha="left",
-        va="center",
-        color=TEXT_BRIGHT,
-        fontsize=10,
-        fontweight="bold",
-        family=FONT_SANS,
-        transform=ax.transAxes,
-        path_effects=_shadow(2),
-    )
-    ax.text(
-        0.99,
-        0,
-        f"{value:.2f}" if isinstance(value, float) else str(value),
-        ha="right",
-        va="center",
-        color=color,
-        fontsize=11,
-        fontweight="bold",
-        transform=ax.transAxes,
-        path_effects=_shadow(2),
-    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════

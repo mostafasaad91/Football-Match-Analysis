@@ -9,6 +9,10 @@ pandas>=2.0.0
 matplotlib>=3.8.0
 
 # Web scraping
+# curl-cffi reproduces a browser's TLS/HTTP2 fingerprint, which is what
+# WhoScored actually checks. It answers in under a second where the browser
+# fallbacks below take minutes.
+curl-cffi>=0.7.0
 cloudscraper>=1.2.71
 requests>=2.31.0
 beautifulsoup4>=4.12.0
@@ -23,6 +27,9 @@ rich>=13.0.0
 
 # Scientific / Statistical
 scipy>=1.11.0
+
+# PDF authoring (tactical report pages and commentary)
+reportlab>=4.0.0
 
 # PDF merging (for unified report)
 pypdf>=4.0.0

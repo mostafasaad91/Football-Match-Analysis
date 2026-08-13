@@ -1,0 +1,2286 @@
+{
+ "competition": "EPL",
+ "season": "2026-2027",
+ "fixtures": [
+  {
+   "kickoff_utc": "2026-08-21T19:00:00+00:00",
+   "home": "arsenal",
+   "away": "coventry",
+   "whoscored_id": "1983546"
+  },
+  {
+   "kickoff_utc": "2026-08-22T11:30:00+00:00",
+   "home": "hull-city",
+   "away": "manchester-united",
+   "whoscored_id": "1983548"
+  },
+  {
+   "kickoff_utc": "2026-08-22T14:00:00+00:00",
+   "home": "everton",
+   "away": "crystal-palace",
+   "whoscored_id": "1983549"
+  },
+  {
+   "kickoff_utc": "2026-08-22T14:00:00+00:00",
+   "home": "ipswich",
+   "away": "sunderland",
+   "whoscored_id": "1983551"
+  },
+  {
+   "kickoff_utc": "2026-08-22T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "leeds",
+   "whoscored_id": "1983552"
+  },
+  {
+   "kickoff_utc": "2026-08-22T16:30:00+00:00",
+   "home": "brentford",
+   "away": "tottenham",
+   "whoscored_id": "1983553"
+  },
+  {
+   "kickoff_utc": "2026-08-23T13:00:00+00:00",
+   "home": "brighton",
+   "away": "aston-villa",
+   "whoscored_id": "1983554"
+  },
+  {
+   "kickoff_utc": "2026-08-23T13:00:00+00:00",
+   "home": "manchester-city",
+   "away": "bournemouth",
+   "whoscored_id": "1983555"
+  },
+  {
+   "kickoff_utc": "2026-08-23T15:30:00+00:00",
+   "home": "newcastle",
+   "away": "liverpool",
+   "whoscored_id": "1983547"
+  },
+  {
+   "kickoff_utc": "2026-08-24T19:00:00+00:00",
+   "home": "fulham",
+   "away": "chelsea",
+   "whoscored_id": "1983550"
+  },
+  {
+   "kickoff_utc": "2026-08-28T19:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "manchester-city",
+   "whoscored_id": "1983557"
+  },
+  {
+   "kickoff_utc": "2026-08-29T11:30:00+00:00",
+   "home": "liverpool",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983560"
+  },
+  {
+   "kickoff_utc": "2026-08-29T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "arsenal",
+   "whoscored_id": "1983558"
+  },
+  {
+   "kickoff_utc": "2026-08-29T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "everton",
+   "whoscored_id": "1983556"
+  },
+  {
+   "kickoff_utc": "2026-08-29T14:00:00+00:00",
+   "home": "coventry",
+   "away": "hull-city",
+   "whoscored_id": "1983563"
+  },
+  {
+   "kickoff_utc": "2026-08-29T16:30:00+00:00",
+   "home": "tottenham",
+   "away": "newcastle",
+   "whoscored_id": "1983565"
+  },
+  {
+   "kickoff_utc": "2026-08-30T13:00:00+00:00",
+   "home": "chelsea",
+   "away": "brighton",
+   "whoscored_id": "1983561"
+  },
+  {
+   "kickoff_utc": "2026-08-30T13:00:00+00:00",
+   "home": "leeds",
+   "away": "brentford",
+   "whoscored_id": "1983559"
+  },
+  {
+   "kickoff_utc": "2026-08-30T13:00:00+00:00",
+   "home": "sunderland",
+   "away": "fulham",
+   "whoscored_id": "1983564"
+  },
+  {
+   "kickoff_utc": "2026-08-30T15:30:00+00:00",
+   "home": "manchester-united",
+   "away": "ipswich",
+   "whoscored_id": "1983562"
+  },
+  {
+   "kickoff_utc": "2026-09-04T19:00:00+00:00",
+   "home": "ipswich",
+   "away": "liverpool",
+   "whoscored_id": "1983580"
+  },
+  {
+   "kickoff_utc": "2026-09-05T11:30:00+00:00",
+   "home": "newcastle",
+   "away": "bournemouth",
+   "whoscored_id": "1983584"
+  },
+  {
+   "kickoff_utc": "2026-09-05T14:00:00+00:00",
+   "home": "brentford",
+   "away": "sunderland",
+   "whoscored_id": "1983570"
+  },
+  {
+   "kickoff_utc": "2026-09-05T14:00:00+00:00",
+   "home": "brighton",
+   "away": "leeds",
+   "whoscored_id": "1983572"
+  },
+  {
+   "kickoff_utc": "2026-09-05T14:00:00+00:00",
+   "home": "fulham",
+   "away": "crystal-palace",
+   "whoscored_id": "1983576"
+  },
+  {
+   "kickoff_utc": "2026-09-05T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "coventry",
+   "whoscored_id": "1983582"
+  },
+  {
+   "kickoff_utc": "2026-09-05T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "tottenham",
+   "whoscored_id": "1983586"
+  },
+  {
+   "kickoff_utc": "2026-09-05T16:30:00+00:00",
+   "home": "hull-city",
+   "away": "aston-villa",
+   "whoscored_id": "1983577"
+  },
+  {
+   "kickoff_utc": "2026-09-06T13:00:00+00:00",
+   "home": "everton",
+   "away": "manchester-united",
+   "whoscored_id": "1983574"
+  },
+  {
+   "kickoff_utc": "2026-09-06T15:30:00+00:00",
+   "home": "arsenal",
+   "away": "chelsea",
+   "whoscored_id": "1983568"
+  },
+  {
+   "kickoff_utc": "2026-09-12T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983590"
+  },
+  {
+   "kickoff_utc": "2026-09-12T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "brentford",
+   "whoscored_id": "1983588"
+  },
+  {
+   "kickoff_utc": "2026-09-12T14:00:00+00:00",
+   "home": "chelsea",
+   "away": "hull-city",
+   "whoscored_id": "1983594"
+  },
+  {
+   "kickoff_utc": "2026-09-12T14:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "ipswich",
+   "whoscored_id": "1983598"
+  },
+  {
+   "kickoff_utc": "2026-09-12T14:00:00+00:00",
+   "home": "liverpool",
+   "away": "fulham",
+   "whoscored_id": "1983602"
+  },
+  {
+   "kickoff_utc": "2026-09-12T16:30:00+00:00",
+   "home": "tottenham",
+   "away": "everton",
+   "whoscored_id": "1983569"
+  },
+  {
+   "kickoff_utc": "2026-09-12T19:00:00+00:00",
+   "home": "sunderland",
+   "away": "arsenal",
+   "whoscored_id": "1983567"
+  },
+  {
+   "kickoff_utc": "2026-09-13T13:00:00+00:00",
+   "home": "coventry",
+   "away": "brighton",
+   "whoscored_id": "1983596"
+  },
+  {
+   "kickoff_utc": "2026-09-13T15:30:00+00:00",
+   "home": "manchester-united",
+   "away": "manchester-city",
+   "whoscored_id": "1983566"
+  },
+  {
+   "kickoff_utc": "2026-09-14T19:00:00+00:00",
+   "home": "leeds",
+   "away": "newcastle",
+   "whoscored_id": "1983600"
+  },
+  {
+   "kickoff_utc": "2026-09-18T19:00:00+00:00",
+   "home": "brentford",
+   "away": "chelsea",
+   "whoscored_id": "1983573"
+  },
+  {
+   "kickoff_utc": "2026-09-19T11:30:00+00:00",
+   "home": "tottenham",
+   "away": "aston-villa",
+   "whoscored_id": "1983589"
+  },
+  {
+   "kickoff_utc": "2026-09-19T14:00:00+00:00",
+   "home": "brighton",
+   "away": "arsenal",
+   "whoscored_id": "1983575"
+  },
+  {
+   "kickoff_utc": "2026-09-19T14:00:00+00:00",
+   "home": "everton",
+   "away": "ipswich",
+   "whoscored_id": "1983578"
+  },
+  {
+   "kickoff_utc": "2026-09-19T14:00:00+00:00",
+   "home": "leeds",
+   "away": "crystal-palace",
+   "whoscored_id": "1983581"
+  },
+  {
+   "kickoff_utc": "2026-09-19T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "sunderland",
+   "whoscored_id": "1983583"
+  },
+  {
+   "kickoff_utc": "2026-09-19T14:00:00+00:00",
+   "home": "newcastle",
+   "away": "hull-city",
+   "whoscored_id": "1983585"
+  },
+  {
+   "kickoff_utc": "2026-09-19T16:30:00+00:00",
+   "home": "nottingham-forest",
+   "away": "coventry",
+   "whoscored_id": "1983587"
+  },
+  {
+   "kickoff_utc": "2026-09-20T13:00:00+00:00",
+   "home": "bournemouth",
+   "away": "liverpool",
+   "whoscored_id": "1983571"
+  },
+  {
+   "kickoff_utc": "2026-09-20T15:30:00+00:00",
+   "home": "fulham",
+   "away": "manchester-united",
+   "whoscored_id": "1983579"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "arsenal",
+   "away": "leeds",
+   "whoscored_id": "1983591"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "brentford",
+   "whoscored_id": "1983592"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "chelsea",
+   "away": "bournemouth",
+   "whoscored_id": "1983593"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "coventry",
+   "away": "newcastle",
+   "whoscored_id": "1983595"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983597"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "hull-city",
+   "away": "everton",
+   "whoscored_id": "1983599"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "ipswich",
+   "away": "fulham",
+   "whoscored_id": "1983601"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "liverpool",
+   "away": "manchester-city",
+   "whoscored_id": "1983603"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "manchester-united",
+   "away": "tottenham",
+   "whoscored_id": "1983604"
+  },
+  {
+   "kickoff_utc": "2026-10-10T14:00:00+00:00",
+   "home": "sunderland",
+   "away": "brighton",
+   "whoscored_id": "1983605"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "sunderland",
+   "whoscored_id": "1983606"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "brentford",
+   "away": "liverpool",
+   "whoscored_id": "1983607"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "brighton",
+   "away": "crystal-palace",
+   "whoscored_id": "1983608"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "everton",
+   "away": "chelsea",
+   "whoscored_id": "1983609"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "fulham",
+   "away": "hull-city",
+   "whoscored_id": "1983610"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "leeds",
+   "away": "manchester-united",
+   "whoscored_id": "1983611"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "ipswich",
+   "whoscored_id": "1983612"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "newcastle",
+   "away": "aston-villa",
+   "whoscored_id": "1983613"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "arsenal",
+   "whoscored_id": "1983614"
+  },
+  {
+   "kickoff_utc": "2026-10-17T14:00:00+00:00",
+   "home": "tottenham",
+   "away": "coventry",
+   "whoscored_id": "1983615"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "arsenal",
+   "away": "everton",
+   "whoscored_id": "1983616"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "manchester-city",
+   "whoscored_id": "1983617"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "chelsea",
+   "away": "tottenham",
+   "whoscored_id": "1983618"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "coventry",
+   "away": "fulham",
+   "whoscored_id": "1983619"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "newcastle",
+   "whoscored_id": "1983620"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "hull-city",
+   "away": "brentford",
+   "whoscored_id": "1983621"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "ipswich",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983622"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "liverpool",
+   "away": "brighton",
+   "whoscored_id": "1983623"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "manchester-united",
+   "away": "bournemouth",
+   "whoscored_id": "1983624"
+  },
+  {
+   "kickoff_utc": "2026-10-24T14:00:00+00:00",
+   "home": "sunderland",
+   "away": "leeds",
+   "whoscored_id": "1983625"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "fulham",
+   "whoscored_id": "1983627"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "leeds",
+   "whoscored_id": "1983626"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "brentford",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983628"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "manchester-united",
+   "whoscored_id": "1983629"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "coventry",
+   "away": "sunderland",
+   "whoscored_id": "1983630"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "ipswich",
+   "whoscored_id": "1983631"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "arsenal",
+   "whoscored_id": "1983632"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "brighton",
+   "whoscored_id": "1983633"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "everton",
+   "whoscored_id": "1983832"
+  },
+  {
+   "kickoff_utc": "2026-10-31T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "crystal-palace",
+   "whoscored_id": "1983834"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "hull-city",
+   "whoscored_id": "1983836"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "brighton",
+   "away": "brentford",
+   "whoscored_id": "1983838"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "liverpool",
+   "whoscored_id": "1983840"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "everton",
+   "away": "coventry",
+   "whoscored_id": "1983842"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "fulham",
+   "away": "newcastle",
+   "whoscored_id": "1983844"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "bournemouth",
+   "whoscored_id": "1983846"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "leeds",
+   "away": "tottenham",
+   "whoscored_id": "1983848"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "aston-villa",
+   "whoscored_id": "1983850"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "manchester-city",
+   "whoscored_id": "1983851"
+  },
+  {
+   "kickoff_utc": "2026-11-07T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "chelsea",
+   "whoscored_id": "1983853"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "sunderland",
+   "whoscored_id": "1983815"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983814"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "brentford",
+   "away": "everton",
+   "whoscored_id": "1983816"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "leeds",
+   "whoscored_id": "1983817"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "coventry",
+   "away": "crystal-palace",
+   "whoscored_id": "1983818"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "brighton",
+   "whoscored_id": "1983819"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "manchester-united",
+   "whoscored_id": "1983820"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "fulham",
+   "whoscored_id": "1983821"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "arsenal",
+   "whoscored_id": "1983822"
+  },
+  {
+   "kickoff_utc": "2026-11-21T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "ipswich",
+   "whoscored_id": "1983823"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "manchester-city",
+   "whoscored_id": "1983824"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "brighton",
+   "away": "newcastle",
+   "whoscored_id": "1983825"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "hull-city",
+   "whoscored_id": "1983826"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "everton",
+   "away": "liverpool",
+   "whoscored_id": "1983827"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "fulham",
+   "away": "bournemouth",
+   "whoscored_id": "1983828"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "aston-villa",
+   "whoscored_id": "1983829"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "leeds",
+   "away": "coventry",
+   "whoscored_id": "1983830"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "brentford",
+   "whoscored_id": "1983831"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "chelsea",
+   "whoscored_id": "1983833"
+  },
+  {
+   "kickoff_utc": "2026-11-28T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "tottenham",
+   "whoscored_id": "1983835"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "aston-villa",
+   "away": "everton",
+   "whoscored_id": "1983839"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "bournemouth",
+   "away": "brighton",
+   "whoscored_id": "1983837"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "brentford",
+   "away": "arsenal",
+   "whoscored_id": "1983841"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "chelsea",
+   "away": "crystal-palace",
+   "whoscored_id": "1983843"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "coventry",
+   "away": "ipswich",
+   "whoscored_id": "1983845"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "hull-city",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983847"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "liverpool",
+   "away": "sunderland",
+   "whoscored_id": "1983849"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "manchester-city",
+   "away": "leeds",
+   "whoscored_id": "1983852"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "newcastle",
+   "away": "manchester-united",
+   "whoscored_id": "1983854"
+  },
+  {
+   "kickoff_utc": "2026-12-02T20:00:00+00:00",
+   "home": "tottenham",
+   "away": "fulham",
+   "whoscored_id": "1983855"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "crystal-palace",
+   "whoscored_id": "1983857"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "hull-city",
+   "whoscored_id": "1983856"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "brentford",
+   "away": "manchester-city",
+   "whoscored_id": "1983635"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "liverpool",
+   "whoscored_id": "1983637"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "everton",
+   "away": "fulham",
+   "whoscored_id": "1983639"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "leeds",
+   "away": "ipswich",
+   "whoscored_id": "1983642"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "coventry",
+   "whoscored_id": "1983647"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "sunderland",
+   "whoscored_id": "1983656"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "brighton",
+   "whoscored_id": "1983659"
+  },
+  {
+   "kickoff_utc": "2026-12-05T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "arsenal",
+   "whoscored_id": "1983661"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "bournemouth",
+   "whoscored_id": "1983664"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "brighton",
+   "away": "everton",
+   "whoscored_id": "1983666"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "coventry",
+   "away": "aston-villa",
+   "whoscored_id": "1983668"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "manchester-united",
+   "whoscored_id": "1983670"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "fulham",
+   "away": "brentford",
+   "whoscored_id": "1983673"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "tottenham",
+   "whoscored_id": "1983676"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "newcastle",
+   "whoscored_id": "1983679"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "leeds",
+   "whoscored_id": "1983682"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "chelsea",
+   "whoscored_id": "1983685"
+  },
+  {
+   "kickoff_utc": "2026-12-12T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983688"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "manchester-united",
+   "whoscored_id": "1983694"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "coventry",
+   "whoscored_id": "1983691"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "brentford",
+   "away": "newcastle",
+   "whoscored_id": "1983697"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "brighton",
+   "away": "ipswich",
+   "whoscored_id": "1983700"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "aston-villa",
+   "whoscored_id": "1983703"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "leeds",
+   "away": "fulham",
+   "whoscored_id": "1983706"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "tottenham",
+   "whoscored_id": "1983709"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "hull-city",
+   "whoscored_id": "1983712"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "everton",
+   "whoscored_id": "1983715"
+  },
+  {
+   "kickoff_utc": "2026-12-19T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "crystal-palace",
+   "whoscored_id": "1983719"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "leeds",
+   "whoscored_id": "1983722"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "coventry",
+   "away": "chelsea",
+   "whoscored_id": "1983725"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "arsenal",
+   "whoscored_id": "1983728"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "everton",
+   "away": "sunderland",
+   "whoscored_id": "1983732"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "fulham",
+   "away": "brighton",
+   "whoscored_id": "1983736"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "liverpool",
+   "whoscored_id": "1983640"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "brentford",
+   "whoscored_id": "1983643"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983645"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "manchester-city",
+   "whoscored_id": "1983651"
+  },
+  {
+   "kickoff_utc": "2026-12-26T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "bournemouth",
+   "whoscored_id": "1983652"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "aston-villa",
+   "away": "liverpool",
+   "whoscored_id": "1983653"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "coventry",
+   "away": "brentford",
+   "whoscored_id": "1983655"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "bournemouth",
+   "whoscored_id": "1983657"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "everton",
+   "away": "manchester-city",
+   "whoscored_id": "1983662"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "fulham",
+   "away": "arsenal",
+   "whoscored_id": "1983672"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "hull-city",
+   "away": "leeds",
+   "whoscored_id": "1983675"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "ipswich",
+   "away": "chelsea",
+   "whoscored_id": "1983678"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "manchester-united",
+   "away": "sunderland",
+   "whoscored_id": "1983681"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "newcastle",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983684"
+  },
+  {
+   "kickoff_utc": "2026-12-30T20:00:00+00:00",
+   "home": "tottenham",
+   "away": "brighton",
+   "whoscored_id": "1983687"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "ipswich",
+   "whoscored_id": "1983693"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "aston-villa",
+   "whoscored_id": "1983690"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "brentford",
+   "away": "crystal-palace",
+   "whoscored_id": "1983696"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "brighton",
+   "away": "manchester-united",
+   "whoscored_id": "1983699"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "newcastle",
+   "whoscored_id": "1983702"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "leeds",
+   "away": "everton",
+   "whoscored_id": "1983705"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "coventry",
+   "whoscored_id": "1983708"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "tottenham",
+   "whoscored_id": "1983711"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "fulham",
+   "whoscored_id": "1983714"
+  },
+  {
+   "kickoff_utc": "2027-01-02T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "hull-city",
+   "whoscored_id": "1983717"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "arsenal",
+   "away": "brentford",
+   "whoscored_id": "1983720"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "brighton",
+   "away": "bournemouth",
+   "whoscored_id": "1983723"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "chelsea",
+   "whoscored_id": "1983726"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "everton",
+   "away": "aston-villa",
+   "whoscored_id": "1983729"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "fulham",
+   "away": "tottenham",
+   "whoscored_id": "1983731"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "ipswich",
+   "away": "coventry",
+   "whoscored_id": "1983734"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "leeds",
+   "away": "manchester-city",
+   "whoscored_id": "1983737"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "manchester-united",
+   "away": "newcastle",
+   "whoscored_id": "1983739"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "hull-city",
+   "whoscored_id": "1983634"
+  },
+  {
+   "kickoff_utc": "2027-01-06T20:00:00+00:00",
+   "home": "sunderland",
+   "away": "liverpool",
+   "whoscored_id": "1983636"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "manchester-united",
+   "whoscored_id": "1983641"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "ipswich",
+   "whoscored_id": "1983638"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "brentford",
+   "away": "brighton",
+   "whoscored_id": "1983644"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "sunderland",
+   "whoscored_id": "1983646"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "coventry",
+   "away": "everton",
+   "whoscored_id": "1983648"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "arsenal",
+   "whoscored_id": "1983649"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "crystal-palace",
+   "whoscored_id": "1983650"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983654"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "fulham",
+   "whoscored_id": "1983658"
+  },
+  {
+   "kickoff_utc": "2027-01-16T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "leeds",
+   "whoscored_id": "1983660"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "newcastle",
+   "whoscored_id": "1983663"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "brighton",
+   "away": "manchester-city",
+   "whoscored_id": "1983665"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "tottenham",
+   "whoscored_id": "1983667"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "everton",
+   "away": "brentford",
+   "whoscored_id": "1983669"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "fulham",
+   "away": "aston-villa",
+   "whoscored_id": "1983671"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "hull-city",
+   "whoscored_id": "1983674"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "leeds",
+   "away": "chelsea",
+   "whoscored_id": "1983677"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "liverpool",
+   "whoscored_id": "1983680"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "bournemouth",
+   "whoscored_id": "1983683"
+  },
+  {
+   "kickoff_utc": "2027-01-23T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "coventry",
+   "whoscored_id": "1983686"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "ipswich",
+   "whoscored_id": "1983692"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "fulham",
+   "whoscored_id": "1983689"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "brentford",
+   "away": "manchester-united",
+   "whoscored_id": "1983695"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983698"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "coventry",
+   "away": "leeds",
+   "whoscored_id": "1983701"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "crystal-palace",
+   "whoscored_id": "1983704"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "everton",
+   "whoscored_id": "1983707"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "arsenal",
+   "whoscored_id": "1983710"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "brighton",
+   "whoscored_id": "1983713"
+  },
+  {
+   "kickoff_utc": "2027-01-30T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "sunderland",
+   "whoscored_id": "1983716"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "liverpool",
+   "whoscored_id": "1983718"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "brighton",
+   "away": "hull-city",
+   "whoscored_id": "1983721"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "coventry",
+   "whoscored_id": "1983724"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "everton",
+   "away": "newcastle",
+   "whoscored_id": "1983727"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "fulham",
+   "away": "manchester-city",
+   "whoscored_id": "1983730"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "tottenham",
+   "whoscored_id": "1983750"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "leeds",
+   "away": "bournemouth",
+   "whoscored_id": "1983752"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "chelsea",
+   "whoscored_id": "1983754"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "brentford",
+   "whoscored_id": "1983756"
+  },
+  {
+   "kickoff_utc": "2027-02-06T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "aston-villa",
+   "whoscored_id": "1983758"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "aston-villa",
+   "away": "bournemouth",
+   "whoscored_id": "1983760"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "coventry",
+   "away": "liverpool",
+   "whoscored_id": "1983762"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "brentford",
+   "whoscored_id": "1983764"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "everton",
+   "away": "leeds",
+   "whoscored_id": "1983766"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "fulham",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983768"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "hull-city",
+   "away": "sunderland",
+   "whoscored_id": "1983770"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "ipswich",
+   "away": "arsenal",
+   "whoscored_id": "1983772"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "manchester-united",
+   "away": "brighton",
+   "whoscored_id": "1983774"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "newcastle",
+   "away": "chelsea",
+   "whoscored_id": "1983776"
+  },
+  {
+   "kickoff_utc": "2027-02-10T20:00:00+00:00",
+   "home": "tottenham",
+   "away": "manchester-city",
+   "whoscored_id": "1983778"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "fulham",
+   "whoscored_id": "1983783"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "crystal-palace",
+   "whoscored_id": "1983780"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "brentford",
+   "away": "coventry",
+   "whoscored_id": "1983785"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "brighton",
+   "away": "tottenham",
+   "whoscored_id": "1983786"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "ipswich",
+   "whoscored_id": "1983788"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "leeds",
+   "away": "aston-villa",
+   "whoscored_id": "1983791"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "hull-city",
+   "whoscored_id": "1983793"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "newcastle",
+   "whoscored_id": "1983795"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "manchester-united",
+   "whoscored_id": "1983798"
+  },
+  {
+   "kickoff_utc": "2027-02-20T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "everton",
+   "whoscored_id": "1983802"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "chelsea",
+   "whoscored_id": "1983803"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "coventry",
+   "away": "bournemouth",
+   "whoscored_id": "1983804"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "sunderland",
+   "whoscored_id": "1983733"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "everton",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983735"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "fulham",
+   "away": "leeds",
+   "whoscored_id": "1983738"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "manchester-city",
+   "whoscored_id": "1983740"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "brighton",
+   "whoscored_id": "1983741"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "arsenal",
+   "whoscored_id": "1983742"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "brentford",
+   "whoscored_id": "1983743"
+  },
+  {
+   "kickoff_utc": "2027-02-27T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "liverpool",
+   "whoscored_id": "1983744"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "arsenal",
+   "away": "crystal-palace",
+   "whoscored_id": "1983746"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "bournemouth",
+   "away": "tottenham",
+   "whoscored_id": "1983745"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "brentford",
+   "away": "ipswich",
+   "whoscored_id": "1983747"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "brighton",
+   "away": "fulham",
+   "whoscored_id": "1983748"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "chelsea",
+   "away": "coventry",
+   "whoscored_id": "1983749"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "leeds",
+   "away": "hull-city",
+   "whoscored_id": "1983751"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "liverpool",
+   "away": "aston-villa",
+   "whoscored_id": "1983753"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "manchester-city",
+   "away": "everton",
+   "whoscored_id": "1983755"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "newcastle",
+   "whoscored_id": "1983757"
+  },
+  {
+   "kickoff_utc": "2027-03-03T20:00:00+00:00",
+   "home": "sunderland",
+   "away": "manchester-united",
+   "whoscored_id": "1983759"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "hull-city",
+   "whoscored_id": "1983763"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "bournemouth",
+   "away": "newcastle",
+   "whoscored_id": "1983761"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "arsenal",
+   "whoscored_id": "1983765"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "coventry",
+   "away": "manchester-city",
+   "whoscored_id": "1983767"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "fulham",
+   "whoscored_id": "1983769"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "leeds",
+   "away": "brighton",
+   "whoscored_id": "1983771"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "ipswich",
+   "whoscored_id": "1983773"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "everton",
+   "whoscored_id": "1983775"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "brentford",
+   "whoscored_id": "1983777"
+  },
+  {
+   "kickoff_utc": "2027-03-13T15:00:00+00:00",
+   "home": "tottenham",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983779"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "sunderland",
+   "whoscored_id": "1983781"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "brentford",
+   "away": "bournemouth",
+   "whoscored_id": "1983782"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "brighton",
+   "away": "coventry",
+   "whoscored_id": "1983784"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "everton",
+   "away": "tottenham",
+   "whoscored_id": "1983787"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "fulham",
+   "away": "liverpool",
+   "whoscored_id": "1983789"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "chelsea",
+   "whoscored_id": "1983790"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "crystal-palace",
+   "whoscored_id": "1983792"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "manchester-city",
+   "away": "manchester-united",
+   "whoscored_id": "1983794"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "newcastle",
+   "away": "leeds",
+   "whoscored_id": "1983796"
+  },
+  {
+   "kickoff_utc": "2027-03-20T15:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "aston-villa",
+   "whoscored_id": "1983797"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "brighton",
+   "whoscored_id": "1983800"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "manchester-city",
+   "whoscored_id": "1983799"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "chelsea",
+   "away": "fulham",
+   "whoscored_id": "1983801"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "coventry",
+   "away": "arsenal",
+   "whoscored_id": "1983805"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "everton",
+   "whoscored_id": "1983806"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "leeds",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983807"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "liverpool",
+   "away": "newcastle",
+   "whoscored_id": "1983808"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "manchester-united",
+   "away": "hull-city",
+   "whoscored_id": "1983809"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "sunderland",
+   "away": "ipswich",
+   "whoscored_id": "1983810"
+  },
+  {
+   "kickoff_utc": "2027-04-10T14:00:00+00:00",
+   "home": "tottenham",
+   "away": "brentford",
+   "whoscored_id": "1983811"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "arsenal",
+   "away": "aston-villa",
+   "whoscored_id": "1983812"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "brentford",
+   "away": "leeds",
+   "whoscored_id": "1983813"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "brighton",
+   "away": "chelsea",
+   "whoscored_id": "1983858"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "everton",
+   "away": "bournemouth",
+   "whoscored_id": "1983859"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "fulham",
+   "away": "sunderland",
+   "whoscored_id": "1983860"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "hull-city",
+   "away": "coventry",
+   "whoscored_id": "1983861"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "ipswich",
+   "away": "manchester-united",
+   "whoscored_id": "1983862"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "crystal-palace",
+   "whoscored_id": "1983863"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "newcastle",
+   "away": "tottenham",
+   "whoscored_id": "1983864"
+  },
+  {
+   "kickoff_utc": "2027-04-17T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "liverpool",
+   "whoscored_id": "1983865"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "coventry",
+   "whoscored_id": "1983867"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "arsenal",
+   "whoscored_id": "1983866"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "brentford",
+   "away": "fulham",
+   "whoscored_id": "1983868"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "chelsea",
+   "away": "manchester-city",
+   "whoscored_id": "1983869"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "everton",
+   "away": "brighton",
+   "whoscored_id": "1983870"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "leeds",
+   "away": "liverpool",
+   "whoscored_id": "1983871"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "manchester-united",
+   "away": "crystal-palace",
+   "whoscored_id": "1983872"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "newcastle",
+   "away": "ipswich",
+   "whoscored_id": "1983873"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "sunderland",
+   "whoscored_id": "1983874"
+  },
+  {
+   "kickoff_utc": "2027-04-24T14:00:00+00:00",
+   "home": "tottenham",
+   "away": "hull-city",
+   "whoscored_id": "1983875"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "arsenal",
+   "away": "tottenham",
+   "whoscored_id": "1983876"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "brighton",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983877"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "coventry",
+   "away": "manchester-united",
+   "whoscored_id": "1983878"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "aston-villa",
+   "whoscored_id": "1983879"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "fulham",
+   "away": "everton",
+   "whoscored_id": "1983880"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "hull-city",
+   "away": "bournemouth",
+   "whoscored_id": "1983881"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "ipswich",
+   "away": "leeds",
+   "whoscored_id": "1983882"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "liverpool",
+   "away": "chelsea",
+   "whoscored_id": "1983883"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "brentford",
+   "whoscored_id": "1983884"
+  },
+  {
+   "kickoff_utc": "2027-05-01T14:00:00+00:00",
+   "home": "sunderland",
+   "away": "newcastle",
+   "whoscored_id": "1983885"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "manchester-united",
+   "whoscored_id": "1983886"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "brentford",
+   "away": "aston-villa",
+   "whoscored_id": "1983887"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "brighton",
+   "away": "sunderland",
+   "whoscored_id": "1983888"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "everton",
+   "away": "hull-city",
+   "whoscored_id": "1983890"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "fulham",
+   "away": "ipswich",
+   "whoscored_id": "1983892"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "leeds",
+   "away": "arsenal",
+   "whoscored_id": "1983894"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "liverpool",
+   "whoscored_id": "1983898"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "newcastle",
+   "away": "coventry",
+   "whoscored_id": "1983904"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "crystal-palace",
+   "whoscored_id": "1983905"
+  },
+  {
+   "kickoff_utc": "2027-05-08T14:00:00+00:00",
+   "home": "tottenham",
+   "away": "chelsea",
+   "whoscored_id": "1983906"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "arsenal",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983907"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "aston-villa",
+   "away": "newcastle",
+   "whoscored_id": "1983908"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "chelsea",
+   "away": "everton",
+   "whoscored_id": "1983909"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "coventry",
+   "away": "tottenham",
+   "whoscored_id": "1983910"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "brighton",
+   "whoscored_id": "1983911"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "hull-city",
+   "away": "fulham",
+   "whoscored_id": "1983912"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "ipswich",
+   "away": "manchester-city",
+   "whoscored_id": "1983913"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "liverpool",
+   "away": "brentford",
+   "whoscored_id": "1983914"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "manchester-united",
+   "away": "leeds",
+   "whoscored_id": "1983915"
+  },
+  {
+   "kickoff_utc": "2027-05-15T14:00:00+00:00",
+   "home": "sunderland",
+   "away": "bournemouth",
+   "whoscored_id": "1983916"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "bournemouth",
+   "away": "chelsea",
+   "whoscored_id": "1983917"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "brentford",
+   "away": "hull-city",
+   "whoscored_id": "1983918"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "brighton",
+   "away": "liverpool",
+   "whoscored_id": "1983919"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "everton",
+   "away": "arsenal",
+   "whoscored_id": "1983920"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "fulham",
+   "away": "coventry",
+   "whoscored_id": "1983921"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "leeds",
+   "away": "sunderland",
+   "whoscored_id": "1983922"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "manchester-city",
+   "away": "aston-villa",
+   "whoscored_id": "1983923"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "newcastle",
+   "away": "crystal-palace",
+   "whoscored_id": "1983924"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "nottingham-forest",
+   "away": "ipswich",
+   "whoscored_id": "1983925"
+  },
+  {
+   "kickoff_utc": "2027-05-23T14:00:00+00:00",
+   "home": "tottenham",
+   "away": "manchester-united",
+   "whoscored_id": "1983889"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "arsenal",
+   "away": "brighton",
+   "whoscored_id": "1983891"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "aston-villa",
+   "away": "tottenham",
+   "whoscored_id": "1983893"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "chelsea",
+   "away": "brentford",
+   "whoscored_id": "1983895"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "coventry",
+   "away": "nottingham-forest",
+   "whoscored_id": "1983896"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "crystal-palace",
+   "away": "leeds",
+   "whoscored_id": "1983897"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "hull-city",
+   "away": "newcastle",
+   "whoscored_id": "1983899"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "ipswich",
+   "away": "everton",
+   "whoscored_id": "1983900"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "liverpool",
+   "away": "bournemouth",
+   "whoscored_id": "1983901"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "manchester-united",
+   "away": "fulham",
+   "whoscored_id": "1983902"
+  },
+  {
+   "kickoff_utc": "2027-05-30T15:00:00+00:00",
+   "home": "sunderland",
+   "away": "manchester-city",
+   "whoscored_id": "1983903"
+  }
+ ]
+}
