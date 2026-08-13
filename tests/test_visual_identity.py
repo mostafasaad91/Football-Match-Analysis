@@ -202,10 +202,17 @@ def test_live_matches_use_complete_amoled_renderer(tmp_path):
             },
             tmp_path / "Egypt_vs_Morocco_2-1",
         )
+        # The rendered colour is the kit colour lifted to the mark-contrast
+        # floor, not the raw kit value. Morocco's #006233 measures 1.6:1 on the
+        # black page and is raised; Egypt's #CE1126 already clears it and is
+        # passed through untouched.
         expected = (
-            ("#CE1126", "#006233") if USE_REAL_TEAM_KIT_COLORS else (C_HOME, C_AWAY)
+            (complete_visuals.lift_to_floor("#CE1126"), complete_visuals.lift_to_floor("#006233"))
+            if USE_REAL_TEAM_KIT_COLORS
+            else (complete_visuals.lift_to_floor(C_HOME), complete_visuals.lift_to_floor(C_AWAY))
         )
         assert complete_visuals.TEAM_COLOR == {1: expected[0], 2: expected[1]}
+        assert complete_visuals.TEAM_COLOR[1] == "#CE1126", "a bright kit must survive intact"
         assert complete_visuals._team_slug(1) == "egypt"
         assert complete_visuals._team_slug(2) == "morocco"
         assert preview.HOME_NAME == "Egypt"

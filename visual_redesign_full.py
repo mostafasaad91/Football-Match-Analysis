@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import colorsys
 import gc
 import hashlib
 import math
@@ -160,10 +161,70 @@ def _team_series_palette(team_color: str) -> tuple[str, str]:
     return mcolors.to_hex(primary_rgb), mcolors.to_hex(secondary_rgb)
 
 
+# Minimum contrast a drawn mark must reach against the page. WCAG puts the
+# floor for non-text graphics at 3:1; this sits above it so a thin arrow or a
+# 1px network link still reads, not only a filled bar.
+MARK_CONTRAST_FLOOR = 3.6
+
+
+def _relative_luminance(rgb) -> float:
+    channels = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def _contrast_on_bg(rgb) -> float:
+    bright, dark = sorted((_relative_luminance(rgb), _relative_luminance(mcolors.to_rgb(BG))))
+    return (dark + 0.05) / (bright + 0.05)
+
+
+def lift_to_floor(color: str, floor: float = MARK_CONTRAST_FLOOR) -> str:
+    """Raise a colour's lightness until it clears the floor, keeping its hue.
+
+    Real kit colours are frequently dark — navy, claret, maroon, near-black.
+    Drawn unmodified on a pure black page they measure under 2:1: PSG's
+    #004170 rendered at 1.99 and Aston Villa's #7A003C at 1.89, roughly half
+    the readable minimum, which is why arrows and network links looked muted.
+    Hue and saturation are preserved, so the side is still recognisably itself
+    — only brighter.
+    """
+    try:
+        rgb = mcolors.to_rgb(color)
+    except ValueError:
+        return color
+    if _contrast_on_bg(rgb) >= floor:
+        # Returned verbatim, not round-tripped through to_hex, so a colour that
+        # already reads keeps the exact string the palette defined — including
+        # its case, which callers compare against.
+        return color
+
+    hue, lightness, saturation = colorsys.rgb_to_hls(*rgb)
+    low, high = lightness, 1.0
+    for _ in range(24):
+        mid = (low + high) / 2
+        candidate = colorsys.hls_to_rgb(hue, mid, saturation)
+        if _contrast_on_bg(candidate) >= floor:
+            high = mid
+        else:
+            low = mid
+
+    # The search runs on floats, but the returned colour is an 8-bit hex. That
+    # rounding can drop the result a hundredth under the floor, which makes a
+    # second call lift it again — so step until the *rounded* value clears.
+    for _ in range(12):
+        hex_value = mcolors.to_hex(colorsys.hls_to_rgb(hue, min(high, 1.0), saturation))
+        if _contrast_on_bg(mcolors.to_rgb(hex_value)) >= floor or high >= 1.0:
+            return hex_value
+        high = min(high + 0.004, 1.0)
+    return hex_value
+
+
 def _team_mark_color(team_id: int) -> str:
-    # Preserve the approved role colour exactly. No lift, outline or glow is
-    # added for dark teams; the user-selected palette is the rendered palette.
-    return TEAM_COLOR.get(team_id, "#94A3B8")
+    """The team's colour as drawn on the pitch, lifted to stay legible.
+
+    The chrome — headers, rules, panel text — keeps the exact kit value,
+    because it sits on a panel rather than on the black ground.
+    """
+    return lift_to_floor(TEAM_COLOR.get(team_id, "#94A3B8"))
 
 
 def _on_team_heatmap_accent(team_color: str) -> str:
@@ -235,7 +296,12 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     # choose_matchup_colors (already clash- and contrast-checked). In roles mode
     # the visual roles are fixed instead: first-listed team is electric blue,
     # second-listed team is true yellow, for every fixture.
-    HOME, AWAY = _resolve_fixture_colors(match_info)
+    # Lift once, here, rather than at each draw call. Most visuals reach for the
+    # HOME/AWAY globals directly instead of going through _team_mark_color, so
+    # lifting only there left arrows, bars and heatmap ramps on the raw kit
+    # value — PSG's navy measured 1.99:1 against the black page and Aston
+    # Villa's claret 1.89:1, against a readable minimum of 3.
+    HOME, AWAY = (lift_to_floor(colour) for colour in _resolve_fixture_colors(match_info))
     MATCH_SCORE = _display_score(match_info.get("score"))
     OUT = Path(output_dir).resolve()
     MATCH_KEY = OUT.name
