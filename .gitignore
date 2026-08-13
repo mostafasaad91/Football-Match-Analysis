@@ -89,3 +89,6 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.xml
+
+# Local deliverables — not published to the repository
+docs/
