@@ -4,12 +4,13 @@
 
 # Football Match Analysis
 
-**One WhoScored URL in. A 49-visual, 80-page tactical report out.**
+**One WhoScored URL in. A 53-visual, 80-page tactical report out.**
 
 An end-to-end Python pipeline that turns Opta event data into a post-match
-analysis package: 30 advanced metrics, a pure-black visual identity built from
-real kit colours, a written tactical report, and a twelve-post thread of the
-whole match story.
+analysis package: 30 advanced metrics, a written tactical report opening on
+artwork drawn from the match itself, four posters built to be published the
+moment the whistle goes, and the whole thing rendered twice — once on black,
+once on paper.
 
 Created and maintained by **Mostafa Saad**.
 
@@ -26,15 +27,15 @@ python football_match_analysis.py
 
 | Output | Detail |
 | --- | --- |
-| **49 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
+| **53 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
 | **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice — opening on a cover drawn from the match itself |
 | **4 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
 | **Player radars** | A full role profile per player, coloured to their team |
+| **Light copy** | The same package again on `#F5F5F5`, in `light/` |
 | **CSV exports** | Events, players and every calculated metric |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
 
-Everything lands in `output/<home>_vs_<away>_<score>/`, and a light-page copy
-of the same package in `output/<home>_vs_<away>_<score>/light/`.
+Everything lands in `output/<home>_vs_<away>_<score>/`.
 
 ### Two pages
 
@@ -128,14 +129,49 @@ Every panel is drawn straight onto the poster canvas from the event frame.
 An earlier version composited the already-rendered PNGs into a contact sheet,
 which scaled each one to a thumbnail and took its type down with it.
 
+---
+
+## Branding
+
+The publisher's badge and both club crests appear on every visual, on all four
+posters, and on the report's cover.
+
 Crests come from the provider's own CDN, addressed by the same team id the
-event data already carries, so no name matching is involved. They are cached
-under `assets/crests` and that directory is untracked — club crests are
-trademarks, fine to render on an analysis board with attribution, not ours to
-redistribute. A side whose crest cannot be fetched gets a monogram roundel in
-its kit colour instead, and the poster still builds.
-Forty-eight of the forty-nine visuals appear; the omissions are listed in code
-with the visual that already tells their story.
+event data already carries, so no name matching is involved — the mapping that
+usually breaks the moment a club is written "Wolves" in one source and
+"Wolverhampton Wanderers" in another. They are cached under `assets/crests`,
+and that directory is untracked: club crests are trademarks, fine to render on
+an analysis board with attribution, not ours to redistribute. A side whose
+crest cannot be fetched gets a monogram roundel in its kit colour instead, and
+the page still builds.
+
+A crest earns a backing plate on the share of its pixels that separate from
+the page, not on its mean colour — Aston Villa's averages light because of the
+pale shield behind the lion, while its claret border and blue field both read.
+
+---
+
+## The cover
+
+The report opens on artwork built from the fixture it introduces: the control
+surface both sides held, with every shot of the match on top of it, bleeding
+full width from the fold to the top of the sheet. One picture and one
+sentence — the statistics are inside.
+
+The artwork is rendered rather than drawn in the PDF, because both layers are
+already computed surfaces here and reportlab cannot interpolate a field. It
+stays dark on both pages: a dark plate on paper reads as a photograph laid on
+the sheet, and a light one would dissolve into it. Its kit colours are
+therefore lifted against *its own* ground rather than the page's — on the light
+page the report hands over PSG's raw `#004170`, which is correct against paper
+and all but invisible on a `#0E1218` image.
+
+A fixture whose artwork cannot render falls back to a typographic cover, which
+leads on the match's most lopsided percentage. That is chosen on the
+*relative* gap, so a 9.1% against 3.7% conversion rate outranks a 54–46
+territory split. Conversion rates draw as two tracks against a common ceiling
+rather than one divided bar: each is a share of its own attempts, and the two
+do not add up.
 
 ---
 
@@ -203,7 +239,8 @@ as a ranking.
 
 ## Visual identity
 
-- Pure black grounds with white pitch markings.
+- Pure black grounds with white pitch markings, and a light `#F5F5F5`
+  counterpart that is a second publishing target rather than a recolour.
 - **Real home-kit colours** for roughly 975 clubs and national teams, resolved
   from `team_palettes.py`. When two kits clash, or one fails the contrast floor
   against black, the renderer substitutes a readable variant rather than
@@ -214,6 +251,9 @@ as a ranking.
   never changes colour between pages of one report.
 - Player-network labels are placed against every other node and penalised for
   running off the pitch, so a name never lands on a neighbour's marker.
+- Every mark is measured against the page it is drawn on. The contrast lift
+  moves a kit colour *away* from whichever ground is active — brightening PSG's
+  navy on black, darkening Manchester City's sky blue on paper.
 
 Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 
@@ -243,12 +283,12 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `match_report.py` | Report pages, PPDA analysis, player tables, PDF assembly |
 | `tactical_pdf_report.py` | Cover, tactical commentary and page chrome |
 | `tactical_visualizations.py` | Metric adapters and chart helpers |
-| `visual_redesign_full.py` | The production renderer and its 49 visuals |
+| `visual_redesign_full.py` | The production renderer and its 53 visuals |
 | `visual_redesign_preview.py` | Shared fixture identity and page furniture |
 | `player_radar.py` | Player role profiles |
 | `visualization_components.py` | Shared chart components and readability helpers |
 | `visualization_design.py` | Visual tokens, typography, reusable frames |
-| `match_posters.py` | The two post-match posters |
+| `match_posters.py` | The four post-match posters |
 | `render_light.py` | The light-page copy of a finished package |
 | `crests.py` | Club crest fetch, cache, plate and fallback |
 | `cover_art.py` | The report cover's hero image |
@@ -274,7 +314,11 @@ produces the numbers it produced before.
 
 Other tests check things that render perfectly and are still wrong — a label
 that lands on a marker, a panel row drawn through the heading below it, a
-verdict sentence that contradicts the numbers printed beside it.
+verdict sentence that contradicts the numbers printed beside it, an indicator
+printed on two posters, a cover that leaves half its page empty. Several run
+the same check in a child process on each theme, because the palette is fixed
+when `visualization_components` is first imported and one process can only see
+one of them.
 
 When a metric changes on purpose, read the drift, then accept it:
 
