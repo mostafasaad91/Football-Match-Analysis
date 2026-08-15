@@ -28,7 +28,7 @@ python football_match_analysis.py
 | --- | --- |
 | **49 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
 | **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice |
-| **12 thread sheets** | Four visuals each, ordered as a narrative — built to be posted one per tweet |
+| **2 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
 | **Player radars** | A full role profile per player, coloured to their team |
 | **CSV exports** | Events, players and every calculated metric |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
@@ -86,18 +86,26 @@ python visual_redesign_full.py
 
 ---
 
-## The thread
+## The posters
 
-The twelve contact sheets are written to be posted in order, one per post, and
-to carry the match on their own without the report around them:
+Two 1640x2048 boards, sized to the tallest frame a timeline shows without
+cropping, each complete on its own:
 
-| | | | |
+| | Left column | Centre | Right column |
 | --- | --- | --- | --- |
-| 01 The Result | 02 The Rhythm | 03 The Shots | 04 The Territory |
-| 05 The Networks | 06 How They Passed | 07 Progression | 08 Central Access |
-| 09 Into the Box | 10 The Press | 11 Defending | 12 The Difference |
+| **1 · Post-match report** | Shape, threat zones, defending | Sixteen indicators, shot map, game control | Shape, threat zones, defending |
+| **2 · How it was played** | Box entries, progression, pressing | Pitch control, zone dominance, sequence leaders | Box entries, progression, pressing |
 
-Each sheet holds four visuals with a line under each saying what it answers.
+Every panel is drawn straight onto the poster canvas from the event frame.
+An earlier version composited the already-rendered PNGs into a contact sheet,
+which scaled each one to a thumbnail and took its type down with it.
+
+Crests come from the provider's own CDN, addressed by the same team id the
+event data already carries, so no name matching is involved. They are cached
+under `assets/crests` and that directory is untracked — club crests are
+trademarks, fine to render on an analysis board with attribution, not ours to
+redistribute. A side whose crest cannot be fetched gets a monogram roundel in
+its kit colour instead, and the poster still builds.
 Forty-eight of the forty-nine visuals appear; the omissions are listed in code
 with the visual that already tells their story.
 
@@ -212,7 +220,8 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `player_radar.py` | Player role profiles |
 | `visualization_components.py` | Shared chart components and readability helpers |
 | `visualization_design.py` | Visual tokens, typography, reusable frames |
-| `build_qa_contact_sheets.py` | The twelve thread sheets |
+| `match_posters.py` | The two post-match posters |
+| `crests.py` | Club crest fetch, cache and fallback |
 | `team_palettes.py` | Kit colours for ~975 clubs and national teams |
 | `match_store.py` | SQLite history and the gzipped payload archive |
 | `team_history.py` | Command-line reader for the stored history |

@@ -3107,26 +3107,29 @@ def generate_match_package(
     paths = sorted({path.resolve() for path in paths}, key=lambda path: path.name)
     catalog = build_catalog(paths)
     pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
-    from build_qa_contact_sheets import build_qa_contact_sheets
-    qa_dashboards = build_qa_contact_sheets(
-        OUT,
+    from match_posters import build_match_posters
+    posters = build_match_posters(
+        events, xg, team_metrics, player_metrics, players,
+        out_dir=OUT,
+        home_id=HOME_ID,
+        away_id=AWAY_ID,
         home_name=HOME_NAME,
         away_name=AWAY_NAME,
-        score=MATCH_SCORE,
         home_color=HOME,
         away_color=AWAY,
-        home_slug=_team_slug(HOME_ID),
-        away_slug=_team_slug(AWAY_ID),
+        score=MATCH_SCORE.replace("-", "—"),
+        competition=str(match_info.get("competition") or "MATCH ANALYSIS"),
+        match_date=str(match_info.get("date") or ""),
     )
     print(f"Generated {len(paths)} full redesigned visuals")
     print(f"Pitch visuals: {int(catalog['has_pitch'].sum())}")
-    print(f"QA dashboards: {len(qa_dashboards)}")
+    print(f"Posters: {len(posters)}")
     print(f"PDF: {pdf}")
     return {
         "visuals": paths,
         "catalog": OUT / "visual_catalog.csv",
         "pdf": pdf,
-        "qa_dashboards": qa_dashboards,
+        "posters": posters,
         "output_dir": OUT,
     }
 

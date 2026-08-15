@@ -92,3 +92,8 @@ coverage.xml
 
 # Local deliverables — not published to the repository
 docs/
+
+# Cached club crests. Fetched per fixture and rendered on the posters with
+# attribution; the crests themselves are club trademarks and are not ours to
+# redistribute, so the cache stays out of the repository.
+assets/crests/
