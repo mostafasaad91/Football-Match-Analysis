@@ -152,6 +152,111 @@ def theme() -> None:
     )
 
 
+# ── the header's fixture cluster ──────────────────────────────────────────
+# Crest, name, score, name, crest. Everything in it is placed from the
+# measured width of the names, not from fixed coordinates: the first version
+# put the crests at 0.600 and 0.933 and capped the names at twelve characters,
+# but a character is not a width. "MAN CITY" measured 0.052 of the figure and
+# "BLACKBURN RO" 0.083 at the same twelve characters, so the cap let the long
+# ones run into the crest beside them while leaving the short ones adrift.
+
+FIXTURE_Y = 0.954
+FIXTURE_SCORE_X = 0.765
+FIXTURE_CREST_W = 0.0245
+FIXTURE_NAME_SIZE = 8.2
+FIXTURE_SCORE_SIZE = 12
+# Clear space between the score and a name, and between a name and its crest.
+FIXTURE_GAP = 0.018
+# The cluster may not cross these; the strip's own edge is 0.965.
+FIXTURE_LEFT, FIXTURE_RIGHT = 0.578, 0.958
+# Words a club name must never end on once its tail has been dropped.
+_NAME_JOINERS = {"AND", "OF", "DE", "DEL", "THE", "&", "FC", "CF", "AFC"}
+
+
+def _text_width(fig: plt.Figure, text: str, size: float) -> float:
+    """Rendered width of one bold string, as a fraction of the figure width."""
+    if not text:
+        return 0.0
+    try:
+        renderer = fig.canvas.get_renderer()
+        item = fig.text(0.5, 0.5, text, fontsize=size, fontweight="bold")
+        width = item.get_window_extent(renderer=renderer).width
+        item.remove()
+        return width / (fig.get_figwidth() * fig.dpi)
+    except Exception:
+        # No renderer yet: fall back to an estimate wide enough to stay safe.
+        return len(text) * size * 0.78 / 72.0 / fig.get_figwidth()
+
+
+def _fit_name(fig: plt.Figure, name: str, budget: float) -> str:
+    """The most of ``name`` that fits ``budget``, shortened the way a club is.
+
+    Trailing words go first, because that is how these names actually shorten:
+    "Tottenham" and "Borussia" are what people call those clubs, while cutting
+    to a fixed width gives "TOTTENHAM HOTSP" and "BORUSSIA DORTMU". Only a
+    single word too long for the space falls back to a cut, and that one is
+    marked so it reads as an abbreviation rather than a rendering fault.
+    """
+    if budget <= 0:
+        return ""
+    words = name.upper().split()
+    while len(words) > 1:
+        if _text_width(fig, " ".join(words), FIXTURE_NAME_SIZE) <= budget:
+            return " ".join(words)
+        words = words[:-1]
+        # Dropping a word can leave the joiner that led to it: "Brighton and
+        # Hove Albion" cut to "BRIGHTON AND", which reads as an unfinished name.
+        while len(words) > 1 and words[-1] in _NAME_JOINERS:
+            words = words[:-1]
+
+    label = words[0] if words else ""
+    if _text_width(fig, label, FIXTURE_NAME_SIZE) <= budget:
+        return label
+    while label and _text_width(fig, label + "…", FIXTURE_NAME_SIZE) > budget:
+        label = label[:-1]
+    return label + "…" if label else ""
+
+
+def fixture_cluster(fig: plt.Figure, glow) -> None:
+    """Draw crest, name, score, name, crest across the header's right side."""
+    score = str(MATCH_SCORE)
+    score_half = _text_width(fig, score, FIXTURE_SCORE_SIZE) / 2
+    crest_span = FIXTURE_CREST_W + FIXTURE_GAP
+
+    # Each name gets whatever is left between the score and its own crest.
+    home_right = FIXTURE_SCORE_X - score_half - FIXTURE_GAP
+    away_left = FIXTURE_SCORE_X + score_half + FIXTURE_GAP
+    home_budget = home_right - (FIXTURE_LEFT + crest_span)
+    away_budget = (FIXTURE_RIGHT - crest_span) - away_left
+
+    home_label = _fit_name(fig, HOME_NAME, home_budget)
+    away_label = _fit_name(fig, AWAY_NAME, away_budget)
+    home_width = _text_width(fig, home_label, FIXTURE_NAME_SIZE)
+    away_width = _text_width(fig, away_label, FIXTURE_NAME_SIZE)
+
+    fig.text(home_right, FIXTURE_Y, home_label, color=HOME,
+             fontsize=FIXTURE_NAME_SIZE, fontweight="bold", ha="right",
+             va="center", zorder=95)
+    fig.text(FIXTURE_SCORE_X, FIXTURE_Y, score, color=TEXT,
+             fontsize=FIXTURE_SCORE_SIZE, fontweight="bold", ha="center",
+             va="center", zorder=95, path_effects=glow)
+    fig.text(away_left, FIXTURE_Y, away_label, color=AWAY,
+             fontsize=FIXTURE_NAME_SIZE, fontweight="bold", ha="left",
+             va="center", zorder=95)
+
+    # Crests sit a fixed gap outboard of the name actually drawn, addressed by
+    # the provider team id the event data already carries. A club whose crest
+    # cannot be fetched falls back to a monogram roundel and the strip reads on.
+    home_crest_x = home_right - home_width - FIXTURE_GAP - FIXTURE_CREST_W / 2
+    away_crest_x = away_left + away_width + FIXTURE_GAP + FIXTURE_CREST_W / 2
+    crests.place_crest(fig, home_crest_x, FIXTURE_Y + 0.0005, HOME_ID,
+                       monogram=HOME_NAME[:3].upper(), colour=HOME,
+                       width=FIXTURE_CREST_W, background=BG, zorder=95)
+    crests.place_crest(fig, away_crest_x, FIXTURE_Y + 0.0005, AWAY_ID,
+                       monogram=AWAY_NAME[:3].upper(), colour=AWAY,
+                       width=FIXTURE_CREST_W, background=BG, zorder=95)
+
+
 def amoled_header(
     fig: plt.Figure,
     title: str,
@@ -196,27 +301,7 @@ def amoled_header(
     fig.text(0.113, 0.881, trimmed, color=MUTED, fontsize=6.8,
              va="center", zorder=95)
 
-    # Crests sit outboard of the names, addressed by the provider team id the
-    # event data already carries. A club whose crest cannot be fetched falls
-    # back to a monogram roundel and the strip still reads.
-    # Names are capped so the cluster keeps its shape whatever the clubs are
-    # called: at full length "Borussia Dortmund" ran straight through the crest
-    # drawn outboard of it, and the strip has no more width to give.
-    home_label = HOME_NAME.upper()[:12]
-    away_label = AWAY_NAME.upper()[:12]
-    crests.place_crest(fig, 0.600, 0.9545, HOME_ID,
-                       monogram=HOME_NAME[:3].upper(), colour=HOME,
-                       width=0.0245, background=BG, zorder=95)
-    fig.text(0.685, 0.954, home_label, color=HOME, fontsize=8.2,
-             fontweight="bold", ha="right", va="center", zorder=95)
-    fig.text(0.765, 0.954, MATCH_SCORE, color=TEXT, fontsize=12,
-             fontweight="bold", ha="center", va="center", zorder=95,
-             path_effects=glow)
-    fig.text(0.845, 0.954, away_label, color=AWAY, fontsize=8.2,
-             fontweight="bold", ha="left", va="center", zorder=95)
-    crests.place_crest(fig, 0.933, 0.9545, AWAY_ID,
-                       monogram=AWAY_NAME[:3].upper(), colour=AWAY,
-                       width=0.0245, background=BG, zorder=95)
+    fixture_cluster(fig, glow)
     context = "FULL MATCH"
     if active_team in {HOME_NAME, AWAY_NAME}:
         context = f"TEAM VIEW  ·  {active_team.upper()}"
