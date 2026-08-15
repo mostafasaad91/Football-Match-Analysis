@@ -15,6 +15,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
 from match_report import compute_ppda_both
+from visualization_components import IS_LIGHT_THEME
 
 
 PAGE_W = 14 * 72
@@ -23,23 +24,42 @@ BASE_PAGE_H = 9 * 72
 VISUAL_NOTE_H = PAGE_H - BASE_PAGE_H
 
 # Aligned to the values the rendered visuals use, so the page chrome and the
-# images sitting on it are the same black rather than two near-blacks.
-BG = colors.HexColor("#000000")
-PANEL = colors.HexColor("#0A0A0A")
-PANEL_2 = colors.HexColor("#101010")
-GRID = colors.HexColor("#1C1C1C")
-TEXT = colors.HexColor("#FFFFFF")
-MUTED = colors.HexColor("#9A9A9A")
-NEUTRAL = colors.HexColor("#5A5A5A")
-HOME = colors.HexColor("#2F5BFF")
-AWAY = colors.HexColor("#FFD400")
+# images sitting on it are the same ground rather than two near-matches.
+#
+# This module carried the black values as literals and had no theme branch at
+# all, so the light package produced a black report with light visuals pasted
+# onto it — the one part of that package still wearing the other identity.
+if IS_LIGHT_THEME:
+    BG = colors.HexColor("#F5F5F5")
+    PANEL = colors.HexColor("#FFFFFF")
+    PANEL_2 = colors.HexColor("#EDEDED")
+    GRID = colors.HexColor("#D8D8D8")
+    TEXT = colors.HexColor("#1F1F1F")
+    MUTED = colors.HexColor("#5C6169")
+    NEUTRAL = colors.HexColor("#8A8F97")
+    HOME = colors.HexColor("#0A0A0A")
+    AWAY = colors.HexColor("#E76F51")
+else:
+    BG = colors.HexColor("#000000")
+    PANEL = colors.HexColor("#0A0A0A")
+    PANEL_2 = colors.HexColor("#101010")
+    GRID = colors.HexColor("#1C1C1C")
+    TEXT = colors.HexColor("#FFFFFF")
+    MUTED = colors.HexColor("#9A9A9A")
+    NEUTRAL = colors.HexColor("#5A5A5A")
+    HOME = colors.HexColor("#2F5BFF")
+    AWAY = colors.HexColor("#FFD400")
+
+# Fixture colours fall back to these when the caller supplies none, so the
+# fallback has to follow the page too.
+_DEFAULT_HOME, _DEFAULT_AWAY = HOME, AWAY
 
 # Structural marks — section numbers, card rules, the spine label. These name
 # parts of the report, not parts of the match, so they must not wear a colour
 # that competes with the two teams. The previous amber did: it ran to 1,398
 # characters against 648 for both kit colours combined, which made a fixed
 # accent, rather than the fixture, the loudest thing in the document.
-FOCUS = colors.HexColor("#C8CDD4")
+FOCUS = colors.HexColor("#3F4650") if IS_LIGHT_THEME else colors.HexColor("#C8CDD4")
 
 # Text sits on this margin everywhere: headers, commentary, cards and the
 # embedded visuals. One number, so a page has one left edge.
@@ -68,7 +88,7 @@ TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR = 40, 62
 # never a value, a bar, or anything a reader could mistake for a team. It reads
 # teal against Manchester City's bluer #6CABDD, but the rule is what keeps them
 # apart: the brand colour is never placed next to a number.
-BRAND = colors.HexColor("#6BCAD6")
+BRAND = colors.HexColor("#1F7C8A") if IS_LIGHT_THEME else colors.HexColor("#6BCAD6")
 
 # The publisher's badge. Absent on a fresh clone, so every use is guarded and
 # the cover falls back to a typographic wordmark rather than failing.
@@ -81,7 +101,7 @@ def _as_pdf_color(value, fallback):
         return colors.HexColor(str(value).strip())
     except (ValueError, AttributeError, TypeError):
         return fallback
-VALUE = colors.HexColor("#9A7CF2")
+VALUE = colors.HexColor("#5B3FBF") if IS_LIGHT_THEME else colors.HexColor("#9A7CF2")
 
 
 def _bool(series: pd.Series) -> pd.Series:
@@ -1415,6 +1435,18 @@ class TacticalPDF:
         c = self.canvas
         if LOGO_PATH.exists():
             try:
+                # The badge is a JPEG on its own black ground, so on the light
+                # page it lands as a bare black square. Give it a rounded plate
+                # of the same black and it reads as a deliberate badge tile
+                # instead of an unmasked crop.
+                if IS_LIGHT_THEME:
+                    pad = size * 0.06
+                    c.saveState()
+                    c.setFillColor(colors.HexColor("#0A0A0A"))
+                    c.roundRect(cx - size / 2 - pad, top - size - pad,
+                                size + 2 * pad, size + 2 * pad, size * 0.09,
+                                stroke=0, fill=1)
+                    c.restoreState()
                 c.drawImage(str(LOGO_PATH), cx - size / 2, top - size, size, size,
                             mask=None, preserveAspectRatio=True, anchor="c")
                 return top - size
@@ -1805,8 +1837,8 @@ def build_tactical_pdf(
     # blue/yellow border belonging to neither side.
     home_hex = str((match_info or {}).get("home_color") or "").strip() or "#2F5BFF"
     away_hex = str((match_info or {}).get("away_color") or "").strip() or "#FFD400"
-    HOME = _as_pdf_color(home_hex, colors.HexColor("#2F5BFF"))
-    AWAY = _as_pdf_color(away_hex, colors.HexColor("#FFD400"))
+    HOME = _as_pdf_color(home_hex, _DEFAULT_HOME)
+    AWAY = _as_pdf_color(away_hex, _DEFAULT_AWAY)
     output.parent.mkdir(parents=True, exist_ok=True)
     valid_paths = [Path(path).resolve() for path in paths if Path(path).exists()]
     context = build_context(events, xg, team_metrics, player_metrics, match_info)

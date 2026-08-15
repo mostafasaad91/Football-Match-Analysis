@@ -6,10 +6,18 @@ which shrank the type inside it past reading. Here every panel is drawn onto
 the poster's own canvas at the poster's own scale, so a number on a poster is
 as sharp as a number anywhere else in the project.
 
-Poster 1, THE MATCH, is what happened: the shape both sides passed in, the
-sixteen indicators, where the shots came from, and when each side was on top.
-Poster 2, HOW IT WAS PLAYED, is why: territory, progression, the penalty area,
-and who actually moved the result.
+Four boards, so a fixture is covered without the report around it:
+
+1. POST-MATCH REPORT -- what happened. Passing shape, sixteen indicators, the
+   shot map, and who was on top minute by minute.
+2. HOW IT WAS PLAYED -- why. Territory, progression, the penalty area,
+   pressing, and who connected the danger.
+3. THE TRANSITION GAME -- the match between the phases. Where possession was
+   surrendered, what the scoreline did to each side, delivery from wide, and
+   the middle nobody wants to give up.
+4. THE FINAL BALL -- the last action. Every shot, where it crossed the line,
+   what the restarts produced, and how much of the pitch each side had to
+   cross to get there.
 
 Both are 1640x2048 -- 4:5, the tallest frame a timeline shows without cropping.
 """
@@ -37,9 +45,13 @@ from match_metrics import (
     deep_completion_mask,
     final_third_entry_mask,
     high_regain_events,
+    pass_length_profile,
     pitch_control,
     progressive_pass_mask,
+    set_piece_breakdown,
+    shot_placement_zones,
     touch_mask,
+    turnover_events,
     xg_momentum,
 )
 from visualization_components import IS_LIGHT_THEME, text_on_fill
@@ -572,6 +584,370 @@ def panel_player_leaders(ax, player_metrics, home_id, away_id, home_colour, away
 
 
 # --------------------------------------------------------------------------
+# panels — the transition game
+# --------------------------------------------------------------------------
+
+def panel_ball_losses(ax, events, team_id, colour, *, flip=False):
+    """Where possession was surrendered, and which losses were punished."""
+    _pitch(ax, attack=not flip)
+    frame = turnover_events(events, team_id).dropna(subset=["x", "y"])
+    if frame.empty:
+        _footnote(ax, "no losses recorded")
+        return
+    punished = _bool(frame["punished"]) if "punished" in frame.columns else pd.Series(
+        False, index=frame.index)
+    for subset, size, alpha, edge in ((frame[~punished], 16, 0.55, "none"),
+                                      (frame[punished], 46, 0.95, INK)):
+        if subset.empty:
+            continue
+        sx, sy = _xy(subset["x"], subset["y"], flip=flip)
+        ax.scatter(sx, sy, s=size, color=colour, alpha=alpha, edgecolor=edge,
+                   linewidth=0.7, zorder=4)
+    conceded = float(pd.to_numeric(frame.get("conceded_xG"), errors="coerce").fillna(0).sum())
+    _footnote(ax, f"{len(frame)} losses · {int(punished.sum())} punished · {conceded:.2f} xg conceded")
+
+
+def panel_game_state(ax, team_metrics, home_colour, away_colour):
+    """What the scoreline did to each side.
+
+    The most under-read board in a match report: a team that stops attacking
+    once ahead and a team that only attacks once behind produce the same
+    ninety-minute totals as two sides who played the game evenly.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    home = _side_metrics(team_metrics, "home")
+    away = _side_metrics(team_metrics, "away")
+    states = ("leading", "drawing", "trailing")
+    peak = max(
+        (_num(side, f"game_state_{state}_xG") for side in (home, away) for state in states),
+        default=0.0,
+    ) or 1.0
+
+    band = 1.0 / len(states)
+    for i, state in enumerate(states):
+        top = 1.0 - i * band
+        ax.text(0.5, top - band * 0.10, state.upper(), color=MUTED, fontsize=6.4,
+                fontweight="bold", ha="center", va="center")
+        for j, (side, colour, align) in enumerate(
+            ((home, home_colour, -1), (away, away_colour, 1))
+        ):
+            xg = _num(side, f"game_state_{state}_xG")
+            share = xg / peak
+            centre = 0.5
+            # The bar has to stop short of the value printed beside it: at
+            # 0.40 the longest one ran straight under its own number.
+            width = 0.30 * share
+            x0 = centre - width if align < 0 else centre
+            bar_y = top - band * 0.46
+            ax.add_patch(Rectangle((x0, bar_y), width, band * 0.16,
+                                   facecolor=colour, edgecolor="none", zorder=3))
+            label_x = centre - 0.44 if align < 0 else centre + 0.44
+            ax.text(label_x, bar_y + band * 0.08, f"{xg:.2f}", color=colour,
+                    fontsize=7.6, fontweight="bold", va="center",
+                    ha="left" if align < 0 else "right", zorder=4)
+            detail = (f"{int(_num(side, f'game_state_{state}_shots'))} shots · "
+                      f"{int(_num(side, f'game_state_{state}_box_entries'))} box")
+            ax.text(label_x, bar_y - band * 0.14, detail, color=NEUTRAL, fontsize=5.4,
+                    fontweight="bold", va="center",
+                    ha="left" if align < 0 else "right", zorder=4)
+        if i:
+            ax.plot([0.03, 0.97], [top, top], color=GRID, lw=0.5)
+    _footnote(ax, "expected goals produced in each scoreline state")
+
+
+def panel_crosses(ax, events, team_id, colour, *, flip=False):
+    """Delivery from wide, completed and not."""
+    _pitch(ax, attack=not flip)
+    team = events[events["team_id"].eq(team_id)]
+    frame = team[cross_mask(team)].dropna(subset=["x", "y", "end_x", "end_y"])
+    if frame.empty:
+        _footnote(ax, "no crosses")
+        return
+    complete = frame["outcome"].astype(str).str.lower().eq("successful")
+    panel_arrows(ax, frame[~complete], NEUTRAL, flip=flip, lw=0.55, alpha=0.5)
+    panel_arrows(ax, frame[complete], colour, flip=flip, lw=1.0, alpha=0.9, head=2.1)
+    _footnote(ax, f"{len(frame)} crosses · {int(complete.sum())} completed")
+
+
+def panel_thirds(ax, team_metrics, home_colour, away_colour, home_name, away_name):
+    """Touch distribution by third: where each side actually spent the match."""
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    bands = (("touch_def_pct", "DEFENSIVE THIRD"), ("touch_mid_pct", "MIDDLE THIRD"),
+             ("touch_att_pct", "ATTACKING THIRD"))
+    for column, (side, colour, name) in enumerate((
+        (_side_metrics(team_metrics, "home"), home_colour, home_name),
+        (_side_metrics(team_metrics, "away"), away_colour, away_name),
+    )):
+        x0 = 0.06 + column * 0.50
+        width = 0.38
+        ax.text(x0 + width / 2, 0.965, name.upper()[:16], color=colour, fontsize=6.6,
+                fontweight="bold", ha="center", va="top")
+        bottom = 0.06
+        # Stacked from the defensive third up, so the column reads like the
+        # pitch it describes.
+        for depth, (key, label) in enumerate(bands):
+            share = _num(side, key) / 100.0
+            height = share * 0.80
+            alpha = 0.30 + 0.55 * (depth / (len(bands) - 1))
+            ax.add_patch(Rectangle((x0, bottom), width, height, facecolor=colour,
+                                   alpha=alpha, edgecolor=BG, linewidth=1.0, zorder=2))
+            blend = mcolors.to_hex(
+                (1 - alpha) * np.asarray(mcolors.to_rgb(BG))
+                + alpha * np.asarray(mcolors.to_rgb(colour))
+            )
+            ink = text_on_fill(blend)
+            ax.text(x0 + width / 2, bottom + height / 2 + 0.026,
+                    f"{_num(side, key):.0f}%", color=ink, fontsize=7.4,
+                    fontweight="bold", ha="center", va="center", zorder=3)
+            ax.text(x0 + width / 2, bottom + height / 2 - 0.026, label,
+                    color=ink, fontsize=5.0, fontweight="bold", alpha=0.75,
+                    ha="center", va="center", zorder=3)
+            bottom += height
+    _footnote(ax, "share of each side's own touches")
+
+
+def panel_zone14(ax, events, team_id, colour, *, flip=False):
+    """Passes into zone 14 -- the pocket a settled block exists to protect."""
+    _pitch(ax, attack=not flip)
+    team = events[events["team_id"].eq(team_id)
+                  & events["type"].astype(str).eq("Pass")
+                  & events["outcome"].astype(str).str.lower().eq("successful")]
+    team = team.dropna(subset=["x", "y", "end_x", "end_y"]).copy()
+    end_x = pd.to_numeric(team["end_x"], errors="coerce")
+    end_y = pd.to_numeric(team["end_y"], errors="coerce")
+    # Zone 14: the central channel immediately outside the penalty area.
+    into = team[end_x.between(70, 83) & end_y.between(33, 67)]
+    half = PITCH_WIDTH / 2
+    lo = _xy([70.0], [50.0], flip=flip)[1][0]
+    hi = _xy([83.0], [50.0], flip=flip)[1][0]
+    left = _xy([75.0], [33.0], flip=flip)[0][0]
+    right = _xy([75.0], [67.0], flip=flip)[0][0]
+    ax.add_patch(Rectangle((min(left, right), min(lo, hi)), abs(right - left),
+                           abs(hi - lo), facecolor=colour, alpha=0.10,
+                           edgecolor=colour, linewidth=0.6, zorder=1))
+    panel_arrows(ax, into, colour, flip=flip, lw=0.8, alpha=0.8, head=1.9)
+    del half
+    _footnote(ax, f"{len(into)} completed passes into zone 14")
+
+
+# --------------------------------------------------------------------------
+# panels — the final ball
+# --------------------------------------------------------------------------
+
+def panel_shots(ax, events, team_id, colour, *, flip=False):
+    """One side's shots, by outcome."""
+    _pitch(ax, attack=not flip)
+    pso = _bool(events.get("is_penalty_shootout"))
+    if pso.empty:
+        pso = pd.Series(False, index=events.index)
+    shots = events[events["team_id"].eq(team_id) & _bool(events["is_shot"]) & ~pso]
+    shots = shots.dropna(subset=["x", "y"]).copy()
+    if shots.empty:
+        _footnote(ax, "no shots")
+        return
+    shots["xG"] = pd.to_numeric(shots["xG"], errors="coerce").fillna(0).clip(lower=0)
+    kinds = shots["type"].astype(str)
+    layers = (
+        (shots[kinds.eq("MissedShots")], "x", NEUTRAL, 1.0),
+        (shots[kinds.eq("BlockedShot")], "s", MUTED, 1.0),
+        (shots[kinds.eq("ShotOnPost")], "D", INK, 1.0),
+        (shots[kinds.eq("SavedShot")], "o", colour, 1.0),
+        (shots[_bool(shots["is_goal"])], "*", colour, 2.6),
+    )
+    for subset, marker, face, scale in layers:
+        if subset.empty:
+            continue
+        sx, sy = _xy(subset["x"], subset["y"], flip=flip)
+        sizes = (18 + subset["xG"].to_numpy() * 380) * scale
+        if marker == "x":
+            ax.scatter(sx, sy, s=sizes * 0.6, marker=marker, color=face,
+                       linewidth=0.8, alpha=0.85, zorder=4)
+        else:
+            ax.scatter(sx, sy, s=sizes, marker=marker, facecolor=face,
+                       edgecolor=INK if marker == "*" else BG, linewidth=0.7,
+                       alpha=0.92, zorder=6 if marker == "*" else 4)
+    total = float(shots["xG"].sum())
+    _footnote(ax, f"{len(shots)} shots · {total:.2f} xg · x off · ◇ post · ★ goal")
+
+
+def panel_goal_frame(ax, events, xg, home_id, away_id, home_colour, away_colour,
+                     home_name, away_name):
+    """Where the shots on target crossed the line, on one goal.
+
+    A goal is three times wider than it is tall, and this panel is nearly
+    square, so an equal-aspect frame can only ever fill one dimension. The band
+    beneath the goal-line carries each side's on-target record rather than
+    being left as the empty third of the cell it was.
+    """
+    ax.set_xlim(-1.42, 1.42)
+    ax.set_ylim(-1.50, 1.30)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    for gx in np.linspace(-1, 1, 13):
+        ax.plot([gx, gx], [0, 1], color=LINE, lw=0.35, alpha=0.5, zorder=1)
+    for gy in np.linspace(0, 1, 7):
+        ax.plot([-1, 1], [gy, gy], color=LINE, lw=0.35, alpha=0.5, zorder=1)
+    for post in (-1, 1):
+        ax.plot([post, post], [0, 1], color=LINE, lw=2.6, solid_capstyle="round", zorder=3)
+    ax.plot([-1, 1], [1, 1], color=LINE, lw=2.6, solid_capstyle="round", zorder=3)
+    ax.plot([-1.38, 1.38], [0, 0], color=LINE, lw=0.9, alpha=0.6, zorder=2)
+
+    # The nine placement zones the provider records, counted per side and
+    # printed in the cell they belong to. The two sides are offset vertically
+    # by more than a marker radius so a shared zone reads as two counts.
+    grid = {"high": 0.80, "mid": 0.50, "low": 0.20}
+    lanes = {"left": -0.60, "centre": 0.0, "right": 0.60}
+    for team_id, colour, dx in ((home_id, home_colour, -0.145),
+                                (away_id, away_colour, 0.145)):
+        zones = shot_placement_zones(events, team_id)
+        for zone, count in zones.items():
+            if not count:
+                continue
+            level, lane = zone.split("_", 1)
+            x, y = lanes[lane] + dx, grid[level]
+            ax.scatter([x], [y], s=96 + 28 * count, color=colour, alpha=0.9,
+                       edgecolor=BG, linewidth=0.8, zorder=5)
+            ax.text(x, y, str(count), color=text_on_fill(colour), fontsize=6.2,
+                    fontweight="bold", ha="center", va="center", zorder=6)
+
+    for i, (name, colour, row) in enumerate((
+        (home_name, home_colour, _xg_row(xg, home_name)),
+        (away_name, away_colour, _xg_row(xg, away_name)),
+    )):
+        y = -0.52 - i * 0.40
+        ax.add_patch(Rectangle((-1.34, y - 0.062), 0.15, 0.124, facecolor=colour,
+                               edgecolor="none", zorder=4))
+        ax.text(-1.13, y, name.upper()[:18], color=TEXT, fontsize=6.4,
+                fontweight="bold", va="center", zorder=4)
+        ax.text(1.36, y, f"{int(_num(row, 'on_target'))} ON TARGET  ·  "
+                         f"{_num(row, 'xGoT'):.2f} xGOT",
+                color=MUTED, fontsize=6.0, fontweight="bold", ha="right",
+                va="center", zorder=4)
+    _footnote(ax, "shots on target by placement · size = count")
+
+
+def panel_set_pieces(ax, events, team_id, colour, name, *, peak=None):
+    """What the restarts produced.
+
+    ``peak`` is shared across both sides so the two columns of this panel can
+    be read against each other; scaled to its own maximum, the weaker side
+    drew the same bar as the stronger one.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    breakdown = set_piece_breakdown(events, team_id)
+    order = [("open_play", "Open play"), ("corner", "Corners"),
+             ("free_kick", "Free kicks"), ("throw_in", "Throw-ins"),
+             ("penalty", "Penalties")]
+    peak = peak or max(
+        (float(breakdown.get(key, {}).get("xG", 0.0)) for key, _ in order), default=0.0
+    ) or 1.0
+    ax.text(0.04, 0.965, name.upper()[:18], color=colour, fontsize=6.6,
+            fontweight="bold", va="top")
+    ax.text(0.96, 0.965, "SHOTS   xG", color=NEUTRAL, fontsize=5.2,
+            fontweight="bold", va="top", ha="right")
+    for i, (key, label) in enumerate(order):
+        row = breakdown.get(key, {})
+        shots = int(float(row.get("shots", 0) or 0))
+        xg = float(row.get("xG", 0.0) or 0.0)
+        goals = int(float(row.get("goals", 0) or 0))
+        y = 0.83 - i * 0.175
+        ax.add_patch(Rectangle((0.04, y - 0.062), 0.62 * (xg / peak), 0.036,
+                               facecolor=colour, alpha=0.5, edgecolor="none", zorder=2))
+        text = f"{label}  ·  {goals} goal{'s' if goals != 1 else ''}" if goals else label
+        ax.text(0.04, y, text, color=TEXT if goals else MUTED, fontsize=6.6,
+                fontweight="bold" if goals else "normal", va="center", zorder=3)
+        ax.text(0.855, y, str(shots), color=TEXT, fontsize=6.6, fontweight="bold",
+                ha="right", va="center", zorder=3)
+        ax.text(0.96, y, f"{xg:.2f}", color=MUTED, fontsize=6.6, ha="right",
+                va="center", zorder=3)
+    _footnote(ax, "bar = expected goals from that restart")
+
+
+def set_piece_peak(events, *team_ids) -> float:
+    """Largest expected-goal total any restart type produced, either side."""
+    values = [
+        float(row.get("xG", 0.0) or 0.0)
+        for team_id in team_ids
+        for row in set_piece_breakdown(events, team_id).values()
+    ]
+    return max(values, default=0.0) or 1.0
+
+
+def panel_funnel(ax, team_metrics, xg, home_id, away_id, home_name, away_name,
+                 home_colour, away_colour):
+    """Possessions narrowed down to goals, one stage at a time.
+
+    Totals say what each side produced; the funnel says where each of them
+    stopped producing it, which is the part a match report usually leaves out.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    home, away = _side_metrics(team_metrics, "home"), _side_metrics(team_metrics, "away")
+    hx, ax_ = _xg_row(xg, home_name), _xg_row(xg, away_name)
+    stages = [
+        ("Possessions", _num(home, "possession_count"), _num(away, "possession_count")),
+        ("Final third", _num(home, "final_third_entries"), _num(away, "final_third_entries")),
+        ("Box entries", _num(home, "box_entries"), _num(away, "box_entries")),
+        ("Shots", _num(hx, "shots"), _num(ax_, "shots")),
+        ("On target", _num(hx, "on_target"), _num(ax_, "on_target")),
+        ("Goals", _num(hx, "goals"), _num(ax_, "goals")),
+    ]
+    peak = max(max(h, a) for _label, h, a in stages) or 1.0
+    band = 1.0 / len(stages)
+    for i, (label, home_value, away_value) in enumerate(stages):
+        top = 1.0 - i * band
+        y = top - band * 0.52
+        ax.text(0.5, top - band * 0.20, label.upper(), color=MUTED, fontsize=5.8,
+                fontweight="bold", ha="center", va="center")
+        for value, colour, align in ((home_value, home_colour, -1),
+                                     (away_value, away_colour, 1)):
+            width = 0.30 * (value / peak)
+            x0 = 0.5 - width if align < 0 else 0.5
+            ax.add_patch(Rectangle((x0, y - band * 0.10), width, band * 0.20,
+                                   facecolor=colour, edgecolor="none", zorder=3))
+            ax.text(0.5 - 0.44 if align < 0 else 0.5 + 0.44, y,
+                    f"{value:.0f}", color=colour, fontsize=7.4, fontweight="bold",
+                    va="center", ha="left" if align < 0 else "right", zorder=4)
+        if i:
+            ax.plot([0.05, 0.95], [top, top], color=GRID, lw=0.4)
+    _footnote(ax, "every stage a possession has to survive to become a goal")
+
+
+def panel_pass_length(ax, events, team_id, colour, name):
+    """The passing profile: how far, how forward, how often it arrived."""
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    profile = pass_length_profile(events, team_id)
+    ax.text(0.04, 0.965, name.upper()[:18], color=colour, fontsize=6.6,
+            fontweight="bold", va="top")
+    # Each row is a share of 100 except the average, which is metres; it is
+    # drawn against a 40m ceiling so the bar still means something.
+    rows = [
+        ("Completion", profile.get("completion", 0.0), 100.0, "{:.1f}%"),
+        ("Forward share", profile.get("forward_share", 0.0), 100.0, "{:.1f}%"),
+        ("Long-ball share", profile.get("long_ball_share", 0.0), 100.0, "{:.1f}%"),
+        ("Long-ball completion", profile.get("long_ball_completion", 0.0), 100.0, "{:.1f}%"),
+        ("Average length", profile.get("avg_length_m", 0.0), 40.0, "{:.1f} m"),
+    ]
+    for i, (label, value, ceiling, fmt) in enumerate(rows):
+        y = 0.82 - i * 0.175
+        ax.add_patch(Rectangle((0.04, y - 0.062), 0.62 * min(value / ceiling, 1.0), 0.036,
+                               facecolor=colour, alpha=0.5, edgecolor="none", zorder=2))
+        ax.text(0.04, y, label, color=TEXT, fontsize=6.6, va="center", zorder=3)
+        ax.text(0.96, y, fmt.format(value), color=TEXT, fontsize=6.6,
+                fontweight="bold", ha="right", va="center", zorder=3)
+    _footnote(ax, f"{int(profile.get('passes', 0))} passes attempted")
+
+
+# --------------------------------------------------------------------------
 # indicators
 # --------------------------------------------------------------------------
 
@@ -660,6 +1036,109 @@ def build_indicator_rows(events, xg, team_metrics, home_id, away_id,
     return rows
 
 
+def build_transition_rows(team_metrics):
+    """Twelve indicators about the game between the phases.
+
+    None of these appear on posters 1 and 2. A side can lose every board there
+    and still be the one who actually punished the other in broken play.
+    """
+    home, away = _side_metrics(team_metrics, "home"), _side_metrics(team_metrics, "away")
+    return [
+        ("Transitions", f"{int(_num(home, 'transitions'))}", f"{int(_num(away, 'transitions'))}",
+         _num(home, "transitions"), _num(away, "transitions")),
+        ("Transition shots", f"{int(_num(home, 'transition_shots'))}",
+         f"{int(_num(away, 'transition_shots'))}",
+         _num(home, "transition_shots"), _num(away, "transition_shots")),
+        ("Transition xG", f"{_num(home, 'transition_xG'):.2f}", f"{_num(away, 'transition_xG'):.2f}",
+         _num(home, "transition_xG"), _num(away, "transition_xG")),
+        ("Transition → shot", f"{_num(home, 'transition_shot_rate'):.1f}%",
+         f"{_num(away, 'transition_shot_rate'):.1f}%",
+         _num(home, "transition_shot_rate"), _num(away, "transition_shot_rate")),
+        ("Metres per transition", f"{_num(home, 'avg_transition_progress'):.1f}",
+         f"{_num(away, 'avg_transition_progress'):.1f}",
+         _num(home, "avg_transition_progress"), _num(away, "avg_transition_progress")),
+        ("Possession regains", f"{int(_num(home, 'possession_regains'))}",
+         f"{int(_num(away, 'possession_regains'))}",
+         _num(home, "possession_regains"), _num(away, "possession_regains")),
+        ("Regain → shot", f"{_num(home, 'regain_to_shot_rate'):.1f}%",
+         f"{_num(away, 'regain_to_shot_rate'):.1f}%",
+         _num(home, "regain_to_shot_rate"), _num(away, "regain_to_shot_rate")),
+        ("Counterpress success", f"{_num(home, 'counterpress_success_rate'):.1f}%",
+         f"{_num(away, 'counterpress_success_rate'):.1f}%",
+         _num(home, "counterpress_success_rate"), _num(away, "counterpress_success_rate")),
+        # Being exposed more often is worse, so the bar is inverted: the wider
+        # half is the side that kept its shape.
+        ("Rest-defence vulnerability", f"{_num(home, 'rest_defence_vulnerability'):.1f}%",
+         f"{_num(away, 'rest_defence_vulnerability'):.1f}%",
+         _num(away, "rest_defence_vulnerability"), _num(home, "rest_defence_vulnerability")),
+        ("Dangerous counters", f"{int(_num(home, 'rest_defence_dangerous_counters'))}",
+         f"{int(_num(away, 'rest_defence_dangerous_counters'))}",
+         _num(away, "rest_defence_dangerous_counters"),
+         _num(home, "rest_defence_dangerous_counters")),
+        ("Build-up success", f"{_num(home, 'build_up_success_rate'):.1f}%",
+         f"{_num(away, 'build_up_success_rate'):.1f}%",
+         _num(home, "build_up_success_rate"), _num(away, "build_up_success_rate")),
+        ("Directness", f"{_num(home, 'directness'):.1f}", f"{_num(away, 'directness'):.1f}",
+         _num(home, "directness"), _num(away, "directness")),
+    ]
+
+
+def build_shooting_rows(xg, team_metrics, home_name, away_name):
+    """Twelve indicators about the last action, and what it was worth."""
+    hx, ax_ = _xg_row(xg, home_name), _xg_row(xg, away_name)
+    home, away = _side_metrics(team_metrics, "home"), _side_metrics(team_metrics, "away")
+
+    def per_shot(row, key):
+        shots = _num(row, "shots")
+        return _num(row, key) / shots if shots else 0.0
+
+    def rate(row, key, base="shots"):
+        total = _num(row, base)
+        return 100.0 * _num(row, key) / total if total else 0.0
+
+    home_over = _num(hx, "goals") - _num(hx, "xG")
+    away_over = _num(ax_, "goals") - _num(ax_, "xG")
+    return [
+        ("Goals", f"{int(_num(hx, 'goals'))}", f"{int(_num(ax_, 'goals'))}",
+         _num(hx, "goals"), _num(ax_, "goals")),
+        ("Expected goals", f"{_num(hx, 'xG'):.2f}", f"{_num(ax_, 'xG'):.2f}",
+         _num(hx, "xG"), _num(ax_, "xG")),
+        ("Finishing vs expected", f"{home_over:+.2f}", f"{away_over:+.2f}",
+         home_over - min(home_over, away_over, 0.0) + 0.01,
+         away_over - min(home_over, away_over, 0.0) + 0.01),
+        ("xG per shot", f"{per_shot(hx, 'xG'):.3f}", f"{per_shot(ax_, 'xG'):.3f}",
+         per_shot(hx, "xG"), per_shot(ax_, "xG")),
+        ("Shots on target", f"{int(_num(hx, 'on_target'))}", f"{int(_num(ax_, 'on_target'))}",
+         _num(hx, "on_target"), _num(ax_, "on_target")),
+        ("Shot accuracy", f"{rate(hx, 'on_target'):.1f}%", f"{rate(ax_, 'on_target'):.1f}%",
+         rate(hx, "on_target"), rate(ax_, "on_target")),
+        # Threat created and final-third efficiency stand where xG on target
+        # and big chances were: both already have a row on poster 1, and a cell
+        # that restates one is a cell the match did not get.
+        ("Threat created (xT)", f"{_num(hx, 'xT'):.2f}", f"{_num(ax_, 'xT'):.2f}",
+         _num(hx, "xT"), _num(ax_, "xT")),
+        # How much of what was created ever reached the goalkeeper.
+        ("xG reaching the frame",
+         f"{100 * _num(hx, 'xGoT') / _num(hx, 'xG'):.0f}%" if _num(hx, "xG") else "—",
+         f"{100 * _num(ax_, 'xGoT') / _num(ax_, 'xG'):.0f}%" if _num(ax_, "xG") else "—",
+         _num(hx, "xGoT") / max(_num(hx, "xG"), 1e-9),
+         _num(ax_, "xGoT") / max(_num(ax_, "xG"), 1e-9)),
+        ("Final-third efficiency", f"{_num(home, 'final_third_entry_efficiency'):.1f}%",
+         f"{_num(away, 'final_third_entry_efficiency'):.1f}%",
+         _num(home, "final_third_entry_efficiency"),
+         _num(away, "final_third_entry_efficiency")),
+        ("Blocked", f"{int(_num(hx, 'blocked'))}", f"{int(_num(ax_, 'blocked'))}",
+         _num(hx, "blocked"), _num(ax_, "blocked")),
+        ("Off target", f"{int(_num(hx, 'off_target'))}", f"{int(_num(ax_, 'off_target'))}",
+         # Missing more is worse, so the bar is inverted.
+         _num(ax_, "off_target"), _num(hx, "off_target")),
+        ("Sequence xT per possession",
+         f"{_num(home, 'sequence_xT_per_possession'):.3f}",
+         f"{_num(away, 'sequence_xT_per_possession'):.3f}",
+         _num(home, "sequence_xT_per_possession"), _num(away, "sequence_xT_per_possession")),
+    ]
+
+
 # --------------------------------------------------------------------------
 # chrome
 # --------------------------------------------------------------------------
@@ -739,7 +1218,7 @@ def build_match_posters(
     byline: str = "MOSTAFA SAAD",
     allow_download: bool = True,
 ) -> list[Path]:
-    """Render both posters for one fixture and return their paths."""
+    """Render all four posters for one fixture and return their paths."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     home_id, away_id = int(home_id), int(away_id)
@@ -772,7 +1251,7 @@ def build_match_posters(
 
     # ---- poster 1: the match -------------------------------------------
     fig = _new_figure()
-    _header(fig, poster_label="POST-MATCH REPORT · 1 OF 2", **header)
+    _header(fig, poster_label="POST-MATCH REPORT · 1 OF 4", **header)
 
     _panel_title(fig, "left", 0, f"{home_name} shape")
     panel_pass_network(_axes(fig, "left", 0), events, players, home_id, home_color)
@@ -810,7 +1289,7 @@ def build_match_posters(
 
     # ---- poster 2: how it was played ------------------------------------
     fig = _new_figure()
-    _header(fig, poster_label="HOW IT WAS PLAYED · 2 OF 2", **header)
+    _header(fig, poster_label="HOW IT WAS PLAYED · 2 OF 4", **header)
 
     _panel_title(fig, "left", 0, f"{home_name} into the box")
     panel_box_entries(_axes(fig, "left", 0), events, home_id, home_color)
@@ -838,6 +1317,81 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_2_tactics.png"
+    fig.savefig(path, facecolor=BG, dpi=DPI)
+    plt.close(fig)
+    generated.append(path)
+    del fig
+    gc.collect()
+
+    # ---- poster 3: the transition game ----------------------------------
+    fig = _new_figure()
+    _header(fig, poster_label="THE TRANSITION GAME · 3 OF 4", **header)
+
+    _panel_title(fig, "left", 0, f"{home_name} ball losses")
+    panel_ball_losses(_axes(fig, "left", 0), events, home_id, home_color)
+    _panel_title(fig, "mid", 0, "What the scoreline did")
+    panel_game_state(_axes(fig, "mid", 0), team_metrics, home_color, away_color)
+    _panel_title(fig, "right", 0, f"{away_name} ball losses")
+    panel_ball_losses(_axes(fig, "right", 0), events, away_id, away_color, flip=True)
+
+    _panel_title(fig, "left", 1, f"{home_name} from wide")
+    panel_crosses(_axes(fig, "left", 1), events, home_id, home_color)
+    _panel_title(fig, "mid", 1, "Transition and press")
+    panel_stat_table(_axes(fig, "mid", 1), build_transition_rows(team_metrics),
+                     home_color, away_color)
+    _panel_title(fig, "right", 1, f"{away_name} from wide")
+    panel_crosses(_axes(fig, "right", 1), events, away_id, away_color, flip=True)
+
+    _panel_title(fig, "left", 2, f"{home_name} into zone 14")
+    panel_zone14(_axes(fig, "left", 2), events, home_id, home_color)
+    _panel_title(fig, "mid", 2, "Where the match was spent")
+    panel_thirds(_axes(fig, "mid", 2), team_metrics, home_color, away_color,
+                 home_name, away_name)
+    _panel_title(fig, "right", 2, f"{away_name} into zone 14")
+    panel_zone14(_axes(fig, "right", 2), events, away_id, away_color, flip=True)
+
+    _footer(fig, home_color, away_color, byline)
+    path = out / "match_poster_3_transitions.png"
+    fig.savefig(path, facecolor=BG, dpi=DPI)
+    plt.close(fig)
+    generated.append(path)
+    del fig
+    gc.collect()
+
+    # ---- poster 4: the final ball ---------------------------------------
+    fig = _new_figure()
+    _header(fig, poster_label="THE FINAL BALL · 4 OF 4", **header)
+
+    _panel_title(fig, "left", 0, f"{home_name} shots")
+    panel_shots(_axes(fig, "left", 0), events, home_id, home_color)
+    _panel_title(fig, "mid", 0, "On the goal frame")
+    panel_goal_frame(_axes(fig, "mid", 0), events, xg, home_id, away_id,
+                     home_color, away_color, home_name, away_name)
+    _panel_title(fig, "right", 0, f"{away_name} shots")
+    panel_shots(_axes(fig, "right", 0), events, away_id, away_color, flip=True)
+
+    restart_peak = set_piece_peak(events, home_id, away_id)
+    _panel_title(fig, "left", 1, f"{home_name} restarts")
+    panel_set_pieces(_axes(fig, "left", 1), events, home_id, home_color, home_name,
+                     peak=restart_peak)
+    _panel_title(fig, "mid", 1, "Possession to goal")
+    panel_funnel(_axes(fig, "mid", 1), team_metrics, xg, home_id, away_id,
+                 home_name, away_name, home_color, away_color)
+    _panel_title(fig, "right", 1, f"{away_name} restarts")
+    panel_set_pieces(_axes(fig, "right", 1), events, away_id, away_color, away_name,
+                     peak=restart_peak)
+
+    _panel_title(fig, "left", 2, f"{home_name} passing profile")
+    panel_pass_length(_axes(fig, "left", 2), events, home_id, home_color, home_name)
+    _panel_title(fig, "mid", 2, "The last action")
+    panel_stat_table(_axes(fig, "mid", 2),
+                     build_shooting_rows(xg, team_metrics, home_name, away_name),
+                     home_color, away_color)
+    _panel_title(fig, "right", 2, f"{away_name} passing profile")
+    panel_pass_length(_axes(fig, "right", 2), events, away_id, away_color, away_name)
+
+    _footer(fig, home_color, away_color, byline)
+    path = out / "match_poster_4_final_ball.png"
     fig.savefig(path, facecolor=BG, dpi=DPI)
     plt.close(fig)
     generated.append(path)

@@ -28,7 +28,7 @@ python football_match_analysis.py
 | --- | --- |
 | **49 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
 | **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice |
-| **2 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
+| **4 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
 | **Player radars** | A full role profile per player, coloured to their team |
 | **CSV exports** | Events, players and every calculated metric |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
@@ -110,13 +110,19 @@ python visual_redesign_full.py
 
 ## The posters
 
-Two 1640x2048 boards, sized to the tallest frame a timeline shows without
+Four 1640x2048 boards, sized to the tallest frame a timeline shows without
 cropping, each complete on its own:
 
-| | Left column | Centre | Right column |
-| --- | --- | --- | --- |
-| **1 · Post-match report** | Shape, threat zones, defending | Sixteen indicators, shot map, game control | Shape, threat zones, defending |
-| **2 · How it was played** | Box entries, progression, pressing | Pitch control, zone dominance, sequence leaders | Box entries, progression, pressing |
+| | Left and right columns | Centre |
+| --- | --- | --- |
+| **1 · Post-match report** | Passing shape, threat zones, defensive work | Sixteen indicators, shot map, game control |
+| **2 · How it was played** | Box entries, progression, pressing | Pitch control, zone dominance, sequence leaders |
+| **3 · The transition game** | Ball losses, delivery from wide, zone 14 | Game-state splits, twelve transition and press indicators, touch distribution |
+| **4 · The final ball** | Shots, restarts, passing profile | The goal frame, the possession-to-goal funnel, twelve shooting indicators |
+
+Forty indicators across the three tables, and no indicator appears on two of
+them — a test enforces it, because a repeated cell is a cell the match did not
+get.
 
 Every panel is drawn straight onto the poster canvas from the event frame.
 An earlier version composited the already-rendered PNGs into a contact sheet,

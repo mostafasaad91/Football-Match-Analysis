@@ -194,7 +194,7 @@ def test_a_failed_download_never_poisons_the_cache(tmp_path, monkeypatch):
 # rendering
 # --------------------------------------------------------------------------
 
-def test_both_posters_render_at_the_declared_size(tmp_path):
+def test_all_four_posters_render_at_the_declared_size(tmp_path):
     from PIL import Image
 
     events, players, xg, team_metrics, player_metrics, _out = _frames()
@@ -208,9 +208,14 @@ def test_both_posters_render_at_the_declared_size(tmp_path):
         competition="UEFA SUPER CUP",
         allow_download=False,  # offline: the monogram fallback must carry it
     )
-    assert len(paths) == 2
+    assert len(paths) == 4
     names = {path.name for path in paths}
-    assert names == {"match_poster_1_report.png", "match_poster_2_tactics.png"}
+    assert names == {
+        "match_poster_1_report.png",
+        "match_poster_2_tactics.png",
+        "match_poster_3_transitions.png",
+        "match_poster_4_final_ball.png",
+    }
     for path in paths:
         with Image.open(path) as image:
             assert image.size == (mp.W_PX, mp.H_PX)
@@ -222,3 +227,65 @@ def test_the_contact_sheets_are_gone():
     root = Path(__file__).resolve().parent.parent
     assert not (root / "build_qa_contact_sheets.py").exists()
     assert not list(root.glob("output/*/qa_contact_sheet_*.png"))
+
+
+def test_the_extra_tables_are_complete_and_weighted():
+    """Posters 3 and 4 add twenty-four more indicators; none may be empty."""
+    events, _players, xg, team_metrics, _pm, _out = _frames()
+    tables = {
+        "transition": mp.build_transition_rows(team_metrics),
+        "shooting": mp.build_shooting_rows(xg, team_metrics, "PSG", "Aston Villa"),
+    }
+    for name, rows in tables.items():
+        assert len(rows) == 12, name
+        assert len(set(row[0] for row in rows)) == 12, f"{name} lists an indicator twice"
+        for label, home_text, away_text, home_w, away_w in rows:
+            assert home_text and away_text, f"{name}/{label} has no value"
+            assert float(home_w) + float(away_w) > 0, f"{name}/{label} has an empty bar"
+
+
+def test_no_indicator_is_repeated_across_the_four_posters():
+    """Twenty-eight cells of one table are wasted if they restate another."""
+    events, _players, xg, team_metrics, _pm, _out = _frames()
+    labels = [
+        row[0].lower()
+        for rows in (
+            mp.build_indicator_rows(events, xg, team_metrics, 304, 24, "PSG",
+                                    "Aston Villa", (5.14, 8.69), (21.0, 30.0, 49.0)),
+            mp.build_transition_rows(team_metrics),
+            mp.build_shooting_rows(xg, team_metrics, "PSG", "Aston Villa"),
+        )
+        for row in rows
+    ]
+    # Expected goals appears on poster 1 as the headline and on poster 4 beside
+    # the finishing it is measured against; nothing else may repeat.
+    duplicated = {label for label in labels if labels.count(label) > 1}
+    assert duplicated <= {"expected goals"}, duplicated
+
+
+def test_inverted_bars_favour_the_better_side():
+    """Three indicators are better when lower; their bars have to be flipped."""
+    events, _players, xg, team_metrics, _pm, _out = _frames()
+    rows = {row[0]: row for row in mp.build_transition_rows(team_metrics)}
+    # PSG were exposed 14.6% of the time against Villa's 9.5%: Villa's bar wins.
+    _label, home_text, away_text, home_w, away_w = rows["Rest-defence vulnerability"]
+    assert home_text == "14.6%" and away_text == "9.5%"
+    assert away_w > home_w
+
+    shooting = {row[0]: row for row in
+                mp.build_shooting_rows(xg, team_metrics, "PSG", "Aston Villa")}
+    _label, home_text, away_text, home_w, away_w = shooting["Off target"]
+    assert home_text == "6" and away_text == "8"
+    assert home_w > away_w, "missing more often must not win the bar"
+
+
+def test_the_restart_bars_share_one_scale():
+    """Two panels normalised to their own peak cannot be read against each other."""
+    events, _players, _xg, _tm, _pm, _out = _frames()
+    peak = mp.set_piece_peak(events, 304, 24)
+    both = [
+        float(row.get("xG", 0.0) or 0.0)
+        for team_id in (304, 24)
+        for row in mp.set_piece_breakdown(events, team_id).values()
+    ]
+    assert peak == max(both)

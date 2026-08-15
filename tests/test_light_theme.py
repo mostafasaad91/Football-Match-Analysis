@@ -254,3 +254,55 @@ def test_the_child_refuses_to_render_under_the_dark_theme():
     )
     assert completed.returncode == 0, completed.stderr
     assert "REFUSED" in completed.stdout
+
+
+# --------------------------------------------------------------------------
+# the report
+# --------------------------------------------------------------------------
+
+_PDF_PROBE = """
+    import json
+    import tactical_pdf_report as pdf
+    from visualization_components import contrast_ratio
+    print(json.dumps({
+        "bg": pdf.BG.hexval()[2:],
+        "panel": pdf.PANEL.hexval()[2:],
+        "text": pdf.TEXT.hexval()[2:],
+        "text_contrast": contrast_ratio("#" + pdf.TEXT.hexval()[2:],
+                                        "#" + pdf.BG.hexval()[2:]),
+        "muted_contrast": contrast_ratio("#" + pdf.MUTED.hexval()[2:],
+                                         "#" + pdf.BG.hexval()[2:]),
+        "focus_contrast": contrast_ratio("#" + pdf.FOCUS.hexval()[2:],
+                                         "#" + pdf.BG.hexval()[2:]),
+        "brand_contrast": contrast_ratio("#" + pdf.BRAND.hexval()[2:],
+                                         "#" + pdf.BG.hexval()[2:]),
+        "value_contrast": contrast_ratio("#" + pdf.VALUE.hexval()[2:],
+                                         "#" + pdf.BG.hexval()[2:]),
+    }))
+"""
+
+
+def test_the_report_follows_the_page_it_is_printed_on():
+    """It carried the black values as literals and had no theme branch at all.
+
+    The light package therefore produced a black report with light visuals
+    pasted onto it -- the one part of that package still wearing the other
+    identity.
+    """
+    dark = _in_theme("dark", _PDF_PROBE)
+    light = _in_theme("light", _PDF_PROBE)
+    assert dark["bg"].lower() == "000000"
+    assert light["bg"].lower() != "000000"
+    assert dark["text"] != light["text"]
+    assert dark["panel"] != light["panel"]
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_report_chrome_reads_on_its_own_page(theme):
+    result = _in_theme(theme, _PDF_PROBE)
+    assert result["text_contrast"] >= 4.5, result
+    assert result["muted_contrast"] >= 3.0, result
+    # Structural marks, the brand and the value accent are all graphics.
+    assert result["focus_contrast"] >= 3.0, result
+    assert result["brand_contrast"] >= 3.0, result
+    assert result["value_contrast"] >= 3.0, result
