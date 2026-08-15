@@ -26,7 +26,6 @@ from pathlib import Path
 
 import numpy as np
 from matplotlib import colors as mcolors
-from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.patches import Ellipse, FancyBboxPatch
 from PIL import Image
 
@@ -40,6 +39,27 @@ _USER_AGENT = "Mozilla/5.0"
 # posters place crests near their native size and the local override exists for
 # anyone who wants them bigger.
 NATIVE_PX = 70
+
+
+def _draw(fig, image: np.ndarray, x: float, y: float, width: float,
+          zorder: float) -> None:
+    """Paint ``image`` centred on a figure-fraction point, at ``width`` of it.
+
+    Drawn into its own transparent axes rather than as an AnnotationBbox. The
+    offsetbox resolved its figure-fraction anchor against the cropped box when
+    the caller saved with ``bbox_inches="tight"``, which put every crest in the
+    visuals' header up and to the right of where it was placed, clipped by the
+    page edge. An axes rectangle is in figure coordinates by definition and is
+    unaffected by the crop. It also removes the dpi arithmetic: the earlier
+    zoom divided by the figure's dpi and the visuals save at a different one,
+    so each crest also came out half again too large.
+    """
+    height = width * fig.get_figwidth() / fig.get_figheight()
+    ax = fig.add_axes([x - width / 2, y - height / 2, width, height],
+                      zorder=zorder)
+    ax.imshow(image, interpolation="lanczos", aspect="auto")
+    ax.set_axis_off()
+    ax.patch.set_alpha(0.0)
 
 # A crest earns a plate when too little of it separates from the page. Judged
 # per pixel rather than on the crest's mean colour: Aston Villa's averages
@@ -174,34 +194,39 @@ def place_crest(
     *,
     monogram: str,
     colour: str,
-    size_px: float,
+    width: float,
     background: str = "#000000",
     text_colour: str | None = None,
     allow_download: bool = True,
+    zorder: float = 6.0,
 ) -> bool:
     """Draw one club's crest at a figure-fraction position.
 
     Returns True when a real crest was drawn, False when the monogram roundel
-    stood in for it. ``size_px`` is the crest's width in output pixels.
+    stood in for it. ``width`` is the crest's width as a fraction of the
+    figure's width. ``zorder`` has to clear whatever the crest is drawn onto:
+    the visuals' header strip is at 90, and at the default the crests were
+    painted underneath it and vanished.
     """
     image = crest_image(team_id, allow_download=allow_download)
     if text_colour is None:
         # The monogram sits on the kit colour, so it follows the fill.
         text_colour = "#111418" if _relative_luminance(
             mcolors.to_rgb(colour)) > 0.42 else "#FFFFFF"
-    width_frac = size_px / fig.get_figwidth() / fig.dpi
-    height_frac = size_px / fig.get_figheight() / fig.dpi
+    width_frac = width
+    height_frac = width * fig.get_figwidth() / fig.get_figheight()
 
     if image is None:
         # Monogram roundel: an ellipse in figure fractions, since the figure is
         # not square and a circle in those units would not be round.
         fig.add_artist(Ellipse((x, y), width_frac, height_frac, facecolor=colour,
-                               edgecolor="none", zorder=6))
+                               edgecolor="none", zorder=zorder))
         fig.add_artist(Ellipse((x, y), width_frac * 0.78, height_frac * 0.78,
                                facecolor="none", edgecolor=text_colour, lw=1.1,
-                               alpha=0.5, zorder=7))
-        fig.text(x, y, monogram, color=text_colour, fontsize=size_px * 0.115,
-                 fontweight="bold", ha="center", va="center", zorder=8)
+                               alpha=0.5, zorder=zorder + 1))
+        fig.text(x, y, monogram, color=text_colour,
+                 fontsize=width * fig.get_figwidth() * 8.3,
+                 fontweight="bold", ha="center", va="center", zorder=zorder + 2)
         return False
 
     if needs_plate(image, background):
@@ -211,16 +236,46 @@ def place_crest(
             width_frac + 2 * pad_w, height_frac + 2 * pad_h,
             boxstyle="round,pad=0,rounding_size=0.008",
             facecolor=plate_colour(image, background), edgecolor="none",
-            alpha=0.93, zorder=5,
+            alpha=0.93, zorder=zorder - 1,
         ))
 
-    # OffsetImage zoom is in 72dpi points, so the figure's dpi has to be
-    # divided out or the crest lands dpi/72 times too large.
-    zoom = size_px / image.shape[1] / (fig.dpi / 72.0)
-    fig.add_artist(AnnotationBbox(
-        OffsetImage(image, zoom=zoom, interpolation="lanczos"),
-        (x, y), xycoords="figure fraction", frameon=False, zorder=6,
-    ))
+    _draw(fig, image, x, y, width, zorder=zorder)
+    return True
+
+
+LOGO_PATH = ROOT / "assets" / "logo.jpg"
+_LOGO_MEMO: list = []
+
+
+def logo_image() -> np.ndarray | None:
+    """The publisher's badge, or None on a clone that does not carry it."""
+    if not _LOGO_MEMO:
+        _LOGO_MEMO.append(_load(LOGO_PATH) if LOGO_PATH.exists() else None)
+    return _LOGO_MEMO[0]
+
+
+def place_logo(fig, x: float, y: float, *, width: float,
+               background: str = "#000000") -> bool:
+    """Draw the publisher's badge at a figure-fraction position.
+
+    The badge is a JPEG on its own black ground, so on a light page it lands as
+    a bare black square. It gets a rounded plate of the same black there and
+    reads as a deliberate badge tile, the way the report's cover does.
+    """
+    image = logo_image()
+    if image is None:
+        return False
+    width_frac = width
+    height_frac = width * fig.get_figwidth() / fig.get_figheight()
+    if _relative_luminance(mcolors.to_rgb(background)) > 0.5:
+        pad_w, pad_h = width_frac * 0.09, height_frac * 0.09
+        fig.add_artist(FancyBboxPatch(
+            (x - width_frac / 2 - pad_w, y - height_frac / 2 - pad_h),
+            width_frac + 2 * pad_w, height_frac + 2 * pad_h,
+            boxstyle="round,pad=0,rounding_size=0.006",
+            facecolor="#0A0A0A", edgecolor="none", zorder=94,
+        ))
+    _draw(fig, image, x, y, width, zorder=95)
     return True
 
 

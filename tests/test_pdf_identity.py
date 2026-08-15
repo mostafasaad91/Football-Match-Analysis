@@ -80,10 +80,15 @@ SCALE_NAMES = (
     "TYPE_DISPLAY", "TYPE_TITLE", "TYPE_SECTION",
     "TYPE_BODY", "TYPE_CAPTION", "TYPE_MICRO",
 )
-# The cover's lead statistic is a named, deliberate exception; `minor` and
-# `major` are the locals that carry those two constants to the draw call.
+# The cover is the one page allowed its own steps, and each is named so it
+# stays a decision rather than becoming drift. TYPE_LEAD_MINOR/MAJOR set the
+# hero statistic's mismatched pair (`minor` and `major` are the locals that
+# carry them to the draw call); TYPE_THESIS and TYPE_FIXTURE separate the
+# report's one-sentence finding from the club names under it, which were the
+# same size until the sentence stopped outranking the scoreline.
 ALLOWED_SIZE_NAMES = set(SCALE_NAMES) | {
     "TYPE_LEAD_MINOR", "TYPE_LEAD_MAJOR", "minor", "major",
+    "TYPE_THESIS", "TYPE_FIXTURE",
 }
 
 

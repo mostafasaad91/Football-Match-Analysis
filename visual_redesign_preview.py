@@ -14,6 +14,8 @@ from matplotlib.patches import Arc, Circle, FancyBboxPatch, Rectangle
 import matplotlib.patheffects as path_effects
 import numpy as np
 import pandas as pd
+
+import crests
 from visualization_components import (
     C_AWAY,
     C_HOME,
@@ -173,9 +175,15 @@ def amoled_header(
                              transform=fig.transFigure, color=AWAY,
                              linewidth=0, zorder=92))
     glow = [path_effects.withStroke(linewidth=3.5, foreground=BG)]
-    fig.text(0.055, 0.955, "●", color=FOCUS, fontsize=8.5,
-             va="center", zorder=95, path_effects=glow)
-    fig.text(0.070, 0.955, section.upper(), color=MUTED, fontsize=7.2,
+    # The publisher's badge stands where a decorative bullet used to, so every
+    # visual carries the same mark the report's cover does.
+    if crests.place_logo(fig, 0.059, 0.9530, width=0.0235, background=BG):
+        eyebrow_x = 0.081
+    else:
+        fig.text(0.055, 0.955, "●", color=FOCUS, fontsize=8.5,
+                 va="center", zorder=95, path_effects=glow)
+        eyebrow_x = 0.070
+    fig.text(eyebrow_x, 0.955, section.upper(), color=MUTED, fontsize=7.2,
              fontweight="bold", va="center", zorder=95)
     fig.text(0.055, 0.909, title, color=TEXT, fontsize=17.5,
              fontweight="bold", va="center", zorder=95, path_effects=glow)
@@ -188,17 +196,31 @@ def amoled_header(
     fig.text(0.113, 0.881, trimmed, color=MUTED, fontsize=6.8,
              va="center", zorder=95)
 
-    fig.text(0.705, 0.954, HOME_NAME.upper(), color=HOME, fontsize=8.2,
+    # Crests sit outboard of the names, addressed by the provider team id the
+    # event data already carries. A club whose crest cannot be fetched falls
+    # back to a monogram roundel and the strip still reads.
+    # Names are capped so the cluster keeps its shape whatever the clubs are
+    # called: at full length "Borussia Dortmund" ran straight through the crest
+    # drawn outboard of it, and the strip has no more width to give.
+    home_label = HOME_NAME.upper()[:12]
+    away_label = AWAY_NAME.upper()[:12]
+    crests.place_crest(fig, 0.600, 0.9545, HOME_ID,
+                       monogram=HOME_NAME[:3].upper(), colour=HOME,
+                       width=0.0245, background=BG, zorder=95)
+    fig.text(0.685, 0.954, home_label, color=HOME, fontsize=8.2,
              fontweight="bold", ha="right", va="center", zorder=95)
-    fig.text(0.785, 0.954, MATCH_SCORE, color=TEXT, fontsize=12,
+    fig.text(0.765, 0.954, MATCH_SCORE, color=TEXT, fontsize=12,
              fontweight="bold", ha="center", va="center", zorder=95,
              path_effects=glow)
-    fig.text(0.865, 0.954, AWAY_NAME.upper(), color=AWAY, fontsize=8.2,
+    fig.text(0.845, 0.954, away_label, color=AWAY, fontsize=8.2,
              fontweight="bold", ha="left", va="center", zorder=95)
+    crests.place_crest(fig, 0.933, 0.9545, AWAY_ID,
+                       monogram=AWAY_NAME[:3].upper(), colour=AWAY,
+                       width=0.0245, background=BG, zorder=95)
     context = "FULL MATCH"
     if active_team in {HOME_NAME, AWAY_NAME}:
         context = f"TEAM VIEW  ·  {active_team.upper()}"
-    fig.text(0.705, 0.903, context, color=NEUTRAL, fontsize=6.7,
+    fig.text(0.685, 0.903, context, color=NEUTRAL, fontsize=6.7,
              fontweight="bold", ha="right", va="center", zorder=95)
     fig.text(0.945, 0.903, "CREATED BY MOSTAFA SAAD", color=NEUTRAL,
              fontsize=6.1, fontweight="bold", ha="right", va="center", zorder=95)

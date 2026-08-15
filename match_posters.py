@@ -1156,10 +1156,10 @@ def _header(fig, *, home_id, away_id, home_name, away_name, home_colour, away_co
              fontweight="bold", va="top", ha="right")
 
     crests.place_crest(fig, 0.068, 0.9525, home_id, monogram=home_name[:3].upper(),
-                       colour=home_colour, size_px=86, background=BG,
+                       colour=home_colour, width=86 / W_PX, background=BG,
                        allow_download=allow_download)
     crests.place_crest(fig, 0.932, 0.9525, away_id, monogram=away_name[:3].upper(),
-                       colour=away_colour, size_px=86, background=BG,
+                       colour=away_colour, width=86 / W_PX, background=BG,
                        allow_download=allow_download)
 
     fig.text(0.5, 0.9605, f"{home_name}  {score}  {away_name}", color=TEXT,
@@ -1179,6 +1179,9 @@ def _header(fig, *, home_id, away_id, home_name, away_name, home_colour, away_co
 def _footer(fig, home_colour, away_colour, byline: str):
     fig.add_artist(Line2D([0.030, 0.970], [0.0495, 0.0495], transform=fig.transFigure,
                           color=GRID, lw=0.8))
+    # The badge goes between the two footer lines rather than beside either:
+    # the header is already carrying two crests and a score.
+    crests.place_logo(fig, 0.5, 0.029, width=46 / W_PX, background=BG)
     fig.text(0.030, 0.030, byline.upper(), color=MUTED, fontsize=7.0, fontweight="bold",
              va="center")
     fig.text(0.970, 0.030, "DATA VIA OPTA / WHOSCORED", color=NEUTRAL, fontsize=7.0,

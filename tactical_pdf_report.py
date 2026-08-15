@@ -14,6 +14,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
+import crests
 from match_report import compute_ppda_both
 from visualization_components import IS_LIGHT_THEME
 
@@ -83,6 +84,11 @@ TYPE_BODY, TYPE_CAPTION, TYPE_MICRO = 9, 7.5, 6.5
 # 8.8 against 91.2 should look as lopsided as it reads. Named rather than
 # left as bare numbers so it stays a decision instead of becoming drift.
 TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR = 40, 62
+
+# The cover's thesis sentence was set at TYPE_TITLE, the same size as the club
+# names beside it, so the one line carrying the whole report did not outrank
+# the fixture. It gets its own step, and the fixture line drops below it.
+TYPE_THESIS, TYPE_FIXTURE = 23, 15
 
 # Sampled from the publisher's mark in assets/logo.jpg. Brand elements only —
 # never a value, a bar, or anything a reader could mistake for a team. It reads
@@ -1360,15 +1366,21 @@ class TacticalPDF:
     # Metrics the cover may lead with, as (context key, printed name, unit).
     # Each is a percentage split that sums to 100 across the two sides, so one
     # number states the whole balance and the bar underneath is honest.
+    # Two kinds of number. A "split" is a share of one whole and the two sides
+    # sum to 100, so it draws as one divided bar. A "rate" is each side's own
+    # percentage of its own attempts; the two are independent and each gets its
+    # own bar against a common 100 baseline. Drawing a rate as a split bar
+    # would claim the two halves add up, which they do not.
     COVER_LEADS = (
-        ("field_tilt", "Field tilt", "share of completed passes reaching the final third"),
-        ("possession_share", "Possession", "share of the match in controlled possession"),
-        ("pass_share", "Pass share", "share of all completed passes"),
+        ("split", "field_tilt", "Field tilt", "share of completed passes reaching the final third"),
+        ("split", "possession_share", "Possession", "share of the match in controlled possession"),
+        ("split", "pass_share", "Pass share", "share of all completed passes"),
+        ("rate", "box_entry_to_shot_rate", "Box entry to shot", "share of penalty-area entries that became a shot"),
+        ("rate", "regain_to_shot_rate", "Regain to shot", "share of possession regains that became a shot"),
+        ("rate", "transition_shot_rate", "Transition to shot", "share of transitions that became a shot"),
+        ("rate", "build_up_success_rate", "Build-up success", "share of build-up attempts that cleared the press"),
+        ("rate", "final_third_entry_efficiency", "Final-third efficiency", "share of final-third entries that became a box entry"),
     )
-
-    # Below this gap the two sides are close enough that no single number is
-    # worth a page, and the cover leads with the scoreline instead.
-    COVER_LEAD_MIN_GAP = 25.0
 
     def _verdict(self) -> str:
         """One sentence on how the result related to the chances created.
@@ -1408,23 +1420,36 @@ class TacticalPDF:
                 f"{winner} needed fewer of them and took them.")
 
     def _cover_lead(self):
-        """Return the widest percentage split, or None if the match was even."""
+        """The match's most lopsided percentage, and how to draw it.
+
+        Returns ``(kind, name, note, home, away)``; never None. The previous
+        version needed a 25-point gap in field tilt, possession or pass share
+        and returned None otherwise, which is almost always: a 59/41 possession
+        match still did not qualify. The cover then fell to a single thin strip
+        and 49% of the page was empty in two dead bands.
+
+        Ranked on the *relative* gap rather than the absolute one, so a 9%
+        against 3% conversion rate outranks a 54 against 46 territory split —
+        which is the right way round, because it is the bigger difference.
+        """
         best = None
-        for key, name, note in self.COVER_LEADS:
+        for kind, key, name, note in self.COVER_LEADS:
             home = self.context.get(f"home_{key}")
             away = self.context.get(f"away_{key}")
             try:
                 home, away = float(home), float(away)
             except (TypeError, ValueError):
                 continue
-            if not 95.0 <= home + away <= 105.0:
-                continue  # not a two-way split; the bar would misrepresent it
-            gap = abs(home - away)
+            if not (home > 0 or away > 0):
+                continue
+            if kind == "split" and not 95.0 <= home + away <= 105.0:
+                continue  # not a two-way split; a divided bar would lie
+            gap = abs(home - away) / max(home, away, 1e-6)
             if best is None or gap > best[0]:
-                best = (gap, name, note, home, away)
-        if best is None or best[0] < self.COVER_LEAD_MIN_GAP:
+                best = (gap, kind, name, note, home, away)
+        if best is None:
             return None
-        return best
+        return best[1:]
 
     def _cover_logo(self, cx: float, top: float, size: float) -> float:
         """Draw the publisher's badge centred on ``cx``; return its bottom edge.
@@ -1462,77 +1487,206 @@ class TacticalPDF:
         self._start("cover", "Cover")
         c = self.canvas
         centre = PAGE_W / 2
-        home, away = self.context["home"], self.context["away"]
 
-        bottom = self._cover_logo(centre, PAGE_H - 58, 148)
+        # A panel under the closing strip, so the sheet has a base to stand on
+        # and the footer is not floating on the bare page.
+        c.setFillColor(PANEL)
+        c.rect(0, 0, PAGE_W, 214, stroke=0, fill=1)
+        c.setStrokeColor(GRID); c.setLineWidth(0.8)
+        c.line(0, 214, PAGE_W, 214)
+
+        # A pitch behind the middle of the sheet. The cover is otherwise all
+        # type, and this is a football report: the band it fills was 24% of the
+        # page carrying nothing. Vector at low weight rather than a rendered
+        # surface, so it stays crisp and adds no file to the package.
+        self._cover_pitch(y=262, height=214)
+
+        bottom = self._cover_logo(centre, PAGE_H - 46, 100)
 
         c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
         c.drawCentredString(centre, bottom - 26, "M A T C H   I N T E L L I G E N C E   R E P O R T")
 
-        # Fixture line. One score, one glyph, each side in its own colour.
-        c.setFont("Helvetica-Bold", TYPE_TITLE)
-        score = self.context["score"]
-        score_w = c.stringWidth(score, "Helvetica-Bold", 34)
-        home_w = c.stringWidth(home.upper(), "Helvetica-Bold", 17)
-        away_w = c.stringWidth(away.upper(), "Helvetica-Bold", 17)
-        gap = 22
-        total = home_w + gap + score_w + gap + away_w
-        x = centre - total / 2
         baseline = bottom - 76
-        c.setFillColor(self.home_color); c.drawString(x, baseline, home.upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_DISPLAY)
-        c.drawString(x + home_w + gap, baseline - 6, score)
-        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_TITLE)
-        c.drawString(x + home_w + gap + score_w + gap, baseline, away.upper())
+        self._cover_fixture(centre, baseline)
+
+        thesis = self._verdict()
+        self._cover_thesis(centre, baseline - 66, thesis, measure=720)
 
         lead = self._cover_lead()
-        thesis = self._verdict()
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
-        c.drawCentredString(centre, baseline - 54, thesis[:104])
-
         if lead:
-            # Hero number high enough to close the gap under the thesis, with
-            # the supporting splits filling the space beneath it. Leaving the
-            # bar at the foot of the page opened a dead band across the middle
-            # a quarter of the sheet deep.
-            _gap, name, note, home_value, away_value = lead
-            self._cover_lead_bar(name, note, home_value, away_value, y=352)
-            self._cover_strip(y=150, exclude=name)
+            kind, name, note, home_value, away_value = lead
+            self._cover_lead_bar(kind, name, note, home_value, away_value, y=302)
+            self._cover_strip(y=124, exclude=name)
         else:
-            # An even match: no single number earns the hero treatment, so the
-            # cover carries the supporting splits alone, centred.
-            self._cover_strip(y=280)
+            self._cover_strip(y=124)
 
         c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO)
-        c.drawString(56, 42, "WHOSCORED / OPTA EVENT DATA")
-        c.drawRightString(PAGE_W - 56, 42, "CREATED BY MOSTAFA SAAD")
+        c.drawString(56, 44, "WHOSCORED / OPTA EVENT DATA")
+        c.drawRightString(PAGE_W - 56, 44, "CREATED BY MOSTAFA SAAD")
         self._finish()
 
-    def _cover_lead_bar(self, name: str, note: str, home_value: float, away_value: float, y: float):
-        """The match's widest split, at full width. The graphic is the finding."""
+    def _cover_thesis(self, centre: float, top: float, text: str, measure: float):
+        """The report's one-sentence finding, wrapped to a readable measure.
+
+        Set as a single centred string it ran the full width of the sheet and
+        touched both margins; a line that long is a banner, not a sentence.
+        """
+        c = self.canvas
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_THESIS)
+        lines, current = [], ""
+        for word in text.split():
+            candidate = f"{current} {word}".strip()
+            if c.stringWidth(candidate, "Helvetica-Bold", TYPE_THESIS) <= measure:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        for index, line in enumerate(lines[:3]):
+            c.drawCentredString(centre, top - index * (TYPE_THESIS + 8), line)
+        return top - (len(lines[:3]) - 1) * (TYPE_THESIS + 8)
+
+    def _cover_pitch(self, y: float, height: float):
+        """The centre of a pitch, faint, behind the cover's hero statistic.
+
+        Only the halfway line, the centre circle and the two touchlines. A full
+        pitch was drawn here first and its penalty areas sit exactly where the
+        hero's two numbers do -- at 62pt those are the largest things on the
+        sheet, and the box lines ran straight through them. These three marks
+        say "pitch" on their own and occupy the middle of the band, which is
+        the one part of it no text uses.
+        """
         c = self.canvas
         left, width = 56, PAGE_W - 112
-        total = max(home_value + away_value, 1e-6)
-        home_w = width * home_value / total
+        middle = left + width / 2
+        c.saveState()
+        c.setStrokeColor(GRID)
+        c.setFillColor(GRID)
+        c.setStrokeAlpha(0.75)
+        c.setFillAlpha(0.75)
+        c.setLineWidth(1.0)
+        c.line(left, y, left + width, y)
+        c.line(left, y + height, left + width, y + height)
+        c.line(middle, y, middle, y + height)
+        c.circle(middle, y + height / 2, height * 0.30, stroke=1, fill=0)
+        c.circle(middle, y + height / 2, 2.0, stroke=0, fill=1)
+        c.restoreState()
+
+    def _cover_fixture(self, centre: float, baseline: float):
+        """Crest, name, score, name, crest — the line the visuals also carry.
+
+        The report was the only part of the package without club crests once
+        the visuals and the posters gained them.
+        """
+        c = self.canvas
+        home, away = self.context["home"], self.context["away"]
+        score = self.context["score"]
+        crest, pad, gap = 36, 13, 20
+
+        score_w = c.stringWidth(score, "Helvetica-Bold", TYPE_DISPLAY)
+        home_w = c.stringWidth(home.upper(), "Helvetica-Bold", TYPE_FIXTURE)
+        away_w = c.stringWidth(away.upper(), "Helvetica-Bold", TYPE_FIXTURE)
+        home_badge = self._crest_reader(self.context.get("home_id"))
+        away_badge = self._crest_reader(self.context.get("away_id"))
+        lead_in = crest + pad if home_badge is not None else 0
+        lead_out = crest + pad if away_badge is not None else 0
+
+        total = lead_in + home_w + gap + score_w + gap + away_w + lead_out
+        left = centre - total / 2
+        x = left
+        if home_badge is not None:
+            c.drawImage(home_badge, x, baseline - 10, crest, crest,
+                        mask="auto", preserveAspectRatio=True, anchor="c")
+            x += lead_in
+        c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", TYPE_FIXTURE)
+        c.drawString(x, baseline, home.upper())
+        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_DISPLAY)
+        c.drawString(x + home_w + gap, baseline - 9, score)
+        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_FIXTURE)
+        c.drawString(x + home_w + gap + score_w + gap, baseline, away.upper())
+        if away_badge is not None:
+            c.drawImage(away_badge, x + home_w + gap + score_w + gap + away_w + pad,
+                        baseline - 10, crest, crest,
+                        mask="auto", preserveAspectRatio=True, anchor="c")
+
+        # The two-colour rule every visual and poster closes its header with,
+        # so the cover is recognisably the front of the same document.
+        rule_y = baseline - 32
+        c.setFillColor(self.home_color)
+        c.rect(left, rule_y, total / 2, 2.4, stroke=0, fill=1)
+        c.setFillColor(self.away_color)
+        c.rect(left + total / 2, rule_y, total / 2, 2.4, stroke=0, fill=1)
+
+    @staticmethod
+    def _crest_reader(team_id):
+        """An ImageReader for one club's crest, or None if there isn't one."""
+        if team_id is None:
+            return None
+        try:
+            if crests.crest_image(int(team_id)) is None:
+                return None
+            return ImageReader(str(crests.cache_path(int(team_id))))
+        except Exception:
+            return None
+
+    def _cover_lead_bar(self, kind: str, name: str, note: str,
+                        home_value: float, away_value: float, y: float):
+        """The match's most lopsided percentage, at full width.
+
+        ``kind`` decides the graphic. A "split" divides one bar between the two
+        sides, because the pair sums to the whole. A "rate" gives each side its
+        own bar against a common 100 baseline, because the two are independent
+        percentages of different denominators and one divided bar would claim
+        they add up.
+        """
+        c = self.canvas
+        left, width = 56, PAGE_W - 112
+
+        # A split bar sits on one track at y; the rate mode stacks two, and its
+        # upper track ran through the bottom of the 62pt number beside it, so
+        # the numbers are lifted clear in that mode.
+        stacked = kind != "split"
+        label_y = y + (124 if stacked else 92)
+        home_y = y + (66 if stacked else 40)
+        away_y = y + (56 if stacked else 30)
 
         c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
-        c.drawString(left, y + 92, f"{name.upper()}  ·  {note.upper()}")
+        c.drawString(left, label_y, f"{name.upper()}  ·  {note.upper()}")
 
         # Deliberately mismatched: the side that lost the battle is set smaller
         # so the pair reads as lopsided before either number is parsed.
         minor, major = ((TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR) if away_value >= home_value
                         else (TYPE_LEAD_MAJOR, TYPE_LEAD_MINOR))
         c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", minor)
-        c.drawString(left, y + 40, f"{home_value:.1f}%")
+        c.drawString(left, home_y, f"{home_value:.1f}%")
         c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", major)
-        c.drawRightString(left + width, y + 30, f"{away_value:.1f}%")
+        c.drawRightString(left + width, away_y, f"{away_value:.1f}%")
 
-        c.setFillColor(self.home_color); c.rect(left, y, home_w, 14, fill=1, stroke=0)
-        c.setFillColor(self.away_color); c.rect(left + home_w, y, width - home_w, 14, fill=1, stroke=0)
+        if kind == "split":
+            total = max(home_value + away_value, 1e-6)
+            home_w = width * home_value / total
+            c.setFillColor(self.home_color); c.rect(left, y, home_w, 14, fill=1, stroke=0)
+            c.setFillColor(self.away_color)
+            c.rect(left + home_w, y, width - home_w, 14, fill=1, stroke=0)
+        else:
+            # Two tracks, separated enough to read as two measurements. Butted
+            # together they looked like one two-tone bar, which is exactly the
+            # split reading this mode exists to avoid.
+            ceiling = max(home_value, away_value, 1e-6)
+            for offset, value, colour in ((26, home_value, self.home_color),
+                                          (0, away_value, self.away_color)):
+                c.setFillColor(PANEL_2)
+                c.rect(left, y + offset, width, 12, fill=1, stroke=0)
+                c.setFillColor(colour)
+                c.rect(left, y + offset, width * value / ceiling, 12, fill=1, stroke=0)
 
-        c.setFont("Helvetica-Bold", TYPE_BODY)
-        c.setFillColor(self.home_color); c.drawString(left, y - 18, self.context["home"])
-        c.setFillColor(self.away_color); c.drawRightString(left + width, y - 18, self.context["away"])
+        c.setFont("Helvetica-Bold", TYPE_SECTION)
+        c.setFillColor(self.home_color)
+        c.drawString(left, y - 22, self.context["home"].upper())
+        c.setFillColor(self.away_color)
+        c.drawRightString(left + width, y - 22, self.context["away"].upper())
 
     def _cover_strip(self, y: float, exclude: str | None = None):
         """Supporting splits under the lead statistic.
