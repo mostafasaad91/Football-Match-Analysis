@@ -41,9 +41,17 @@ _USER_AGENT = "Mozilla/5.0"
 # anyone who wants them bigger.
 NATIVE_PX = 70
 
-# Below this contrast against the page, a crest is laid on a light plate rather
-# than left to disappear -- the same floor the marks use.
-_PLATE_CONTRAST_FLOOR = 2.6
+# A crest earns a plate when too little of it separates from the page. Judged
+# per pixel rather than on the crest's mean colour: Aston Villa's averages
+# light, because of the pale shield behind the lion, but its claret border and
+# blue field both clear the page comfortably and it needs no plate at all.
+_PIXEL_CONTRAST_FLOOR = 2.0
+_MIN_READABLE_FRACTION = 0.30
+
+# The plate itself. Slate rather than near-black on paper: a crest tile is
+# meant to read as a deliberate badge, not as a hole in the page.
+PLATE_ON_DARK_PAGE = "#E8EBEF"
+PLATE_ON_LIGHT_PAGE = "#39414D"
 
 _MEMO: dict[int, np.ndarray | None] = {}
 
@@ -109,8 +117,8 @@ def crest_image(team_id: int, *, allow_download: bool = True) -> np.ndarray | No
     return image
 
 
-def needs_plate(image: np.ndarray, background: str) -> bool:
-    """Whether a crest is too dark for the page it is being drawn on.
+def crest_luminance(image: np.ndarray) -> float:
+    """Mean luminance over the opaque pixels of a crest.
 
     Averaged over the opaque pixels only -- a crest is mostly transparent
     corner, and including those would call every crest light enough.
@@ -118,10 +126,44 @@ def needs_plate(image: np.ndarray, background: str) -> bool:
     alpha = image[..., 3].astype(float) / 255.0
     weight = alpha.sum()
     if weight <= 0:
-        return False
+        return 0.0
     rgb = [float((image[..., channel].astype(float) / 255.0 * alpha).sum() / weight)
            for channel in range(3)]
-    return _contrast(rgb, mcolors.to_rgb(background)) < _PLATE_CONTRAST_FLOOR
+    return _relative_luminance(rgb)
+
+
+def readable_fraction(image: np.ndarray, background: str) -> float:
+    """Share of a crest's opaque area that separates from the page."""
+    alpha = image[..., 3].astype(float) / 255.0
+    opaque = alpha > 0.5
+    if not opaque.any():
+        return 1.0
+    rgb = image[..., :3].astype(float) / 255.0
+    channels = np.where(rgb <= 0.03928, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    luminance = (0.2126 * channels[..., 0] + 0.7152 * channels[..., 1]
+                 + 0.0722 * channels[..., 2])
+    page = _relative_luminance(mcolors.to_rgb(background))
+    bright = np.maximum(luminance, page)
+    dark = np.minimum(luminance, page)
+    contrast = (bright + 0.05) / (dark + 0.05)
+    return float((contrast[opaque] >= _PIXEL_CONTRAST_FLOOR).mean())
+
+
+def needs_plate(image: np.ndarray, background: str) -> bool:
+    """Whether too little of a crest separates from the page under it."""
+    return readable_fraction(image, background) < _MIN_READABLE_FRACTION
+
+
+def plate_colour(image: np.ndarray, background: str) -> str:
+    """The plate a crest is laid on when it cannot hold its own on the page.
+
+    A crest reaches this point because most of it sits close to the page, so
+    the plate has to move away from the page: light behind a navy crest on
+    black, dark behind a white-and-silver one on paper.
+    """
+    del image  # kept in the signature: the plate is per-crest by intent
+    light_page = _relative_luminance(mcolors.to_rgb(background)) > 0.5
+    return PLATE_ON_LIGHT_PAGE if light_page else PLATE_ON_DARK_PAGE
 
 
 def place_crest(
@@ -134,7 +176,7 @@ def place_crest(
     colour: str,
     size_px: float,
     background: str = "#000000",
-    text_colour: str = "#FFFFFF",
+    text_colour: str | None = None,
     allow_download: bool = True,
 ) -> bool:
     """Draw one club's crest at a figure-fraction position.
@@ -143,6 +185,10 @@ def place_crest(
     stood in for it. ``size_px`` is the crest's width in output pixels.
     """
     image = crest_image(team_id, allow_download=allow_download)
+    if text_colour is None:
+        # The monogram sits on the kit colour, so it follows the fill.
+        text_colour = "#111418" if _relative_luminance(
+            mcolors.to_rgb(colour)) > 0.42 else "#FFFFFF"
     width_frac = size_px / fig.get_figwidth() / fig.dpi
     height_frac = size_px / fig.get_figheight() / fig.dpi
 
@@ -164,7 +210,8 @@ def place_crest(
             (x - width_frac / 2 - pad_w, y - height_frac / 2 - pad_h),
             width_frac + 2 * pad_w, height_frac + 2 * pad_h,
             boxstyle="round,pad=0,rounding_size=0.008",
-            facecolor="#E8EBEF", edgecolor="none", alpha=0.93, zorder=5,
+            facecolor=plate_colour(image, background), edgecolor="none",
+            alpha=0.93, zorder=5,
         ))
 
     # OffsetImage zoom is in 72dpi points, so the figure's dpi has to be

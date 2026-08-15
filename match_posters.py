@@ -24,6 +24,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import colors as mcolors
 import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import Arc, Circle, Rectangle
@@ -41,7 +42,7 @@ from match_metrics import (
     touch_mask,
     xg_momentum,
 )
-from visualization_components import IS_LIGHT_THEME
+from visualization_components import IS_LIGHT_THEME, text_on_fill
 
 if IS_LIGHT_THEME:
     BG, PANEL, GRID = "#F5F5F5", "#FFFFFF", "#CCCCCC"
@@ -49,6 +50,14 @@ if IS_LIGHT_THEME:
 else:
     BG, PANEL, GRID = "#000000", "#08090B", "#22262D"
     TEXT, MUTED, NEUTRAL, LINE = "#F5F7FA", "#9BA3AE", "#626A75", "#31363E"
+
+# Marks that have to separate from the page rather than carry a team: the
+# goal star's rim, the average-height rule, a scatter edge. Written as #FFFFFF
+# throughout the first pass, which is right on black and invisible on paper.
+INK = "#1A1A1A" if IS_LIGHT_THEME else "#FFFFFF"
+# Network links are drawn in the team colour at partial alpha. The same
+# 0.34 that reads as a bright line on black washes a dark line out on paper.
+LINK_ALPHA = 0.55 if IS_LIGHT_THEME else 0.34
 
 PITCH_LENGTH, PITCH_WIDTH = 105.0, 58.0
 
@@ -221,7 +230,7 @@ def panel_pass_network(ax, events, players, team_id, colour, *, flip=False):
         a, b = coords.get(str(row.player)), coords.get(str(row.next_player))
         if not a or not b:
             continue
-        ax.plot([a[0], b[0]], [a[1], b[1]], color=colour, alpha=0.34,
+        ax.plot([a[0], b[0]], [a[1], b[1]], color=colour, alpha=LINK_ALPHA,
                 lw=0.5 + 3.4 * row.n / top, zorder=2, solid_capstyle="round")
 
     shirts = {}
@@ -237,8 +246,9 @@ def panel_pass_network(ax, events, players, team_id, colour, *, flip=False):
         x, y = coords[str(name)]
         ax.scatter(x, y, s=90 + 260 * row["touches"] / peak, color=colour,
                    edgecolor=BG, linewidth=0.9, zorder=4)
-        ax.text(x, y, shirts.get(str(name), str(name)[:2].upper()), color="#FFFFFF",
-                fontsize=5.4, fontweight="bold", ha="center", va="center", zorder=5)
+        ax.text(x, y, shirts.get(str(name), str(name)[:2].upper()),
+                color=text_on_fill(colour), fontsize=5.4, fontweight="bold",
+                ha="center", va="center", zorder=5)
     _footnote(ax, f"node = touches · {len(links)} completed links")
 
 
@@ -297,7 +307,7 @@ def panel_shot_map(ax, events, home_id, away_id, home_colour, away_colour):
         goals = _bool(side["is_goal"])
         for subset, marker, scale, edge in (
             (side[~goals], "o", 1.0, BG),
-            (side[goals], "*", 2.6, "#FFFFFF"),
+            (side[goals], "*", 2.6, INK),
         ):
             if subset.empty:
                 continue
@@ -335,7 +345,7 @@ def panel_momentum(ax, events, home_id, away_id, home_colour, away_colour):
         m = float(getattr(row, "minute", 0) or 0)
         ax.plot([m, m], [-span * 1.16, span * 1.16], color=NEUTRAL, lw=0.6,
                 linestyle=(0, (2, 2)), zorder=1)
-        ax.scatter([m], [span * 1.16], marker="*", s=42, color="#FFFFFF",
+        ax.scatter([m], [span * 1.16], marker="*", s=42, color=INK,
                    edgecolor=BG, linewidth=0.5, zorder=5)
     ax.set_xlim(0, max(93.0, float(minute.max()) if len(minute) else 93.0))
     ax.set_ylim(-span * 1.32, span * 1.32)
@@ -397,9 +407,9 @@ def panel_defensive_actions(ax, events, team_id, colour, *, flip=False):
     height = pd.to_numeric(actions["x"], errors="coerce").mean()
     hx, hy = _xy([50.0, 50.0], [0.0, 100.0], flip=flip)
     _, line_y = _xy([height], [50.0], flip=flip)
-    ax.plot([hx[0], hx[1]], [line_y[0], line_y[0]], color="#FFFFFF", lw=0.9,
+    ax.plot([hx[0], hx[1]], [line_y[0], line_y[0]], color=INK, lw=0.9,
             linestyle=(0, (4, 3)), alpha=0.75, zorder=5)
-    ax.text(0, line_y[0] + 1.6, f"AVG {height:.0f}", color="#FFFFFF", fontsize=5.6,
+    ax.text(0, line_y[0] + 1.6, f"AVG {height:.0f}", color=INK, fontsize=5.6,
             fontweight="bold", ha="center", va="bottom", zorder=5)
     _footnote(ax, f"{len(won)} won · {len(cleared)} cleared · avg height {height:.0f}")
 
@@ -454,11 +464,18 @@ def panel_zone_dominance(ax, events, home_id, away_id, home_colour, away_colour)
         for c in range(cols):
             value = grid[r, c]
             colour = home_colour if value >= 0 else away_colour
+            alpha = 0.12 + 0.78 * abs(value) / peak
             ax.add_patch(Rectangle((c * cell_w, r * cell_h), cell_w, cell_h,
-                                   facecolor=colour, alpha=0.12 + 0.78 * abs(value) / peak,
+                                   facecolor=colour, alpha=alpha,
                                    edgecolor=BG, linewidth=1.1, zorder=2))
+            # A faint cell is mostly page, a saturated one mostly team colour,
+            # so the label is measured against the blend it actually sits on.
+            blend = mcolors.to_hex(
+                (1 - alpha) * np.asarray(mcolors.to_rgb(BG))
+                + alpha * np.asarray(mcolors.to_rgb(colour))
+            )
             ax.text((c + 0.5) * cell_w, (r + 0.5) * cell_h, f"{value:+.0f}",
-                    color="#FFFFFF", fontsize=6.4, fontweight="bold",
+                    color=text_on_fill(blend), fontsize=6.4, fontweight="bold",
                     ha="center", va="center", zorder=3)
     ax.text(0.5, -0.022, "OWN THIRD  →  ATTACKING THIRD, HOME DIRECTION",
             transform=ax.transAxes, color=NEUTRAL, fontsize=6.0,
@@ -501,7 +518,7 @@ def panel_high_regains(ax, events, team_id, colour, *, flip=False):
     frame = high_regain_events(events, team_id).dropna(subset=["x", "y"])
     if not frame.empty:
         sx, sy = _xy(frame["x"], frame["y"], flip=flip)
-        ax.scatter(sx, sy, s=34, color=colour, edgecolor="#FFFFFF", linewidth=0.6,
+        ax.scatter(sx, sy, s=34, color=colour, edgecolor=INK, linewidth=0.6,
                    alpha=0.9, zorder=4)
     # The zone the regains are counted in, so the reader sees the rule not just
     # the dots that passed it.
@@ -651,11 +668,13 @@ def _header(fig, *, home_id, away_id, home_name, away_name, home_colour, away_co
             score, competition, match_date, poster_label, subhead, allow_download):
     fig.text(0.030, 0.9885, poster_label.upper(), color=NEUTRAL, fontsize=7.0,
              fontweight="bold", va="top")
-    fig.text(0.970, 0.9885, competition.upper(), color=NEUTRAL, fontsize=7.0,
-             fontweight="bold", va="top", ha="right")
+    # One line, above the crest band. On its own row the date landed at 0.9705,
+    # inside the crest drawn at 0.9525, and was printed behind it.
+    strap = competition.upper()
     if match_date:
-        fig.text(0.970, 0.9705, str(match_date), color=NEUTRAL, fontsize=6.4,
-                 fontweight="bold", va="top", ha="right")
+        strap = f"{strap}  ·  {match_date}"
+    fig.text(0.970, 0.9885, strap, color=NEUTRAL, fontsize=7.0,
+             fontweight="bold", va="top", ha="right")
 
     crests.place_crest(fig, 0.068, 0.9525, home_id, monogram=home_name[:3].upper(),
                        colour=home_colour, size_px=86, background=BG,

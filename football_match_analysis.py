@@ -12791,6 +12791,21 @@ def main():
             f"{package['output_dir']}[/bold green]"
         )
         console.print(f"[green]  ✓ Tactical PDF → {package['pdf']}[/green]")
+
+        # A light-page copy of the same fixture, for choosing what to publish.
+        # The theme is fixed when visualization_components is first imported,
+        # so this runs in a child process; it writes to <match>/light/ and a
+        # failure there never costs the black package that is already done.
+        if os.environ.get("MATCH_ANALYSIS_LIGHT_COPY", "1").strip().lower() not in {
+            "0", "false", "no", "off"
+        }:
+            from render_light import render_light_package
+
+            light_out = render_light_package(package["output_dir"])
+            if light_out is not None:
+                package["light_output_dir"] = light_out
+                console.print(f"[green]  ✓ Light package → {light_out}[/green]")
+
         return package
 
     plt.style.use("dark_background")

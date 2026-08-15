@@ -33,7 +33,29 @@ python football_match_analysis.py
 | **CSV exports** | Events, players and every calculated metric |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
 
-Everything lands in `output/<home>_vs_<away>_<score>/`.
+Everything lands in `output/<home>_vs_<away>_<score>/`, and a light-page copy
+of the same package in `output/<home>_vs_<away>_<score>/light/`.
+
+### Two pages
+
+The identity is AMOLED black. A light "Ink & Petrol" palette renders the same
+package on `#F5F5F5`, so a fixture can be published on whichever page suits
+where it is going. Set `MATCH_ANALYSIS_LIGHT_COPY=0` to skip it.
+
+The theme is read when `visualization_components` is first imported and every
+renderer copies its colours into module constants there and then, so one
+process renders one page. The light copy is therefore rendered by a child
+process — `render_light.py`, which any finished match folder can be handed:
+
+```bash
+python render_light.py output/PSG_vs_Aston_Villa_2-1
+```
+
+A colour that reads on one page frequently does not read on the other, so the
+contrast lift moves kit colours *away from whichever page they are drawn on* —
+brightening PSG's navy on black, darkening Manchester City's sky blue on paper.
+Written for the black page it only searched upward, which drove City's `#6CABDD`
+and Juventus' `#DCE3EC` to pure white against `#F5F5F5`.
 
 ---
 
@@ -221,6 +243,7 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `visualization_components.py` | Shared chart components and readability helpers |
 | `visualization_design.py` | Visual tokens, typography, reusable frames |
 | `match_posters.py` | The two post-match posters |
+| `render_light.py` | The light-page copy of a finished package |
 | `crests.py` | Club crest fetch, cache and fallback |
 | `team_palettes.py` | Kit colours for ~975 clubs and national teams |
 | `match_store.py` | SQLite history and the gzipped payload archive |

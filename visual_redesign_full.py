@@ -3,6 +3,7 @@ from __future__ import annotations
 import colorsys
 import gc
 import hashlib
+import json
 import math
 import re
 import shutil
@@ -178,14 +179,19 @@ def _contrast_on_bg(rgb) -> float:
 
 
 def lift_to_floor(color: str, floor: float = MARK_CONTRAST_FLOOR) -> str:
-    """Raise a colour's lightness until it clears the floor, keeping its hue.
+    """Move a colour's lightness until it clears the floor, keeping its hue.
 
     Real kit colours are frequently dark — navy, claret, maroon, near-black.
     Drawn unmodified on a pure black page they measure under 2:1: PSG's
     #004170 rendered at 1.99 and Aston Villa's #7A003C at 1.89, roughly half
     the readable minimum, which is why arrows and network links looked muted.
-    Hue and saturation are preserved, so the side is still recognisably itself
-    — only brighter.
+    Hue and saturation are preserved, so the side is still recognisably itself.
+
+    Which way lightness moves is decided by the page, not assumed. Written for
+    the black page it only ever searched upward, which is correct there and
+    exactly wrong on the light one: Manchester City's #6CABDD and Juventus'
+    #DCE3EC were both driven to pure white against #F5F5F5, a contrast of
+    1.09, and disappeared. A light page needs the same colours darkened.
     """
     try:
         rgb = mcolors.to_rgb(color)
@@ -198,23 +204,27 @@ def lift_to_floor(color: str, floor: float = MARK_CONTRAST_FLOOR) -> str:
         return color
 
     hue, lightness, saturation = colorsys.rgb_to_hls(*rgb)
-    low, high = lightness, 1.0
+    # Move away from the page: brighten on a dark ground, darken on a light one.
+    target = 0.0 if _relative_luminance(mcolors.to_rgb(BG)) > 0.5 else 1.0
+    # ``far`` is the end known to satisfy the floor, ``near`` the end known not
+    # to; which of the two is numerically larger depends on the page.
+    near, far = lightness, target
     for _ in range(24):
-        mid = (low + high) / 2
-        candidate = colorsys.hls_to_rgb(hue, mid, saturation)
-        if _contrast_on_bg(candidate) >= floor:
-            high = mid
+        mid = (near + far) / 2
+        if _contrast_on_bg(colorsys.hls_to_rgb(hue, mid, saturation)) >= floor:
+            far = mid
         else:
-            low = mid
+            near = mid
 
     # The search runs on floats, but the returned colour is an 8-bit hex. That
     # rounding can drop the result a hundredth under the floor, which makes a
-    # second call lift it again — so step until the *rounded* value clears.
+    # second call move it again — so step until the *rounded* value clears.
+    step = 0.004 if target > lightness else -0.004
     for _ in range(12):
-        hex_value = mcolors.to_hex(colorsys.hls_to_rgb(hue, min(high, 1.0), saturation))
-        if _contrast_on_bg(mcolors.to_rgb(hex_value)) >= floor or high >= 1.0:
+        hex_value = mcolors.to_hex(colorsys.hls_to_rgb(hue, far, saturation))
+        if _contrast_on_bg(mcolors.to_rgb(hex_value)) >= floor or far == target:
             return hex_value
-        high = min(high + 0.004, 1.0)
+        far = float(np.clip(far + step, 0.0, 1.0))
     return hex_value
 
 
@@ -3045,6 +3055,13 @@ def generate_match_package(
     base.theme()
     team_metrics.to_csv(OUT / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
     player_metrics.to_csv(OUT / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
+    # The fixture's identity, next to the frames it describes. Without it the
+    # output folder held every number about the match and no record of which
+    # match it was, so nothing downstream could re-render from it.
+    (OUT / "match_info.json").write_text(
+        json.dumps(match_info, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
     generated = non_pitch_pages(events, xg, team_metrics)
     plt.close("all")
     gc.collect()
