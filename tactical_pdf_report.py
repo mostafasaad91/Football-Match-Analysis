@@ -15,6 +15,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
 import crests
+from cover_art import build_cover_art
 from match_report import compute_ppda_both
 from visualization_components import IS_LIGHT_THEME
 
@@ -1483,46 +1484,67 @@ class TacticalPDF:
         c.drawCentredString(cx, top - 50, "F O O T B A L L   D A T A   &   A N A L Y S I S")
         return top - 62
 
+    # The artwork bleeds from this height to the top of the sheet.
+    COVER_ART_FLOOR = 262
+
     def cover(self):
         self._start("cover", "Cover")
         c = self.canvas
         centre = PAGE_W / 2
 
-        # A panel under the closing strip, so the sheet has a base to stand on
-        # and the footer is not floating on the bare page.
-        c.setFillColor(PANEL)
-        c.rect(0, 0, PAGE_W, 214, stroke=0, fill=1)
-        c.setStrokeColor(GRID); c.setLineWidth(0.8)
-        c.line(0, 214, PAGE_W, 214)
+        art = self.context.get("cover_art")
+        drawn = False
+        if art and Path(art).exists():
+            try:
+                # Full bleed: no margin, because a cover image with a margin is
+                # a picture on a page rather than the front of the document.
+                c.drawImage(ImageReader(str(art)), 0, self.COVER_ART_FLOOR,
+                            PAGE_W, PAGE_H - self.COVER_ART_FLOOR,
+                            mask=None, preserveAspectRatio=False)
+                drawn = True
+            except Exception:
+                drawn = False
 
-        # A pitch behind the middle of the sheet. The cover is otherwise all
-        # type, and this is a football report: the band it fills was 24% of the
-        # page carrying nothing. Vector at low weight rather than a rendered
-        # surface, so it stays crisp and adds no file to the package.
-        self._cover_pitch(y=262, height=214)
-
-        bottom = self._cover_logo(centre, PAGE_H - 46, 100)
-
-        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
-        c.drawCentredString(centre, bottom - 26, "M A T C H   I N T E L L I G E N C E   R E P O R T")
-
-        baseline = bottom - 76
-        self._cover_fixture(centre, baseline)
-
-        thesis = self._verdict()
-        self._cover_thesis(centre, baseline - 66, thesis, measure=720)
-
-        lead = self._cover_lead()
-        if lead:
-            kind, name, note, home_value, away_value = lead
-            self._cover_lead_bar(kind, name, note, home_value, away_value, y=302)
-            self._cover_strip(y=124, exclude=name)
+        if drawn:
+            # The badge is a JPEG on its own near-black ground and the artwork
+            # is #0E1218, so laying it straight on showed the seam. A rounded
+            # tile one step lighter than the artwork turns that seam into the
+            # edge of a badge, which is what it should have looked like.
+            tile = 84
+            c.setFillColor(colors.HexColor("#181E27"))
+            c.roundRect(centre - tile / 2 - 7, PAGE_H - 56 - tile - 7,
+                        tile + 14, tile + 14, 9, stroke=0, fill=1)
+            self._cover_logo(centre, PAGE_H - 56, tile)
+            baseline = 204
         else:
-            self._cover_strip(y=124)
+            # No artwork: the typographic cover, with the pitch behind it.
+            self._cover_pitch(y=262, height=214)
+            bottom = self._cover_logo(centre, PAGE_H - 46, 100)
+            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
+            c.drawCentredString(centre, bottom - 26,
+                                "M A T C H   I N T E L L I G E N C E   R E P O R T")
+            baseline = bottom - 76
 
-        c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO)
-        c.drawString(56, 44, "WHOSCORED / OPTA EVENT DATA")
-        c.drawRightString(PAGE_W - 56, 44, "CREATED BY MOSTAFA SAAD")
+        self._cover_fixture(centre, baseline)
+        self._cover_thesis(centre, baseline - 64, self._verdict(), measure=720)
+
+        if not drawn:
+            lead = self._cover_lead()
+            if lead:
+                kind, name, note, home_value, away_value = lead
+                self._cover_lead_bar(kind, name, note, home_value, away_value, y=302)
+                self._cover_strip(y=124, exclude=name)
+            else:
+                self._cover_strip(y=124)
+
+        if drawn:
+            c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.drawCentredString(centre, 78,
+                                "P I T C H   C O N T R O L   ·   E V E R Y   S H O T ,"
+                                "   S I Z E D   B Y   C H A N C E   Q U A L I T Y")
+        c.setFillColor(NEUTRAL)
+        c.drawString(56, 44, "M A T C H   I N T E L L I G E N C E   R E P O R T")
+        c.drawRightString(PAGE_W - 56, 44, "WHOSCORED / OPTA EVENT DATA")
         self._finish()
 
     def _cover_thesis(self, centre: float, top: float, text: str, measure: float):
@@ -1998,6 +2020,14 @@ def build_tactical_pdf(
     context = build_context(events, xg, team_metrics, player_metrics, match_info)
     context["home_color"] = home_hex
     context["away_color"] = away_hex
+    # The cover's artwork, rendered beside the report. None of this is fatal:
+    # build_cover_art returns None on any failure and the cover falls back to
+    # its typographic form.
+    context["cover_art"] = build_cover_art(
+        events, output.parent / "cover_art.png",
+        home_id=context["home_id"], away_id=context["away_id"],
+        home_colour=home_hex, away_colour=away_hex,
+    )
     section_copy = _section_copy(context)
     groups = _ordered_section_paths(valid_paths)
     core = [

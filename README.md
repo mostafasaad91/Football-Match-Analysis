@@ -27,7 +27,7 @@ python football_match_analysis.py
 | Output | Detail |
 | --- | --- |
 | **49 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
-| **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice — opening on a cover built from the match's most lopsided number |
+| **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice — opening on a cover drawn from the match itself |
 | **4 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
 | **Player radars** | A full role profile per player, coloured to their team |
 | **CSV exports** | Events, players and every calculated metric |
@@ -251,6 +251,7 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `match_posters.py` | The two post-match posters |
 | `render_light.py` | The light-page copy of a finished package |
 | `crests.py` | Club crest fetch, cache, plate and fallback |
+| `cover_art.py` | The report cover's hero image |
 | `team_palettes.py` | Kit colours for ~975 clubs and national teams |
 | `match_store.py` | SQLite history and the gzipped payload archive |
 | `team_history.py` | Command-line reader for the stored history |

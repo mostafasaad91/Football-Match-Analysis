@@ -92,12 +92,12 @@ def test_a_goalless_metric_is_skipped_rather_than_dividing_by_zero():
 # the page
 # --------------------------------------------------------------------------
 
-def test_the_cover_fills_the_page(tmp_path):
-    """Measured, because 'looks empty' is exactly what went unnoticed before."""
+def _coverage(tmp_path, context):
+    """Share of the cover's rows carrying anything, and its deepest gap."""
     fitz = pytest.importorskip("fitz")
     import numpy as np
 
-    _cover(tmp_path)
+    _cover(tmp_path, context)
     doc = fitz.open(tmp_path / "cover.pdf")
     pix = doc[0].get_pixmap(dpi=60)
     image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
@@ -106,16 +106,37 @@ def test_the_cover_fills_the_page(tmp_path):
     rows = (np.abs(image - page).sum(axis=2) > 12).any(axis=1)
     doc.close()
 
-    covered = rows.sum() / len(rows)
-    assert covered > 0.55, f"only {covered:.0%} of the cover's rows carry anything"
-
     longest = current = 0
     for hit in rows:
         current = 0 if hit else current + 1
         longest = max(longest, current)
-    assert longest / len(rows) < 0.15, (
-        f"a dead band {longest / len(rows):.0%} of the page deep"
+    return rows.sum() / len(rows), longest / len(rows)
+
+
+def test_the_cover_fills_the_page_with_its_artwork(tmp_path):
+    """Measured, because 'looks empty' is exactly what went unnoticed before."""
+    from cover_art import build_cover_art
+
+    out = ROOT / "output" / "PSG_vs_Aston_Villa_2-1"
+    context = _context()
+    context["cover_art"] = build_cover_art(
+        pd.read_csv(out / "events.csv"), tmp_path / "art.png",
+        home_id=context["home_id"], away_id=context["away_id"],
+        home_colour=context["home_color"], away_colour=context["away_color"],
     )
+    assert context["cover_art"] is not None, "the artwork failed to render"
+    covered, gap = _coverage(tmp_path, context)
+    assert covered > 0.80, f"only {covered:.0%} of the cover's rows carry anything"
+    assert gap < 0.10, f"a dead band {gap:.0%} of the page deep"
+
+
+def test_the_typographic_fallback_still_fills_the_page(tmp_path):
+    """A fixture whose artwork cannot render must not open on an empty sheet."""
+    context = _context()
+    context["cover_art"] = None
+    covered, gap = _coverage(tmp_path, context)
+    assert covered > 0.48, f"only {covered:.0%} of the cover's rows carry anything"
+    assert gap < 0.16, f"a dead band {gap:.0%} of the page deep"
 
 
 def test_the_cover_carries_both_crests(tmp_path):
@@ -189,3 +210,51 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
     )
     assert completed.returncode == 0, completed.stderr
     assert "OK" in completed.stdout
+
+
+# --------------------------------------------------------------------------
+# the artwork
+# --------------------------------------------------------------------------
+
+def test_the_artwork_lifts_kit_colours_against_its_own_ground():
+    """It is dark on both pages, so the page's own fit is the wrong one.
+
+    On the light page the report hands over PSG's raw #004170, which is
+    correct against paper and all but invisible on the artwork.
+    """
+    from cover_art import GROUND, MARK_FLOOR, _contrast, lift_for_artwork
+    from matplotlib import colors as mcolors
+
+    ground = mcolors.to_rgb(GROUND)
+    for kit in ("#004170", "#7A003C", "#111111", "#2F5BFF"):
+        lifted = lift_for_artwork(kit)
+        assert _contrast(mcolors.to_rgb(lifted), ground) >= MARK_FLOOR - 0.05, kit
+
+
+def test_a_colour_that_already_carries_is_left_alone():
+    from cover_art import lift_for_artwork
+
+    assert lift_for_artwork("#FFD400") == "#FFD400"
+
+
+def test_the_artwork_never_raises(tmp_path):
+    """A cover that cannot draw its picture must still produce a report."""
+    from cover_art import build_cover_art
+
+    assert build_cover_art(pd.DataFrame(), tmp_path / "x.png", home_id=1, away_id=2,
+                           home_colour="#000000", away_colour="#FFFFFF") is None
+
+
+def test_the_artwork_is_the_page_width_and_the_declared_height(tmp_path):
+    from PIL import Image
+
+    from cover_art import HEIGHT_PX, WIDTH_PX, build_cover_art
+
+    out = ROOT / "output" / "PSG_vs_Aston_Villa_2-1"
+    if not (out / "events.csv").exists():
+        pytest.skip("no rendered fixture available")
+    path = build_cover_art(pd.read_csv(out / "events.csv"), tmp_path / "art.png",
+                           home_id=304, away_id=24,
+                           home_colour="#004170", away_colour="#7A003C")
+    with Image.open(path) as image:
+        assert image.size == (WIDTH_PX, HEIGHT_PX)
