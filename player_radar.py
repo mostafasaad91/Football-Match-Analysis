@@ -19,6 +19,7 @@ top_players_per_team(events, info, n=5) -> {"home":[...], "away":[...]}
 
 from __future__ import annotations
 
+import colorsys
 import os
 import re
 
@@ -181,6 +182,80 @@ def _chip_text_color(color: str) -> str:
     actually measures highest against the fill fixes all of them at once.
     """
     return text_on_fill(color)
+
+
+# The chip is an 8pt digit on a coloured tile, and WCAG's luminance formula
+# flatters saturated hues: red carries a coefficient of 0.2126, so a fully
+# saturated red computes as "dark" and near-black on it scores 4.9:1 while
+# reading as a smudge. Arsenal's #fe0107 was exactly that. The tile is pushed
+# until its own best ink clears a floor well above the nominal minimum.
+CHIP_CONTRAST_FLOOR = 7.0
+
+
+# How far apart two adjusted chips are kept, in lightness. Without it every
+# group that needed moving stopped at the same boundary: Arsenal's passing,
+# defence and duels chips all became #b60105 and three of the five groups
+# stopped being told apart.
+CHIP_SEPARATION = 0.055
+
+
+def _chip_fill(color: str, floor: float = CHIP_CONTRAST_FLOOR,
+               nudge: float = 0.0) -> str:
+    """Move a group colour's lightness until a label on it is properly legible.
+
+    The direction follows whichever tier the fill already prefers, so the pale
+    groups stay pale and the deep ones stay deep. Only the saturated middle —
+    where neither tier is comfortable — is moved far, and it goes darker,
+    because the light end of the ramp is already occupied.
+
+    ``nudge`` pushes further in the same direction, which only ever raises the
+    contrast. ``chip_fills`` uses it to keep adjusted chips apart.
+    """
+    try:
+        rgb = mcolors.to_rgb(color)
+    except (ValueError, TypeError):
+        return color
+    if not nudge and contrast_ratio(text_on_fill(color), color) >= floor:
+        return color
+
+    hue, lightness, saturation = colorsys.rgb_to_hls(*rgb)
+    # A fill that is already light goes lighter; anything else goes darker.
+    target = 1.0 if lightness > 0.62 else 0.0
+    low, high = lightness, target
+    for _ in range(20):
+        mid = (low + high) / 2
+        candidate = mcolors.to_hex(colorsys.hls_to_rgb(hue, mid, saturation))
+        if contrast_ratio(text_on_fill(candidate), candidate) >= floor:
+            high = mid
+        else:
+            low = mid
+    if nudge:
+        high = float(np.clip(high + (nudge if target > lightness else -nudge),
+                             0.06, 0.96))
+    return mcolors.to_hex(colorsys.hls_to_rgb(hue, high, saturation))
+
+
+def chip_fills(colors, floor: float = CHIP_CONTRAST_FLOOR) -> list[str]:
+    """Legible chip fills for one radar's groups, still distinguishable.
+
+    Taken as a set rather than one at a time, because the fix for legibility is
+    to move a fill to the edge of the safe zone and several groups of the same
+    kit arrive at the same edge. Each one after the first is pushed a little
+    further, which keeps them apart and can only improve their contrast.
+    """
+    adjusted, moved = [], 0
+    for colour in colors:
+        try:
+            safe = contrast_ratio(text_on_fill(colour), colour) >= floor
+        except Exception:
+            adjusted.append(colour)
+            continue
+        if safe:
+            adjusted.append(colour)
+            continue
+        adjusted.append(_chip_fill(colour, floor, nudge=moved * CHIP_SEPARATION))
+        moved += 1
+    return adjusted
 
 
 def _readable_on_page(color: str, min_ratio: float = 4.0) -> str:
@@ -1090,8 +1165,13 @@ def make_player_pizza(
             clip_on=False,
         )
 
-    # metric labels + value chips (all horizontal)
+    # metric labels + value chips (all horizontal). The bar keeps the group's
+    # own colour; the chip behind the number is adjusted until the number on it
+    # is legible — a tile carrying an 8pt digit and a wedge carrying a
+    # percentile do not have the same job.
+    chip_by_group = dict(zip(group_colors, chip_fills(group_colors)))
     for a, lab, dv, p, c in zip(angs, labels, disps, pcts, colors):
+        chip = chip_by_group.get(c, _chip_fill(c))
         ax.text(
             a,
             RLAB,
@@ -1110,7 +1190,7 @@ def make_player_pizza(
             a,
             RVAL,
             dv,
-            color=_chip_text_color(c),
+            color=_chip_text_color(chip),
             fontsize=9,
             fontweight="bold",
             family="monospace",
@@ -1121,8 +1201,11 @@ def make_player_pizza(
             # Saturated mid-lightness fills (a red team's middle ramp step)
             # sit where neither tier quite clears 4.5:1 on its own. The stroke
             # is a no-op everywhere else.
-            path_effects=label_outline(c, linewidth=1.4),
-            bbox=dict(boxstyle="round,pad=0.24", fc=c, ec=BG_DARK, lw=1.2),
+            path_effects=label_outline(chip, linewidth=1.4),
+            # The fill carries the number's legibility, the border carries the
+            # group: a chip pushed dark enough for white text sits almost on
+            # the black page and stopped reading as a tile at all.
+            bbox=dict(boxstyle="round,pad=0.24", fc=chip, ec=c, lw=1.3),
         )
     for sp in ax.spines.values():
         sp.set_visible(False)
