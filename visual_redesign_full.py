@@ -3138,15 +3138,23 @@ def generate_match_package(
         competition=str(match_info.get("competition") or "MATCH ANALYSIS"),
         match_date=str(match_info.get("date") or ""),
     )
+    # The publishable read, beside the reference report. Never fatal: a package
+    # that cannot write its article still has every visual and the PDF.
+    from match_article import build_match_article
+    article = build_match_article(events, xg, team_metrics, player_metrics,
+                                  match_info, OUT)
+
     print(f"Generated {len(paths)} full redesigned visuals")
     print(f"Pitch visuals: {int(catalog['has_pitch'].sum())}")
     print(f"Posters: {len(posters)}")
+    print(f"Article: {article}" if article else "Article: not written")
     print(f"PDF: {pdf}")
     return {
         "visuals": paths,
         "catalog": OUT / "visual_catalog.csv",
         "pdf": pdf,
         "posters": posters,
+        "article": article,
         "output_dir": OUT,
     }
 

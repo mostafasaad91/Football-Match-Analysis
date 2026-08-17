@@ -31,6 +31,7 @@ python football_match_analysis.py
 | **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice — opening on a cover drawn from the match itself |
 | **4 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
 | **Player radars** | A full role profile per player, coloured to their team |
+| **Publishable article** | A 1,200–1,500 word read as `.docx`, argued from the fixture's own numbers |
 | **Light copy** | The same package again on `#F5F5F5`, in `light/` |
 | **CSV exports** | Events, players and every calculated metric |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
@@ -175,6 +176,37 @@ do not add up.
 
 ---
 
+## The article
+
+The report is a reference: every visual, a paragraph under each. An article is
+not that, so `match_article.py` does not walk the visuals and describe them. It
+derives a set of findings from the frames, ranks them by how far apart the two
+sides actually were, and gives the strongest five or six a section each with
+the visuals that evidence them. The output is a `.docx` with real heading
+styles and no tables, which is what pastes cleanly into an editor.
+
+Two rules hold throughout, both learned from defects the PDF shipped:
+
+- **a sentence names whichever side its numbers name.** Four readings in the
+  report said "the away side" and meant "the leader", so they contradicted the
+  figures printed beside them whenever the home team led. Every comparison now
+  asks which side leads the pair, with a tolerance so a genuine tie is reported
+  as one.
+- **a number is followed by what it bought.** "70.8% field tilt" is a
+  measurement; "seventy per cent of the match in the other half, for 1.08 xG"
+  is a finding.
+
+A phase where the two sides were level is still a finding about that phase —
+skipping those left an even match with three sections and 773 words against a
+1,200 floor.
+
+The tests check what is checkable: the length, that no sentence carrying a
+number appears in two different matches' articles, and that every claim
+survives its own mirror image — the same fixture with the sides swapped, which
+is the only way to tell "names the away side" apart from "names the leader".
+
+---
+
 ## Metrics
 
 Thirty metric functions, each defined once in `match_metrics.py` and reused by
@@ -292,6 +324,7 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `render_light.py` | The light-page copy of a finished package |
 | `crests.py` | Club crest fetch, cache, plate and fallback |
 | `cover_art.py` | The report cover's hero image |
+| `match_article.py` | The publishable article and its Word output |
 | `team_palettes.py` | Kit colours for ~975 clubs and national teams |
 | `match_store.py` | SQLite history and the gzipped payload archive |
 | `team_history.py` | Command-line reader for the stored history |
