@@ -26,9 +26,11 @@ import pandas as pd
 import pytest
 
 from tactical_pdf_report import (
+    _legacy_visual_explanation,
     _section_copy,
     _visual_team,
     build_context,
+    visual_data_read,
     visual_explanation,
     visual_implication,
 )
@@ -94,20 +96,26 @@ def test_no_explanation_repeats_another_boards_wording_verbatim(match):
     assert not duplicates, duplicates
 
 
+@pytest.mark.parametrize("writer", [visual_implication, visual_data_read],
+                         ids=["implication", "data_read"])
 @pytest.mark.parametrize("match", MATCHES)
-def test_every_visual_has_its_own_coaching_note(match):
-    """The implication under each board had the same fifteen-way fallback.
+def test_every_visual_has_its_own_note_from_every_writer(match, writer):
+    """Each paragraph writer had the same fifteen-way fallback.
 
-    A third of the report ended on "Translate the pattern into a coachable
-    behaviour", which tells a coach nothing about the board above it.
+    The report puts three paragraphs under a board — the reading, the data
+    line and the coaching note — and each was written by its own function with
+    its own list of branches. Fixing the fallback in one left the other two
+    printing "Translate the pattern into a coachable behaviour" and "The
+    numerical layer should confirm the visual pattern" across a third of the
+    report, which tells a reader nothing about the board above it.
     """
     context, out = _context(match)
     notes: dict[str, list[str]] = {}
     for path in sorted(out.glob("[0-9]*.png")):
-        notes.setdefault(visual_implication(path, context), []).append(path.name)
+        notes.setdefault(writer(path, context), []).append(path.name)
     shared = {note: names for note, names in notes.items() if len(names) > 2}
     assert not shared, (
-        "one coaching note is repeated across unrelated boards: "
+        f"{writer.__name__} repeats one paragraph across unrelated boards: "
         + "; ".join(f"{names}" for names in shared.values()))
 
 
@@ -181,3 +189,39 @@ def test_the_player_cards_read_as_english(match):
     text = " ".join(t for _, t in cards["performance"] + cards["data"])
     assert "1 goals" not in text, text
     assert "No qualifying player" not in text, text
+
+
+@pytest.mark.parametrize("match", MATCHES)
+def test_no_count_of_one_is_printed_as_a_plural(match):
+    """Player pages read "1 goals, 1 shots and 1 key passes".
+
+    Counts on a single-match player profile are small, so the plural is wrong
+    more often than it is right. This sweeps the radar text as well as the
+    board readings, which is where the last two survived a first pass.
+    """
+    context, out = _context(match)
+    # Sweep every function that puts words on a page, not only the one that
+    # writes the board readings: the same "1 shots" survived in two other
+    # paragraphs about the same player because only one was checked.
+    writers = [visual_explanation, visual_implication, visual_data_read,
+               _legacy_visual_explanation]
+    boards = sorted(out.glob("[0-9]*.png"))
+    radars = out / "player_radars"
+    if radars.exists():
+        boards += sorted(radars.glob("*/*.png"))
+    texts = [write(p, context) for write in writers for p in boards]
+    for section in _section_copy(context).values():
+        texts += [t for _, t in section["performance"] + section["data"]]
+
+    # The lookbehind keeps a scoreline out of it: "the final 2 — 1 makes it
+    # look like" is not a count of one followed by a plural.
+    offenders = []
+    for text in texts:
+        for found in re.finditer(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b", text):
+            word = found.group(0)
+            # "1 passes" is wrong; "1 less", "1 series" and similar are not
+            # plurals formed from a count.
+            if word.endswith(("ss", "ess")):
+                continue
+            offenders.append(word)
+    assert not offenders, sorted(set(offenders))

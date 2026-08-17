@@ -644,6 +644,20 @@ def tactical_lens(path: Path) -> str:
     return "Use this page as supporting evidence inside the section narrative, not as a standalone conclusion."
 
 
+def _count(value, one: str, many: str) -> str:
+    """A count with the noun that agrees with it.
+
+    Player pages carry small numbers, so the plural is wrong more often than it
+    is right: three separate paragraphs printed "1 goals, 1 shots and 1 key
+    passes" about the same player.
+    """
+    try:
+        number = int(float(value))
+    except (TypeError, ValueError):
+        return f"{value} {many}"
+    return f"{number} {one if number == 1 else many}"
+
+
 def _slugged(text: str) -> str:
     """A name reduced to the form filenames carry it in."""
     return re.sub(r"[^a-z0-9]+", "_", str(text).lower()).strip("_")
@@ -685,8 +699,9 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
         profile = context.get("player_profiles", {}).get(player.lower(), {})
         if profile:
             return (
-                f"{player}'s match profile combines {profile['goals']} goals, {profile['shots']} shots ({profile['xG']:.2f} xG), "
-                f"{profile['key_passes']} key passes and {profile['pass_xT']:.2f} pass xT. The sequence layer ({profile['sequence_xT']:.2f} xT; "
+                f"{player}'s match profile combines {_count(profile['goals'], 'goal', 'goals')}, "
+                f"{_count(profile['shots'], 'shot', 'shots')} ({profile['xG']:.2f} xG), "
+                f"{_count(profile['key_passes'], 'key pass', 'key passes')} and {profile['pass_xT']:.2f} pass xT. The sequence layer ({profile['sequence_xT']:.2f} xT; "
                 f"{profile['xGChain']:.2f} xGChain) shows involvement beyond the final action, but the shape must still be interpreted through role, minutes and score state."
             )
         return tactical_lens(path) + " The page should be used to describe role-specific contribution, not to rank unlike positions."
@@ -908,9 +923,13 @@ def visual_explanation(path: Path, context: dict) -> str:
             role_read = "The strongest contribution came earlier in the sequence, suggesting value in build-up support, line access and continuity before the final pass or shot."
         else:
             role_read = "The shape points to a supporting contribution inside collective sequences rather than dominance of one decisive action."
+        # "the direct output was 1 goals, 1 shots and 1 key passes" — the
+        # counts are almost always small, so the plural is wrong more often
+        # than it is right on a player page.
         return (
-            f"{role_read} {player} was involved in attacks worth {p['xGChain']:.2f} xGChain and {p['sequence_xT']:.2f} sequence xT, while the direct output was {p['goals']} goals, "
-            f"{p['shots']} shots and {p['key_passes']} key passes. Those figures are evidence for the role, not the story by themselves. "
+            f"{role_read} {player} was involved in attacks worth {p['xGChain']:.2f} xGChain and {p['sequence_xT']:.2f} sequence xT, while the direct output was "
+            f"{_count(p['goals'], 'goal', 'goals')}, {_count(p['shots'], 'shot', 'shots')} and "
+            f"{_count(p['key_passes'], 'key pass', 'key passes')}. Those figures are evidence for the role, not the story by themselves. "
             f"Read the missing or smaller segments as boundaries of the match role: they may reflect position, minutes, the score state or the team's route of attack. The radar is most useful when traced back to the team pages that show where {p.get('team') or 'the team'} created space for this contribution."
         )
 
@@ -1527,14 +1546,35 @@ def visual_data_read(path: Path, context: dict) -> str:
         if p:
             return (
                 f"The event record places {player} in sequences worth {p['xGChain']:.2f} xGChain and {p['sequence_xT']:.2f} sequence xT, with "
-                f"{p['shots']} shots, {p['key_passes']} key passes and {p['pass_xT']:.2f} threat added by passing. These are single-match contributions, so role and minutes matter more than the total radar area."
+                f"{_count(p['shots'], 'shot', 'shots')}, {_count(p['key_passes'], 'key pass', 'key passes')} and {p['pass_xT']:.2f} threat added by passing. These are single-match contributions, so role and minutes matter more than the total radar area."
             )
         return "The radar is scaled within this match, so it describes relative involvement on the day rather than long-term player quality."
     if "xg_flow" in stem:
-        return (
-            f"Both sides attempted {int(context['home_shots'])} and {int(context['away_shots'])} shots, but {away} finished with {context['away_xG']:.2f} xG against {home}'s {context['home_xG']:.2f}. "
-            f"The {context['home_goals'] + context['away_goals']} goals exceeded the combined {context['home_xG'] + context['away_xG']:.2f} xG, so finishing increased the score gap beyond the underlying chance gap."
-        )
+        # Named the away side as the one who "finished with" the xG whatever
+        # the totals said, and asserted that the goals exceeded them.
+        xg_leader, xg_trailer, xg_level = _lead(
+            home, away, context["home_xG"], context["away_xG"], tolerance=0.05)
+        top = context["home_xG"] if xg_leader == home else context["away_xG"]
+        bottom = context["home_xG"] if xg_trailer == home else context["away_xG"]
+        scored = context["home_goals"] + context["away_goals"]
+        expected = context["home_xG"] + context["away_xG"]
+        if scored > expected + 0.4:
+            finishing = (f"The {scored} goals ran ahead of the combined {expected:.2f} xG, so "
+                         f"finishing widened the score gap beyond the underlying chance gap.")
+        elif scored < expected - 0.4:
+            finishing = (f"The {scored} goals fell short of the combined {expected:.2f} xG, so "
+                         f"the scoreline understates what the chances were worth.")
+        else:
+            finishing = (f"The {scored} goals came from a combined {expected:.2f} xG, so the "
+                         f"scoreline and the chances created say the same thing.")
+        opening = (
+            f"Both sides attempted {int(context['home_shots'])} and "
+            f"{int(context['away_shots'])} shots, and the curves finished level at "
+            f"{top:.2f} xG. " if xg_level else
+            f"Both sides attempted {int(context['home_shots'])} and "
+            f"{int(context['away_shots'])} shots, but {xg_leader} finished with {top:.2f} xG "
+            f"against {xg_trailer}'s {bottom:.2f}. ")
+        return opening + finishing
     if "goals_breakdown" in stem:
         first = context["goal_rows"][0] if context["goal_rows"] else None
         first_line = f"{first['team']} scored first {_goal_moment(first)}" if first else "The game remained level early"
@@ -1647,8 +1687,25 @@ def visual_data_read(path: Path, context: dict) -> str:
             f"The data records {int(context[f'{side}_progressive_passes'])} progressive passes and {context[f'{side}_sequence_xT']:.2f} sequence xT for {team}. The relationship between the two helps separate frequent advancement from advancement that materially improved the attacking state."
         )
     if "dominating_zones" in stem:
+        # Both halves of this sentence named a fixed side, so in this fixture
+        # it read "Field tilt favoured Arsenal 29.2%-70.8%, while xG favoured
+        # Man City 1.08-1.88" — inverted twice, against the figures beside it.
+        tilt_team = home if context["home_field_tilt"] >= context["away_field_tilt"] else away
+        xg_team = home if context["home_xG"] >= context["away_xG"] else away
+        tilt_top = max(context["home_field_tilt"], context["away_field_tilt"])
+        tilt_low = min(context["home_field_tilt"], context["away_field_tilt"])
+        xg_top = max(context["home_xG"], context["away_xG"])
+        xg_low = min(context["home_xG"], context["away_xG"])
+        closing = (
+            "The opposing signals are evidence that zone ownership did not translate "
+            "proportionally into chance quality."
+            if tilt_team != xg_team else
+            "Territory and chance quality ran the same way here, so the open question is "
+            "whether the zones held were the ones that mattered or simply the ones the "
+            "opponent was content to concede.")
         return (
-            f"Field tilt favoured {home} {context['home_field_tilt']:.1f}%-{context['away_field_tilt']:.1f}%, while xG favoured {away} {context['away_xG']:.2f}-{context['home_xG']:.2f}. The opposing signals are evidence that zone ownership did not translate proportionally into chance quality."
+            f"Field tilt favoured {tilt_team} {tilt_top:.1f}%-{tilt_low:.1f}%, while xG "
+            f"favoured {xg_team} {xg_top:.2f}-{xg_low:.2f}. {closing}"
         )
     if "pass_targets" in stem and side:
         return (
@@ -1683,6 +1740,101 @@ def visual_data_read(path: Path, context: dict) -> str:
     if "player_sequence" in stem:
         return (
             f"The xGChain leaders were {context['home_players']['chain']} for {home} and {context['away_players']['chain']} for {away}. xGBuildup and sequence xT add earlier involvement, preventing the analysis from assigning all credit to the final passer or shooter."
+        )
+    # The same fifteen boards that had no reading and no coaching note also had
+    # no data line, so a third of the report carried one sentence three times.
+    if "match_momentum" in stem:
+        return (
+            f"The windows are five minutes wide and sum to {context['home_xG']:.2f}-"
+            f"{context['away_xG']:.2f} xG. A short window is a small sample by "
+            f"construction, so read the run of bars rather than any single one; one "
+            f"clear chance fills a window on its own."
+        )
+    if "win_probability" in stem:
+        return (
+            f"The curve is driven by the {context['home_goals'] + context['away_goals']} "
+            f"goals and the {context['home_xG'] + context['away_xG']:.2f} combined xG behind "
+            f"them, priced as they arrived. It carries no information the shot record does "
+            f"not, so treat it as a readable summary of sequence rather than as evidence "
+            f"of its own."
+        )
+    if "sequence_types" in stem:
+        return (
+            f"Broken play produced {context['home_transition_xG']:.2f} xG for {home} from "
+            f"{int(context['home_transitions'])} transitions and "
+            f"{context['away_transition_xG']:.2f} from {int(context['away_transitions'])} "
+            f"for {away}. The remainder came from settled possession and restarts, which is "
+            f"the comparison the columns are for."
+        )
+    if "goal_origins" in stem:
+        return (
+            f"{context['home_goals'] + context['away_goals']} goals are traced here, of "
+            f"which {int(context['home_transition_goals']) + int(context['away_transition_goals'])} "
+            f"began as a transition. With a handful of events the classification matters "
+            f"more than the count: check each origin against the footage before treating "
+            f"the split as a pattern."
+        )
+    if "pitch_control" in stem:
+        return (
+            f"The surface is a model, not a measurement: it infers reach from position and "
+            f"distance rather than recording it. Field tilt puts the same question in one "
+            f"number - {context['home_field_tilt']:.1f}% for {home} against "
+            f"{context['away_field_tilt']:.1f}% - and the two should broadly agree. Where "
+            f"they do not, trust the passing record."
+        )
+    if "set_pieces" in stem:
+        return (
+            f"Restart chances are a small sample in any single match, so the totals here "
+            f"carry less weight than the repetition of a routine. {home} attempted "
+            f"{int(context['home_crosses'])} crosses in all phases and {away} "
+            f"{int(context['away_crosses'])}, which is the volume the delivery quality "
+            f"should be judged against."
+        )
+    if "ball_losses" in stem and side:
+        return (
+            f"{team} were exposed on {context[f'{side}_rest_defence_vulnerability']:.1f}% of "
+            f"{int(context[f'{side}_rest_defence_exposures'])} advanced losses, conceding "
+            f"{_count(context[f'{side}_rest_defence_dangerous_counters'], 'dangerous counter', 'dangerous counters')}. "
+            f"The denominator matters: a low rate over few losses is not the same evidence "
+            f"as a low rate over many."
+        )
+    if "defensive_shape" in stem:
+        return (
+            f"PPDA read {context['home_ppda']:.2f} for {home} and {context['away_ppda']:.2f} "
+            f"for {away}, with {int(context['home_high_regains'])} and "
+            f"{int(context['away_high_regains'])} high regains. PPDA measures how early a "
+            f"side engaged and says nothing about what the engagement won, which is why the "
+            f"regain counts sit beside it."
+        )
+    if "playing_through" in stem and side:
+        return (
+            f"{team} completed {int(context[f'{side}_deep_completions'])} passes into the "
+            f"deep attacking zone from {int(context[f'{side}_progressive_passes'])} "
+            f"progressive passes. The ratio is the useful figure; the raw progressive count "
+            f"rewards a side that simply had more of the ball."
+        )
+    if "unlocking" in stem and side:
+        return (
+            f"{team} reached the final third {int(context[f'{side}_final_third_entries'])} "
+            f"times and the box {int(context[f'{side}_box_entries'])}, converting "
+            f"{context[f'{side}_box_entry_to_shot_rate']:.1f}% of those entries into a shot. "
+            f"Receptions in the pocket are the step between the first two numbers."
+        )
+    if "press_triggers" in stem:
+        return (
+            f"{home} won {int(context['home_high_regains'])} balls in the opponent's "
+            f"territory and {away} {int(context['away_high_regains'])}, converting "
+            f"{context['home_regain_to_shot_rate']:.1f}% and "
+            f"{context['away_regain_to_shot_rate']:.1f}% of all regains into a shot. The "
+            f"trigger classification is inferred from the opponent's action, so treat it as "
+            f"a description of the moment rather than proof of intent."
+        )
+    if "action_value" in stem:
+        return (
+            f"Values are in goals, so they are directly comparable across action types and "
+            f"directly distorted by sample size. Over a single match the ranking is "
+            f"dominated by a handful of events out of the {int(context['home_touches']) + int(context['away_touches'])} "
+            f"touches recorded, which is why it locates passages rather than rating players."
         )
     return "The numerical layer should confirm the visual pattern, provide a denominator and identify uncertainty. It should not replace the football mechanism shown on the page."
 
