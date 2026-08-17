@@ -137,6 +137,28 @@ def test_indicator_values_match_the_pipeline_frames():
     home_box = int(team_metrics[team_metrics["side"].eq("home")].iloc[0]["box_entries"])
     assert by_label["Box entries"][1] == str(home_box)
 
+    # Every indicator the frame already answers, checked against the frame.
+    # Possession was derived from the touch counts instead, so the poster read
+    # 42.5% where the report and the article read 38.3% for the same side in
+    # the same package — the one line that broke the rule this file states.
+    home_row = team_metrics[team_metrics["side"].eq("home")].iloc[0]
+    away_row = team_metrics[team_metrics["side"].eq("away")].iloc[0]
+    from_frame = {
+        "Possession": ("possession_share", "{:.1f}%"),
+        "Field tilt": ("field_tilt", "{:.1f}%"),
+        "Final third entries": ("final_third_entries", "{:.0f}"),
+        "Box entries": ("box_entries", "{:.0f}"),
+        "Progressive passes": ("progressive_passes", "{:.0f}"),
+        "Deep completions": ("deep_completions", "{:.0f}"),
+        "High regains": ("high_regains", "{:.0f}"),
+        "Sequence threat (xT)": ("sequence_xT", "{:.2f}"),
+    }
+    for label, (column, fmt) in from_frame.items():
+        if column not in team_metrics.columns:
+            continue
+        assert by_label[label][1] == fmt.format(float(home_row[column])), label
+        assert by_label[label][2] == fmt.format(float(away_row[column])), label
+
 
 # --------------------------------------------------------------------------
 # crests

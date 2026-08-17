@@ -981,16 +981,23 @@ def build_indicator_rows(events, xg, team_metrics, home_id, away_id,
     home_ppda, away_ppda = ppda
     home_control, away_control, _contested = control_shares
 
-    def touches_share(row):
-        return _num(row, "touches", 1.0)
-
-    home_touch, away_touch = touches_share(home), touches_share(away)
-    home_poss = 100.0 * home_touch / max(home_touch + away_touch, 1.0)
+    # Possession comes from the frame, like every other row. Deriving it from
+    # the touch counts made this the one line that broke the rule above: the
+    # poster read 42.5% while the report and the article, quoting
+    # possession_share, read 38.3% for the same side in the same package.
+    home_poss = _num(home, "possession_share", -1.0)
+    if home_poss < 0:
+        home_touch = _num(home, "touches", 1.0)
+        away_touch = _num(away, "touches", 1.0)
+        home_poss = 100.0 * home_touch / max(home_touch + away_touch, 1.0)
+    away_poss = _num(away, "possession_share", 100.0 - home_poss)
 
     rows = [
         ("Expected goals", f"{_num(hx, 'xG'):.2f}", f"{_num(ax_, 'xG'):.2f}",
          _num(hx, "xG"), _num(ax_, "xG")),
-        ("xG on target", f"{_num(hx, 'xGoT'):.2f}", f"{_num(ax_, 'xGoT'):.2f}",
+        # xGoT is post-shot expected goals now that it is priced from where
+        # the ball crossed the line, so "xG on target" no longer describes it.
+        ("Post-shot xG", f"{_num(hx, 'xGoT'):.2f}", f"{_num(ax_, 'xGoT'):.2f}",
          _num(hx, "xGoT"), _num(ax_, "xGoT")),
         ("Shots (on target)",
          f"{int(_num(hx, 'shots'))} ({int(_num(hx, 'on_target'))})",
@@ -998,8 +1005,8 @@ def build_indicator_rows(events, xg, team_metrics, home_id, away_id,
          _num(hx, "shots"), _num(ax_, "shots")),
         ("Big chances", f"{int(_num(hx, 'big_chances'))}", f"{int(_num(ax_, 'big_chances'))}",
          _num(hx, "big_chances"), _num(ax_, "big_chances")),
-        ("Possession", f"{home_poss:.1f}%", f"{100 - home_poss:.1f}%",
-         home_poss, 100 - home_poss),
+        ("Possession", f"{home_poss:.1f}%", f"{away_poss:.1f}%",
+         home_poss, away_poss),
         ("Field tilt", f"{_num(home, 'field_tilt'):.1f}%", f"{_num(away, 'field_tilt'):.1f}%",
          _num(home, "field_tilt"), _num(away, "field_tilt")),
         ("Pitch control", f"{home_control:.0f}%", f"{away_control:.0f}%",
@@ -1117,8 +1124,12 @@ def build_shooting_rows(xg, team_metrics, home_name, away_name):
         # that restates one is a cell the match did not get.
         ("Threat created (xT)", f"{_num(hx, 'xT'):.2f}", f"{_num(ax_, 'xT'):.2f}",
          _num(hx, "xT"), _num(ax_, "xT")),
-        # How much of what was created ever reached the goalkeeper.
-        ("xG reaching the frame",
+        # Post-shot value against pre-shot value. This used to be described as
+        # how much of the xG "reached the goalkeeper", which was true only
+        # while xGoT was a subset of xG. Priced from the placement it is not:
+        # a side that finishes into the corners ends above 100%, and that is
+        # the finding, not an error.
+        ("Post-shot vs pre-shot xG",
          f"{100 * _num(hx, 'xGoT') / _num(hx, 'xG'):.0f}%" if _num(hx, "xG") else "—",
          f"{100 * _num(ax_, 'xGoT') / _num(ax_, 'xG'):.0f}%" if _num(ax_, "xG") else "—",
          _num(hx, "xGoT") / max(_num(hx, "xG"), 1e-9),
