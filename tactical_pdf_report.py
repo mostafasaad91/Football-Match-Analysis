@@ -154,16 +154,28 @@ def _goal_summary(events: pd.DataFrame, team_names: dict[int, str]) -> tuple[lis
     for _, goal in goals.iterrows():
         team_id = int(goal["team_id"])
         running[team_id] = running.get(team_id, 0) + 1
+        # str(goal.get("player", "Goal")) returns "nan" when the column exists
+        # and the cell is empty — the default only covers a missing key — so a
+        # goal with no recorded scorer was reported as "scored through nan".
+        scorer = goal.get("player")
+        scorer = "" if scorer is None or pd.isna(scorer) else str(scorer).strip()
         rows.append(
             {
-                "minute": int(float(goal.get("minute", 0))),
+                "minute": int(float(goal.get("minute", 0) or 0)),
+                # The seconds are needed to say when a first-minute goal
+                # arrived; without them the report and the article described
+                # the same goal differently.
+                "second": int(float(goal.get("second", 0) or 0)),
                 "team_id": team_id,
                 "team": team_names.get(team_id, str(team_id)),
-                "player": str(goal.get("player", "Goal")),
+                "player": scorer,
                 "score": dict(running),
             }
         )
-    timeline = " | ".join(f"{row['minute']}' {row['player'].split()[-1]} ({row['team']})" for row in rows)
+    timeline = " | ".join(
+        f"{row['minute']}' {row['player'].split()[-1] if row['player'] else 'unknown'} ({row['team']})"
+        for row in rows
+    )
     return rows, timeline
 
 
@@ -354,7 +366,9 @@ def _section_copy(c: dict) -> dict[str, dict]:
     winner, loser = c["winner"], c["loser"]
     early = c["goal_rows"][0] if c["goal_rows"] else None
     early_text = (
-        f"{early['team']} scored through {early['player']} {_goal_moment(early)}, forcing the opponent to operate from a chasing game state."
+        (f"{early['team']} scored through {early['player']} {_goal_moment(early)}"
+         if early["player"] else f"{early['team']} scored {_goal_moment(early)}")
+        + ", forcing the opponent to operate from a chasing game state."
         if early else "The score state did not create a clear early tactical constraint."
     )
     press_team = home if c["home_ppda"] < c["away_ppda"] else away
@@ -1087,8 +1101,34 @@ def visual_explanation(path: Path, context: dict) -> str:
         # with the stronger field tilt on 29.2% against Manchester City's 70.8.
         zone_territory = home if context["home_field_tilt"] >= context["away_field_tilt"] else away
         zone_efficient = home if context["home_xG_per_shot"] >= context["away_xG_per_shot"] else away
+        # In a match where neither side led, "X's stronger field tilt ... yet X
+        # used its possessions more efficiently" named the same team twice over
+        # a difference that was not there.
+        tilt_level = abs(context["home_field_tilt"] - context["away_field_tilt"]) <= 2.0
+        quality_level = abs(context["home_xG_per_shot"] - context["away_xG_per_shot"]) <= 0.01
+        if tilt_level and quality_level:
+            opening = (
+                "The zone map shows where each team established more sustained influence, but "
+                "territory is a platform rather than an outcome. Neither side owned the ground "
+                "and neither created the better attempt, so the map is a record of two teams "
+                "occupying the pitch evenly rather than of one imposing itself. ")
+        elif tilt_level:
+            opening = (
+                f"The zone map shows where each team established more sustained influence, but "
+                f"territory is a platform rather than an outcome. The ground was shared, yet "
+                f"{zone_efficient} used its dangerous possessions more efficiently, so the "
+                f"difference was made inside the areas both sides reached. ")
+        elif quality_level:
+            opening = (
+                f"The zone map shows where each team established more sustained influence, but "
+                f"territory is a platform rather than an outcome. {zone_territory}'s stronger "
+                f"field tilt meant more play was located near the attacking end, and yet both "
+                f"sides arrived at the same quality of attempt. ")
+        else:
+            opening = (
+                f"The zone map shows where each team established more sustained influence, but territory is a platform rather than an outcome. {zone_territory}'s stronger field tilt meant more play was located near the attacking end, yet {zone_efficient} used its dangerous possessions more efficiently. ")
         return (
-            f"The zone map shows where each team established more sustained influence, but territory is a platform rather than an outcome. {zone_territory}'s stronger field tilt meant more play was located near the attacking end, yet {zone_efficient} used its dangerous possessions more efficiently. "
+            opening +
             "This can happen when the deeper side protects central space, encourages circulation toward the touchline and attacks the first open pass after recovery. The territorial side then appears dominant while repeatedly restarting outside the block. "
             "The tactical judgement must join zone control to the next action: did dominance create a free receiver, a box entry and a shot, or did it increase the number of players ahead of the ball without improving the final situation?"
         )
@@ -1199,6 +1239,7 @@ def visual_explanation(path: Path, context: dict) -> str:
         # paragraph put "0' Calafiori (Arsenal) | 27' Havertz (Arsenal)" in the
         # middle of a sentence in a document meant to be read.
         told = [f"{row['player']} {_goal_moment(row)} for {row['team']}"
+                if row["player"] else f"{row['team']} {_goal_moment(row)}"
                 for row in context["goal_rows"]]
         if len(told) > 1:
             listed = ", ".join(told[:-1]) + f", then {told[-1]}"

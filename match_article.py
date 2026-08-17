@@ -185,7 +185,11 @@ class _Match:
                 when = f"after {second} seconds" if second else "from the kick-off"
             else:
                 when = f"in minute {minute + 1}"
-            return when, str(row.get("player") or "").strip(), minute
+            # `nan or ""` returns nan — a float NaN is truthy — so an
+            # unattributed goal produced "through nan".
+            scorer = row.get("player")
+            scorer = "" if scorer is None or pd.isna(scorer) else str(scorer).strip()
+            return when, scorer, minute
         except Exception:
             return None
 

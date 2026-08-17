@@ -410,6 +410,41 @@ Opta counts the opening minute as minute 0, so a goal from the kick-off was
 reported as arriving "in minute 0" in three places. Goal times are now phrased
 the way a report phrases them.
 
+### The shapes a match can take
+
+The checks above run against the rendered fixtures, and both of those are home
+wins settled without the lead changing hands, level on nothing, with a one-word
+home side. So most of the prose had never executed: the level branches, the
+draw branches, the away-win branch, the lead-change branch, the goalless
+branch. A branch nobody has run is a branch nobody has checked — which is
+exactly where the defects were.
+
+`tests/test_scenarios.py` derives eight match shapes from a real fixture by
+transformation, so the frames stay internally consistent, and runs every
+paragraph writer over every board for each of them:
+
+| shape | what it exercises |
+| --- | --- |
+| as rendered | the baseline |
+| two-word home side | the slug matcher from the other direction |
+| one-word both sides | the case where the old substring match worked |
+| goalless | no first goal, no score state |
+| level on everything | every comparison with nothing to compare |
+| away win | winner and home side are not the same team |
+| lead changed hands | the match-story card that assumed it never did |
+| thin export | optional metric columns simply absent |
+
+Four defects surfaced here that neither rendered fixture could reach. A goal
+with no recorded scorer printed "scored through nan" — twice, for two different
+reasons: `str(row.get("player", "Goal"))` returns `"nan"` when the column exists
+and the cell is empty, and `row.get("player") or ""` returns the NaN itself,
+because a float NaN is truthy. The report and the article described the same
+goal differently, because the report's goal rows carried no `second` field. A
+match level on both territory and shot quality produced "X's stronger field
+tilt … yet X used its possessions more efficiently", naming one side twice over
+a difference that was not there. And the goal timeline called `.split()[-1]` on
+a name that could be empty.
+
 When a metric changes on purpose, read the drift, then accept it:
 
 ```bash
