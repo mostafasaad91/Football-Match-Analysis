@@ -875,26 +875,19 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
     lb_tot = int(lb_mask.sum())
     lb_comp = int((lb_mask & (o == "Successful")).sum())
 
-    # ── xGOT (post-shot proxy): xG scaled by finish placement in the goal ──
-    xgot = 0.0
-    sot_rows = d[
-        d.get("shot_whoscored_type", pd.Series(index=d.index, dtype=object)).isin(
-            ["Goal", "SavedShot"]
-        )
-    ]
-    for _, r in sot_rows.iterrows():
-        q = str(r.get("qualifier_names", ""))
-        xgv = float(r.get("xG", 0) or 0)
-        if any(z in q for z in ("LowLeft", "LowRight", "HighLeft", "HighRight")):
-            mlt = 1.45  # corners — hardest to save
-        elif "HighCentre" in q:
-            mlt = 1.05
-        elif "LowCentre" in q or "Centre" in q:
-            mlt = 0.65  # central — comfortable for the keeper
-        else:
-            mlt = 1.0
-        xgot += min(xgv * mlt, 0.99)
-    xgot = round(xgot, 2)
+    # ── xGOT: post-shot expected goals ──
+    # This used to bucket the placement qualifier into four hand-picked
+    # multipliers, so every shot in any corner was priced identically and a
+    # shot the provider gave exact coordinates for was rounded into a zone.
+    # match_metrics.post_shot_xg reads goal_mouth_y/goal_mouth_z — where the
+    # ball actually crossed the line — and was written, tested and never
+    # called. The radar and the team card now share it.
+    try:
+        from match_metrics import post_shot_xg
+
+        xgot = round(float(post_shot_xg(d).sum()), 2)
+    except Exception:
+        xgot = 0.0
 
     key_passes = int(
         (
@@ -1035,8 +1028,24 @@ def compute_metrics_pool(events: pd.DataFrame):
 
 
 def _percentile(allm, elig, metric, val):
+    """Where this value sits among the players on the pitch, as a percentage.
+
+    Ties take the mid-rank, which is the right answer between two real values
+    and the wrong one at zero. Twenty-three of thirty players finished a match
+    on 0.00 xGoT, so a zero scored 38% and drew a wedge two-fifths of the way
+    out for a player who never had a shot on target; a zero on goal difference
+    against expectation scored 62%, past the halfway ring. The chip beside the
+    bar read 0.0 while the bar said otherwise.
+
+    Not doing a thing is not doing it averagely, so a zero draws nothing. That
+    holds for the signed metrics too: a goal difference against expectation of
+    exactly zero is no deviation to show, and it drew the longest zero bar on
+    the board for a full-back who never took a shot.
+    """
     vs = [allm[p][metric] for p in elig]
     n = len(vs) or 1
+    if val == 0:
+        return 0.0
     below = sum(1 for v in vs if v < val)
     equal = sum(1 for v in vs if v == val)
     return (below + 0.5 * equal) / n * 100

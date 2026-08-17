@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1980554/live/europe-uefa-super-cup-2025-2026-paris-saint-germain-aston-villa",
+    "https://www.whoscored.com/matches/1988981/live/england-championship-2026-2027-burnley-west-ham",
 ).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -4705,11 +4705,24 @@ def xg_stats(events: pd.DataFrame, info: dict) -> dict:
             if source_side.get("woodwork") is not None:
                 counts["post"] = int(source_side["woodwork"])
 
-        xgot = round(float(s[on_target_mask]["xG"].fillna(0).sum()), 2)
-        raw_on_target = int(on_target_mask.sum())
-        if counts["on_target"] != raw_on_target and raw_on_target > 0:
-            xgot = round(xgot * (counts["on_target"] / raw_on_target), 2)
-        xgot = min(xgot, xg_total)
+        # xGoT is post-shot expected goals: how likely the attempt was to beat
+        # the keeper given where it was actually struck. Summing the pre-shot
+        # xG of on-target attempts is a different quantity entirely — a shot
+        # rolled at the keeper and one in the top corner scored the same — and
+        # it was published under the post-shot name. match_metrics.post_shot_xg
+        # weights the chance by the placement the provider recorded.
+        try:
+            from match_metrics import post_shot_xg
+
+            xgot = round(float(post_shot_xg(s).sum()), 2)
+        except Exception:
+            xgot = round(float(s[on_target_mask]["xG"].fillna(0).sum()), 2)
+        # The old value was scaled by the ratio between the provider's
+        # on-target count and the events', which inflated a sum to paper over a
+        # counting difference. Post-shot xG is priced shot by shot from the
+        # placement, so there is nothing to scale: it reports what the events
+        # contain, and the shot-total check in match_sanity flags a gap that is
+        # too wide to be a coding difference.
         xg_per_shot = round(xg_total / max(counts["shots"], 1), 3)
 
         team_passes = (

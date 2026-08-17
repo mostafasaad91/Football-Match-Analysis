@@ -131,6 +131,52 @@ def check_goals_match_the_score(events, xg, info) -> list[Problem]:
     return problems
 
 
+def check_the_published_shots_match_the_events(events, xg, info) -> list[Problem]:
+    """The team's shot totals and the shot events tell the same story.
+
+    The exported totals prefer the provider's own published figures when it has
+    them, and the events are what everything per-player is built from. A gap of
+    one is normal — WhoScored counts a shot the keeper turned round the post as
+    on target while the event is coded as blocked — and that gap is why adding
+    up the players' radars can land a shot short of the team card.
+
+    A wide gap is different: it means the two files were not produced from the
+    same match, which nothing else here would notice.
+    """
+    if "shot_whoscored_type" not in events.columns:
+        return []
+    shots = events[_bool(events.get("is_shot"))]
+    problems = []
+    for side in ("home", "away"):
+        try:
+            team_id = int(info[f"{side}_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = str(info.get(f"{side}_name") or side)
+        rows = xg[xg["team"].astype(str).str.lower().eq(name.lower())]
+        if rows.empty:
+            continue
+        row, mine = rows.iloc[0], shots[shots["team_id"].eq(team_id)]
+        for column, counted in (
+            ("shots", len(mine)),
+            ("on_target", int(mine["shot_whoscored_type"].isin(["Goal", "SavedShot"]).sum())),
+        ):
+            if column not in row.index:
+                continue
+            try:
+                stated = int(float(row[column]))
+            except (TypeError, ValueError):
+                continue
+            gap = abs(stated - counted)
+            if gap > max(2, 0.2 * max(stated, counted, 1)):
+                problems.append(Problem(
+                    "shot totals disagree with the events",
+                    f"{name}: the export says {stated} {column.replace('_', ' ')}, "
+                    f"the events contain {counted}",
+                ))
+    return problems
+
+
 def check_the_teams_are_two_and_named(events, info) -> list[Problem]:
     """Exactly two team ids act in the match, and both are the ones named."""
     ids = {int(v) for v in events["team_id"].dropna().unique()
@@ -162,6 +208,7 @@ def check_the_match_has_enough_events(events, info) -> list[Problem]:
 
 CHECKS = (
     check_the_teams_are_two_and_named,
+    check_the_published_shots_match_the_events,
     check_the_match_has_enough_events,
     check_no_player_appears_for_both_sides,
     check_event_players_belong_to_their_team,
@@ -175,7 +222,8 @@ def inspect(events: pd.DataFrame, players: pd.DataFrame, xg: pd.DataFrame,
     problems: list[Problem] = []
     for check in CHECKS:
         try:
-            if check is check_goals_match_the_score:
+            if check in (check_goals_match_the_score,
+                         check_the_published_shots_match_the_events):
                 problems.extend(check(events, xg, info))
             elif check in (check_the_teams_are_two_and_named,
                            check_the_match_has_enough_events):
