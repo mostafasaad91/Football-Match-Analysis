@@ -30,8 +30,8 @@ python football_match_analysis.py
 | **53 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
 | **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice — opening on a cover drawn from the match itself |
 | **4 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
-| **Player radars** | A full role profile per player, coloured to their team |
-| **Publishable article** | A 1,200–1,500 word read as `.docx`, argued from the fixture's own numbers |
+| **Player radars** | A full role profile per player, coloured to their team; the report and the article carry the five per side that mattered |
+| **Publishable article** | A `.docx` argued from the fixture's own numbers, with every visual and a reading under each |
 | **Light copy** | The same package again on `#F5F5F5`, in `light/` |
 | **CSV exports** | Events, players and every calculated metric |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
@@ -181,9 +181,20 @@ do not add up.
 The report is a reference: every visual, a paragraph under each. An article is
 not that, so `match_article.py` does not walk the visuals and describe them. It
 derives a set of findings from the frames, ranks them by how far apart the two
-sides actually were, and gives the strongest five or six a section each with
-the visuals that evidence them. The output is a `.docx` with real heading
-styles and no tables, which is what pastes cleanly into an editor.
+sides actually were, and gives each one a section with the visuals that
+evidence it. Behind the argument sits an appendix carrying every remaining
+board with the report's own reading under it, and five player radars a side.
+The output is a `.docx` with real heading styles and no tables, which is what
+pastes cleanly into an editor.
+
+It opens on the report's own cover — not a second layout that tries to look
+like it, but page one of the finished PDF rasterised at 200dpi. Two documents
+about one match should carry one cover, and rendering the page makes them
+identical by construction rather than by two pieces of drawing code agreeing.
+
+The argued part has a floor of 1,200 words and no ceiling: a finding the match
+supports is not worth dropping to save words the reader was never promised. The
+appendix is extra on top of it.
 
 Two rules hold throughout, both learned from defects the PDF shipped:
 
@@ -200,10 +211,25 @@ A phase where the two sides were level is still a finding about that phase —
 skipping those left an even match with three sections and 773 words against a
 1,200 floor.
 
+Nothing is written at all unless the fixture holds together. `match_sanity.py`
+asks the questions that cannot be wrong about a real match — a player belongs
+to one side, the goals in the events add up to the exported score, the team ids
+acting are the two the fixture names — and the article declines with the reason
+rather than describing a game that did not happen. It is the artefact most
+likely to be published without a second look, so it is the one that should
+refuse.
+
 The tests check what is checkable: the length, that no sentence carrying a
-number appears in two different matches' articles, and that every claim
-survives its own mirror image — the same fixture with the sides swapped, which
-is the only way to tell "names the away side" apart from "names the leader".
+number appears in two different matches' articles, that every claim survives
+its own mirror image — the same fixture with the sides swapped, which is the
+only way to tell "names the away side" apart from "names the leader" — and that
+**every figure printed in the prose can be found in the frames**, including the
+ratios and shares, recomputed the same way the generator computes them.
+
+What none of that can catch is data that is internally consistent and still
+wrong. A squad list that agrees with itself but does not match the real club
+passes every check here, because the project has no external roster to compare
+against.
 
 ---
 
@@ -325,6 +351,7 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `crests.py` | Club crest fetch, cache, plate and fallback |
 | `cover_art.py` | The report cover's hero image |
 | `match_article.py` | The publishable article and its Word output |
+| `match_sanity.py` | Coherence checks a fixture must pass before anything is written about it |
 | `team_palettes.py` | Kit colours for ~975 clubs and national teams |
 | `match_store.py` | SQLite history and the gzipped payload archive |
 | `team_history.py` | Command-line reader for the stored history |

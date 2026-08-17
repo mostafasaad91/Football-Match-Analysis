@@ -3006,8 +3006,13 @@ def build_catalog(paths: list[Path]):
     return catalog
 
 
+# How many player radars the report carries per side. Every participant is
+# still exported to the team folders; this is only what reaches the PDF.
+PDF_RADARS_PER_TEAM = 5
+
+
 def player_pizzas(events: pd.DataFrame) -> list[Path]:
-    """Export one canonical radar per player inside the team folders."""
+    """Export every player's radar, and return the five per side for the report."""
     from player_radar import export_player_radars
 
     info = {
@@ -3019,15 +3024,31 @@ def player_pizzas(events: pd.DataFrame) -> list[Path]:
         "away_color": AWAY,
         "score": MATCH_SCORE,
     }
-    export_player_radars(events, info, str(OUT), dpi=135)
+    ranking = export_player_radars(events, info, str(OUT), dpi=135)
+
+    # Every participant's radar is written to disk — the folders are the
+    # reference and the article picks its own three a side from them. The
+    # report carries the five that mattered most per team instead of all
+    # thirty-odd, which was half the document.
     source_root = OUT / "player_radars"
     exported = []
-    for team in (HOME_NAME, AWAY_NAME):
-        team_dir = source_root / team
+    for side, team in (("home", HOME_NAME), ("away", AWAY_NAME)):
+        team_dir = source_root / team.replace(" ", "_")
+        if not team_dir.exists():
+            team_dir = source_root / team
         if not team_dir.exists():
             continue
-        for source in sorted(team_dir.glob("*.png")):
-            exported.append(source)
+        best = [name for name, _rating in (ranking or {}).get(side, [])][:PDF_RADARS_PER_TEAM]
+        for name in best:
+            candidate = team_dir / (str(name).replace(" ", "_") + ".png")
+            if candidate.exists():
+                exported.append(candidate)
+                continue
+            wanted = str(name).replace(" ", "_").lower()
+            match = next((f for f in team_dir.glob("*.png")
+                          if f.stem.lower() == wanted), None)
+            if match is not None:
+                exported.append(match)
     return exported
 
 
@@ -3142,7 +3163,7 @@ def generate_match_package(
     # that cannot write its article still has every visual and the PDF.
     from match_article import build_match_article
     article = build_match_article(events, xg, team_metrics, player_metrics,
-                                  match_info, OUT)
+                                  match_info, OUT, players)
 
     print(f"Generated {len(paths)} full redesigned visuals")
     print(f"Pitch visuals: {int(catalog['has_pitch'].sum())}")

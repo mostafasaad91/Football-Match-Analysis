@@ -60,28 +60,71 @@ def _article(match, mirror=False) -> Article:
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("match", MATCHES)
-def test_the_article_is_the_length_it_was_commissioned_at(match):
+def test_the_argument_is_the_length_it_was_commissioned_at(match):
+    """A floor, and no ceiling.
+
+    Measured on the argued sections only. Every finding the match supports is
+    printed — dropping one to save words the reader was never promised is the
+    wrong trade — and the appendix behind them carries a reading under every
+    remaining board on top of that.
+    """
     low, high = TARGET_WORDS
-    words = _article(match).words()
-    assert low <= words <= high, f"{match}: {words} words, wanted {low}-{high}"
+    words = _article(match).narrative_words()
+    assert words >= low, f"{match}: {words} words, wanted at least {low}"
+    if high is not None:
+        assert words <= high, f"{match}: {words} words, wanted at most {high}"
 
 
 @pytest.mark.parametrize("match", MATCHES)
 def test_it_argues_in_sections_rather_than_walking_the_visuals(match):
     article = _article(match)
-    # Five findings plus the opener and the close; never one per visual.
-    assert 4 <= len(article.sections) <= 8, len(article.sections)
-    for section in article.sections:
+    assert 5 <= len(article.sections) <= 13, len(article.sections)
+    # The argument's own sections stay tight. The ones that exist to show
+    # things say so, because identifying them by position broke as soon as the
+    # profiles section stopped being last.
+    for section in (s for s in article.sections if not s.gallery):
         assert len(section.paragraphs) >= 2, section.heading
         assert len(section.visuals) <= 3, f"{section.heading} carries a gallery"
+
+
+@pytest.mark.parametrize("match", MATCHES)
+def test_the_article_carries_the_whole_package(match):
+    """Every visual the run produced reaches the article, not a selection."""
+    events, _xg, _tm, _pm, _info, out = _frames(match)
+    article = _article(match)
+    shown = {Path(v).name for s in article.sections for v in s.visuals}
+    produced = {p.name for p in out.glob("[0-9]*.png")}
+    missing = produced - shown
+    assert not missing, sorted(missing)
+
+
+@pytest.mark.parametrize("match", MATCHES)
+def test_it_shows_five_radars_a_side(match):
+    events, _xg, _tm, _pm, _info, _out = _frames(match)
+    article = _article(match)
+    from match_article import RADARS_PER_TEAM
+
+    radars = [Path(v) for s in article.sections for v in s.visuals
+              if "player_radars" in str(v)]
+    assert len(radars) == RADARS_PER_TEAM * 2, [r.name for r in radars]
+    per_team = {}
+    for radar in radars:
+        per_team.setdefault(radar.parent.name, []).append(radar.name)
+    assert len(per_team) == 2, per_team
+    assert all(len(v) == RADARS_PER_TEAM for v in per_team.values()), per_team
 
 
 @pytest.mark.parametrize("match", MATCHES)
 def test_every_section_earns_its_place(match):
     article = _article(match)
     for section in article.sections:
-        assert section.words() >= 60, f"{section.heading} is a stub"
         assert section.heading.strip()
+        if section.gallery:
+            # A gallery earns its place with its images, not its word count;
+            # its lead-in is one sentence by design.
+            assert section.visuals, f"{section.heading} shows nothing"
+            continue
+        assert section.words() >= 60, f"{section.heading} is a stub"
     headings = [s.heading for s in article.sections]
     assert len(set(headings)) == len(headings), headings
 
@@ -97,8 +140,9 @@ def test_every_visual_it_points_at_exists(match):
 # the claims
 # --------------------------------------------------------------------------
 
-def _text(article) -> str:
-    return " ".join(p for s in article.sections for p in s.paragraphs)
+def _text(article, findings_only: bool = False) -> str:
+    sections = [s for s in article.sections if not (findings_only and s.gallery)]
+    return " ".join(p for s in sections for p in s.paragraphs)
 
 
 @pytest.mark.parametrize("match", MATCHES)
@@ -171,7 +215,10 @@ def test_no_finding_is_recycled_between_matches():
     """
     import re
 
-    first, second = (_text(_article(m)) for m in MATCHES)
+    # Only the argument's sections. The galleries introduce themselves with a
+    # count of what follows, which is a fact about the article rather than
+    # about the match, and two fixtures can honestly have the same number left.
+    first, second = (_text(_article(m), findings_only=True) for m in MATCHES)
     assert first != second
 
     def claims(text):

@@ -29,7 +29,14 @@ from pathlib import Path
 
 import pandas as pd
 
-TARGET_WORDS = (1200, 1500)
+# The argued sections have no ceiling: every finding the match supports is
+# worth printing, and the appendix behind them carries a reading under every
+# remaining board. The floor stays, because a piece shorter than this is a
+# summary rather than a read.
+TARGET_WORDS = (1200, None)
+
+# Player radars carried per side, matching the report's own appendix.
+RADARS_PER_TEAM = 5
 
 
 # --------------------------------------------------------------------------
@@ -83,6 +90,11 @@ class Section:
     paragraphs: list[str]
     visuals: list[Path] = field(default_factory=list)
     pull_quote: str | None = None
+    # True for the sections whose job is to show rather than to argue: the
+    # player profiles and the closing gallery. The argument's own sections stay
+    # tight, and identifying them by position broke the moment the profiles
+    # stopped being last.
+    gallery: bool = False
 
     def words(self) -> int:
         return sum(len(p.split()) for p in self.paragraphs)
@@ -95,9 +107,18 @@ class Article:
     strap: str
     sections: list[Section]
     cover: Path | None = None
+    home: str = ""
+    away: str = ""
+    # The report's own context, so each visual in the appendix can carry the
+    # analytical note the PDF writes under it rather than a bare caption.
+    context: dict | None = None
 
     def words(self) -> int:
         return sum(section.words() for section in self.sections)
+
+    def narrative_words(self) -> int:
+        """The argued part, without the appendix that shows the rest."""
+        return sum(s.words() for s in self.sections if not s.gallery)
 
 
 @dataclass
@@ -180,6 +201,21 @@ class _Match:
     def team_visual(self, pattern: str, team: str) -> list[Path]:
         slug = self.home_slug if team == self.home else self.away_slug
         return self.visual(pattern.format(slug=slug))
+
+    def radar(self, team: str, player: str) -> Path | None:
+        """The exported radar for one player, if it was written."""
+        folder = self.out / "player_radars" / str(team).replace(" ", "_")
+        candidate = folder / (str(player).replace(" ", "_") + ".png")
+        if candidate.exists():
+            return candidate
+        # Fall back to a case-insensitive match: the exporter and the ranking
+        # agree on the name, but not always on its punctuation.
+        if folder.exists():
+            wanted = str(player).replace(" ", "_").lower()
+            for found in folder.glob("*.png"):
+                if found.stem.lower() == wanted:
+                    return found
+        return None
 
     def top_player(self, team: str | None = None):
         if self.players is None or self.players.empty:
@@ -705,6 +741,61 @@ def _finding_player(m: _Match) -> Finding | None:
     ))
 
 
+def _finding_profiles(m: _Match, events) -> Finding | None:
+    """The three players each side leaned on, as radars.
+
+    The report's appendix carries one for every participant. An article wants
+    the few the match actually turned on, which is a different selection and
+    the reason this asks the ranking rather than listing the folder.
+    """
+    try:
+        from player_radar import top_players_per_team
+
+        ranking = top_players_per_team(events, {
+            "home_id": m.hm.get("team_id"), "away_id": m.am.get("team_id"),
+            "home_name": m.home, "away_name": m.away,
+        }, n=RADARS_PER_TEAM)
+    except Exception:
+        return None
+
+    visuals, named = [], {}
+    for side, team in (("home", m.home), ("away", m.away)):
+        picked = []
+        for player in ranking.get(side, [])[:RADARS_PER_TEAM]:
+            radar = m.radar(team, player)
+            if radar is not None:
+                visuals.append(radar)
+                picked.append(str(player))
+        if picked:
+            named[team] = picked
+    if not visuals:
+        return None
+
+    lines = [f"{team}: {', '.join(players)}" for team, players in named.items()]
+    opening = (
+        f"{_spell(len(visuals)).capitalize()} profiles, the "
+        f"{_spell(RADARS_PER_TEAM)} each side leaned on most. "
+        + ". ".join(lines) + "."
+    )
+    second = (
+        "Each radar is one match, not a rating. The bars are percentiles against every "
+        "player on the pitch that afternoon, so a full wedge means the player led this "
+        "fixture on that action and nothing more; the chip beside it carries the raw "
+        "number, because a percentile with no count behind it can dress two touches up "
+        "as dominance."
+    )
+    third = (
+        "Read them for shape rather than area. A defender with an empty attacking half "
+        "and a full defensive one has done the job asked of him, and the interesting "
+        "players are the ones whose profile does not match the position they were "
+        "listed in — the full-back with a creator's passing segments, the forward whose "
+        "value sits in build-up rather than finishing."
+    )
+    return Finding("profiles", 0.22,
+                   Section("The players it turned on", [opening, second, third],
+                           visuals, gallery=True))
+
+
 BUILDERS = (
     _finding_territory,
     _finding_quality,
@@ -739,6 +830,37 @@ def _title(m: _Match) -> tuple[str, str]:
         f"{m.home} and {m.away} finished {m.score}. Almost nothing else about the "
         f"match was level.",
     )
+
+
+def _cover_image(out_dir: Path) -> Path | None:
+    """The report's own cover page, rendered for the article to open on.
+
+    Not the bare artwork: the cover is the artwork plus the badge, both crests,
+    the score, the two-colour rule and the finding underneath, and the article
+    should open on the same page the report does. Rendering page one of the
+    finished PDF makes them identical by construction rather than by two
+    layouts agreeing.
+    """
+    pdf = out_dir / "full_visual_redesign_real_data.pdf"
+    target = out_dir / "article_cover.png"
+    if pdf.exists():
+        try:
+            import fitz
+
+            document = fitz.open(pdf)
+            try:
+                page = document[0]
+                # 200dpi: sharp in Word and on a phone, without a 20MB page.
+                page.get_pixmap(matrix=fitz.Matrix(200 / 72, 200 / 72)).save(target)
+            finally:
+                document.close()
+            if target.exists():
+                return target
+        except Exception:
+            pass
+    # No report yet, or no renderer: the artwork alone is better than nothing.
+    artwork = out_dir / "cover_art.png"
+    return artwork if artwork.exists() else None
 
 
 def _closing(m: _Match, used: list[str]) -> Section:
@@ -783,6 +905,52 @@ def _closing(m: _Match, used: list[str]) -> Section:
                    m.visual("14_post_match_advanced_dashboard.png"))
 
 
+_GALLERY_ORDER = (
+    "04_goals_breakdown", "40_win_probability", "45_sequence_types",
+    "05a_pass_network", "05b_pass_network", "06a_pass_network", "06b_pass_network",
+    "22a_average_positions", "22b_average_positions",
+    "23a_average_positions", "23b_average_positions",
+    "07_xt_map", "08_xt_map", "09_pass_map", "10_pass_map",
+    "29_pass_targets", "30_pass_targets", "12_zone14", "13_zone14",
+    "47_unlocking", "48_unlocking", "16_progressive", "17_progressive",
+    "41_playing_through", "42_playing_through", "18_crosses", "19_crosses",
+    "25_box_entries", "26_box_entries", "36_set_pieces", "15_xt_per_minute",
+    "20_defensive_activity", "21_defensive_activity", "39_defensive_shape",
+    "27_high_regains", "28_high_regains", "37_ball_losses", "38_ball_losses",
+)
+
+
+def _gallery(m: _Match, used: set[str]) -> Section | None:
+    """Everything the argument did not need, in a reading order.
+
+    The article picks its evidence, but the package produced fifty-three
+    visuals and a reader who wants the rest should not have to open the PDF to
+    find them. They go at the end, after the argument has been made.
+    """
+    remaining = []
+    for prefix in _GALLERY_ORDER:
+        for path in sorted(m.out.glob(f"{prefix}*.png")):
+            if path.name not in used:
+                remaining.append(path)
+                used.add(path.name)
+    # Then everything the order does not name. Without this a visual reached the
+    # article only if it was either chosen as evidence or listed above, and
+    # 31_ppda_pressing.png was neither whenever the press finding was trimmed.
+    for path in sorted(m.out.glob("[0-9]*.png")):
+        if path.name not in used:
+            remaining.append(path)
+            used.add(path.name)
+    if not remaining:
+        return None
+    opening = (
+        f"The argument above used the boards that carried it. These are the rest, in "
+        f"the order a full read would take them — how each side built possession, "
+        f"where it tried to progress, what it did in the final third and what it did "
+        f"without the ball — each with the reading that belongs to it."
+    )
+    return Section("The rest of the evidence", [opening], remaining, gallery=True)
+
+
 def build_article(
     events: pd.DataFrame,
     xg: pd.DataFrame,
@@ -798,34 +966,55 @@ def build_article(
 
     opener = _finding_result(m)
     rest = [f for f in (builder(m) for builder in BUILDERS) if f is not None]
+    profiles = _finding_profiles(m, events)
+    if profiles is not None:
+        rest.append(profiles)
     rest.sort(key=lambda f: f.weight, reverse=True)
 
     # Take the strongest findings, then keep taking while the piece is short of
     # the length it was commissioned at. An even match has weaker findings, not
     # fewer things worth saying, and stopping at a fixed count left one at 773
     # words against a 1200 floor.
-    chosen = ([opener] if opener else []) + rest[:max_sections]
-    floor = TARGET_WORDS[0]
-    extra = max_sections
-    while extra < len(rest) and sum(f.section.words() for f in chosen) < floor - 90:
-        chosen.append(rest[extra])
-        extra += 1
+    # Every finding, strongest first. There is no ceiling to trim against, and
+    # a finding the match actually supports is not worth dropping to save
+    # words the reader was never promised.
+    del max_sections
+    chosen = ([opener] if opener else []) + rest
 
     title, standfirst = _title(m)
     strap = " · ".join(
         part for part in (m.competition.upper(),
                           f"{m.home.upper()} {m.score} {m.away.upper()}") if part)
-    sections = [f.section for f in chosen] + [_closing(m, [f.key for f in chosen])]
-    cover = m.out / "cover_art.png"
+    # The profiles section is the one finding that always earns its place: an
+    # article about a match that never shows a player is missing the people.
+    if profiles is not None and profiles not in chosen:
+        chosen.append(profiles)
+
+    closing = _closing(m, [f.key for f in chosen])
+
+    sections = [f.section for f in chosen] + [closing]
+    used = {Path(v).name for s in sections for v in s.visuals}
+    gallery = _gallery(m, used)
+    if gallery is not None:
+        sections.append(gallery)
+    cover = _cover_image(m.out)
+    context = None
+    try:
+        from tactical_pdf_report import build_context
+
+        context = build_context(events, xg, team_metrics, player_metrics, match_info)
+    except Exception:
+        context = None
     return Article(title, standfirst, strap, sections,
-                   cover if cover.exists() else None)
+                   cover, m.home, m.away, context)
 
 
 # --------------------------------------------------------------------------
 # Word output
 # --------------------------------------------------------------------------
 
-def render_docx(article: Article, path: Path | str) -> Path:
+def render_docx(article: Article, path: Path | str,
+                home: str = "", away: str = "") -> Path:
     """Write the article as a .docx built for pasting straight into Substack.
 
     Real Heading 1/2 styles, because that is what an editor's paste reads;
@@ -880,10 +1069,19 @@ def render_docx(article: Article, path: Path | str) -> Path:
             holder.add_run().add_picture(str(visual), width=Inches(6.2))
             caption = document.add_paragraph()
             caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            caption_run = caption.add_run(_caption(visual))
+            caption_run = caption.add_run(_caption(visual, home, away))
             caption_run.italic = True
             caption_run.font.size = Pt(9)
             caption_run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+            # In the appendix a caption alone is a label. Each board gets the
+            # reading the report writes under it, from the same source, so the
+            # two documents cannot say different things about the same picture.
+            note = _analysis(visual, article.context)
+            if note:
+                body = document.add_paragraph()
+                body_run = body.add_run(note)
+                body_run.font.size = Pt(10.5)
+                body_run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
 
     footer = document.add_paragraph()
     footer_run = footer.add_run(
@@ -898,41 +1096,138 @@ def render_docx(article: Article, path: Path | str) -> Path:
     return path
 
 
+# What each board actually shows. Every visual the package produces has an
+# entry: the fallback turned a filename into title case, so thirty-six of the
+# fifty-three carried "Xt Map Arsenal" where a caption belonged.
+#
+# Keys are matched against the filename stem, longest first, and {team} is
+# filled from the side named in it.
 _CAPTIONS = {
     "xg_flow": "Cumulative expected goals. Each step is a chance; the flat stretches are possession that never became one.",
-    "goal_origins": "Every goal traced back to the moment its possession began.",
-    "pitch_control": "Distance-decayed influence: who held which space.",
-    "dominating_zones": "Touch difference by zone.",
-    "shot_map": "Every shot, sized by chance quality.",
-    "goalkeeper_saves": "What each goalkeeper actually had to deal with.",
-    "game_state_splits": "Output by scoreline state.",
+    "goals_breakdown": "Every goal with the pass that made it and the minute it arrived.",
+    "goal_origins": "Each goal traced back to the moment its possession began.",
+    "win_probability": "How the likely result moved as chances arrived.",
+    "xt_per_minute": "Threat added minute by minute, both sides on one axis.",
     "match_momentum": "Expected-goal difference in five-minute windows.",
-    "transition_outcomes": "What broken play produced for each side.",
-    "press_triggers": "What the opponent was doing when the ball was won high.",
+    "sequence_types": "How each side's danger was built: sustained possession, transition, or a restart.",
+    "game_state_splits": "Output by scoreline state — leading, level, and chasing.",
+
+    "pitch_control": "Distance-decayed influence: who held which space.",
+    "dominating_zones": "Touch difference by zone. Positive is the home side.",
+    "post_match_advanced_dashboard": "The match in thirty-two indicators.",
+
+    "shot_map": "{team}'s shots, sized by chance quality.",
+    "goalkeeper_saves": "What each goalkeeper had to deal with, on the goal frame.",
+    "set_pieces": "What the restarts produced for each side.",
+
+    "pass_network_{half}": "{team}'s passing network, {half_word}. Node size is touches; line weight is passes between the pair.",
+    "average_positions_{half}": "{team}'s average positions, {half_word}.",
+    "pass_network": "{team}'s passing network. Node size is touches; line weight is passes between the pair.",
+    "average_positions": "{team}'s average positions.",
+    "pass_map": "Every pass {team} attempted, completed and not.",
+    "pass_targets": "Where {team} aimed its passes — the density of intended receivers.",
+    "xt_map": "Where {team}'s possession added threat.",
+
+    "progressive": "{team}'s passes that moved play meaningfully forward.",
+    "playing_through": "{team}'s passes that broke a defensive line.",
+    "zone14": "{team} in zone 14 and the five vertical lanes.",
+    "unlocking": "{team}'s receptions in the pocket ahead of the defensive line.",
+    "box_entries": "How {team} entered the penalty area.",
+    "crosses": "{team}'s delivery from wide, completed and not.",
+
+    "defensive_activity": "Where {team} did its defensive work.",
+    "defensive_shape": "The shape each side held out of possession.",
+    "high_regains": "{team}'s regains in the opponent's territory.",
     "ppda_pressing": "Opponent passes allowed per defensive action. Lower presses harder.",
-    "high_regains": "Regains in the opponent's territory.",
+    "press_triggers": "What the opponent was doing when the ball was won high.",
+    "ball_losses": "Where {team} gave the ball away, and which losses were punished.",
+    "transition_outcomes": "What broken play produced for each side.",
+
     "player_sequence_leaders": "Involvement in valuable attacking sequences.",
     "action_value": "Every action priced in goals.",
-    "post_match_advanced_dashboard": "The match in thirty-two indicators.",
 }
 
+_HALF_WORDS = {"1h": "first half", "2h": "second half"}
 
-def _caption(path: Path) -> str:
+
+def _analysis(path, context) -> str:
+    """The report's own reading of one visual, or "" if it has none."""
+    if not context:
+        return ""
+    try:
+        from tactical_pdf_report import visual_explanation
+
+        return (visual_explanation(Path(path), context) or "").strip()
+    except Exception:
+        return ""
+
+
+def _caption(path, home: str = "", away: str = "") -> str:
+    """The caption for one visual, with its team and half filled in.
+
+    ``home`` and ``away`` are needed because the filename carries a slug —
+    "man_city" — and a caption should say "Man City".
+    """
     stem = Path(path).stem
-    for key, text in _CAPTIONS.items():
-        if key in stem:
-            return text
+    lowered = stem.lower()
+
+    if "player_radars" in str(path):
+        return f"{Path(path).stem.replace('_', ' ')} — one match, percentiles against every player on the pitch."
+
+    team = ""
+    for name in (home, away):
+        if name and _slug(name) and _slug(name) in lowered:
+            team = name
+    half = next((h for h in ("1h", "2h") if lowered.endswith(h)), "")
+
+    # Longest key first, so "pass_network_{half}" wins over "pass_network".
+    # The half is tested separately from the prefix: the filename puts the team
+    # slug between them ("05b_pass_network_arsenal_2h"), so a single contiguous
+    # probe never matched and every half-specific caption fell through.
+    for key in sorted(_CAPTIONS, key=len, reverse=True):
+        if "{half}" in key:
+            if not half:
+                continue
+            probe = key.replace("_{half}", "")
+        else:
+            probe = key
+        if probe in lowered:
+            text = _CAPTIONS[key]
+            return (text.replace("{team}", team or "The side")
+                        .replace("{half_word}", _HALF_WORDS.get(half, ""))
+                        .replace("{half}", half))
     return stem.split("_", 1)[-1].replace("_", " ").title()
 
 
 def build_match_article(
     events, xg, team_metrics, player_metrics, match_info, out_dir,
+    players=None, *, strict: bool = True,
 ) -> Path | None:
-    """Build the article and write it beside the package. None on failure."""
+    """Build the article and write it beside the package. None on failure.
+
+    Refuses to write when the fixture does not hold together. Everything else
+    in the pipeline reads the frames and writes about them with total
+    confidence; an article is the artefact most likely to be published without
+    a second look, so it is the one that should decline rather than describe a
+    match that never happened.
+    """
     try:
+        if strict and players is not None:
+            from match_sanity import describe, inspect
+
+            problems = inspect(events, players, xg, match_info)
+            if problems:
+                print("  ! article not written — the fixture does not hold together:")
+                print(describe(problems))
+                return None
+
         article = build_article(events, xg, team_metrics, player_metrics,
                                 match_info, out_dir)
         target = Path(out_dir) / "match_article.docx"
-        return render_docx(article, target)
-    except Exception:
+        return render_docx(article, target, article.home, article.away)
+    except Exception as error:
+        # The article is optional — a failure here must not take the package
+        # down with it — but a silent None is indistinguishable from a refusal,
+        # and debugging one costs an hour. Say what broke.
+        print(f"  ! article not written — {type(error).__name__}: {error}")
         return None
