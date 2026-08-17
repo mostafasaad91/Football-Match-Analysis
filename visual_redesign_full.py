@@ -3052,6 +3052,42 @@ def player_pizzas(events: pd.DataFrame) -> list[Path]:
     return exported
 
 
+def _corrected_xgot(events: pd.DataFrame, xg: pd.DataFrame, match_info: dict) -> pd.DataFrame:
+    """Recompute xGoT from the events, so the package agrees with itself.
+
+    xGoT used to be the sum of *pre-shot* xG over on-target attempts, which
+    knows nothing about where the ball went. The collector now prices it from
+    the placement, but a fixture parsed before that still carries the old
+    number on disk — and the player radars, which read the events directly,
+    would then disagree with the team card in the same document.
+
+    Recomputing here means an old export and a new one produce the same
+    package. Only touched when the events carry the placement the model needs.
+    """
+    if events is None or events.empty or xg is None or xg.empty:
+        return xg
+    if not {"goal_mouth_y", "goal_mouth_z"}.issubset(events.columns):
+        return xg
+    try:
+        from match_metrics import post_shot_xg
+    except Exception:
+        return xg
+
+    corrected = xg.copy()
+    for side in ("home", "away"):
+        try:
+            team_id = int(match_info[f"{side}_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = str(match_info.get(f"{side}_name") or "")
+        rows = corrected.index[corrected["team"].astype(str).str.lower().eq(name.lower())]
+        if not len(rows):
+            continue
+        shots = events[events["team_id"].eq(team_id)]
+        corrected.loc[rows, "xGoT"] = round(float(post_shot_xg(shots).sum()), 2)
+    return corrected
+
+
 def generate_match_package(
     events: pd.DataFrame,
     players: pd.DataFrame,
@@ -3074,6 +3110,7 @@ def generate_match_package(
             if generated_dir.exists():
                 shutil.rmtree(generated_dir)
     base.theme()
+    xg = _corrected_xgot(events, xg, match_info)
     team_metrics.to_csv(OUT / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
     player_metrics.to_csv(OUT / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
     # The fixture's identity, next to the frames it describes. Without it the
