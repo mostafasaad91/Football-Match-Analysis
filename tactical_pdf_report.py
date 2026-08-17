@@ -305,6 +305,26 @@ def build_context(
     return context
 
 
+def _lead(home_name: str, away_name: str, home_value, away_value,
+          tolerance: float = 0.0) -> tuple[str, str, bool]:
+    """Return (leader, trailer, level) for one pair of values.
+
+    Several readings named a fixed side — "Man City\'s curve finished above
+    Arsenal\'s", "average chance quality favoured {away}" — and printed the two
+    numbers next to the claim, so the sentence contradicted its own evidence
+    whenever the home side led. Every such sentence asks this instead.
+    """
+    try:
+        home_value, away_value = float(home_value), float(away_value)
+    except (TypeError, ValueError):
+        return home_name, away_name, False
+    if abs(home_value - away_value) <= tolerance:
+        return home_name, away_name, True
+    if home_value >= away_value:
+        return home_name, away_name, False
+    return away_name, home_name, False
+
+
 def _section_copy(c: dict) -> dict[str, dict]:
     home, away = c["home"], c["away"]
     winner, loser = c["winner"], c["loser"]
@@ -319,6 +339,25 @@ def _section_copy(c: dict) -> dict[str, dict]:
     territory_team = home if c["home_field_tilt"] > c["away_field_tilt"] else away
     territory_value = max(c["home_field_tilt"], c["away_field_tilt"])
 
+    # Every heading and sentence below has to follow the numbers it is printed
+    # beside. This card used to claim the volume was level and that the second
+    # side "also attempted" whatever it had, so Arsenal's 9 against Manchester
+    # City's 12 read as a match.
+    home_shots, away_shots = int(c["home_shots"]), int(c["away_shots"])
+    shot_gap = abs(home_shots - away_shots)
+    if shot_gap == 0:
+        shot_volume_head = "Shot volume was level"
+        shot_volume_text = f"{home} and {away} attempted {home_shots} shots each."
+    else:
+        shot_leader = home if home_shots > away_shots else away
+        shot_volume_head = (
+            "Shot volume was close" if shot_gap <= 3 else
+            f"{shot_leader} shot more often"
+        )
+        shot_volume_text = (
+            f"{home} attempted {home_shots} shots; {away} attempted {away_shots}."
+        )
+
     return {
         "Match Story": {
             "subtitle": "Score state, momentum and the moments that changed the tactical problem",
@@ -328,7 +367,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
                 ("Chasing changed risk", f"{loser} had to increase forward numbers and accept more space behind the ball as the match developed."),
             ],
             "data": [
-                ("Shot volume was level", f"{home} attempted {int(c['home_shots'])} shots; {away} also attempted {int(c['away_shots'])}."),
+                (shot_volume_head, shot_volume_text),
                 ("Chance quality separated them", f"{home} produced {c['home_xG']:.2f} xG; {away} produced {c['away_xG']:.2f} xG."),
                 ("Finishing ran hot", f"The match produced {c['home_goals'] + c['away_goals']} goals from {c['home_xG'] + c['away_xG']:.2f} combined xG, so execution exceeded expectation."),
             ],
@@ -533,14 +572,52 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
             "a high workload can contain routine shots, while a smaller number of high-quality attempts can be more decisive."
         )
     if "xg_summary" in stem or "shot_profile" in stem:
+        volume_leader, _volume_trailer, volume_level = _lead(
+            home, away, context["home_shots"], context["away_shots"], tolerance=2)
+        quality_leader, quality_trailer, quality_level = _lead(
+            home, away, context["home_xG_per_shot"], context["away_xG_per_shot"],
+            tolerance=0.005)
+        volume_text = (
+            f"Shot volume was level at {int(context['home_shots'])}-{int(context['away_shots'])}"
+            if volume_level else
+            f"{volume_leader} shot more often, {int(context['home_shots'])}-{int(context['away_shots'])}"
+        )
+        leader_per_shot = context[
+            "home_xG_per_shot" if quality_leader == home else "away_xG_per_shot"]
+        trailer_per_shot = context[
+            "home_xG_per_shot" if quality_trailer == home else "away_xG_per_shot"]
+        quality_text = (
+            "average chance quality was almost identical "
+            f"({leader_per_shot:.3f} against {trailer_per_shot:.3f} xG per shot)"
+            if quality_level else
+            f"average chance quality favoured {quality_leader} "
+            f"({leader_per_shot:.3f} against {trailer_per_shot:.3f} xG per shot)"
+        )
         return (
-            f"Shot volume was level at {int(context['home_shots'])}-{int(context['away_shots'])}, but average chance quality favoured {away} "
-            f"({context['away_xG_per_shot']:.3f} vs {context['home_xG_per_shot']:.3f} xG per shot). The analytical separation is therefore quality and execution, not volume. "
+            f"{volume_text}, and {quality_text}. The analytical separation is therefore quality and execution, not volume. "
             "Use the location maps to identify which entry routes produced that difference."
         )
     if "match_stats" in stem:
+        tilt_leader, _tilt_trailer, _tilt_level = _lead(
+            home, away, context["home_field_tilt"], context["away_field_tilt"])
+        xg_leader, _xg_trailer, xg_level = _lead(
+            home, away, context["home_xG"], context["away_xG"], tolerance=0.05)
+        tilt_value = context[
+            "home_field_tilt" if tilt_leader == home else "away_field_tilt"]
+        if xg_level or xg_leader == tilt_leader:
+            # No contradiction to point at: the same side led both.
+            opening = (
+                f"{tilt_leader} held {tilt_value:.1f}% field tilt and more final-third "
+                f"access, and the xG return followed the territory"
+            )
+        else:
+            opening = (
+                f"The overview contains the central contradiction: {tilt_leader} held "
+                f"{tilt_value:.1f}% field tilt and more final-third access, while "
+                f"{xg_leader} produced the stronger xG return"
+            )
         return (
-            f"The overview contains the central contradiction: {home} held {context['home_field_tilt']:.1f}% field tilt and more final-third access, while {away} produced the stronger xG return. "
+            f"{opening}. "
             "Treat the page as a map of questions rather than a conclusion - the following phase-specific charts explain how territory, pressure and transitions created different outcomes."
         )
     if "xt_per_minute" in stem:
@@ -698,9 +775,18 @@ def visual_explanation(path: Path, context: dict) -> str:
         )
 
     if "xg_flow" in stem:
+        # Which curve finishes higher is a fact about the two totals, and this
+        # sentence used to name the away side whatever they were.
+        leader, trailer, level = _lead(
+            home, away, context["home_xG"], context["away_xG"], tolerance=0.05)
+        if level:
+            curve_leader, curve_clause = "The two curves", " finished level"
+        else:
+            curve_leader = f"{leader}'s curve"
+            curve_clause = f" finished above {trailer}'s"
         return (
             f"The match developed through separate bursts of danger rather than a smooth exchange of chances. The vertical steps show when an attack reached a genuine finishing situation; the flat stretches show periods in which possession did not materially improve the chance of scoring. "
-            f"{away}'s curve finished above {home}'s, but the larger tactical point is the timing of the jumps: once {loser} had to chase, attacks became more direct and the spaces between the pressing line and the defensive cover grew. "
+            f"{curve_leader}{curve_clause}, but the larger tactical point is the timing of the jumps: once {loser} had to chase, attacks became more direct and the spaces between the pressing line and the defensive cover grew. "
             f"The final {context['score']} score came from {context['home_xG'] + context['away_xG']:.2f} combined xG, so finishing amplified the tactical advantages rather than simply mirroring the volume of chances."
         )
     if "goals_breakdown" in stem:
