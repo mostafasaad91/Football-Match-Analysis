@@ -380,6 +380,36 @@ the same check in a child process on each theme, because the palette is fixed
 when `visualization_components` is first imported and one process can only see
 one of them.
 
+### What the prose is held to
+
+Every sentence in the report and the article is generated, which means a wrong
+one renders as confidently as a right one. Three properties are enforced by
+test rather than by reading:
+
+- **A number in the prose exists in the frames.** Every figure is extracted
+  from the finished text and matched against the export at the precisions the
+  documents print, including ratios and shares recomputed the same way the
+  generator computes them. A metric missing from the export used to default to
+  zero and print as a measurement — the article stated "PPDA read 0.00", which
+  is not a reading a match can produce.
+- **A sentence agrees with the numbers beside it.** The recurring defect was a
+  branch choosing the wording while an f-string printed the pair in fixed
+  home-then-away order: "Man City shot more often, 9 to 12". The same shape
+  produced "the same asymmetry" over two figures running opposite ways,
+  "finishing ran hot" over three goals from 3.26 xG, and a card crediting
+  Arsenal with the stronger field tilt on 29.2% against 70.8%.
+- **Every board gets its own reading.** Twenty-nine of the fifty-three visuals
+  fell through to two filler sentences, for two independent reasons: the team
+  matcher compared `"man city"` against `03_shot_map_man_city.png`, so any
+  two-word side lost all fourteen of its boards while a one-word side kept
+  them; and fifteen boards had no branch written at all. The tests now assert
+  no board carries the generic ending and no coaching note is repeated across
+  unrelated boards.
+
+Opta counts the opening minute as minute 0, so a goal from the kick-off was
+reported as arriving "in minute 0" in three places. Goal times are now phrased
+the way a report phrases them.
+
 When a metric changes on purpose, read the drift, then accept it:
 
 ```bash

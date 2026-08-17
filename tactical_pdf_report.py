@@ -185,18 +185,27 @@ def _player_leaders(events: pd.DataFrame, player_metrics: pd.DataFrame, team: st
     sequence = team_pm.sort_values("sequence_xT", ascending=False) if "sequence_xT" in team_pm else team_pm
 
     def leader(series: pd.Series, fmt: str) -> str:
+        # "No qualifying player" is a database message, not a sentence. A side
+        # that did not score has nobody to name, and the report should say so.
         if series.empty:
-            return "No qualifying player"
+            return "nobody"
         return f"{series.index[0]} ({fmt.format(float(series.iloc[0]))})"
 
     def frame_leader(data: pd.DataFrame, key: str, fmt: str) -> str:
         if data.empty or key not in data:
-            return "No qualifying player"
+            return "nobody"
         row = data.iloc[0]
         return f"{row['player']} ({fmt.format(float(row[key]))})"
 
+    def goal_leader() -> str:
+        """The top scorer, with the count in words a person would use."""
+        if goal_counts.empty:
+            return "nobody scored"
+        name, count = goal_counts.index[0], int(goal_counts.iloc[0])
+        return f"{name} ({count} goal{'s' if count != 1 else ''})"
+
     return {
-        "goals": leader(goal_counts, "{:.0f} goals"),
+        "goals": goal_leader(),
         "shot_xg": leader(shot_xg, "{:.2f} xG"),
         "pass_xt": leader(pass_xt, "{:.2f} pass xT"),
         "chain": frame_leader(chain, "xGChain", "{:.2f} xGChain"),
@@ -325,12 +334,27 @@ def _lead(home_name: str, away_name: str, home_value, away_value,
     return away_name, home_name, False
 
 
+def _goal_moment(goal: dict) -> str:
+    """When a goal arrived, phrased the way a report would phrase it.
+
+    Opta counts the opening minute as minute 0, so a goal from the kick-off was
+    printed as "in minute 0" — which is not a thing anyone says, and it landed
+    on the one goal most worth describing precisely, since a goal that early is
+    the reason the two sides never played a level match at all.
+    """
+    minute = int(goal.get("minute") or 0)
+    second = int(goal.get("second") or 0)
+    if minute == 0:
+        return f"after {second} seconds" if second else "straight from the kick-off"
+    return f"in minute {minute + 1}"
+
+
 def _section_copy(c: dict) -> dict[str, dict]:
     home, away = c["home"], c["away"]
     winner, loser = c["winner"], c["loser"]
     early = c["goal_rows"][0] if c["goal_rows"] else None
     early_text = (
-        f"{early['team']} scored through {early['player']} in minute {early['minute']}, forcing the opponent to operate from a chasing game state."
+        f"{early['team']} scored through {early['player']} {_goal_moment(early)}, forcing the opponent to operate from a chasing game state."
         if early else "The score state did not create a clear early tactical constraint."
     )
     press_team = home if c["home_ppda"] < c["away_ppda"] else away
@@ -350,33 +374,138 @@ def _section_copy(c: dict) -> dict[str, dict]:
         shot_volume_text = f"{home} and {away} attempted {home_shots} shots each."
     else:
         shot_leader = home if home_shots > away_shots else away
+        shot_trailer = away if shot_leader == home else home
+        # A flat "gap of three or fewer" called 9 against 12 close, which is a
+        # third more attempts. Closeness is relative to the volume shot.
+        close = shot_gap <= 2 or shot_gap / max(home_shots, away_shots) <= 0.15
         shot_volume_head = (
-            "Shot volume was close" if shot_gap <= 3 else
-            f"{shot_leader} shot more often"
+            "Shot volume was close" if close else f"{shot_leader} shot more often"
         )
         shot_volume_text = (
             f"{home} attempted {home_shots} shots; {away} attempted {away_shots}."
+            if close else
+            f"{shot_leader} attempted {max(home_shots, away_shots)} shots; "
+            f"{shot_trailer} {min(home_shots, away_shots)}."
         )
+
+    # "The game never settled" was printed over every result, including a 3-0
+    # settled by a goal inside the first minute. Whether a match swung is a
+    # question about who scored and when, so ask it.
+    scorers = {row["team"] for row in c["goal_rows"]}
+    lead_changes = 0
+    running = {home: 0, away: 0}
+    ahead = None
+    for row in c["goal_rows"]:
+        running[row["team"]] = running.get(row["team"], 0) + 1
+        now = None if running[home] == running[away] else (
+            home if running[home] > running[away] else away)
+        if now is not None and ahead is not None and now != ahead:
+            lead_changes += 1
+        ahead = now
+    if lead_changes:
+        settled_card = ("The lead changed hands", (
+            f"The {c['score']} scoreline was reached after {lead_changes} change"
+            f"{'s' if lead_changes != 1 else ''} of leader, so neither side spent the "
+            f"match defending the same problem."))
+    elif len(scorers) == 1 and early:
+        settled_card = ("One side led throughout", (
+            f"Only {early['team']} scored, and did so {_goal_moment(early)}, so the "
+            f"tactical conditions were set early and never reversed."))
+    else:
+        settled_card = ("The result held", (
+            f"The {c['score']} scoreline was built without the lead changing hands, so "
+            f"the trailing side spent the match solving one problem rather than several."))
+
+    # Four cards below asserted a direction and then printed numbers that ran
+    # the other way. Each now reads its own figures first.
+    goals_total = c["home_goals"] + c["away_goals"]
+    xg_total = c["home_xG"] + c["away_xG"]
+    if goals_total > xg_total + 0.4:
+        finishing_card = ("Finishing ran hot", (
+            f"The match produced {goals_total} goals from {xg_total:.2f} combined xG, so "
+            f"execution ran ahead of the chances created. Conversion is the noisiest part "
+            f"of a match and the least likely to repeat."))
+    elif goals_total < xg_total - 0.4:
+        finishing_card = ("Finishing ran cold", (
+            f"The match produced {goals_total} goals from {xg_total:.2f} combined xG, so the "
+            f"chances created were not fully taken. The attacking processes were better than "
+            f"the scoreline records."))
+    else:
+        finishing_card = ("Finishing tracked the chances", (
+            f"The match produced {goals_total} goals from {xg_total:.2f} combined xG, so "
+            f"conversion neither flattered nor hid either performance. The underlying numbers "
+            f"can be read close to face value."))
+
+    quality_team = home if c["home_xG_per_shot"] >= c["away_xG_per_shot"] else away
+    quality_other = away if quality_team == home else home
+    quality_best = max(c["home_xG_per_shot"], c["away_xG_per_shot"])
+    quality_worst = min(c["home_xG_per_shot"], c["away_xG_per_shot"])
+    volume_of_quality_team = (c["home_shots"] if quality_team == home else c["away_shots"])
+    volume_of_other = (c["home_shots"] if quality_other == home else c["away_shots"])
+    if abs(quality_best - quality_worst) <= 0.01:
+        efficiency_card = ("Chance quality did not separate them", (
+            f"Both sides averaged close to {quality_best:.3f} expected goals an attempt, so "
+            f"the difference in the match was made somewhere other than in the value of the "
+            f"shooting."))
+    elif volume_of_quality_team < volume_of_other:
+        efficiency_card = ("The decisive edge was efficiency", (
+            f"{quality_team} shot less often than {quality_other} and still averaged "
+            f"{quality_best:.3f} expected goals an attempt against {quality_worst:.3f}, "
+            f"converting fewer attacking situations into a higher-quality return."))
+    else:
+        efficiency_card = ("The better chances went with the volume", (
+            f"{quality_team} both shot more often and averaged the better attempt, "
+            f"{quality_best:.3f} expected goals against {quality_worst:.3f}, so the shooting "
+            f"advantage was not a trade-off between quantity and quality."))
+
+    possession_team = home if c["home_possession_share"] >= c["away_possession_share"] else away
+    if possession_team == territory_team:
+        territory_card = ("Territory and possession pointed the same way", (
+            f"{territory_team} held {territory_value:.1f}% of the final-third passing and "
+            f"{max(c['home_possession_share'], c['away_possession_share']):.1f}% of possession, "
+            f"so the ball and the ground were owned by the same side. The open question is "
+            f"whether that control reached the penalty area or stopped in front of it."))
+    else:
+        territory_card = ("Territory and possession told different stories", (
+            f"{territory_team} held {territory_value:.1f}% of the final-third passing while "
+            f"{possession_team} held the larger share of the ball, so one side owned the "
+            f"match and the other owned the ground closest to goal."))
+
+    if transition_team == winner and winner:
+        game_state_card = ("Game state amplified the pattern", (
+            f"{winner}'s lead created more opportunities to attack space as {loser} committed "
+            f"additional players, so the transition advantage and the scoreline reinforced "
+            f"each other."))
+    elif winner:
+        game_state_card = ("Game state cut against the pattern", (
+            f"{transition_team} took more from broken play while {'leading' if transition_team == winner else 'chasing'} "
+            f"the match, which is the harder version: a trailing side wins transitions against "
+            f"an opponent that no longer needs to commit players, so the advantage came from "
+            f"the first forward action rather than from the space the score created."))
+    else:
+        game_state_card = ("Neither side owned the score state", (
+            f"{transition_team} took more from broken play in a match that stayed level, so "
+            f"the transition advantage was structural rather than a product of the scoreline."))
 
     return {
         "Match Story": {
             "subtitle": "Score state, momentum and the moments that changed the tactical problem",
             "performance": [
                 ("The first goal shaped the match", early_text),
-                ("The game never settled", f"The final {c['score']} scoreline came through repeated swings rather than one sustained period of control."),
+                settled_card,
                 ("Chasing changed risk", f"{loser} had to increase forward numbers and accept more space behind the ball as the match developed."),
             ],
             "data": [
                 (shot_volume_head, shot_volume_text),
                 ("Chance quality separated them", f"{home} produced {c['home_xG']:.2f} xG; {away} produced {c['away_xG']:.2f} xG."),
-                ("Finishing ran hot", f"The match produced {c['home_goals'] + c['away_goals']} goals from {c['home_xG'] + c['away_xG']:.2f} combined xG, so execution exceeded expectation."),
+                finishing_card,
             ],
             "implication": f"Read every territorial and pressing metric through game state: {winner} protected a lead for long periods, while {loser} accumulated attacking activity under greater urgency.",
         },
         "Chance Creation": {
             "subtitle": "Shot quality, final-third access and the difference between threat and conversion",
             "performance": [
-                ("The decisive edge was efficiency", f"{winner} converted fewer attacking situations into a higher-quality scoring return."),
+                efficiency_card,
                 ("Access did not guarantee clean shots", f"{territory_team}'s territorial control still had to pass through compact central protection and crowded finishing zones."),
                 ("Final actions mattered", "Use the shot and zone maps to separate useful penetration from low-value circulation around the box."),
             ],
@@ -390,7 +519,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
         "Possession and Progression": {
             "subtitle": "How each side moved the ball, occupied territory and connected build-up to penetration",
             "performance": [
-                ("Territory and possession told different stories", f"{territory_team} owned {territory_value:.1f}% of field tilt without necessarily owning the same share of total passes."),
+                territory_card,
                 ("Progression was not the end product", "The pass maps should be read from first-line exit through final-third reception, not as isolated completion totals."),
                 ("Half-to-half structures changed", "Average positions and networks are split by half so interval substitutions do not distort the starting structure."),
             ],
@@ -422,7 +551,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
             "performance": [
                 ("Transitions were the clearest separator", f"{transition_team} converted open-field moments into shots more consistently."),
                 ("The first forward action mattered", "Transition progress measures whether regains immediately broke a line or merely restarted possession."),
-                ("Game-state context amplified the pattern", f"{winner}'s lead created more opportunities to attack space as {loser} committed additional players."),
+                game_state_card,
             ],
             "data": [
                 ("Transition shot rate", f"{home}: {c['home_transition_shot_rate']:.1f}% ({int(c['home_transition_shots'])}/{int(c['home_transitions'])}); {away}: {c['away_transition_shot_rate']:.1f}% ({int(c['away_transition_shots'])}/{int(c['away_transitions'])})."),
@@ -430,7 +559,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
                 ("Transition goals", f"{home}: {int(c['home_transition_goals'])}; {away}: {int(c['away_transition_goals'])}."),
                 ("Average progress", f"{home}: {c['home_avg_transition_progress']:.1f}; {away}: {c['away_avg_transition_progress']:.1f} pitch units."),
             ],
-            "implication": f"{transition_team}'s advantage came from turning fewer seconds of disorder into clearer shots. The defensive response is to secure the ball-side rest defence before attacking numbers advance.",
+            "implication": f"{transition_team}'s advantage came from turning a few seconds of disorder into clearer shots. The defensive response is to secure the ball-side rest defence before attacking numbers advance.",
         },
         "Player Impact Appendix": {
             "subtitle": "Role-specific match influence, sequence involvement and individual event profiles",
@@ -515,13 +644,24 @@ def tactical_lens(path: Path) -> str:
     return "Use this page as supporting evidence inside the section narrative, not as a standalone conclusion."
 
 
+def _slugged(text: str) -> str:
+    """A name reduced to the form filenames carry it in."""
+    return re.sub(r"[^a-z0-9]+", "_", str(text).lower()).strip("_")
+
+
 def _visual_team(path: Path, context: dict) -> tuple[str | None, str | None]:
     # Use the visual filename only. The output directory contains both team
     # names (for example, France_vs_England) and must not influence attribution.
-    identity = path.name.lower()
+    #
+    # Compare on the slug, not the name. "man city" is not a substring of
+    # "03_shot_map_man_city.png", so every two-word side failed to be
+    # identified and its fourteen boards fell through to the generic ending —
+    # while a one-word side matched and got the real reading. The defect was
+    # invisible in any fixture where both names happened to be one word.
+    identity = _slugged(path.stem)
     for side in ["home", "away"]:
         team = str(context[side])
-        if team.lower() in identity:
+        if _slugged(team) in identity:
             return team, side
     return None, None
 
@@ -791,15 +931,25 @@ def visual_explanation(path: Path, context: dict) -> str:
         )
     if "goals_breakdown" in stem:
         first = context["goal_rows"][0] if context["goal_rows"] else None
-        first_text = f"The opening goal in minute {first['minute']} gave {first['team']} control over the risk level" if first else "The opening phase did not establish a stable score-state advantage"
+        first_text = f"The opening goal {_goal_moment(first)} gave {first['team']} control over the risk level" if first else "The opening phase did not establish a stable score-state advantage"
         return (
             f"{first_text}. From that point, the trailing side had to push more players beyond the ball, shorten the time spent circulating and accept more direct attacks. That changed both teams at once: the chaser gained territory but weakened the distances protecting turnovers, while the leader could defend central space and wait for open-field moments. "
             "The scorer and assist labels identify the final action, but each goal should be read as the end of a chain involving the regain or progression route, the movement that displaced the last line and the final decision in the box. The order of the goals therefore explains why later full-match averages cannot be treated as neutral."
         )
     if "goalkeeper" in stem:
+        # "Greatly exceeded the pre-shot expectation" was asserted over every
+        # match, including three goals from 2.96 combined xG.
+        scored = context["home_goals"] + context["away_goals"]
+        expected = context["home_xG"] + context["away_xG"]
+        if scored > expected + 0.75:
+            conversion = f"{scored} goals ran well ahead of the {expected:.2f} xG the chances were worth"
+        elif scored < expected - 0.75:
+            conversion = f"{scored} goals fell short of the {expected:.2f} xG the chances were worth"
+        else:
+            conversion = f"{scored} goals came from {expected:.2f} xG, close to par"
         return (
             "This page separates goalkeeper influence from the defensive workload in front of the goalkeeper. Save count alone can reward a keeper for facing several routine attempts, whereas post-shot quality asks how difficult the shots became after placement and power were known. "
-            f"The two goalkeepers faced a match in which {context['home_goals'] + context['away_goals']} goals greatly exceeded the pre-shot expectation, so the analysis must distinguish defensive access, finishing execution and actual shot-stopping. "
+            f"The two goalkeepers faced a match in which {conversion}, so the analysis must distinguish defensive access, finishing execution and actual shot-stopping. "
             "A concession is not automatically a goalkeeper error: central close-range shots usually point first to box protection, while goals from lower-quality positions place more weight on placement, visibility, reaction and starting position."
         )
     if "xg_summary" in stem or "shot_profile" in stem:
@@ -913,8 +1063,13 @@ def visual_explanation(path: Path, context: dict) -> str:
             "Read the endpoints and surrounding support: the map should reveal who received on the far side of pressure, who provided the third-man option and whether the team remained protected if the action failed."
         )
     if "dominating_zones" in stem:
+        # Named home as the territorial side and away as the efficient one
+        # whatever the figures said, so in this fixture it credited Arsenal
+        # with the stronger field tilt on 29.2% against Manchester City's 70.8.
+        zone_territory = home if context["home_field_tilt"] >= context["away_field_tilt"] else away
+        zone_efficient = home if context["home_xG_per_shot"] >= context["away_xG_per_shot"] else away
         return (
-            f"The zone map shows where each team established more sustained influence, but territory is a platform rather than an outcome. {home}'s stronger field tilt meant more play was located near the attacking end, yet {away} used its dangerous possessions more efficiently. "
+            f"The zone map shows where each team established more sustained influence, but territory is a platform rather than an outcome. {zone_territory}'s stronger field tilt meant more play was located near the attacking end, yet {zone_efficient} used its dangerous possessions more efficiently. "
             "This can happen when the deeper side protects central space, encourages circulation toward the touchline and attacks the first open pass after recovery. The territorial side then appears dominant while repeatedly restarting outside the block. "
             "The tactical judgement must join zone control to the next action: did dominance create a free receiver, a box entry and a shot, or did it increase the number of players ahead of the ball without improving the final situation?"
         )
@@ -966,6 +1121,206 @@ def visual_explanation(path: Path, context: dict) -> str:
             f"For {home} and {away}, the leading names should be traced back to the team structure: did they receive because of deliberate occupation, did they carry the ball through pressure, or did their value come from repeatedly choosing the correct next action? "
             "The following radars break those collective mechanisms into role-specific match profiles without treating unlike positions as directly comparable."
         )
+    # ---- boards that had no branch at all ------------------------------
+    # Fifteen visuals per match reached the generic ending below because
+    # nothing above matched their stem. Each now gets the same treatment as
+    # the rest: the mechanism first, this match's numbers as evidence.
+    if "match_momentum" in stem:
+        swing, chased, level = _lead(home, away, context["home_xG"], context["away_xG"])
+        return (
+            "Momentum here is expected-goal difference inside five-minute windows, which is a "
+            "deliberately short lens: it asks who was creating in each passage, not who ended "
+            "the night ahead. A block of bars on one side is a period the opponent could not "
+            "settle, and the interesting question is always what changed at its edges - a "
+            "substitution, a goal, a press that started arriving earlier. "
+            + ("Neither side owned the windows for long, which is the signature of a match "
+               "decided by single actions rather than by a passage of control. "
+               if level else
+               f"{swing} finished on {context['home_xG' if swing == home else 'away_xG']:.2f} "
+               f"against {chased}'s "
+               f"{context['home_xG' if chased == home else 'away_xG']:.2f}, but the totals hide "
+               f"when that gap was built; the bars locate it. ")
+            + "Read the windows against the goal timeline: a side that dominates the ten minutes "
+            "after conceding is reacting, and a side that dominates the ten minutes before "
+            "scoring built something. Only the second is a mechanism worth repeating."
+        )
+    if "win_probability" in stem:
+        return (
+            f"This curve converts the chances as they arrived into the likelihood of each result, "
+            f"so it measures what a spectator could reasonably have believed at each point rather "
+            f"than what the final {context['score']} makes it look like in hindsight. Steep moves "
+            f"belong to goals and clear chances; the long flat stretches are where the match was "
+            f"being played without being decided. "
+            f"The tactical value is in the shape, not the endpoint. A curve that settles early "
+            f"says the losing side never assembled a sustained response and that the leader was "
+            f"able to manage rather than defend; a curve that keeps moving says the result stayed "
+            f"available to both. "
+            f"Read it beside the game-state pages: once the probability stops moving, both teams "
+            f"are playing a different match from the one the pre-match plan described, and every "
+            f"later total is coloured by that."
+        )
+    if "sequence_types" in stem:
+        return (
+            "Every attack is classified by how the possession began - built from settled "
+            "possession, launched from a turnover, or restarted from a set piece - because those "
+            "three routes ask completely different things of a defence and are coached "
+            "separately. A side whose danger is concentrated in one column has one way of hurting "
+            "an opponent, which is easier to plan against than a spread. "
+            f"Set that against the totals: {home} took {context['home_transition_xG']:.2f} "
+            f"expected goals from broken play and {away} {context['away_transition_xG']:.2f}, "
+            f"from {int(context['home_transitions'])} and "
+            f"{int(context['away_transitions'])} transitions. "
+            "The reading to avoid is treating one route as inherently better. Sustained "
+            "possession that produces nothing is not superior to three transitions that produce "
+            "a goal; what matters is whether the route was chosen or forced, and whether the "
+            "side had a second one available when the first was closed."
+        )
+    if "goal_origins" in stem:
+        # goal_timeline is a pipe-delimited machine string. Dropping it into a
+        # paragraph put "0' Calafiori (Arsenal) | 27' Havertz (Arsenal)" in the
+        # middle of a sentence in a document meant to be read.
+        told = [f"{row['player']} {_goal_moment(row)} for {row['team']}"
+                for row in context["goal_rows"]]
+        if len(told) > 1:
+            listed = ", ".join(told[:-1]) + f", then {told[-1]}"
+        else:
+            listed = told[0] if told else ""
+        origins = f"The goals came through {listed}. " if listed else ""
+        return (
+            f"Each goal is traced back to the moment its possession started, which usually sits "
+            f"further from the finish than the highlight suggests. The origin identifies the "
+            f"action that actually created the advantage - a regain in a useful area, an exit "
+            f"that beat the first pressure, a restart - and that is the part a team can rehearse. "
+            f"{origins}"
+            f"Read origin and finish together. Goals beginning deep in a team's own half point to "
+            f"progression that survived several lines and normally to an opponent caught with too "
+            f"many players ahead of the ball; goals beginning high point to pressing structure "
+            f"rather than possession structure. The two demand different work in the week."
+        )
+    if "pitch_control" in stem:
+        territory = home if context["home_field_tilt"] >= context["away_field_tilt"] else away
+        other = away if territory == home else home
+        return (
+            f"The surface models which side would reach a loose ball first across the whole "
+            f"pitch, weighted by distance, so it describes space occupied rather than passes "
+            f"completed. It answers a question the possession figure cannot: not who had the "
+            f"ball, but who would have had it. "
+            f"{territory} held the larger share of advanced territory here "
+            f"({context['home_field_tilt' if territory == home else 'away_field_tilt']:.1f}% "
+            f"field tilt against "
+            f"{context['home_field_tilt' if other == home else 'away_field_tilt']:.1f}%), and the "
+            f"map shows where that control was real and where it was conceded on purpose. "
+            f"A settled block gives up the areas in front of it deliberately; the diagnostic is "
+            f"whether the controlled zones touch the penalty area or stop at its edge. Territory "
+            f"that ends twenty metres from goal is a platform the opponent is content to allow."
+        )
+    if "set_pieces" in stem:
+        return (
+            "Restarts are the one phase where both teams get to arrange themselves in advance, "
+            "which makes them the most coachable source of chances on this page and the least "
+            "excusable source of concessions. The map should be read for repetition: the same "
+            "delivery to the same zone twice is a rehearsed routine, and the second attempt tells "
+            "you whether the opponent adjusted. "
+            f"With {int(context['home_crosses'])} crosses from {home} and "
+            f"{int(context['away_crosses'])} from {away} in open play, the restarts have to be "
+            f"judged separately - a team can be poor from the run of play and still own the "
+            f"restarts, and the corrections are unrelated. "
+            "The defensive reading is the second ball as much as the first contact. Most damage "
+            "from a corner arrives after the initial header, from an edge-of-box position that "
+            "was left unoccupied because everyone was marking inside."
+        )
+    if "ball_losses" in stem and side:
+        exposure = context[f"{side}_rest_defence_vulnerability"]
+        counters = int(context[f"{side}_rest_defence_dangerous_counters"])
+        return (
+            f"Not every turnover matters, and this map separates the ones that did. A loss is "
+            f"expensive when it happens with players committed ahead of the ball and the opponent "
+            f"facing forward; the same loss in a settled shape costs nothing but possession. "
+            f"{team} were punished on {exposure:.1f}% of their advanced losses, conceding "
+            f"{counters} dangerous counter{'s' if counters != 1 else ''}. "
+            f"That figure is a property of the shape before the loss, not of the player who lost "
+            f"it. Read the clusters for their height and their width: losses on the far side from "
+            f"the covering midfielder are the ones that become counters, because the recovery run "
+            f"has to cross the pitch before it can start. "
+            f"The correction is in the possession phase - who holds the inside lane while the "
+            f"ball is wide - rather than in the instruction to lose the ball less often."
+        )
+    if "defensive_shape" in stem:
+        return (
+            f"This compares the shape each side held without the ball: how high the first line "
+            f"engaged, how much distance sat between the units, and whether the block stayed "
+            f"connected as the ball moved across it. "
+            f"{home} allowed {context['home_ppda']:.2f} opponent passes per defensive action and "
+            f"{away} {context['away_ppda']:.2f}, so one side was engaging materially earlier than "
+            f"the other. Height is a choice with a cost attached, and this page shows what was "
+            f"bought with it. "
+            f"The test is compactness rather than height. A high line with thirty metres to the "
+            f"midfield is not pressing, it is two separate teams; a deep block with the same gap "
+            f"is not protecting the box either. Judge the distance between the lines first, then "
+            f"ask whether the space that shape conceded was the space the opponent wanted."
+        )
+    if "playing_through" in stem and side:
+        return (
+            f"These are the passes that eliminated a defensive line rather than moving around it, "
+            f"which is the distinction between progress and territory. A block slides "
+            f"comfortably against circulation; it has to break its own structure when a pass "
+            f"arrives behind one of its lines. "
+            f"{team} completed {int(context[f'{side}_deep_completions'])} passes into the deep "
+            f"attacking zone from {int(context[f'{side}_progressive_passes'])} progressive "
+            f"passes, which is the ratio worth watching - it separates a team that moves the ball "
+            f"forward from one that moves it through. "
+            f"Read the receptions, not the passes. A line-breaking pass to a player facing his "
+            f"own goal with a defender on his back has not broken anything: the defence steps, "
+            f"the ball comes back, and the shape is intact. The ones that count leave the "
+            f"receiver able to turn, which is a function of when the pass was played more than "
+            f"where it went."
+        )
+    if "unlocking" in stem and side:
+        return (
+            f"This isolates receptions in the pocket ahead of the defensive line - the position "
+            f"from which a player can shoot, slide a runner in behind, or force a centre-back to "
+            f"step out and open the space he was occupying. It is the single most valuable place "
+            f"to receive and the hardest to occupy repeatedly. "
+            f"{team} reached the final third {int(context[f'{side}_final_third_entries'])} times "
+            f"and the penalty area {int(context[f'{side}_box_entries'])}; these receptions are "
+            f"most of the explanation for the gap between those two numbers. "
+            f"What makes the reception work is what is happening around it. Without a runner "
+            f"threatening depth, the defender can simply step and press the receiver with no risk "
+            f"behind him, and the pocket stops existing. The occupation of the pocket and the run "
+            f"beyond it are one coordinated action, not two."
+        )
+    if "press_triggers" in stem:
+        presser = home if context["home_high_regains"] >= context["away_high_regains"] else away
+        return (
+            f"A press is a set of conditions, not an effort level. This page asks what the "
+            f"opponent was doing at the moment the ball was won high - receiving with the back to "
+            f"goal, taking a touch too many, playing into a covered lane - because those are the "
+            f"cues a team actually trains, and a regain without a cue behind it is an accident "
+            f"rather than a mechanism. "
+            f"{presser} won the ball in the opponent's territory "
+            f"{int(context['home_high_regains' if presser == home else 'away_high_regains'])} "
+            f"times, converting "
+            f"{context['home_regain_to_shot_rate' if presser == home else 'away_regain_to_shot_rate']:.1f}% "
+            f"of all regains into a shot. "
+            f"Read the triggers against the rest-defence page. A press that wins the ball on a "
+            f"predictable cue leaves the defence arranged for the moment it fails; a press that "
+            f"wins it from individual pursuit does not, and its cost shows up as counters "
+            f"conceded rather than as a lower regain count."
+        )
+    if "action_value" in stem:
+        return (
+            "Every action on the pitch is priced by how much it changed the probability of a goal "
+            "at either end, which puts a recovery in a dangerous area and a pass that creates a "
+            "shot on the same scale. It is the most honest single view of contribution and the "
+            "easiest to over-read. "
+            "The caution is sample size. One high-value action can outweigh eighty ordinary ones "
+            "over ninety minutes, so the ranking says who had the largest moments, not who played "
+            "best. A defender whose whole match was preventing situations from arising scores "
+            "near zero here by construction. "
+            "Use it to locate passages worth reviewing rather than to rank players. The question "
+            "the page answers well is where the value in this match was concentrated; the "
+            "question it answers badly is who deserves credit for it."
+        )
     return (
         _legacy_visual_explanation(path, context)
         + " The deeper reading is the causal chain behind the pattern: opponent behaviour created a space, the team occupied or missed that space, and the next action either preserved the advantage or returned control."
@@ -1008,6 +1363,20 @@ def visual_implication(path: Path, context: dict) -> str:
         ("transition_outcomes", "The attack and the protection behind it must be coached together. Good transition defence begins with occupation before possession is lost."),
         ("advanced_metrics", "Keep the verdict phase-specific. Preserve repeatable structural advantages, treat finishing as volatile and prioritise the risks that gave the opponent direct access to goal."),
         ("player_sequence", "Use the leaders to assign tactical responsibility: who initiates, who connects, who advances and who finishes. The team mechanism matters more than a flat player ranking."),
+        # The fifteen boards that had no rule here all returned the same
+        # closing line, so a third of the report ended on one sentence.
+        ("match_momentum", "Take the two or three windows with the largest swing into the video session. The bars say when to look; only the footage says whether a change of shape, a substitution or one player's decision opened the passage."),
+        ("win_probability", "Judge the plan by where the curve moved, not by where it finished. A result that was settled by the hour asks a different question of the losing side than one that stayed open."),
+        ("sequence_types", "Make sure the side has a second route to danger. A team that creates only from settled possession can be shut down by a deep block; a team that creates only from turnovers needs the opponent to make a mistake."),
+        ("goal_origins", "Rehearse the origin, not the finish. The action that created the advantage sits several passes before the shot and is the part that can be repeated on purpose."),
+        ("pitch_control", "Ask whether the controlled space touched the box. Territory that stops at the edge of the area is a platform the opponent is content to concede, and holding more of it changes nothing on its own."),
+        ("set_pieces", "Treat restarts as their own training block with their own personnel. They are the only phase where both teams arrange themselves in advance, and the second ball decides more of them than the first contact."),
+        ("ball_losses", "Fix the shape before the loss rather than the loss itself. Who holds the inside lane while the ball is wide determines whether a turnover costs possession or a chance."),
+        ("defensive_shape", "Coach the distance between the units before the height of the first line. A high press with a disconnected midfield concedes more than a deep block, and both are visible here as spacing rather than as effort."),
+        ("playing_through", "Judge a line-breaking pass by the reception it produced. A pass behind the line to a player facing his own goal has not broken anything; timing matters more than direction."),
+        ("unlocking", "Coach the occupation of the pocket and the run beyond it as one action. Without a runner threatening depth, the defender can step onto the receiver at no risk and the pocket stops existing."),
+        ("press_triggers", "Define the cue, not the intensity. A regain won on a trained trigger leaves the defence arranged for the moment the press fails; one won on individual pursuit does not, and the cost appears as counters conceded."),
+        ("action_value", "Use this to find the passages worth reviewing, not to rank the squad. A defender who prevented situations from arising scores near zero here by construction."),
     ]
     for token, implication in rules:
         if token in stem:
@@ -1168,7 +1537,7 @@ def visual_data_read(path: Path, context: dict) -> str:
         )
     if "goals_breakdown" in stem:
         first = context["goal_rows"][0] if context["goal_rows"] else None
-        first_line = f"{first['team']} scored first in minute {first['minute']}" if first else "The game remained level early"
+        first_line = f"{first['team']} scored first {_goal_moment(first)}" if first else "The game remained level early"
         return f"{first_line}; the match then produced {context['home_goals'] + context['away_goals']} goals. The sequence and assist fields locate the decisive actions, but the score-state split is required before comparing full-match possession or pressure totals."
     if "goalkeeper" in stem:
         return (

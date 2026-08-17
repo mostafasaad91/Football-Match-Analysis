@@ -163,14 +163,29 @@ class _Match:
 
     @staticmethod
     def _first_goal(events):
-        """(minute, scoring team name) for the opening goal, or None."""
+        """(when, scorer) for the opening goal, or None.
+
+        ``when`` is a phrase rather than a number because "minute 0" is not how
+        anyone describes a goal scored inside the first minute — and a goal that
+        early is exactly the one worth describing precisely, since it is the
+        whole reason the two sides never played a level match.
+        """
         try:
             goals = events[events["is_goal"].astype(str).str.lower().eq("true")]
             goals = goals.sort_values(["minute", "second"], kind="stable")
             if goals.empty:
                 return None
             row = goals.iloc[0]
-            return int(float(row["minute"])), str(row.get("player") or "").strip()
+            minute = int(float(row["minute"]))
+            try:
+                second = int(float(row.get("second")))
+            except (TypeError, ValueError):
+                second = 0
+            if minute == 0:
+                when = f"after {second} seconds" if second else "from the kick-off"
+            else:
+                when = f"in minute {minute + 1}"
+            return when, str(row.get("player") or "").strip(), minute
         except Exception:
             return None
 
@@ -396,10 +411,15 @@ def _finding_quality(m: _Match) -> Finding | None:
                    m.of(quality_trailer, home_per, away_per))
     ratio = best / worst if worst else 0.0
 
+    # A sentence that names a side must print that side's number first. Fixed
+    # home-then-away order read as "Man City shot more often, 9 to 12" whenever
+    # the away team led the count.
     volume = (
         f"the two sides took {int(home_shots)} and {int(away_shots)} shots"
         if volume_level else
-        f"{volume_leader} shot more often, {int(home_shots)} to {int(away_shots)}"
+        f"{volume_leader} shot more often, "
+        f"{int(m.of(volume_leader, home_shots, away_shots))} to "
+        f"{int(m.of(_v_trailer, home_shots, away_shots))}"
     )
     if quality_level:
         opening = (
@@ -410,8 +430,12 @@ def _finding_quality(m: _Match) -> Finding | None:
             f"means the difference in the match was made somewhere other than here."
         )
     else:
+        # "On volume there was little in it" was printed even when one side had
+        # out-shot the other by a third, contradicting the clause after the dash.
+        lead_in = ("On volume there was little in it"
+                   if volume_level else "One side shot more")
         opening = (
-            f"On volume there was little in it — {volume}. On what those shots were "
+            f"{lead_in} — {volume}. On what those shots were "
             f"worth there was a great deal: {quality_leader} averaged {best:.3f} expected "
             f"goals a shot, {quality_trailer} {worst:.3f}."
             + (f" One side's average attempt was worth {ratio:.1f} times the other's."
@@ -510,15 +534,15 @@ def _finding_game_state(m: _Match) -> Finding | None:
         "who chose the game, and who was made to play it."
     )
     if m.first_goal:
-        minute, scorer = m.first_goal
+        when, scorer, _minute = m.first_goal
         moment = (
-            f"The first goal arrived in minute {minute}"
+            f"The first goal arrived {when}"
             + (f", through {scorer}" if scorer else "")
             + ", and from that point the two teams were solving different problems. "
         )
     else:
         moment = "Until the first goal both sides were solving the same problem. "
-    early = bool(m.first_goal and m.first_goal[0] <= 25)
+    early = bool(m.first_goal and m.first_goal[2] <= 25)
     if early:
         third = (
             moment +
@@ -576,13 +600,37 @@ def _finding_transition(m: _Match) -> Finding | None:
             f"{leader}, {int(trailer_count)} for {trailer} — and the value taken from it "
             f"was not: {leader_xg:.2f} expected goals against {trailer_xg:.2f}."
         )
-    second = (
-        f"The same asymmetry runs through the regains. {leader} turned "
-        f"{leader_rate:.1f}% of possession regains into a shot; {trailer} managed "
-        f"{trailer_rate:.1f}%. The four seconds after winning the ball are when an "
-        f"opponent is at its most stretched, and a side that spends them securing "
-        f"possession has made a defensible choice and a costly one."
+    # "The same asymmetry" was asserted whatever the two rates said. Arsenal
+    # turned 4.4% of regains into a shot and Man City 4.5%, and the sentence
+    # still claimed the transition gap ran through them.
+    tail = (
+        "The four seconds after winning the ball are when an opponent is at its most "
+        "stretched, and a side that spends them securing possession has made a "
+        "defensible choice and a costly one."
     )
+    if abs(leader_rate - trailer_rate) <= 0.5:
+        second = (
+            f"It does not run through the regains, though: {leader} turned "
+            f"{leader_rate:.1f}% of possession regains into a shot and {trailer} "
+            f"{trailer_rate:.1f}%, which is the same rate. The advantage was in what the "
+            f"transitions were worth, not in how often either side got a shot away from "
+            f"one — so it was built by the positions the ball was won in and the runs "
+            f"available from them, not by speed off the turnover."
+        )
+    elif leader_rate > trailer_rate:
+        second = (
+            f"The same asymmetry runs through the regains. {leader} turned "
+            f"{leader_rate:.1f}% of possession regains into a shot; {trailer} managed "
+            f"{trailer_rate:.1f}%. " + tail
+        )
+    else:
+        second = (
+            f"The regains cut the other way: {trailer} turned {trailer_rate:.1f}% of "
+            f"possession regains into a shot against {leader}'s {leader_rate:.1f}%. "
+            f"Getting a shot away more often from broken play while taking less value "
+            f"out of it means the attempts themselves were worth less — the phase was "
+            f"reached, the position at the end of it was not. " + tail
+        )
     leader_vuln = m.of(leader, _num(m.hm, "rest_defence_vulnerability"),
                        _num(m.am, "rest_defence_vulnerability"))
     trailer_vuln = m.of(trailer, _num(m.hm, "rest_defence_vulnerability"),
@@ -617,7 +665,13 @@ def _finding_transition(m: _Match) -> Finding | None:
 
 def _finding_press(m: _Match) -> Finding | None:
     """Pressing, and whether it was worth anything."""
+    # PPDA is not in every export. Defaulting it to zero printed "PPDA read
+    # 0.00 for Arsenal and 0.00 for Man City" — a figure that cannot occur,
+    # since a side allowing no passes per defensive action has not played.
     home_ppda, away_ppda = _num(m.hm, "ppda", 0.0), _num(m.am, "ppda", 0.0)
+    ppda = (f" PPDA read {home_ppda:.2f} for {m.home} and {away_ppda:.2f} for "
+            f"{m.away}, but that number only describes how hard a side pressed, "
+            f"never what it collected." if home_ppda > 0 and away_ppda > 0 else "")
     home_hr, away_hr = _num(m.hm, "high_regains"), _num(m.am, "high_regains")
     if not (home_hr or away_hr):
         return None
@@ -650,21 +704,30 @@ def _finding_press(m: _Match) -> Finding | None:
                         _num(m.am, "regain_to_shot_rate"))
     other_rate = m.of(other, _num(m.hm, "regain_to_shot_rate"),
                       _num(m.am, "regain_to_shot_rate"))
-    if presser_rate >= other_rate:
+    # A tenth of a percentage point is a tie, and calling it "paid for" made
+    # the paragraph contradict the one above it, which had just said a side can
+    # lead every pressing board while converting none of the disorder.
+    if abs(presser_rate - other_rate) <= 0.5:
+        third = (
+            f"It bought nothing either way: {presser_rate:.1f}% of {presser}'s regains "
+            f"became a shot and {other_rate:.1f}% of {other}'s, which is the same rate "
+            f"from a different number of regains." + ppda + " Pressing harder and "
+            f"converting at the opponent's rate means the extra regains arrived in "
+            f"positions no more dangerous than the ordinary ones — the press was won "
+            f"where it did not matter."
+        )
+    elif presser_rate > other_rate:
         third = (
             f"And it was paid for: {presser_rate:.1f}% of regains became a shot against "
-            f"{other_rate:.1f}%. PPDA read {home_ppda:.2f} for {m.home} and "
-            f"{away_ppda:.2f} for {m.away}, but that number only describes how hard a "
-            f"side pressed, never what it collected. Winning the ball high and turning "
+            f"{other_rate:.1f}%." + ppda + " Winning the ball high and turning "
             f"it into an attempt in the seconds that follow is the whole return on the "
             f"cost, and it is the half of the press most often left unmeasured."
         )
     else:
         third = (
             f"It was not paid for. {presser} turned {presser_rate:.1f}% of regains into "
-            f"a shot; {other} managed {other_rate:.1f}% from fewer of them. PPDA read "
-            f"{home_ppda:.2f} against {away_ppda:.2f}, which measures the intensity and "
-            f"not the reward. The four seconds after a high regain are when an opponent "
+            f"a shot; {other} managed {other_rate:.1f}% from fewer of them." + ppda +
+            f" The four seconds after a high regain are when an opponent "
             f"is at its most stretched and has nobody arranged between the ball and the "
             f"goal; a side that wins it there and takes a touch to settle has spent the "
             f"advantage it just spent ninety minutes manufacturing."
