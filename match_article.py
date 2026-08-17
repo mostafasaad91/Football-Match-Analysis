@@ -29,6 +29,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from frame_values import (number as _number, ratio as _ratio, text as _text,
+                          whole as _whole)
+
 # The argued sections have no ceiling: every finding the match supports is
 # worth printing, and the appendix behind them carries a reading under every
 # remaining board. The floor stays, because a piece shorter than this is a
@@ -145,7 +148,7 @@ class _Match:
         self.hm, self.am = _side(team_metrics, "home"), _side(team_metrics, "away")
         self.hx, self.ax = _xg_row(xg, self.home), _xg_row(xg, self.away)
         self.players = player_metrics
-        self.competition = str(info.get("competition") or "").strip()
+        self.competition = _text(info.get("competition"))
 
         self.home_goals = int(_num(self.hx, "goals"))
         self.away_goals = int(_num(self.ax, "goals"))
@@ -187,9 +190,7 @@ class _Match:
                 when = f"in minute {minute + 1}"
             # `nan or ""` returns nan — a float NaN is truthy — so an
             # unattributed goal produced "through nan".
-            scorer = row.get("player")
-            scorer = "" if scorer is None or pd.isna(scorer) else str(scorer).strip()
-            return when, scorer, minute
+            return when, _text(row.get("player")), minute
         except Exception:
             return None
 
@@ -362,10 +363,16 @@ def _finding_territory(m: _Match) -> Finding | None:
             f"{leader_xg:.2f} expected goals against {trailer_xg:.2f}."
         )
 
+    # A side with no final-third entries divides by zero here. It cannot happen
+    # in a normal match and does happen in a partial parse, and the article
+    # should still be written.
+    survived = (
+        f": {_ratio(100 * boxes, thirds):.0f}% of the entries survived the last "
+        f"twenty metres" if thirds else ""
+    )
     second = (
         f"The funnel is where it becomes concrete. {tilt_leader} reached the final third "
-        f"{int(thirds)} times and the penalty area {int(boxes)}: "
-        f"{100 * boxes / thirds:.0f}% of the entries survived the last twenty metres. "
+        f"{int(thirds)} times and the penalty area {int(boxes)}{survived}. "
         f"{tilt_trailer} arrived in the box {int(other_boxes)} times. Reaching the final "
         f"third is a function of having the ball; reaching the box is a function of "
         f"having somewhere to put it."
@@ -749,13 +756,13 @@ def _finding_player(m: _Match) -> Finding | None:
     best = m.top_player()
     if best is None:
         return None
-    name = str(best.get("player") or "").strip()
+    name = _text(best.get("player"))
     if not name:
         return None
-    team = str(best.get("team") or "")
-    xt = float(best.get("sequence_xT") or 0)
-    chain = float(best.get("xGChain") or 0)
-    sequences = int(float(best.get("sequences") or 0))
+    team = _text(best.get("team"))
+    xt = _number(best.get("sequence_xT"))
+    chain = _number(best.get("xGChain"))
+    sequences = _whole(best.get("sequences"))
     if xt <= 0:
         return None
 
@@ -763,8 +770,8 @@ def _finding_player(m: _Match) -> Finding | None:
     rival = m.top_player(rival_team)
     comparison = ""
     if rival is not None:
-        rival_name = str(rival.get("player") or "").strip()
-        rival_xt = float(rival.get("sequence_xT") or 0)
+        rival_name = _text(rival.get("player"))
+        rival_xt = _number(rival.get("sequence_xT"))
         if rival_name and rival_xt > 0:
             comparison = (
                 f" {rival_name} led {rival_team} on {rival_xt:.2f}, which is the "
@@ -783,7 +790,7 @@ def _finding_player(m: _Match) -> Finding | None:
         "a coach actually asks after a match — who moved this team forward — "
         "and it is deliberately blind to whether the last touch went in."
     )
-    buildup = float(best.get("xGBuildup") or 0)
+    buildup = _number(best.get("xGBuildup"))
     buildup_share = buildup / chain if chain else 0.0
     if buildup_share >= 0.5:
         third = (
@@ -1241,11 +1248,18 @@ def _caption(path, home: str = "", away: str = "") -> str:
     if "player_radars" in str(path):
         return f"{Path(path).stem.replace('_', ' ')} — one match, percentiles against every player on the pitch."
 
-    team = ""
-    for name in (home, away):
-        if name and _slug(name) and _slug(name) in lowered:
-            team = name
     half = next((h for h in ("1h", "2h") if lowered.endswith(h)), "")
+
+    # Match the slug as the trailing token, longest first. A substring search
+    # gave "milan" the boards belonging to "inter_milan", and a side called
+    # Cross every board whose name contains "crosses".
+    body = lowered[: -(len(half) + 1)] if half else lowered
+    team = ""
+    for name in sorted((home, away), key=lambda n: len(_slug(n or "")), reverse=True):
+        slug = _slug(name or "")
+        if name and slug and (body == slug or body.endswith("_" + slug)):
+            team = name
+            break
 
     # Longest key first, so "pass_network_{half}" wins over "pass_network".
     # The half is tested separately from the prefix: the filename puts the team

@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+
+from frame_values import number as _number, text as _text, whole as _whole
 from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -157,15 +159,14 @@ def _goal_summary(events: pd.DataFrame, team_names: dict[int, str]) -> tuple[lis
         # str(goal.get("player", "Goal")) returns "nan" when the column exists
         # and the cell is empty — the default only covers a missing key — so a
         # goal with no recorded scorer was reported as "scored through nan".
-        scorer = goal.get("player")
-        scorer = "" if scorer is None or pd.isna(scorer) else str(scorer).strip()
+        scorer = _text(goal.get("player"))
         rows.append(
             {
-                "minute": int(float(goal.get("minute", 0) or 0)),
+                "minute": _whole(goal.get("minute")),
                 # The seconds are needed to say when a first-minute goal
                 # arrived; without them the report and the article described
                 # the same goal differently.
-                "second": int(float(goal.get("second", 0) or 0)),
+                "second": _whole(goal.get("second")),
                 "team_id": team_id,
                 "team": team_names.get(team_id, str(team_id)),
                 "player": scorer,
@@ -354,8 +355,10 @@ def _goal_moment(goal: dict) -> str:
     on the one goal most worth describing precisely, since a goal that early is
     the reason the two sides never played a level match at all.
     """
-    minute = int(goal.get("minute") or 0)
-    second = int(goal.get("second") or 0)
+    # int(nan) raises ValueError, and `nan or 0` returns the nan: a goal row
+    # with an empty minute took the whole report down.
+    minute = _whole(goal.get("minute"))
+    second = _whole(goal.get("second"))
     if minute == 0:
         return f"after {second} seconds" if second else "straight from the kick-off"
     return f"in minute {minute + 1}"
@@ -686,11 +689,24 @@ def _visual_team(path: Path, context: dict) -> tuple[str | None, str | None]:
     # identified and its fourteen boards fell through to the generic ending —
     # while a one-word side matched and got the real reading. The defect was
     # invisible in any fixture where both names happened to be one word.
+    #
+    # And match the slug as the trailing token rather than anywhere in the
+    # name, longest first. A substring search gave every board of a Milan
+    # derby to whichever Milan was listed at home, and handed a side called
+    # Cross all the crossing boards, because "cross" sits inside "crosses".
     identity = _slugged(path.stem)
-    for side in ["home", "away"]:
-        team = str(context[side])
-        if _slugged(team) in identity:
-            return team, side
+    for suffix in ("_1h", "_2h"):
+        if identity.endswith(suffix):
+            identity = identity[: -len(suffix)]
+            break
+
+    candidates = sorted(
+        (("home", _slugged(str(context["home"]))), ("away", _slugged(str(context["away"])))),
+        key=lambda pair: len(pair[1]), reverse=True,
+    )
+    for side, slug in candidates:
+        if slug and (identity == slug or identity.endswith("_" + slug)):
+            return str(context[side]), side
     return None, None
 
 
@@ -944,7 +960,7 @@ def visual_explanation(path: Path, context: dict) -> str:
             f"{role_read} {player} was involved in attacks worth {p['xGChain']:.2f} xGChain and {p['sequence_xT']:.2f} sequence xT, while the direct output was "
             f"{_count(p['goals'], 'goal', 'goals')}, {_count(p['shots'], 'shot', 'shots')} and "
             f"{_count(p['key_passes'], 'key pass', 'key passes')}. Those figures are evidence for the role, not the story by themselves. "
-            f"Read the missing or smaller segments as boundaries of the match role: they may reflect position, minutes, the score state or the team's route of attack. The radar is most useful when traced back to the team pages that show where {p.get('team') or 'the team'} created space for this contribution."
+            f"Read the missing or smaller segments as boundaries of the match role: they may reflect position, minutes, the score state or the team's route of attack. The radar is most useful when traced back to the team pages that show where {_text(p.get('team'), 'the team')} created space for this contribution."
         )
 
     if "xg_flow" in stem:

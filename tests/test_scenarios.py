@@ -160,8 +160,65 @@ def _without_optional_columns(events, xg, team_metrics, player_metrics, info):
     return events, xg, team_metrics, player_metrics, info
 
 
+def _unnamed_scorers(events, xg, team_metrics, player_metrics, info):
+    """The goals are there; the scorer column is not filled in.
+
+    This is what a provider gives for an own goal it has not attributed, and
+    what a partial parse gives for everything. It used to print "scored through
+    nan" and, in the xG-flow chart, raise IndexError on "".split()[-1].
+    """
+    events = events.copy()
+    goals = events.index[events["is_goal"].astype(str).str.lower().eq("true")]
+    events.loc[goals, "player"] = None
+    return events, xg, team_metrics, player_metrics, info
+
+
+def _no_shots_for_one_side(events, xg, team_metrics, player_metrics, info):
+    """One side did not attempt a shot: every per-shot rate divides by zero."""
+    xg = xg.copy()
+    away = ~xg["team"].astype(str).eq(str(info["home_name"]))
+    for column in ("shots", "on_target", "goals", "big_chances", "xG", "xGoT", "xG_per_shot"):
+        if column in xg:
+            xg.loc[away, column] = 0
+    return events, xg, team_metrics, player_metrics, info
+
+
+def _empty_player_metrics(events, xg, team_metrics, player_metrics, info):
+    """No player frame at all — the player sections have nothing to rank."""
+    return events, xg, team_metrics, player_metrics.iloc[0:0], info
+
+
+def _blank_cells(events, xg, team_metrics, player_metrics, info):
+    """Optional columns present but empty, which is not the same as absent."""
+    team_metrics = team_metrics.copy()
+    for column in ("rest_defence_dangerous_counters", "counterpress_success_rate",
+                   "deep_completions", "transition_goals"):
+        if column in team_metrics:
+            team_metrics[column] = pd.NA
+    return events, xg, team_metrics, player_metrics, info
+
+
+def _high_scoring(events, xg, team_metrics, player_metrics, info):
+    """A scoreline far above the chances, which the finishing cards must name."""
+    xg = xg.copy()
+    home = xg["team"].astype(str).eq(str(info["home_name"]))
+    xg.loc[home, "goals"] = 6
+    xg.loc[~home, "goals"] = 4
+    events = events.copy()
+    events["is_goal"] = False
+    for team_id, count in ((int(info["home_id"]), 6), (int(info["away_id"]), 4)):
+        rows = events.index[events["team_id"].eq(team_id)][:count]
+        events.loc[rows, "is_goal"] = True
+    return events, xg, team_metrics, player_metrics, info
+
+
 SHAPES = {
     "as_rendered": lambda *a: a,
+    "unnamed_scorers": _unnamed_scorers,
+    "no_shots_one_side": _no_shots_for_one_side,
+    "empty_player_metrics": _empty_player_metrics,
+    "blank_cells": _blank_cells,
+    "high_scoring": _high_scoring,
     "two_word_home": lambda e, x, t, p, i: _rename(e, x, t, p, i, "Real Sociedad", "Leeds"),
     "one_word_both": lambda e, x, t, p, i: _rename(e, x, t, p, i, "Porto", "Ajax"),
     "goalless": _goalless,
@@ -276,6 +333,84 @@ def test_a_goalless_match_does_not_describe_an_opening_goal():
     assert "The first goal arrived" not in text
     assert "The opening goal" not in text
     assert "scored first" not in text
+
+
+@pytest.mark.parametrize(
+    "home, away, filename, owner",
+    [
+        # One side's name inside the other's — a derby the matcher used to give
+        # entirely to whichever side was listed at home.
+        ("Milan", "Inter Milan", "03_shot_map_inter_milan.png", "Inter Milan"),
+        ("Inter Milan", "Milan", "03_shot_map_milan.png", "Milan"),
+        ("United", "Manchester United", "03_shot_map_manchester_united.png",
+         "Manchester United"),
+        # A name that sits inside the board's own vocabulary. "cross" is a
+        # substring of "crosses", so a side called Cross claimed every
+        # crossing board in the report.
+        ("Cross", "Arsenal", "18_crosses_arsenal.png", "Arsenal"),
+        ("Zone", "Arsenal", "12_zone14_arsenal.png", "Arsenal"),
+        ("Arsenal", "Man City", "03_shot_map_man_city.png", "Man City"),
+        ("Arsenal", "Man City", "06a_pass_network_man_city_1h.png", "Man City"),
+        ("Arsenal", "Man City", "05b_pass_network_arsenal_2h.png", "Arsenal"),
+    ],
+)
+def test_a_board_is_attributed_to_the_side_whose_name_ends_it(home, away, filename, owner):
+    from tactical_pdf_report import _visual_team
+
+    team, side = _visual_team(Path(filename), {"home": home, "away": away})
+    assert team == owner, (filename, home, away, team)
+    assert side == ("home" if owner == home else "away")
+
+
+@pytest.mark.parametrize(
+    "home, away, filename, owner",
+    [
+        ("Milan", "Inter Milan", "03_shot_map_inter_milan.png", "Inter Milan"),
+        ("Cross", "Arsenal", "18_crosses_arsenal.png", "Arsenal"),
+        ("Arsenal", "Man City", "07_xt_map_arsenal.png", "Arsenal"),
+        ("Arsenal", "Man City", "06a_pass_network_man_city_1h.png", "Man City"),
+    ],
+)
+def test_the_article_caption_names_the_same_side(home, away, filename, owner):
+    """The caption builder had its own copy of the substring match."""
+    from match_article import _caption
+
+    # The caption does not always lead with the name — "Where Arsenal's
+    # possession added threat" — so check that the chosen side is named, and
+    # that the other one is not. The second half only means anything when
+    # neither name contains the other: "Milan" is inside "Inter Milan".
+    caption = _caption(Path(filename), home, away)
+    other = away if owner == home else home
+    assert owner in caption, (filename, caption, owner)
+    if owner not in other and other not in owner:
+        assert other not in caption, (filename, caption)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("shape", ["unnamed_scorers", "no_shots_one_side", "goalless"])
+def test_the_whole_package_builds_for_a_hostile_fixture(shape, tmp_path):
+    """Everything above tests the prose. This tests the charts too.
+
+    A paragraph that cannot name a scorer is a bad sentence; a chart that
+    cannot label one used to raise IndexError and take the run down. Only
+    generating the package proves the difference.
+    """
+    import shutil
+
+    events, xg, team_metrics, player_metrics, info, out = _shaped(shape)
+    players = pd.read_csv(out / "players.csv")
+    from visual_redesign_full import generate_match_package
+
+    target = tmp_path / shape
+    target.mkdir(parents=True, exist_ok=True)
+    try:
+        generate_match_package(events, players, xg, team_metrics, player_metrics,
+                               info, target)
+        assert len(list(target.glob("*.png"))) > 40, shape
+        assert (target / "full_visual_redesign_real_data.pdf").exists(), shape
+        assert (target / "match_article.docx").exists(), shape
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
 
 
 def test_an_away_win_is_named_as_an_away_win():

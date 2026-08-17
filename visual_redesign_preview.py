@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 import crests
+from frame_values import surname as _surname
 from visualization_components import (
     C_AWAY,
     C_HOME,
@@ -676,7 +677,9 @@ def xg_flow(events: pd.DataFrame) -> Path:
             ax.scatter(goal["minute"], upto, s=40, facecolor=color, edgecolor=BG, linewidth=0.8, zorder=7)
             # Name the scorer on the marker — a minute alone makes the reader
             # cross-reference the timeline strip below to learn who scored.
-            surname = str(goal.get("player") or "").split()[-1][:12]
+            # str(nan) is "nan" and "".split()[-1] raises: the chart used to
+            # either label a goal "nan" or stop drawing altogether.
+            surname = _surname(goal.get("player"))[:12]
             label = f"{surname} {int(goal['minute'])}′" if surname else f"{int(goal['minute'])}′"
             offset = 13 if goal_idx % 2 == 0 else 22
             ax.annotate(
@@ -724,7 +727,7 @@ def xg_flow(events: pd.DataFrame) -> Path:
         y = 0.78 if idx % 2 == 0 else 0.22
         goals_ax.plot([minute, minute], [0.50, y], color=color, lw=0.65, alpha=0.8)
         goals_ax.scatter([minute], [0.50], s=36, facecolor=color, edgecolor=BG, linewidth=0.7, zorder=3)
-        surname = str(goal.get("player") or "Goal").split()[-1][:10].upper()
+        surname = (_surname(goal.get("player"), "GOAL")[:10]).upper()
         own = " (OG)" if _bool(pd.Series([goal.get("is_own_goal", False)])).iloc[0] else ""
         goals_ax.text(minute, y, f"{int(minute)}′  {surname}{own}", color=TEXT, fontsize=5.4, fontweight="bold", ha="center", va="center")
     fig.text(0.945, 0.030, "PURE BLACK MATCH INTELLIGENCE · REAL EVENT DATA", ha="right", fontsize=6.5, color=NEUTRAL)

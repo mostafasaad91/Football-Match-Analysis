@@ -25,6 +25,8 @@ import re
 
 import numpy as np
 import pandas as pd
+
+from frame_values import text as _text
 import matplotlib
 
 matplotlib.use("Agg")
@@ -1423,8 +1425,8 @@ def _team_split(events, info):
     """Return {'home': (name, [players]), 'away': (name, [players])}."""
     hid = info.get("home_id")
     aid = info.get("away_id")
-    hn = info.get("home_name") or "Home"
-    an = info.get("away_name") or "Away"
+    hn = _text(info.get("home_name"), "Home")
+    an = _text(info.get("away_name"), "Away")
     # dominant team_id per player (real player names, participants only)
     part = _get_participation(events)
     ev = events[events["player"].map(_valid_name)]
@@ -1518,8 +1520,8 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
     allm, elig = compute_metrics_pool(events)
     split = _team_split(events, info)
     opp = {
-        "home": info.get("away_name") or "the opponent",
-        "away": info.get("home_name") or "the opponent",
+        "home": _text(info.get("away_name"), "the opponent"),
+        "away": _text(info.get("home_name"), "the opponent"),
     }
     base = os.path.join(out_dir, "player_radars")
     result = {}
