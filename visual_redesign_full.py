@@ -5,6 +5,7 @@ import gc
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 from pathlib import Path
@@ -3111,6 +3112,11 @@ def generate_match_package(
                 shutil.rmtree(generated_dir)
     base.theme()
     xg = _corrected_xgot(events, xg, match_info)
+    # Persist it beside the other frames. The documents were built from the
+    # corrected value while xg.csv kept the old one, so anything re-reading the
+    # folder — the tests, a second render, the article — disagreed with the PDF
+    # it sat next to.
+    xg.to_csv(OUT / "xg.csv", index=False, encoding="utf-8-sig")
     team_metrics.to_csv(OUT / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
     player_metrics.to_csv(OUT / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
     # The fixture's identity, next to the frames it describes. Without it the
@@ -3207,7 +3213,7 @@ def generate_match_package(
     print(f"Posters: {len(posters)}")
     print(f"Article: {article}" if article else "Article: not written")
     print(f"PDF: {pdf}")
-    return {
+    result = {
         "visuals": paths,
         "catalog": OUT / "visual_catalog.csv",
         "pdf": pdf,
@@ -3215,6 +3221,30 @@ def generate_match_package(
         "article": article,
         "output_dir": OUT,
     }
+
+    # The light copy belongs here, not in the collector that used to call it.
+    # Re-rendering a fixture from its saved frames only rebuilt the black
+    # package, so a corrected report could sit next to a light one carrying
+    # numbers fixed weeks earlier, and nothing said so.
+    #
+    # The theme is fixed when visualization_components is first imported, so
+    # this runs in a child process. That child is given LIGHT_COPY=0, which is
+    # what stops this from recursing. A failure here never costs the package
+    # that is already written.
+    if os.environ.get("MATCH_ANALYSIS_LIGHT_COPY", "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }:
+        try:
+            from render_light import render_light_package
+
+            light_out = render_light_package(OUT)
+            if light_out is not None:
+                result["light_output_dir"] = light_out
+                print(f"Light package: {light_out}")
+        except Exception as error:
+            print(f"  ! light package not written — {type(error).__name__}: {error}")
+
+    return result
 
 
 def _sample_kit_colors() -> tuple[str, str]:

@@ -862,7 +862,7 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
     if "pass_map" in stem and side:
         return (
             f"{team}'s pass map should be read in layers: circulation to stabilise possession, progressive actions to break lines and failed passes that exposed transition space. "
-            f"The side completed a {context[f'{side}_pass_share']:.1f}% share of match passes and recorded {int(context[f'{side}_progressive_passes'])} progressive passes. The location of risk is more informative than completion percentage alone."
+            f"The side played a {context[f'{side}_pass_share']:.1f}% share of match passes and recorded {int(context[f'{side}_progressive_passes'])} progressive passes. The location of risk is more informative than completion percentage alone."
         )
     if "ball_touches" in stem:
         return (
@@ -2039,7 +2039,9 @@ class TacticalPDF:
     COVER_LEADS = (
         ("split", "field_tilt", "Field tilt", "share of completed passes reaching the final third"),
         ("split", "possession_share", "Possession", "share of the match in controlled possession"),
-        ("split", "pass_share", "Pass share", "share of all completed passes"),
+        # pass_share counts passes attempted, not completed: the mask carries no
+        # outcome filter. Both descriptions of it said "completed".
+        ("split", "pass_share", "Pass share", "share of all passes played"),
         ("rate", "box_entry_to_shot_rate", "Box entry to shot", "share of penalty-area entries that became a shot"),
         ("rate", "regain_to_shot_rate", "Regain to shot", "share of possession regains that became a shot"),
         ("rate", "transition_shot_rate", "Transition to shot", "share of transitions that became a shot"),
