@@ -263,12 +263,18 @@ def _fold(name: str) -> str:
 
 
 def check_no_player_changed_team_since_a_stored_match(events, players, info) -> list[Problem]:
-    """A player the history has seen for another team is worth a second look.
+    """A player the history has seen for another team, listed for a new one.
 
-    No configuration and no external source: the project's own match history
-    already records who played for whom. A real transfer trips this once and
-    the user accepts it; a fixture attributing a player to the wrong side trips
-    it too, which is the case nothing else here can see.
+    Deliberately **not** in CHECKS. The squads come from the match page the
+    user supplies, which is the authority on who played — so every real
+    transfer would trip this, and a check in the gate stops the article being
+    written. Blocking a correct fixture because a player moved clubs is worse
+    than not noticing a wrong one.
+
+    Kept because it is the only view the project has across fixtures, and it is
+    useful to call directly when a squad looks surprising:
+
+        from match_sanity import check_no_player_changed_team_since_a_stored_match
     """
     if players is None or players.empty or "name" not in players.columns:
         return []
@@ -349,7 +355,6 @@ CHECKS = (
     check_the_match_has_enough_events,
     check_no_player_appears_for_both_sides,
     check_players_belong_to_the_squad_you_named,
-    check_no_player_changed_team_since_a_stored_match,
     check_event_players_belong_to_their_team,
     check_goals_match_the_score,
 )
