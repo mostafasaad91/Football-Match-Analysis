@@ -15,6 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import matplotlib.patheffects as path_effects
 from matplotlib import colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
@@ -2279,7 +2280,13 @@ def player_sequence(player_metrics):
         colors = [HOME if str(team).lower() == HOME_NAME.lower() else AWAY for team in top["team"]]
         ax.barh(top["player"].astype(str).str.split().str[-1], top[column], color=colors, alpha=0.9)
         base.clean_ax(ax); ax.grid(axis="x", color=GRID, lw=0.65); ax.set_title(title.upper(), loc="left", color=MUTED, fontsize=10, fontweight="bold")
-        for idx, value in enumerate(top[column]): ax.text(value + max(top[column].max(), 0.01) * 0.025, idx, f"{value:.2f}", color=TEXT, va="center", fontsize=8)
+        # Room for the value that sits past the end of the bar, or the
+        # longest one prints outside the axes and over its neighbour.
+        widest = max(float(top[column].max()), 0.01)
+        ax.set_xlim(0, widest * 1.22)
+        for idx, value in enumerate(top[column]):
+            ax.text(value + widest * 0.025, idx, f"{value:.2f}", color=TEXT,
+                    va="center", fontsize=8)
     fig.text(0.945, 0.035, f"{HOME_NAME.upper()} · {AWAY_NAME.upper()}", ha="right", fontsize=8, color=NEUTRAL)
     return save(fig, "34_player_sequence_leaders.png")
 
@@ -2605,13 +2612,21 @@ def action_value_leaders(events):
     ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
     ax.set_xlabel("Action value (goals)", fontsize=9, color=MUTED)
     ax.tick_params(labelsize=8)
+    # Room on the right for those labels. Without it the widest bar reaches
+    # the axis edge and its number is drawn past it, over whatever sits beside
+    # the panel.
+    _reach = max([max(o, 0.0) + max(d, 0.0) for o, d in zip(offensive, defensive)] + [0.01])
+    _left = min(list(offensive) + [0.0])
+    _value_pad = _reach * 0.03
+    ax.set_xlim(_left * 1.15 if _left < 0 else 0.0, _reach * 1.30)
+
     # Label at the bar's right edge, not at the total. When a player lost value
     # on the ball the bar starts left of zero, so the two do not coincide and
     # the number ended up printed across the bar.
     for index, (off, dfn, total) in enumerate(
         zip(offensive, defensive, top["total_value"].to_numpy())
     ):
-        ax.text(max(off, 0.0) + max(dfn, 0.0) + 0.012, index, f"{total:+.3f}",
+        ax.text(max(off, 0.0) + max(dfn, 0.0) + _value_pad, index, f"{total:+.3f}",
                 color=TEXT, fontsize=8, fontweight="bold", va="center")
 
     fig.text(0.20, 0.80, "SOLID = ON-BALL   ·   FADED = DEFENSIVE", color=MUTED,
@@ -2866,16 +2881,28 @@ def press_and_rest(events):
             ax.text(0.5, 0.5, "No high regains", color=MUTED, ha="center", va="center")
         else:
             positions = np.arange(len(triggers))
-            ax.barh(positions, triggers["regains"], height=0.6, color=color, alpha=0.9)
+            counts = [int(v) for v in triggers["regains"]]
+            ax.barh(positions, counts, height=0.6, color=color, alpha=0.9)
             ax.set_yticks(positions)
             ax.set_yticklabels(triggers["trigger"], fontsize=8.5, color=TEXT)
             ax.invert_yaxis()
             ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
             ax.set_xlabel("High regains", fontsize=8.5, color=MUTED)
             ax.tick_params(labelsize=8)
-            for index, (count, share) in enumerate(zip(triggers["regains"], triggers["share"])):
-                ax.text(count + 0.15, index, f"{int(count)}  ({share:.0f}%)", color=TEXT,
-                        fontsize=7.8, va="center", fontweight="bold")
+
+            # Room for the value that sits at the end of the bar. Without it a
+            # longest bar reaches the axis edge and its label is drawn past it,
+            # over the other side's category names — which is exactly what
+            # happened whenever a press produced only two or three regains.
+            top = max(counts + [1])
+            ax.set_xlim(0, top * 1.42)
+            # These are counts of regains: a tick at 0.25 of one does not exist.
+            ax.set_xticks(range(0, top + 1, max(1, top // 5)))
+            ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v)}"))
+
+            for index, (count, share) in enumerate(zip(counts, triggers["share"])):
+                ax.text(count + top * 0.045, index, f"{count}  ({share:.0f}%)",
+                        color=TEXT, fontsize=7.8, va="center", fontweight="bold")
 
         structure = rest_defence_structure(events, team_id)
         second = second_ball_recovery(events, team_id)
