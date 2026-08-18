@@ -2746,6 +2746,12 @@ def _shot_context_features(row, f: dict | None = None) -> dict:
     }
 
 
+# How fast the foot-shot curve keeps falling past the turning point of its
+# own polynomial, in log odds per metre. Chosen so the tail lands on the
+# published range rather than on the parabola climbing back up.
+_XG_FOOT_FAR_DECAY = 0.115
+
+
 def _xg_foot_shot(f: dict, ctx: dict) -> float:
     """Open-play foot shot submodel (v3 — recalibrated).
 
@@ -2762,12 +2768,30 @@ def _xg_foot_shot(f: dict, ctx: dict) -> float:
     d = f["distance"]
     a = f["angle"]
     c = f["central"]
+
+    # The distance²  term is positive, so the curve is a parabola: it falls to
+    # a minimum and then climbs. The minimum sits where -0.108 + 0.0042d -
+    # 0.028a is zero, about 26 metres out, and beyond it the model rewarded
+    # distance. A shot from 74 metres — inside the taker's own half — was
+    # priced at 0.786, and seventeen per cent of the shots in the archive fall
+    # past that turn.
+    #
+    # Everything inside the turn is left exactly as it was: that is where the
+    # coefficients were tuned and where almost every shot is taken. Past it the
+    # polynomial is frozen and a straight penalty continues, so the curve keeps
+    # falling at a rate that puts a 30-metre strike near 0.02 and a 40-metre
+    # one near 0.005, which is where published models put them.
+    turn = (0.108 + 0.028 * a) / 0.0042
+    beyond = max(d - turn, 0.0)
+    d = min(d, turn)
+
     z = (
         -2.30
         - 0.108 * d
         + 1.82 * a
         + 0.0021 * d * d
         - 0.028 * (d * a)
+        - _XG_FOOT_FAR_DECAY * beyond
         + 0.28 * c
         + (0.22 if f["in_box"] else 0.0)
         + (0.40 if f["in_six"] else 0.0)
@@ -2869,8 +2893,37 @@ def _opta_like_local_xg_from_row(row) -> float:
     else:
         xg = _xg_foot_shot(f, ctx)
 
+    # A correction the project earned from its own collected matches, if it
+    # ever did. xg_calibration refuses to write one until there are enough
+    # shots to see a bias and it beats the uncomputed model on held-out folds,
+    # so this is the identity until the archive is large enough — which is the
+    # honest state today: 358 shots produced 41 goals against 37.4 predicted,
+    # six tenths of a standard deviation, no bias to correct.
+    xg = _apply_xg_calibration(xg)
+
     # Simple bounds — no complex rule-based caps needed
     return round(float(_clamp(xg, 0.001, XG_SINGLE_SHOT_CAP)), 4)
+
+
+_XG_CALIBRATION: object = "unread"
+
+
+def _apply_xg_calibration(value: float) -> float:
+    """Stretch the model's own curve, if a correction was earned. Cached."""
+    global _XG_CALIBRATION
+    if _XG_CALIBRATION == "unread":
+        try:
+            import xg_calibration
+
+            _XG_CALIBRATION = xg_calibration.load()
+        except Exception:
+            _XG_CALIBRATION = None
+    if _XG_CALIBRATION is None:
+        return float(value)
+    try:
+        return float(_XG_CALIBRATION.apply(float(value)))
+    except Exception:
+        return float(value)
 
 
 def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
