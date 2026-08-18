@@ -111,3 +111,57 @@ def test_the_real_fixture_passes_every_check():
     events, players, info = _fixture()
     xg = pd.read_csv(ROOT / "output" / MATCH / "xg.csv")
     assert ms.inspect(events, players, xg, info) == []
+
+
+# --------------------------------------------------------------------------
+# a row with no player is not a player
+# --------------------------------------------------------------------------
+
+def test_a_blank_player_name_is_not_a_stranger():
+    """The shape that refused Casa Pia vs Benfica an article.
+
+    dropna removes a missing cell but not an empty string, so one event with
+    ``player = ""`` counted as a player who is not in the squad — and the
+    message named him as nothing at all. It only bites before the frames are
+    written: a blank field comes back from CSV as NaN, so the same fixture
+    passed when re-read from disk and failed while it was being built.
+    """
+    players = pd.DataFrame({
+        "name": ["Ana", "Beto", "Caio", "Dinis"],
+        "team_id": [1, 1, 2, 2],
+    })
+    events = pd.DataFrame({
+        "player": ["Ana", "", "Beto", None, "Caio", "   ", "Dinis"],
+        "team_id": [1, 1, 1, 1, 2, 2, 2],
+    })
+    info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
+    assert ms.check_event_players_belong_to_their_team(events, players, info) == []
+
+
+def test_a_real_stranger_is_still_caught():
+    """The blank-name fix must not blind the check to a genuine one."""
+    players = pd.DataFrame({"name": ["Ana", "Beto"], "team_id": [1, 2]})
+    events = pd.DataFrame({
+        "player": ["Ana", "", "Someone Else", "Beto"],
+        "team_id": [1, 1, 1, 2],
+    })
+    info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
+    problems = ms.check_event_players_belong_to_their_team(events, players, info)
+    assert len(problems) == 1
+    assert "Someone Else" in str(problems[0])
+
+
+def test_a_blank_name_does_not_read_as_playing_for_both_sides():
+    players = pd.DataFrame({
+        "name": ["Ana", "", None, "Beto"],
+        "team_id": [1, 1, 2, 2],
+    })
+    info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
+    assert ms.check_no_player_appears_for_both_sides(None, players, info) == []
+
+
+def test_surrounding_whitespace_is_not_a_different_player():
+    players = pd.DataFrame({"name": ["Ana ", "Beto"], "team_id": [1, 2]})
+    events = pd.DataFrame({"player": ["Ana", "Beto "], "team_id": [1, 2]})
+    info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
+    assert ms.check_event_players_belong_to_their_team(events, players, info) == []

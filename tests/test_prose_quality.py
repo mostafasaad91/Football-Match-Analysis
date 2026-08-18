@@ -36,7 +36,11 @@ from tactical_pdf_report import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1"]
+# A third fixture, added because it broke two things the first two could
+# not: a one-shot count printed as "1 shots", and a blank player name in
+# memory that refused the article.
+MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1",
+           "Casa_Pia_AC_vs_Benfica_0-7"]
 
 GENERIC = "The deeper reading is the causal chain behind the pattern"
 

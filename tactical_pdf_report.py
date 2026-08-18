@@ -912,8 +912,8 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
         )
     if "transition_outcomes" in stem:
         return (
-            f"{away} turned {int(context['away_transitions'])} transitions into {int(context['away_transition_shots'])} shots ({context['away_transition_shot_rate']:.1f}%) and {context['away_transition_xG']:.2f} xG. "
-            f"{home} produced {int(context['home_transition_shots'])} shots from {int(context['home_transitions'])} transitions ({context['home_transition_shot_rate']:.1f}%). "
+            f"{away} turned {_count(context['away_transitions'], 'transition', 'transitions')} into {_count(context['away_transition_shots'], 'shot', 'shots')} ({context['away_transition_shot_rate']:.1f}%) and {context['away_transition_xG']:.2f} xG. "
+            f"{home} produced {_count(context['home_transition_shots'], 'shot', 'shots')} from {int(context['home_transitions'])} transitions ({context['home_transition_shot_rate']:.1f}%). "
             "The winner's edge was not simply more transitions, but faster conversion of disorder into a clean final action."
         )
     if "advanced_metrics" in stem:
@@ -1341,7 +1341,7 @@ def visual_explanation(path: Path, context: dict) -> str:
             f"which is the distinction between progress and territory. A block slides "
             f"comfortably against circulation; it has to break its own structure when a pass "
             f"arrives behind one of its lines. "
-            f"{team} completed {int(context[f'{side}_deep_completions'])} passes into the deep "
+            f"{team} completed {_count(context[f'{side}_deep_completions'], 'pass', 'passes')} into the deep "
             f"attacking zone from {int(context[f'{side}_progressive_passes'])} progressive "
             f"passes, which is the ratio worth watching - it separates a team that moves the ball "
             f"forward from one that moves it through. "
@@ -1787,7 +1787,7 @@ def visual_data_read(path: Path, context: dict) -> str:
         )
     if "transition_outcomes" in stem:
         return (
-            f"{home} turned {int(context['home_transitions'])} transitions into {int(context['home_transition_shots'])} shots ({context['home_transition_shot_rate']:.1f}%); {away} turned {int(context['away_transitions'])} into {int(context['away_transition_shots'])} ({context['away_transition_shot_rate']:.1f}%). "
+            f"{home} turned {_count(context['home_transitions'], 'transition', 'transitions')} into {_count(context['home_transition_shots'], 'shot', 'shots')} ({context['home_transition_shot_rate']:.1f}%); {away} turned {int(context['away_transitions'])} into {int(context['away_transition_shots'])} ({context['away_transition_shot_rate']:.1f}%). "
             f"Transition xG was {context['home_transition_xG']:.2f}-{context['away_transition_xG']:.2f}."
         )
     if "advanced_metrics" in stem:
@@ -1865,8 +1865,8 @@ def visual_data_read(path: Path, context: dict) -> str:
         )
     if "playing_through" in stem and side:
         return (
-            f"{team} completed {int(context[f'{side}_deep_completions'])} passes into the "
-            f"deep attacking zone from {int(context[f'{side}_progressive_passes'])} "
+            f"{team} completed {_count(context[f'{side}_deep_completions'], 'pass', 'passes')} into "
+            f"the deep attacking zone from {int(context[f'{side}_progressive_passes'])} "
             f"progressive passes. The ratio is the useful figure; the raw progressive count "
             f"rewards a side that simply had more of the ball."
         )

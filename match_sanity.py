@@ -46,11 +46,29 @@ def _goals(xg: pd.DataFrame, team: str) -> int | None:
         return None
 
 
+def _named(series) -> pd.Series:
+    """The rows that carry an actual name.
+
+    dropna removes a missing cell but not an empty string, and an event with
+    ``player = ""`` is a row with no player, not a player nobody has heard of.
+    It only shows up before the frames are written: a blank field comes back
+    from CSV as NaN, so the same fixture passed when re-read from disk and
+    failed while it was being built — Casa Pia vs Benfica was refused an
+    article over one nameless row per side, with the offending name printed as
+    nothing at all.
+    """
+    if series is None:
+        return pd.Series(dtype=bool)
+    text = series.astype(str).str.strip()
+    return series.notna() & text.ne("") & ~text.str.lower().isin(
+        ["nan", "none", "nat", "<na>"])
+
+
 def check_no_player_appears_for_both_sides(events, players, info) -> list[Problem]:
     """A player belongs to one team. Two means the frames were merged wrong."""
     if players is None or players.empty or "name" not in players.columns:
         return []
-    named = players.dropna(subset=["name", "team_id"])
+    named = players[_named(players["name"]) & players["team_id"].notna()]
     counts = named.groupby("name")["team_id"].nunique()
     shared = sorted(counts[counts > 1].index.astype(str))
     if not shared:
@@ -67,15 +85,15 @@ def check_event_players_belong_to_their_team(events, players, info) -> list[Prob
     if players is None or players.empty or "name" not in players.columns:
         return []
     squads: dict[int, set[str]] = {}
-    for team_id, group in players.dropna(subset=["name"]).groupby("team_id"):
+    for team_id, group in players[_named(players["name"])].groupby("team_id"):
         try:
-            squads[int(team_id)] = set(group["name"].astype(str))
+            squads[int(team_id)] = set(group["name"].astype(str).str.strip())
         except (TypeError, ValueError):
             continue
     if len(squads) < 2:
         return []
 
-    acting = events.dropna(subset=["player", "team_id"])
+    acting = events[_named(events.get("player")) & events["team_id"].notna()]
     strays: dict[int, set[str]] = {}
     for team_id, group in acting.groupby("team_id"):
         try:
@@ -84,7 +102,7 @@ def check_event_players_belong_to_their_team(events, players, info) -> list[Prob
             continue
         if squad is None:
             continue
-        loose = set(group["player"].astype(str)) - squad
+        loose = set(group["player"].astype(str).str.strip()) - squad
         if loose:
             strays[int(team_id)] = loose
 
