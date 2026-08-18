@@ -410,6 +410,33 @@ Opta counts the opening minute as minute 0, so a goal from the kick-off was
 reported as arriving "in minute 0" in three places. Goal times are now phrased
 the way a report phrases them.
 
+### The one thing the data cannot check about itself
+
+Every check above reads the frames against each other. A squad cannot be
+checked that way. The pipeline takes each side's players straight from the
+provider's own match feed, so the events agree with the squad and the squad
+agrees with the events: a fixture that lists a player for the wrong side is
+perfectly coherent and passes everything. Nothing inside the data can see it.
+
+Two ways in, neither of which invents an answer:
+
+- **A roster you keep.** Put a `squads.json` beside the code —
+  `{"Arsenal": ["David Raya", …]}` — and any player not in it is named before
+  anything is written. It is opt-in because the project cannot track a
+  league's transfers on your behalf, and it is gitignored because a roster is
+  your opinion, not project data. `python scripts/build_squads.py` writes a
+  first draft from the fixtures already parsed, and flags names seen in only
+  one of them; the entry that is wrong is exactly the one worth reviewing.
+- **The project's own history.** `output/match_history.db` already records who
+  played for whom. A player listed for a side the history has seen him play
+  against trips the check with no configuration at all. A real transfer trips
+  it once and you accept it; a misattributed fixture trips it too.
+
+Names are compared with accents, case and punctuation removed, and with the
+letters that decomposition leaves nothing behind for spelled out — Ø, Æ, Ð, Þ,
+ß, Ł. "Ødegaard" folded to "degaard" before that, so a roster typed as
+"Odegaard" reported a player who does not exist.
+
 ### The shapes a match can take
 
 The checks above run against the rendered fixtures, and both of those are home

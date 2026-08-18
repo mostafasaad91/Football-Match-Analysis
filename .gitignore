@@ -97,3 +97,6 @@ docs/
 # attribution; the crests themselves are club trademarks and are not ours to
 # redistribute, so the cache stays out of the repository.
 assets/crests/
+
+# A roster is the user's own opinion about who plays for whom, not project data.
+squads.json

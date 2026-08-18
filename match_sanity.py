@@ -177,6 +177,143 @@ def check_the_published_shots_match_the_events(events, xg, info) -> list[Problem
     return problems
 
 
+SQUADS_FILE = "squads.json"
+
+
+def _known_squads(root=None) -> dict[str, set[str]]:
+    """Rosters the user maintains, keyed by team name. Empty when absent.
+
+    The pipeline has no idea who plays for whom: it reads the squads out of the
+    provider's own match feed, so a fixture whose feed lists the wrong side for
+    a player is internally consistent and passes every other check here. This
+    is the only place an outside opinion can enter, and it is opt-in because
+    the project cannot keep a league's transfers up to date on the user's
+    behalf.
+    """
+    from pathlib import Path
+
+    base = Path(root) if root else Path(__file__).resolve().parent
+    path = base / SQUADS_FILE
+    if not path.exists():
+        return {}
+    try:
+        import json
+
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    squads: dict[str, set[str]] = {}
+    for team, names in (raw or {}).items():
+        if isinstance(names, list):
+            squads[str(team).strip().lower()] = {str(n).strip() for n in names if str(n).strip()}
+    return squads
+
+
+def check_players_belong_to_the_squad_you_named(events, players, info) -> list[Problem]:
+    """Every player is in the roster the user keeps for that team, if any."""
+    squads = _known_squads()
+    if not squads or players is None or players.empty or "name" not in players.columns:
+        return []
+
+    problems = []
+    for side in ("home", "away"):
+        name = str(info.get(f"{side}_name") or "").strip()
+        known = squads.get(name.lower())
+        if not known:
+            continue
+        try:
+            team_id = int(info[f"{side}_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        listed = players[players["team_id"].eq(team_id)]["name"].dropna().astype(str)
+        # Compare on a loose form so an accent or a middle name does not
+        # produce a false alarm about a player who is in the roster.
+        folded = {_fold(n): n for n in known}
+        strangers = sorted({n for n in listed if _fold(n) not in folded})
+        if strangers:
+            shown = ", ".join(strangers[:6]) + (" …" if len(strangers) > 6 else "")
+            problems.append(Problem(
+                "player not in the squad you listed",
+                f"{name}: {len(strangers)} player(s) are not in your {SQUADS_FILE} "
+                f"roster: {shown}",
+            ))
+    return problems
+
+
+# Letters that are not an accented Latin letter underneath, so decomposition
+# leaves nothing behind: "Ødegaard" folded to "degaard" and a roster typed as
+# "Odegaard" was reported as a player who does not exist.
+_LETTER_ALIASES = {
+    "ø": "o", "æ": "ae", "œ": "oe", "å": "a", "ð": "d", "þ": "th",
+    "ß": "ss", "ł": "l", "đ": "d", "ħ": "h", "ı": "i", "ŋ": "n",
+}
+
+
+def _fold(name: str) -> str:
+    """A name reduced to letters, for comparing rosters written by hand."""
+    import re
+    import unicodedata
+
+    lowered = str(name).lower()
+    for letter, plain in _LETTER_ALIASES.items():
+        lowered = lowered.replace(letter, plain)
+    stripped = unicodedata.normalize("NFKD", lowered)
+    stripped = "".join(c for c in stripped if not unicodedata.combining(c))
+    return re.sub(r"[^a-z]", "", stripped)
+
+
+def check_no_player_changed_team_since_a_stored_match(events, players, info) -> list[Problem]:
+    """A player the history has seen for another team is worth a second look.
+
+    No configuration and no external source: the project's own match history
+    already records who played for whom. A real transfer trips this once and
+    the user accepts it; a fixture attributing a player to the wrong side trips
+    it too, which is the case nothing else here can see.
+    """
+    if players is None or players.empty or "name" not in players.columns:
+        return []
+    try:
+        import sqlite3
+        from pathlib import Path
+
+        db = Path(__file__).resolve().parent / "output" / "match_history.db"
+        if not db.exists():
+            return []
+        connection = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            seen: dict[str, set[str]] = {}
+            for name, team in connection.execute(
+                "SELECT player, team FROM player_match_stats WHERE team IS NOT NULL"
+            ):
+                seen.setdefault(_fold(name), set()).add(str(team))
+        finally:
+            connection.close()
+    except Exception:
+        return []
+    if not seen:
+        return []
+
+    problems = []
+    for side in ("home", "away"):
+        name = str(info.get(f"{side}_name") or "").strip()
+        try:
+            team_id = int(info[f"{side}_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        moved = []
+        for player in players[players["team_id"].eq(team_id)]["name"].dropna().astype(str):
+            previous = seen.get(_fold(player))
+            if previous and name and name not in previous:
+                moved.append(f"{player} (last seen for {sorted(previous)[0]})")
+        if moved:
+            shown = ", ".join(moved[:5]) + (" …" if len(moved) > 5 else "")
+            problems.append(Problem(
+                "player listed for a different team than the history has",
+                f"{name}: {shown}",
+            ))
+    return problems
+
+
 def check_the_teams_are_two_and_named(events, info) -> list[Problem]:
     """Exactly two team ids act in the match, and both are the ones named."""
     ids = {int(v) for v in events["team_id"].dropna().unique()
@@ -211,6 +348,8 @@ CHECKS = (
     check_the_published_shots_match_the_events,
     check_the_match_has_enough_events,
     check_no_player_appears_for_both_sides,
+    check_players_belong_to_the_squad_you_named,
+    check_no_player_changed_team_since_a_stored_match,
     check_event_players_belong_to_their_team,
     check_goals_match_the_score,
 )
