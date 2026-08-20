@@ -6,6 +6,8 @@ import hashlib
 import json
 import math
 import os
+
+from frame_values import surname as _surname
 import re
 import shutil
 from pathlib import Path
@@ -525,7 +527,7 @@ def compact_player_label(name: str, limit: int = 7) -> str:
     a column to themselves and pass a larger limit — truncating "Locatelli" to
     "Locate…" there threw away a legible name to save space nothing needed.
     """
-    surname = str(name).strip().split()[-1] if str(name).strip() else "?"
+    surname = _surname(name, "?")
     return surname if len(surname) <= limit else f"{surname[:limit - 1]}…"
 
 
@@ -578,7 +580,7 @@ def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch
                          fontweight="bold", ha="center", va="center", zorder=7, clip_on=True)
         number.set_path_effects([path_effects.withStroke(linewidth=1.6, foreground=fill, alpha=0.6)])
 
-    label = compact_player_label(name) if not shirt else str(name).strip().split()[-1][:12]
+    label = compact_player_label(name) if not shirt else _surname(name)[:12]
 
     # Offset, alignment, and where the label's centre ends up relative to the
     # anchor — the last part is what makes the clearance test meaningful, since
@@ -811,7 +813,7 @@ def goals_breakdown(events):
         team_goal_count[tid] += 1
         ax.vlines(minute, 0, y, color=_team_mark_color(tid), lw=2)
         ax.scatter(minute, y, s=150, marker="*", color=FOCUS, edgecolor=BG, linewidth=1.2, zorder=4)
-        player = str(goal.get("player", "Goal")).split()[-1]
+        player = _surname(goal.get("player"), "Goal")
         is_own = bool(as_bool(pd.Series([goal.get("is_own_goal", False)])).iloc[0])
         assist = assist_for(goal)
         assist_label = (
@@ -1084,7 +1086,7 @@ def xt_map(events, team_id, number):
     side_title(side, "TOP 10 xT PASSES")
     side_rows(
         side,
-        [(f"{rank}. {str(row['player']).split()[-1]}", f"{float(row['xT']):.3f}") for rank, (_, row) in enumerate(top.iterrows(), start=1)],
+        [(f"{rank}. {_surname(row['player'])}", f"{float(row['xT']):.3f}") for rank, (_, row) in enumerate(top.iterrows(), start=1)],
         start=0.835,
         gap=0.063,
         value_color=TEXT,
@@ -1481,7 +1483,7 @@ def zone14(events, team_id, number):
     side.text(0.08, 0.34, "ZONE 14 CONTRIBUTORS", color=MUTED, fontsize=7.5, fontweight="bold")
     for idx, (name, value) in enumerate(top.items()):
         y = 0.285 - idx * 0.06
-        side.text(0.08, y, str(name).split()[-1], color=TEXT, fontsize=8, va="center")
+        side.text(0.08, y, _surname(name), color=TEXT, fontsize=8, va="center")
         side.text(0.92, y, str(int(value)), color=TEXT, fontsize=8, fontweight="bold", ha="right", va="center")
     side.text(0.08, 0.075, f"Zone 14 entries: {len(actions)}", color=TEXT, fontsize=9.5, fontweight="bold")
     return save(fig, f"{number:02d}_zone14_{_team_slug(team_id)}.png")
@@ -1654,7 +1656,7 @@ def progressive(events, team_id, number):
         )
     top = prog.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PROGRESSORS")
-    side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
+    side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
     side.text(0.08, 0.14, f"Team-colour dashed = all progressive passes ({len(prog)})", color=_team_mark_color(team_id), fontsize=8.2)
     side.text(0.08, 0.09, f"{HIGHLIGHT_LABEL} = top 10 by xT added", color=EVENT_HIGHLIGHT, fontsize=8.4)
     return save(fig, f"{number:02d}_progressive_{_team_slug(team_id)}.png")
@@ -1890,7 +1892,7 @@ def box_entries(events, team_id, number):
         pitch.scatter(ex[0], ey[0], s=32, marker=marker, color=entry_color, edgecolor=TEXT, linewidth=0.65)
     top = frame.groupby("player").size().sort_values(ascending=False).head(5)
     side_title(side, "ENTRY CONTRIBUTORS")
-    side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()], start=0.81, gap=0.083)
+    side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()], start=0.81, gap=0.083)
     pass_count = int(frame["type"].astype(str).eq("Pass").sum())
     carry_count = len(frame) - pass_count
     side.text(0.08, 0.35, "ENTRY METHOD LEGEND", color=MUTED, fontsize=7.5, fontweight="bold")
@@ -1924,7 +1926,7 @@ def high_regains(events, team_id, number):
     pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.09), ncol=2, frameon=False, labelcolor=TEXT, fontsize=7)
     top = frame.groupby("player").size().sort_values(ascending=False).head(7) if "player" in frame else pd.Series(dtype=int)
     side_title(side, "HIGH-REGAIN LEADERS")
-    side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
+    side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
     side.text(0.08, 0.14, f"Total high regains: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold")
     return save(fig, f"{number:02d}_high_regains_{_team_slug(team_id)}.png")
 
@@ -1958,7 +1960,7 @@ def pass_targets(events, team_id, number):
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02); cbar.ax.tick_params(colors=MUTED, labelsize=7); cbar.outline.set_edgecolor(GRID); cbar.set_label("Completed-pass targets", color=MUTED, fontsize=8)
     top = frame.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PASSERS")
-    side_rows(side, [(str(name).split()[-1], str(int(value))) for name, value in top.items()])
+    side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
     side.text(0.08, 0.14, f"Completed passes: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold")
     return save(fig, f"{number:02d}_pass_targets_{_team_slug(team_id)}.png")
 
@@ -2607,7 +2609,7 @@ def action_value_leaders(events):
         ax.barh(index, dfn, left=max(off, 0.0), height=0.62, color=color, alpha=0.42)
 
     ax.set_yticks(positions)
-    ax.set_yticklabels([str(name).split()[-1] for name in top["player"]], fontsize=8.5, color=TEXT)
+    ax.set_yticklabels([_surname(name) for name in top["player"]], fontsize=8.5, color=TEXT)
     ax.axvline(0, color=PITCH_LINE, lw=1.0, alpha=0.6)
     ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
     ax.set_xlabel("Action value (goals)", fontsize=9, color=MUTED)
@@ -2785,7 +2787,7 @@ def goal_origins(events):
         color = HOME if int(row.team_id) == HOME_ID else AWAY
         values = [
             f"{int(row.minute)}'",
-            str(row.scorer).split()[-1][:16],
+            _surname(row.scorer)[:16],
             str(row.sequence_type).replace("_", " ").title(),
             str(int(row.passes)),
             f"{float(row.duration):.0f}",
@@ -2854,7 +2856,7 @@ def unlocking_the_block(events, team_id, opponent_id, number):
         side.text(0.08, 0.28, "MOST OFTEN IN THE POCKET", color=MUTED, fontsize=7.5, fontweight="bold")
         for index, (name, count) in enumerate(receivers.items()):
             y = 0.235 - index * 0.048
-            side.text(0.08, y, str(name).split()[-1][:14], color=TEXT, fontsize=8, va="center")
+            side.text(0.08, y, _surname(name)[:14], color=TEXT, fontsize=8, va="center")
             side.text(0.92, y, str(int(count)), color=TEXT, fontsize=8.5,
                       fontweight="bold", ha="right", va="center")
     return save(fig, f"{number:02d}_unlocking_{_team_slug(team_id)}.png")

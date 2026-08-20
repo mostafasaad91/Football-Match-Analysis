@@ -39,6 +39,7 @@ from matplotlib.patches import Arc, Circle, Rectangle
 from scipy.ndimage import gaussian_filter
 
 import crests
+from frame_values import surname as _surname, text as _text
 from match_metrics import (
     box_entry_mask,
     cross_mask,
@@ -573,9 +574,11 @@ def panel_player_leaders(ax, player_metrics, home_id, away_id, home_colour, away
             ax.add_patch(Rectangle((x0, y - 0.052), width * share, 0.030,
                                    facecolor=colour, alpha=0.55, edgecolor="none",
                                    zorder=2))
-            label = str(row.player)
+            # str(nan) prints "nan", and a name of nothing but spaces is
+            # longer than twelve characters and splits to an empty list.
+            label = _text(row.player, "—")
             if len(label) > 12:
-                label = label.split()[-1]
+                label = _surname(row.player, label)
             ax.text(x0, y, label[:12], color=TEXT, fontsize=6.4, va="center", zorder=3)
             ax.text(x0 + width - 0.085, y, f"{row.sequence_xT:.2f}", color=TEXT,
                     fontsize=6.4, fontweight="bold", ha="right", va="center", zorder=3)

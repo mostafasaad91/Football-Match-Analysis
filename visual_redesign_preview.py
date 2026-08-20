@@ -918,7 +918,7 @@ def pass_network(events: pd.DataFrame, players: pd.DataFrame, team_id=HOME_ID) -
         starter = str(starters.get(name, "True")).lower() in {"true", "1", "yes"}
         marker = "o" if starter else "s"
         ax.scatter(row["x"], row["y"], s=size, marker=marker, color=HOME, edgecolor=TEXT, linewidth=1.3, zorder=4)
-        short = str(name).split()[-1]
+        short = _surname(name)
         xoff = 8 if row["x"] < 80 else -8
         ha = "left" if xoff > 0 else "right"
         ax.annotate(short, (row["x"], row["y"]), xytext=(xoff, 9), textcoords="offset points", ha=ha, va="bottom", color=TEXT, fontsize=8, arrowprops=dict(arrowstyle="-", color=GRID, lw=0.7), zorder=5)
@@ -945,7 +945,7 @@ def average_positions(events: pd.DataFrame, players: pd.DataFrame, team_id=HOME_
         ax.scatter(row["x"], row["y"], s=size, marker=marker, color=HOME, edgecolor=TEXT, linewidth=1.3, zorder=4)
         dx, dy = offsets[idx % len(offsets)]
         ha = "left" if dx > 0 else "right"
-        ax.annotate(str(name).split()[-1], (row["x"], row["y"]), xytext=(dx, dy), textcoords="offset points", ha=ha, va="center", color=TEXT, fontsize=8, arrowprops=dict(arrowstyle="-", color=GRID, lw=0.7))
+        ax.annotate(_surname(name), (row["x"], row["y"]), xytext=(dx, dy), textcoords="offset points", ha=ha, va="center", color=TEXT, fontsize=8, arrowprops=dict(arrowstyle="-", color=GRID, lw=0.7))
     legend = [
         Line2D([0], [0], marker="o", color="none", markerfacecolor=HOME, markeredgecolor=TEXT, markersize=8, label="Starter"),
         Line2D([0], [0], marker="s", color="none", markerfacecolor=HOME, markeredgecolor=TEXT, markersize=8, label="Substitute"),

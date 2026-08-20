@@ -26,7 +26,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from frame_values import text as _text
+from frame_values import surname as _surname, text as _text
 import matplotlib
 
 matplotlib.use("Agg")
@@ -1347,10 +1347,10 @@ def player_commentary(events, player, team_name, opp_name, allm, elig, role="Pla
     )
     if tops:
         lead += (
-            f"{player.split()[-1]} ranked among the match's best for {', '.join(tops)}."
+            f"{_surname(player)} ranked among the match's best for {', '.join(tops)}."
         )
     else:
-        lead += f"{player.split()[-1]} operated in a supporting role by the underlying numbers."
+        lead += f"{_surname(player)} operated in a supporting role by the underlying numbers."
     s1.append(lead)
 
     if shots:
