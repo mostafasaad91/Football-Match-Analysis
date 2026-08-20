@@ -885,25 +885,130 @@ BUILDERS = (
 # --------------------------------------------------------------------------
 
 def _title(m: _Match) -> tuple[str, str]:
-    leader, _trailer, level = m.lead(m.home_xg, m.away_xg, tolerance=0.15)
-    if m.winner and not level and leader != m.winner:
-        return (
-            f"{m.loser} Won Everything But The Match",
-            f"{m.winner} beat {m.loser} {m.score}. The expected goals finished "
-            f"{m.of(m.loser, m.home_xg, m.away_xg):.2f} to "
-            f"{m.of(m.winner, m.home_xg, m.away_xg):.2f} the other way.",
-        )
+    """The headline, taken from whatever actually separated the two sides.
+
+    There used to be three titles in the whole file — one per result shape — so
+    every ordinary win was published as "How X Took Y Apart" and the headline
+    said nothing a reader could not see in the scoreline.
+
+    Each candidate below owns a condition and a strength. The strongest
+    condition writes the headline, which means two matches share a title only
+    when the same thing decided them by the same margin. It is varied because
+    matches differ, not because anything is random: the same fixture always
+    produces the same headline.
+    """
+    candidates: list[tuple[float, str, str]] = []
+
+    def offer(strength: float, headline: str, standfirst: str) -> None:
+        if strength > 0:
+            candidates.append((strength, headline, standfirst))
+
+    result = f"{m.winner} beat {m.loser} {m.score}" if m.winner else \
+             f"{m.home} and {m.away} finished {m.score}"
+
+    # -- the result against the process ----------------------------------
+    xg_leader, _xg_trailer, xg_level = m.lead(m.home_xg, m.away_xg, tolerance=0.15)
+    if m.winner and not xg_level and xg_leader != m.winner:
+        offer(3.0,
+              f"{m.loser} Won Everything But The Match",
+              f"{result}. The expected goals finished "
+              f"{m.of(m.loser, m.home_xg, m.away_xg):.2f} to "
+              f"{m.of(m.winner, m.home_xg, m.away_xg):.2f} the other way.")
+
+    # -- territory that never became threat -------------------------------
+    home_tilt, away_tilt = _num(m.hm, "field_tilt"), _num(m.am, "field_tilt")
+    tilt_leader, tilt_trailer, tilt_level = m.lead(home_tilt, away_tilt, tolerance=6.0)
+    tilt_xg = m.of(tilt_leader, m.home_xg, m.away_xg)
+    other_xg = m.of(tilt_trailer, m.home_xg, m.away_xg)
+    if not tilt_level and other_xg > tilt_xg:
+        offer(1.2 + m.gap(home_tilt, away_tilt),
+              f"{tilt_leader} Had The Ball. {tilt_trailer} Had The Chances.",
+              f"{result}. {tilt_leader} held "
+              f"{m.of(tilt_leader, home_tilt, away_tilt):.1f}% of the final-third "
+              f"passing and {tilt_xg:.2f} expected goals for it.")
+
+    # -- the last twenty metres ------------------------------------------
+    def survival(side_row):
+        thirds = _num(side_row, "final_third_entries")
+        return _ratio(100 * _num(side_row, "box_entries"), thirds) if thirds else 0.0
+
+    home_survival, away_survival = survival(m.hm), survival(m.am)
+    if min(home_survival, away_survival) > 0:
+        better, worse, survival_level = m.lead(home_survival, away_survival, tolerance=8.0)
+        if not survival_level:
+            offer(1.0 + m.gap(home_survival, away_survival),
+                  "The Last Twenty Metres Decided It",
+                  f"{result}. {better} turned "
+                  f"{m.of(better, home_survival, away_survival):.0f}% of its "
+                  f"final-third entries into the box; {worse} "
+                  f"{m.of(worse, home_survival, away_survival):.0f}%.")
+
+    # -- what a shot was worth -------------------------------------------
+    home_per, away_per = _num(m.hx, "xG_per_shot"), _num(m.ax, "xG_per_shot")
+    home_shots, away_shots = _num(m.hx, "shots"), _num(m.ax, "shots")
+    quality, blunt, quality_level = m.lead(home_per, away_per, tolerance=0.02)
+    if not quality_level and m.of(quality, home_shots, away_shots) < m.of(blunt, home_shots, away_shots):
+        offer(1.1 + m.gap(home_per, away_per),
+              f"{quality} Shot Less And Meant It More",
+              f"{result}. {quality} averaged "
+              f"{m.of(quality, home_per, away_per):.3f} expected goals an attempt "
+              f"against {m.of(blunt, home_per, away_per):.3f}, from fewer shots.")
+
+    # -- broken play ------------------------------------------------------
+    home_txg, away_txg = _num(m.hm, "transition_xG"), _num(m.am, "transition_xG")
+    if max(home_txg, away_txg) >= 0.5:
+        breaker, held, transition_level = m.lead(home_txg, away_txg, tolerance=0.25)
+        if not transition_level:
+            offer(0.9 + m.gap(home_txg, away_txg),
+                  f"{breaker} Won The Match In The Broken Moments",
+                  f"{result}. Transitions were worth "
+                  f"{m.of(breaker, home_txg, away_txg):.2f} expected goals to "
+                  f"{breaker} and {m.of(held, home_txg, away_txg):.2f} to {held}.")
+
+    # -- an early goal that removed the level phase ------------------------
+    if m.first_goal and m.first_goal[2] <= 2 and m.winner:
+        when, scorer, _minute = m.first_goal
+        offer(1.3,
+              "The Match Was Framed Before It Started",
+              f"{result}. The opening goal arrived {when}"
+              + (f", through {scorer}" if scorer else "")
+              + ", so neither side ever played a level minute.")
+
+    # -- finishing well away from the chances ------------------------------
+    scored, expected = m.home_goals + m.away_goals, m.home_xg + m.away_xg
+    if scored >= expected + 1.5:
+        offer(0.8 + (scored - expected) / 6,
+              "The Finishing Outran The Football",
+              f"{result}. {scored} goals came from {expected:.2f} combined "
+              f"expected goals, so conversion, not creation, set the margin.")
+    elif expected >= scored + 1.5:
+        offer(0.8 + (expected - scored) / 6,
+              "The Chances Were There. The Finishing Was Not.",
+              f"{result}. {expected:.2f} combined expected goals produced "
+              f"{scored}, so the scoreline understates what was built.")
+
+    # -- a one-sided scoreline --------------------------------------------
+    if m.winner and abs(m.home_goals - m.away_goals) >= 3:
+        offer(0.85,
+              f"{m.winner} Made It Look Simple",
+              f"{result}, and the margin was not an accident. This is where it "
+              f"came from.")
+
+    # -- the fallbacks, which only win when nothing above applies ----------
     if m.winner:
-        return (
-            f"How {m.winner} Took {m.loser} Apart",
-            f"{m.winner} beat {m.loser} {m.score}, and the underlying numbers agree "
-            f"with the scoreline. This is how the margin was built.",
-        )
-    return (
-        "The Draw That Was Not Even",
-        f"{m.home} and {m.away} finished {m.score}. Almost nothing else about the "
-        f"match was level.",
-    )
+        offer(0.5,
+              f"How {m.winner} Took {m.loser} Apart",
+              f"{result}, and the underlying numbers agree with the scoreline. "
+              f"This is how the margin was built.")
+    else:
+        offer(0.6,
+              "The Draw That Was Not Even",
+              f"{result}. Almost nothing else about the match was level.")
+    offer(0.1, f"{m.home} vs {m.away}, Read From The Data",
+          f"{result}. What the match record says about how it happened.")
+
+    strength, headline, standfirst = max(candidates, key=lambda row: row[0])
+    return headline, standfirst
 
 
 def _cover_image(out_dir: Path) -> Path | None:

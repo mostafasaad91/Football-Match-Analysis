@@ -13,6 +13,7 @@ of these got into the PDF.
 """
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -276,3 +277,91 @@ def test_a_broken_render_returns_none_rather_than_killing_the_package(tmp_path):
 
     assert build_match_article(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
                                pd.DataFrame(), {}, tmp_path) is None
+
+
+# --------------------------------------------------------------------------
+# the headline
+# --------------------------------------------------------------------------
+
+_TITLE_CACHE: list | None = None
+
+
+def _titles():
+    """(match, title, standfirst) for every rendered fixture.
+
+    Cached: building an article walks every frame, and four tests asking the
+    same question rebuilt every fixture four times.
+    """
+    global _TITLE_CACHE
+    if _TITLE_CACHE is not None:
+        return _TITLE_CACHE
+
+    from match_article import build_article
+
+    root = Path(__file__).resolve().parent.parent
+    rows = []
+    for folder in sorted((root / "output").glob("*/match_info.json")):
+        out = folder.parent
+        info = json.loads(folder.read_text(encoding="utf-8"))
+        article = build_article(
+            pd.read_csv(out / "events.csv"),
+            pd.read_csv(out / "xg.csv"),
+            pd.read_csv(out / "team_advanced_metrics.csv"),
+            pd.read_csv(out / "player_sequence_metrics.csv"),
+            info, out,
+        )
+        rows.append((out.name, article.title, article.standfirst))
+    _TITLE_CACHE = rows
+    return rows
+
+
+def test_the_headline_is_not_the_same_sentence_every_time():
+    """There were three titles in the file, so every ordinary win shared one.
+
+    A headline that only restates the result tells a reader nothing the
+    scoreline has not. Each candidate now owns a measurable condition, and the
+    strongest one writes it.
+    """
+    rows = _titles()
+    if len(rows) < 3:
+        pytest.skip("fewer than three fixtures rendered")
+    titles = [title for _match, title, _stand in rows]
+    assert len(set(titles)) == len(titles), f"a headline repeats: {titles}"
+
+
+def test_no_headline_falls_back_to_the_bare_fixture_line():
+    """The last-resort title means every condition declined. None should."""
+    for match, title, _stand in _titles():
+        assert "Read From The Data" not in title, (match, title)
+
+
+def test_the_headline_is_stable_for_the_same_match():
+    """Varied because matches differ, not because anything is random.
+
+    The cache would answer this with itself, so this builds one article twice
+    for real.
+    """
+    import json
+
+    from match_article import build_article
+
+    root = Path(__file__).resolve().parent.parent
+    folder = next(iter(sorted((root / "output").glob("*/match_info.json"))), None)
+    if folder is None:
+        pytest.skip("no rendered fixture")
+    out = folder.parent
+    info = json.loads(folder.read_text(encoding="utf-8"))
+    frames = (
+        pd.read_csv(out / "events.csv"),
+        pd.read_csv(out / "xg.csv"),
+        pd.read_csv(out / "team_advanced_metrics.csv"),
+        pd.read_csv(out / "player_sequence_metrics.csv"),
+    )
+    first = build_article(*frames, info, out)
+    second = build_article(*frames, info, out)
+    assert (first.title, first.standfirst) == (second.title, second.standfirst)
+
+
+def test_every_standfirst_carries_the_score():
+    for match, _title, standfirst in _titles():
+        assert re.search(r"\d+–\d+", standfirst), (match, standfirst)
