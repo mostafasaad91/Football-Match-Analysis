@@ -165,3 +165,43 @@ def test_surrounding_whitespace_is_not_a_different_player():
     events = pd.DataFrame({"player": ["Ana", "Beto "], "team_id": [1, 2]})
     info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
     assert ms.check_event_players_belong_to_their_team(events, players, info) == []
+
+
+# --------------------------------------------------------------------------
+# what the gate is allowed to stop
+# --------------------------------------------------------------------------
+
+def test_the_squad_checks_stay_out_of_the_blocking_gate():
+    """Both refused a correct fixture before either caught a wrong one.
+
+    The roster check blocked Arsenal vs Coventry because a draft built from two
+    earlier matches held twenty Arsenal names and not Ethan Nwaneri's. The
+    transfer check would fire on every genuine move. A squad is not the list of
+    everyone who will play, and the match page the user supplies is the
+    authority on who did — so neither may stop the article being written.
+    """
+    blocking = {check.__name__ for check in ms.CHECKS}
+    assert "check_players_belong_to_the_squad_you_named" not in blocking
+    assert "check_no_player_changed_team_since_a_stored_match" not in blocking
+
+
+def test_the_gate_still_holds_the_checks_that_cannot_be_wrong():
+    """What stays: the questions a genuine match always answers the same way."""
+    blocking = {check.__name__ for check in ms.CHECKS}
+    for name in (
+        "check_the_teams_are_two_and_named",
+        "check_the_match_has_enough_events",
+        "check_no_player_appears_for_both_sides",
+        "check_event_players_belong_to_their_team",
+        "check_goals_match_the_score",
+    ):
+        assert name in blocking, name
+
+
+def test_an_incomplete_roster_does_not_stop_a_fixture(monkeypatch, tmp_path):
+    """The exact shape that blocked Coventry, run through the whole gate."""
+    events, players, info = _fixture()
+    home = players[players["team_id"].eq(int(info["home_id"]))]["name"].astype(str).tolist()
+    _with_roster(monkeypatch, tmp_path, {info["home_name"]: home[:-1]})
+    xg = pd.read_csv(ROOT / "output" / MATCH / "xg.csv")
+    assert ms.inspect(events, players, xg, info) == []

@@ -228,7 +228,23 @@ def _known_squads(root=None) -> dict[str, set[str]]:
 
 
 def check_players_belong_to_the_squad_you_named(events, players, info) -> list[Problem]:
-    """Every player is in the roster the user keeps for that team, if any."""
+    """Every player is in the roster the user keeps for that team, if any.
+
+    Deliberately **not** in CHECKS, for the same reason as the transfer check
+    above: it blocked two perfectly good fixtures before it caught a bad one.
+
+    A roster is a squad, and a squad is not the list of everyone who will play.
+    A draft built from two matches held twenty Arsenal names and refused an
+    article the week Ethan Nwaneri started. Keeping it accurate means editing a
+    file every time a teenager gets a debut or a January signing arrives, and
+    the cost of forgetting is that a correct match does not get written about.
+
+    The match page the user supplies is the authority on who played. This stays
+    for the case where that authority is in doubt, and it is worth calling by
+    hand then:
+
+        from match_sanity import check_players_belong_to_the_squad_you_named
+    """
     squads = _known_squads()
     if not squads or players is None or players.empty or "name" not in players.columns:
         return []
@@ -372,7 +388,6 @@ CHECKS = (
     check_the_published_shots_match_the_events,
     check_the_match_has_enough_events,
     check_no_player_appears_for_both_sides,
-    check_players_belong_to_the_squad_you_named,
     check_event_players_belong_to_their_team,
     check_goals_match_the_score,
 )
