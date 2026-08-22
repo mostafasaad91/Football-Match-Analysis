@@ -22,12 +22,13 @@ import pandas as pd
 import pytest
 
 from match_verdict import CHASING_SHARE, LEVEL_XG_FLOOR, read_match
+from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _fixture(match):
-    out = ROOT / "output" / match
+    out = match_dir(match)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{match} has not been rendered")
     return (
@@ -133,7 +134,7 @@ def test_the_article_and_the_report_reach_the_same_verdict():
     from match_article import build_article
     from tactical_pdf_report import _section_copy, build_context
 
-    out = ROOT / "output" / "PSG_vs_Aston_Villa_2-1"
+    out = match_dir("PSG_vs_Aston_Villa_2-1")
     if not (out / "match_info.json").exists():
         pytest.skip("fixture not rendered")
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))

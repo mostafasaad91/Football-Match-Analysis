@@ -28,13 +28,14 @@ import pandas as pd
 import pytest
 
 from match_article import build_article
+from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1"]
 
 
 def _built(match):
-    out = ROOT / "output" / match
+    out = match_dir(match)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{match} has not been rendered")
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))

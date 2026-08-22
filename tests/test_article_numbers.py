@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 
 from match_article import build_article
+from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1"]
@@ -29,7 +30,7 @@ PROSE_NUMBERS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "14",
 
 
 def _frames(match):
-    out = ROOT / "output" / match
+    out = match_dir(match)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{match} has not been rendered")
     return (

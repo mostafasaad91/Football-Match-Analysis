@@ -71,3 +71,53 @@ def _restore_renderer_globals(_pristine_renderer_state):
         yield
     finally:
         restore()
+
+
+# --------------------------------------------------------------------------
+# finding a fixture after the shelving
+# --------------------------------------------------------------------------
+#
+# Matches used to sit directly in output/. They are now filed under their
+# competition, season and round, so every test that opened
+# ``output/PSG_vs_Aston_Villa_2-1`` broke at once — and the failure was a
+# FileNotFoundError several frames deep rather than a missing fixture.
+#
+# Tests ask for a match by folder name and this finds it wherever it is
+# shelved, so moving a fixture again costs nothing.
+
+from pathlib import Path as _Path
+
+_OUTPUT = _Path(__file__).resolve().parent.parent / "output"
+_FOUND: dict = {}
+
+
+def match_dir(name: str) -> _Path:
+    """The folder holding one parsed match.
+
+    Always a path, never None: a caller that has not found its fixture writes
+    ``if not (out / "match_info.json").exists(): pytest.skip(...)``, and a None
+    there raises a TypeError instead of skipping. The unshelved location is
+    returned when nothing is on disk, so the skip reads the way it should.
+    """
+    if name in _FOUND:
+        return _FOUND[name]
+
+    direct = _OUTPUT / name
+    found = direct if (direct / "match_info.json").exists() else None
+    if found is None:
+        for candidate in sorted(_OUTPUT.rglob(f"{name}/match_info.json")):
+            # The light-theme package is a rendering of the same match, not a
+            # second match: its frames live one level up.
+            if candidate.parent.name == "light":
+                continue
+            found = candidate.parent
+            break
+
+    _FOUND[name] = found or direct
+    return _FOUND[name]
+
+
+@pytest.fixture(scope="session")
+def find_match():
+    """Session fixture wrapping :func:`match_dir` for tests that want it."""
+    return match_dir

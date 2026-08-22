@@ -19,6 +19,7 @@ import pytest
 
 import crests
 import match_posters as mp
+from conftest import match_dir
 
 
 # --------------------------------------------------------------------------
@@ -84,7 +85,7 @@ def test_lateral_axis_is_mirrored_consistently():
 # --------------------------------------------------------------------------
 
 def _frames():
-    out = Path(__file__).resolve().parent.parent / "output" / "PSG_vs_Aston_Villa_2-1"
+    out = match_dir("PSG_vs_Aston_Villa_2-1")
     if not (out / "events.csv").exists():
         pytest.skip("no rendered fixture available")
     return (

@@ -21,6 +21,7 @@ from pathlib import Path
 import matplotlib
 import pandas as pd
 import pytest
+from conftest import match_dir
 
 matplotlib.use("Agg")
 
@@ -30,7 +31,7 @@ MATCH = "Arsenal_vs_Man_City_3-0"
 
 @pytest.fixture(scope="module")
 def rendered(tmp_path_factory):
-    out = ROOT / "output" / MATCH
+    out = match_dir(MATCH)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{MATCH} has not been rendered")
 

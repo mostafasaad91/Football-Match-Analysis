@@ -89,6 +89,10 @@ SCALE_NAMES = (
 ALLOWED_SIZE_NAMES = set(SCALE_NAMES) | {
     "TYPE_LEAD_MINOR", "TYPE_LEAD_MAJOR", "minor", "major",
     "TYPE_THESIS", "TYPE_FIXTURE",
+    # The comparison card on the cover, which is set larger than the body
+    # scale because it is read across a room rather than at reading distance.
+    "TYPE_COVER_SCORE", "TYPE_COVER_TEAM",
+    "TYPE_COVER_FIGURE", "TYPE_COVER_MARK",
 }
 
 

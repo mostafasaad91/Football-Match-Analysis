@@ -93,6 +93,13 @@ TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR = 40, 62
 # the fixture. It gets its own step, and the fixture line drops below it.
 TYPE_THESIS, TYPE_FIXTURE = 23, 15
 
+# The comparison card on the cover: the score, each club's name, the
+# figure on each side of a row, and the initials that stand in for a crest
+# that never downloaded. Named rather than written into the drawing code,
+# because a bare number in a setFont call is a size nothing else can find.
+TYPE_COVER_SCORE, TYPE_COVER_TEAM = 44, 18
+TYPE_COVER_FIGURE, TYPE_COVER_MARK = 21, 27
+
 # Sampled from the publisher's mark in assets/logo.jpg. Brand elements only —
 # never a value, a bar, or anything a reader could mistake for a team. It reads
 # teal against Manchester City's bluer #6CABDD, but the rule is what keeps them
@@ -704,6 +711,24 @@ def _count(value, one: str, many: str) -> str:
     except (TypeError, ValueError):
         return f"{value} {many}"
     return f"{number} {one if number == 1 else many}"
+
+
+def _spaced_out(text: str) -> str:
+    """Letter-spacing, which reportlab has no setting for."""
+    return "  ".join(str(text))
+
+
+def _club_initials(name: str) -> str:
+    """AVFC from "Aston Villa FC"; PSG stays PSG."""
+    words = [w for w in str(name).replace("-", " ").split() if w]
+    if not words:
+        return "?"
+    if len(words) == 1:
+        return words[0][:3].upper()
+    # One letter per word, up to four. Truncating the joined initials instead
+    # turned "Aston Villa FC" into AVF, dropping the C off the club's own
+    # abbreviation.
+    return "".join(w[0] for w in words[:4]).upper()
 
 
 def _slugged(text: str) -> str:
@@ -2114,6 +2139,17 @@ class TacticalPDF:
         if winner_xg >= loser_xg:
             return (f"{winner} won the execution battle. "
                     f"{loser}'s activity never became control of shot quality.")
+        # The higher total is not the better performance when almost all of it
+        # arrived after going behind. This is the first line a reader sees, and
+        # it was making the claim the report goes on to correct eleven pages
+        # later: Manchester United's 1.97 against Hull's 1.60 was 94% chased,
+        # and 0.11 while the match was level.
+        verdict = self.context.get("verdict")
+        if verdict is not None and verdict.loser_was_only_chasing:
+            beaten = verdict.of(loser)
+            return (f"{loser}'s xG is a chase, not a performance. "
+                    f"{100 * beaten.chasing_share:.0f}% of it arrived behind; "
+                    f"level, they created {beaten.level_xg:.2f}.")
         return (f"{loser} created the better chances and lost. "
                 f"{winner} needed fewer of them and took them.")
 
@@ -2184,65 +2220,226 @@ class TacticalPDF:
     # The artwork bleeds from this height to the top of the sheet.
     COVER_ART_FLOOR = 262
 
+    # The eight numbers a reader wants before anything else, in the order a
+    # match is usually argued: who had the ball, what the chances were worth,
+    # how often they tried, how good the looks were, how far they got, how far
+    # inside, who held the ground, and what the possessions were worth.
+    COVER_ROWS = (
+        ("POSSESSION",          "possession_share",    "{:.1f}%"),
+        ("EXPECTED GOALS",      "xG",                  "{:.2f}"),
+        ("SHOTS  (ON TARGET)",  "shots",               ""),
+        ("BIG CHANCES",         "big_chances",         "{:.0f}"),
+        ("FINAL THIRD ENTRIES", "final_third_entries", "{:.0f}"),
+        ("BOX ENTRIES",         "box_entries",         "{:.0f}"),
+        ("PITCH CONTROL",       "field_tilt",          "{:.0f}%"),
+        ("SEQUENCE THREAT  xT", "sequence_xT",         "{:.2f}"),
+    )
+
     def cover(self):
+        """The match in eight numbers, in the two clubs' colours.
+
+        The cover was the pitch-control artwork with one sentence under it. It
+        looked like the front of a document and told a reader nothing they
+        could act on, and the sentence — being a single claim — was the part of
+        the report most likely to be wrong.
+
+        A comparison card is the opposite. Every row is two figures and a bar
+        drawn from them, so it cannot assert anything the data does not, and
+        the shape of the match arrives in one look.
+        """
         self._start("cover", "Cover")
         c = self.canvas
         centre = PAGE_W / 2
 
-        art = self.context.get("cover_art")
-        drawn = False
-        if art and Path(art).exists():
-            try:
-                # Full bleed: no margin, because a cover image with a margin is
-                # a picture on a page rather than the front of the document.
-                c.drawImage(ImageReader(str(art)), 0, self.COVER_ART_FLOOR,
-                            PAGE_W, PAGE_H - self.COVER_ART_FLOOR,
-                            mask=None, preserveAspectRatio=False)
-                drawn = True
-            except Exception:
-                drawn = False
-
-        if drawn:
-            # The badge is a JPEG on its own near-black ground and the artwork
-            # is #0E1218, so laying it straight on showed the seam. A rounded
-            # tile one step lighter than the artwork turns that seam into the
-            # edge of a badge, which is what it should have looked like.
-            tile = 84
-            c.setFillColor(colors.HexColor("#181E27"))
-            c.roundRect(centre - tile / 2 - 7, PAGE_H - 56 - tile - 7,
-                        tile + 14, tile + 14, 9, stroke=0, fill=1)
-            self._cover_logo(centre, PAGE_H - 56, tile)
-            baseline = 204
-        else:
-            # No artwork: the typographic cover, with the pitch behind it.
-            self._cover_pitch(y=262, height=214)
-            bottom = self._cover_logo(centre, PAGE_H - 46, 100)
-            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
-            c.drawCentredString(centre, bottom - 26,
-                                "M A T C H   I N T E L L I G E N C E   R E P O R T")
-            baseline = bottom - 76
-
-        self._cover_fixture(centre, baseline)
-        self._cover_thesis(centre, baseline - 64, self._verdict(), measure=720)
-
-        if not drawn:
-            lead = self._cover_lead()
-            if lead:
-                kind, name, note, home_value, away_value = lead
-                self._cover_lead_bar(kind, name, note, home_value, away_value, y=302)
-                self._cover_strip(y=124, exclude=name)
-            else:
-                self._cover_strip(y=124)
-
-        if drawn:
-            c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO)
-            c.drawCentredString(centre, 78,
-                                "P I T C H   C O N T R O L   ·   E V E R Y   S H O T ,"
-                                "   S I Z E D   B Y   C H A N C E   Q U A L I T Y")
+        top = PAGE_H - 54
         c.setFillColor(NEUTRAL)
-        c.drawString(56, 44, "M A T C H   I N T E L L I G E N C E   R E P O R T")
-        c.drawRightString(PAGE_W - 56, 44, "WHOSCORED / OPTA EVENT DATA")
+        c.setFont("Helvetica-Bold", TYPE_CAPTION)
+        competition = self._cover_competition().upper()
+        c.drawString(56, top, _spaced_out(competition or "MATCH ANALYSIS"))
+        if competition:
+            c.setFillColor(MUTED)
+            c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.drawString(56, top - 19, _spaced_out("MATCH ANALYSIS"))
+        self._cover_logo(PAGE_W - 92, PAGE_H - 22, 64)
+
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.8)
+        c.line(56, top - 38, PAGE_W - 56, top - 38)
+
+        # Centre the card on the sheet rather than hanging it from the
+        # header: eight rows and a badge cluster left the lower half of
+        # the page empty.
+        badge_y = top - 214
+        self._cover_badges(centre, badge_y)
+
+        rows = self._cover_rows()
+        first = badge_y - 104
+        step = 52.0
+        for index, row in enumerate(rows):
+            self._cover_row(centre, first - index * step, *row)
+
+        base = first - (len(rows) - 1) * step - 40
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.8)
+        c.line(56, base, PAGE_W - 56, base)
+        c.setFillColor(NEUTRAL)
+        c.setFont("Helvetica-Bold", TYPE_MICRO)
+        byline = str(self.context.get("byline") or "MOSTAFA SAAD").upper()
+        c.drawString(56, base - 21, _spaced_out(byline))
+        c.drawRightString(PAGE_W - 56, base - 21,
+                          _spaced_out("WHOSCORED / OPTA EVENT DATA"))
+
+        # The two-colour rule every visual and poster closes on.
+        c.setFillColor(self.home_color)
+        c.rect(0, 0, PAGE_W / 2, 5, stroke=0, fill=1)
+        c.setFillColor(self.away_color)
+        c.rect(PAGE_W / 2, 0, PAGE_W / 2, 5, stroke=0, fill=1)
         self._finish()
+
+    def _cover_competition(self) -> str:
+        """The competition line, read from the fixture rather than typed."""
+        supplied = str(self.context.get("competition") or "").strip()
+        if supplied:
+            return supplied
+        try:
+            from match_fixture import describe, from_url
+
+            url = self.context.get("url") or self._stored_url()
+            line = describe(from_url(url))
+            if line:
+                return line
+        except Exception:
+            pass
+        return ""
+
+    def _stored_url(self) -> str:
+        """The fixture's URL from the match history, when info has none.
+
+        The collector does not put the URL in match_info.json, so the
+        competition line came out empty and the header printed its subtitle
+        twice. The history has kept it all along.
+        """
+        import sqlite3
+
+        try:
+            database = Path(__file__).resolve().parent / "output" / "match_history.db"
+            if not database.exists():
+                return ""
+            connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+            try:
+                row = connection.execute(
+                    "SELECT url FROM matches WHERE home_team = ? AND away_team = ? "
+                    "ORDER BY stored_at DESC LIMIT 1",
+                    (str(self.context.get("home")), str(self.context.get("away"))),
+                ).fetchone()
+            finally:
+                connection.close()
+            return str(row[0]) if row and row[0] else ""
+        except Exception:
+            return ""
+
+    def _cover_badges(self, centre: float, y: float):
+        """Crest, name and score, with the crest carrying the club's colour."""
+        c = self.canvas
+        crest, spread = 92, 232
+
+        for team_id, colour, name, x in (
+            (self.context.get("home_id"), self.home_color,
+             self.context["home"], centre - spread),
+            (self.context.get("away_id"), self.away_color,
+             self.context["away"], centre + spread),
+        ):
+            badge = self._crest_reader(team_id)
+            if badge is not None:
+                c.drawImage(badge, x - crest / 2, y - crest / 2, crest, crest,
+                            mask="auto", preserveAspectRatio=True, anchor="c")
+            else:
+                # No crest cached: a disc in the club's colour with its
+                # initials, which is what the crest would have carried.
+                c.setFillColor(colour)
+                c.circle(x, y, crest / 2, stroke=0, fill=1)
+                c.setFillColor(colors.white)
+                c.setFont("Helvetica-Bold", TYPE_COVER_MARK)
+                c.drawCentredString(x, y - 10, _club_initials(name))
+            c.setFillColor(TEXT)
+            c.setFont("Helvetica-Bold", TYPE_COVER_TEAM)
+            c.drawCentredString(x, y - crest / 2 - 25, str(name).upper())
+
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_COVER_SCORE)
+        c.drawCentredString(centre, y - 15, str(self.context["score"]))
+
+    def _cover_rows(self):
+        """(label, home text, away text, home share) for every row."""
+        built = []
+        for label, key, shape in self.COVER_ROWS:
+            home, away, home_text, away_text = self._cover_pair(key, shape)
+            total = abs(home) + abs(away)
+            share = 0.5 if not total else abs(home) / total
+            built.append((label, home_text, away_text, share))
+        return built
+
+    def _cover_pair(self, key: str, shape: str):
+        """One row's figures, as numbers and as the text to print."""
+        context = self.context
+        if key == "shots":
+            home = _number(context.get("home_shots"))
+            away = _number(context.get("away_shots"))
+            return (home, away,
+                    f"{home:.0f} ({_number(context.get('home_on_target')):.0f})",
+                    f"{away:.0f} ({_number(context.get('away_on_target')):.0f})")
+        home = _number(context.get(f"home_{key}"))
+        away = _number(context.get(f"away_{key}"))
+        return home, away, shape.format(home), shape.format(away)
+
+    def _cover_row(self, centre: float, y: float, label: str,
+                   home_text: str, away_text: str, home_share: float):
+        """A label, two figures, and one bar split between the two colours.
+
+        Both halves grow outwards from the centre line, which is what makes a
+        row read as a comparison rather than as two unrelated lengths.
+        """
+        c = self.canvas
+        width, height = 560.0, 6.0
+        left = centre - width / 2
+        half = width / 2
+
+        c.setFillColor(MUTED)
+        c.setFont("Helvetica-Bold", TYPE_MICRO)
+        c.drawCentredString(centre, y + 15, _spaced_out(label))
+
+        # The track, so a short bar still reads against a measured length.
+        c.setFillColor(GRID)
+        c.roundRect(left, y - height / 2, width, height, height / 2,
+                    stroke=0, fill=1)
+
+        # Each half is that side's share of the pair, scaled so the larger
+        # figure fills its half and the smaller is drawn in proportion to it.
+        # Four lines of arithmetic here overwrote one another and every one of
+        # them pinned the leading side at exactly half, so a 2.15 against 1.11
+        # drew the same blue bar as a 1.11 against 2.15.
+        share = min(max(float(home_share), 0.0), 1.0)
+        bigger = max(share, 1.0 - share) or 1.0
+        home_length = half * (share / bigger)
+        away_length = half * ((1.0 - share) / bigger)
+
+        # Both bars meet at the centre line and grow outwards, so the end each
+        # one reaches is its figure and the two are read against one another.
+        c.setFillColor(self.home_color)
+        c.roundRect(centre - home_length, y - height / 2, home_length, height,
+                    height / 2, stroke=0, fill=1)
+        c.setFillColor(self.away_color)
+        c.roundRect(centre, y - height / 2, away_length, height,
+                    height / 2, stroke=0, fill=1)
+
+        # The leader's figure is printed in its own colour; the other stays
+        # neutral, so the winner of each row is readable without the bar.
+        leads = share >= 0.5
+        c.setFillColor(self.home_color if leads else NEUTRAL)
+        c.setFont("Helvetica-Bold", TYPE_COVER_FIGURE)
+        c.drawRightString(left - 20, y - 7, home_text)
+        c.setFillColor(self.away_color if not leads else NEUTRAL)
+        c.drawString(left + width + 20, y - 7, away_text)
 
     def _cover_thesis(self, centre: float, top: float, text: str, measure: float):
         """The report's one-sentence finding, wrapped to a readable measure.

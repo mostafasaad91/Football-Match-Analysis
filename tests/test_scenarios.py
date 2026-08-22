@@ -24,6 +24,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from conftest import match_dir
 from match_article import build_article
 from tactical_pdf_report import (
     _section_copy,
@@ -56,7 +57,7 @@ def _leaks(text: str) -> list[str]:
 
 
 def _base():
-    out = ROOT / "output" / BASE
+    out = match_dir(BASE)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{BASE} has not been rendered")
     return (

@@ -413,6 +413,28 @@ TEAM_ALIASES = {
 # The first colour follows the shirt identity; the remaining colours are used automatically
 # when two teams have very similar visual colours on the same chart.
 TOP5_2025_26_TEAM_PALETTES = {
+    # ---- outside the top five leagues -----------------------------------
+    # A club with no entry here falls through to a deterministic colour picked
+    # from a general pool, which is stable but has nothing to do with the kit:
+    # Hull City, who play in amber and black, were drawn in rose on every
+    # visual and on the cover. These are the sides the collected fixtures have
+    # actually met.
+    "Hull": ["#F5A12D", "#000000", "#FFFFFF"],  # Home: Amber | Away: Black
+    "Coventry": ["#78D2F2", "#FFFFFF", "#1A1A1A"],  # Home: Sky Blue
+    "Leicester": ["#003090", "#FDBE11", "#FFFFFF"],  # Home: Blue | Away: Gold
+    "Southampton": ["#D71920", "#FFFFFF", "#130C0E"],  # Home: Red and white
+    "Watford": ["#FBEE23", "#ED2127", "#000000"],  # Home: Yellow | Away: Red
+    "Blackburn": ["#009EE0", "#FFFFFF", "#DA291C"],  # Home: Blue and white
+    "Bolton": ["#FFFFFF", "#263B80", "#DA291C"],  # Home: White | Away: Navy
+    "Middlesbrough": ["#E21A23", "#FFFFFF", "#000000"],  # Home: Red
+    "Preston": ["#FFFFFF", "#B2B2B2", "#00205B"],  # Home: White | Away: Navy
+    "Portsmouth": ["#001489", "#FFFFFF", "#D50032"],  # Home: Royal Blue
+    "QPR": ["#1D5BA4", "#FFFFFF", "#D50032"],  # Home: Blue and white hoops
+    "Notts Co.": ["#000000", "#FFFFFF", "#F5A12D"],  # Home: Black and white
+    "Lincoln City": ["#D6001C", "#FFFFFF", "#000000"],  # Home: Red and white
+    "Malaga": ["#0069B4", "#FFFFFF", "#00A650"],  # Home: Blue and white
+    "Casa Pia AC": ["#000000", "#FFFFFF", "#D6001C"],  # Home: Black and white
+
     # Premier League 2025/26
     "Arsenal": ["#EF0107", "#FFFFFF", "#063672"],  # Home: Red | Away: Navy Blue
     "Aston Villa": ["#7A003C", "#95BFE5", "#FEE505"],  # Home: Claret | Away: Light Blue
@@ -1377,8 +1399,23 @@ def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") 
     # readable colour there is, and it is also the honest one. Substitute a soft
     # silver instead: it still reads as "the white kit team", but stays clear of
     # pure #FFFFFF, which the highlight layer and pitch markings already own.
+    # Bright *and* colourless. The docstring above already promises that
+    # yellows and golds survive this branch, but the test was on luminance
+    # alone: Watford's #FBEE23 measures 0.818 and was sent to silver, so a side
+    # that plays in yellow was drawn grey — and against Southampton's red the
+    # substitute had less contrast (4.01) than the yellow it replaced (4.29).
+    # White is saturation 0.00; a yellow at 0.96 is not near it.
     if lum >= 0.80:
-        return WHITE_KIT_SILVER
+        try:
+            import colorsys
+
+            import matplotlib.colors as _mc
+
+            _hue, _light, saturation = colorsys.rgb_to_hls(*_mc.to_rgb(hex_color))
+        except Exception:
+            saturation = 0.0
+        if saturation < 0.45:
+            return WHITE_KIT_SILVER
 
     return hex_color
 
@@ -1477,7 +1514,25 @@ def choose_matchup_colors(
     # White lines and text are invisible on legend boxes, stat labels and light
     # chart areas. If away_primary ended up white, force the next palette entry.
     def _is_near_white(col: str) -> bool:
-        return _relative_luminance(col) >= 0.82
+        """Bright *and* colourless. Brightness alone is not whiteness.
+
+        Watford play in yellow. #FBEE23 measures 0.818 luminance, so a test on
+        brightness alone threw it out as near-white and drew them in a grey
+        that had less contrast against Southampton's red than the yellow it
+        replaced. White is colourless — saturation 0.00 — and a saturated
+        yellow at 0.96 is nothing like it.
+        """
+        if _relative_luminance(col) < 0.82:
+            return False
+        try:
+            import colorsys
+
+            import matplotlib.colors as _mc
+
+            _hue, _light, saturation = colorsys.rgb_to_hls(*_mc.to_rgb(col))
+        except Exception:
+            return True
+        return saturation < 0.45
 
     def _best_non_white(palette_raw: list, primary: str, fb: str) -> str:
         """Return the best non-white visible entry from the palette."""

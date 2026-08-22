@@ -25,13 +25,14 @@ import pytest
 from match_metrics import post_shot_xg
 from player_radar import player_metrics
 from visual_redesign_full import _corrected_xgot
+from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1"]
 
 
 def _fixture(match):
-    out = ROOT / "output" / match
+    out = match_dir(match)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{match} has not been rendered")
     return (

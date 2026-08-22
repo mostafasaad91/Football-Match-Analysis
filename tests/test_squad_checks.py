@@ -19,13 +19,14 @@ import pandas as pd
 import pytest
 
 import match_sanity as ms
+from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 MATCH = "Arsenal_vs_Man_City_3-0"
 
 
 def _fixture():
-    out = ROOT / "output" / MATCH
+    out = match_dir(MATCH)
     if not (out / "players.csv").exists():
         pytest.skip(f"{MATCH} has not been rendered")
     return (
@@ -109,7 +110,7 @@ def test_folding_ignores_accents_case_and_punctuation():
 def test_the_real_fixture_passes_every_check():
     """No regression: the shipped fixture stays coherent."""
     events, players, info = _fixture()
-    xg = pd.read_csv(ROOT / "output" / MATCH / "xg.csv")
+    xg = pd.read_csv(match_dir(MATCH) / "xg.csv")
     assert ms.inspect(events, players, xg, info) == []
 
 
@@ -203,5 +204,5 @@ def test_an_incomplete_roster_does_not_stop_a_fixture(monkeypatch, tmp_path):
     events, players, info = _fixture()
     home = players[players["team_id"].eq(int(info["home_id"]))]["name"].astype(str).tolist()
     _with_roster(monkeypatch, tmp_path, {info["home_name"]: home[:-1]})
-    xg = pd.read_csv(ROOT / "output" / MATCH / "xg.csv")
+    xg = pd.read_csv(match_dir(MATCH) / "xg.csv")
     assert ms.inspect(events, players, xg, info) == []

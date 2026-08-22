@@ -18,12 +18,13 @@ import pytest
 
 import tactical_pdf_report as report
 from tactical_pdf_report import TacticalPDF, build_context
+from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _context():
-    out = ROOT / "output" / "PSG_vs_Aston_Villa_2-1"
+    out = match_dir("PSG_vs_Aston_Villa_2-1")
     if not (out / "match_info.json").exists():
         pytest.skip("no rendered fixture available")
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
@@ -93,7 +94,13 @@ def test_a_goalless_metric_is_skipped_rather_than_dividing_by_zero():
 # --------------------------------------------------------------------------
 
 def _coverage(tmp_path, context):
-    """Share of the cover's rows carrying anything, and its deepest gap."""
+    """Share of the cover's rows carrying anything, its deepest gap, and reach.
+
+    ``reach`` is the span from the first inked row to the last, as a share of
+    the page. The comparison card leaves deliberate air between its rows, so a
+    fill ratio alone cannot tell a well-spaced card from a page whose bottom
+    half failed to draw — the span can.
+    """
     fitz = pytest.importorskip("fitz")
     import numpy as np
 
@@ -110,14 +117,48 @@ def _coverage(tmp_path, context):
     for hit in rows:
         current = 0 if hit else current + 1
         longest = max(longest, current)
-    return rows.sum() / len(rows), longest / len(rows)
+    inked = np.flatnonzero(rows)
+    reach = (inked[-1] - inked[0] + 1) / len(rows) if inked.size else 0.0
+    return rows.sum() / len(rows), longest / len(rows), reach
 
 
-def test_the_cover_fills_the_page_with_its_artwork(tmp_path):
+# The cover used to be a full-bleed pass-network render, so "fills the page"
+# was measured as a fill ratio and held above 80%. It is now the comparison
+# card the reference asked for: a header, two crests either side of the score
+# and eight labelled bars, with air between the rows because that is what
+# makes a row of figures readable. Forty-four per cent of the rows carry ink
+# by design, and holding the old number would mean either a failing suite or
+# a cover crushed back together to satisfy it.
+#
+# What the tests were really guarding is that the cover does not go blank, and
+# that no band of it silently fails to draw. Both still hold, measured against
+# the design that ships.
+COVER_MIN_FILL = 0.30
+COVER_MAX_GAP = 0.20
+COVER_MIN_REACH = 0.90
+
+
+def test_the_cover_draws_every_band_of_the_page(tmp_path):
     """Measured, because 'looks empty' is exactly what went unnoticed before."""
+    covered, gap, reach = _coverage(tmp_path, _context())
+    assert covered > COVER_MIN_FILL, (
+        f"only {covered:.0%} of the cover's rows carry anything")
+    assert gap < COVER_MAX_GAP, f"a dead band {gap:.0%} of the page deep"
+    assert reach > COVER_MIN_REACH, (
+        f"the cover's ink spans only {reach:.0%} of the page")
+
+
+def test_the_cover_does_not_depend_on_the_artwork_rendering(tmp_path):
+    """The card is drawn from the frames, so a failed render cannot empty it.
+
+    ``build_cover_art`` still runs — match_article falls back to its PNG when
+    the report cannot be rasterised — but the cover itself no longer places it,
+    and a fixture whose artwork fails must open on the same page as one whose
+    artwork succeeds.
+    """
     from cover_art import build_cover_art
 
-    out = ROOT / "output" / "PSG_vs_Aston_Villa_2-1"
+    out = match_dir("PSG_vs_Aston_Villa_2-1")
     context = _context()
     context["cover_art"] = build_cover_art(
         pd.read_csv(out / "events.csv"), tmp_path / "art.png",
@@ -125,18 +166,11 @@ def test_the_cover_fills_the_page_with_its_artwork(tmp_path):
         home_colour=context["home_color"], away_colour=context["away_color"],
     )
     assert context["cover_art"] is not None, "the artwork failed to render"
-    covered, gap = _coverage(tmp_path, context)
-    assert covered > 0.80, f"only {covered:.0%} of the cover's rows carry anything"
-    assert gap < 0.10, f"a dead band {gap:.0%} of the page deep"
+    with_art = _coverage(tmp_path, context)
 
-
-def test_the_typographic_fallback_still_fills_the_page(tmp_path):
-    """A fixture whose artwork cannot render must not open on an empty sheet."""
-    context = _context()
     context["cover_art"] = None
-    covered, gap = _coverage(tmp_path, context)
-    assert covered > 0.48, f"only {covered:.0%} of the cover's rows carry anything"
-    assert gap < 0.16, f"a dead band {gap:.0%} of the page deep"
+    assert _coverage(tmp_path, context) == with_art
+    assert with_art[0] > COVER_MIN_FILL
 
 
 def test_the_cover_carries_both_crests(tmp_path):
@@ -185,13 +219,16 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
     """Cover code is shared, so a change lands on both packages at once."""
     import os
 
+    fixture = match_dir("PSG_vs_Aston_Villa_2-1")
+    if not (fixture / "match_info.json").exists():
+        pytest.skip("fixture has not been rendered")
     script = textwrap.dedent(f"""
         import json, sys
         from pathlib import Path
         sys.path.insert(0, {str(ROOT)!r})
         import pandas as pd
         from tactical_pdf_report import TacticalPDF, build_context
-        out = Path({str(ROOT / "output" / "PSG_vs_Aston_Villa_2-1")!r})
+        out = Path({str(fixture)!r})
         info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
         context = build_context(
             pd.read_csv(out / "events.csv"), pd.read_csv(out / "xg.csv"),
@@ -250,7 +287,7 @@ def test_the_artwork_is_the_page_width_and_the_declared_height(tmp_path):
 
     from cover_art import HEIGHT_PX, WIDTH_PX, build_cover_art
 
-    out = ROOT / "output" / "PSG_vs_Aston_Villa_2-1"
+    out = match_dir("PSG_vs_Aston_Villa_2-1")
     if not (out / "events.csv").exists():
         pytest.skip("no rendered fixture available")
     path = build_cover_art(pd.read_csv(out / "events.csv"), tmp_path / "art.png",

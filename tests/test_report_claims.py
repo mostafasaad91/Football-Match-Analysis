@@ -17,6 +17,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from conftest import match_dir
 from tactical_pdf_report import (
     _lead,
     _legacy_visual_explanation,
@@ -29,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _context(match="Arsenal_vs_Man_City_3-0"):
-    out = ROOT / "output" / match
+    out = match_dir(match)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{match} has not been rendered")
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))

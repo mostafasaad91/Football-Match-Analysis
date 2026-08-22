@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from conftest import match_dir
 from match_article import (
     TARGET_WORDS,
     Article,
@@ -31,7 +32,7 @@ MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1"]
 
 
 def _frames(match):
-    out = ROOT / "output" / match
+    out = match_dir(match)
     if not (out / "match_info.json").exists():
         pytest.skip(f"{match} has not been rendered")
     return (
