@@ -59,13 +59,88 @@ except Exception:  # pragma: no cover - fallback colours
 RADAR_GRID = _identity.GRID if _identity is not None else "#242424"
 
 
+# One hue per metric group, in the order GROUPS declares them, chosen so the
+# colour says something about the actions underneath it: warm for the shot,
+# blue for the pass, rose for the danger it creates, green for the work without
+# the ball, violet for the contest.
+#
+# The team's own colour used to drive all five as a single ramp. That kept the
+# radar in the club's identity and cost it everything else: five steps of one
+# hue put ATTACK next to THREAT and DEFENCE next to DUELS in shades a reader
+# had to compare side by side to separate, and a saturated kit made the whole
+# page shout in one tone. Identity is carried by the crest, the score and the
+# rule under the header — the wedges are better spent saying which group they
+# belong to.
+GROUP_HUES = (
+    36.0,    # ATTACK   — amber
+    212.0,   # PASSING  — blue
+    338.0,   # THREAT   — rose
+    162.0,   # DEFENCE  — green
+    276.0,   # DUELS    — violet
+)
+
+# Held constant across every hue, which is what makes five different colours
+# read as one family rather than five decisions. The light page needs darker,
+# slightly stronger ink to hold the same weight against white.
+GROUP_LIGHTNESS = 0.42 if IS_LIGHT_THEME else 0.62
+GROUP_SATURATION = 0.52 if IS_LIGHT_THEME else 0.46
+
+
+# What every group shade has to clear against the page it is drawn on. Equal
+# HLS lightness is not equal weight: at L=0.42 the green measured 2.88 against
+# the light page and the violet 6.95, so five colours built to be siblings
+# arrived as two faint ones and three solid. Each hue is nudged until it hits
+# the same contrast instead, which is the thing the eye is actually reading.
+GROUP_PAGE_CONTRAST = 3.4 if IS_LIGHT_THEME else 4.6
+
+
+def group_palette(n_groups: int) -> list[str]:
+    """One colour per metric group, harmonised by construction.
+
+    Saturation is held constant and the hues are fixed; lightness is solved per
+    hue so all five weigh the same against the page. Two colours built that way
+    cannot clash, and none of them can dominate the others.
+    """
+    import colorsys
+
+    hues = list(GROUP_HUES)
+    while len(hues) < n_groups:            # more groups than hues: keep spacing
+        hues.append((hues[-1] + 360.0 / max(n_groups, 1)) % 360.0)
+
+    return [_hue_at_page_contrast(hue) for hue in hues[:n_groups]]
+
+
+def _hue_at_page_contrast(hue: float) -> str:
+    """One hue, darkened or lightened until it carries its weight on the page.
+
+    Walks away from the page rather than towards it — dark ink on a light page,
+    light ink on a dark one — and stops at the first step that clears the
+    floor, so a hue that already reads well is left where it is.
+    """
+    import colorsys
+
+    step = -0.02 if IS_LIGHT_THEME else 0.02
+    level = GROUP_LIGHTNESS
+    best = mcolors.to_hex(
+        colorsys.hls_to_rgb(hue / 360.0, level, GROUP_SATURATION))
+    for _ in range(40):
+        try:
+            if contrast_ratio(best, BG_DARK) >= GROUP_PAGE_CONTRAST:
+                return best
+        except Exception:
+            return best
+        level = min(max(level + step, 0.06), 0.94)
+        best = mcolors.to_hex(
+            colorsys.hls_to_rgb(hue / 360.0, level, GROUP_SATURATION))
+    return best
+
+
 def team_group_colors(team_color: str, n_groups: int) -> list[str]:
     """Return one shade per metric group, all drawn from the team's own colour.
 
-    A radar belongs to a player, and a player belongs to a team, so the whole
-    chart should read in that team's colour rather than a fixed category
-    palette. Hue and saturation are held constant and only lightness varies, so
-    the groups stay separable while the radar still reads as one team.
+    Kept for callers that want the single-hue ramp. The radar itself now uses
+    ``group_palette``: a chart whose five groups are five steps of one colour
+    asks the reader to compare shades to tell a tackle from a through ball.
 
     Kits with almost no saturation (white/silver sides) fall back to a grey
     ramp of the same shape, which is the honest rendering of a white shirt.
@@ -77,6 +152,12 @@ def team_group_colors(team_color: str, n_groups: int) -> list[str]:
     except (ValueError, TypeError):
         r, g, b = mcolors.to_rgb(C_HOME)
     hue, _lightness, saturation = colorsys.rgb_to_hls(r, g, b)
+    # A kit colour is chosen to be seen from the back of a stand. Thirty wedges
+    # of it, at full saturation, is a page that shouts in one tone and gives the
+    # eye nowhere to rest, so the ramp is drawn at a calmer saturation than the
+    # shirt. The hue still identifies the team; the volume comes down.
+    saturation = min(max(saturation, 0.06) * 0.72, 0.62)
+
     # Lightness range chosen so the darkest step still separates from the black
     # page and the lightest stays below pure white.
     lows, highs = 0.40, 0.80
@@ -95,9 +176,16 @@ def team_group_colors(team_color: str, n_groups: int) -> list[str]:
             ordered.append(levels[front])
         front += 1
         back -= 1
+
+    # Lightness alone left DEFENCE and DUELS looking like one group: on a five
+    # step ramp the last two steps are close, and they sit next to each other on
+    # the ring. Nudging the hue a few degrees per step separates the neighbours
+    # without letting the radar stop reading as one team.
+    spread = [(-1.4, 0.0, 1.4, -0.7, 0.7)[i % 5] for i in range(len(ordered))]
     return [
-        mcolors.to_hex(colorsys.hls_to_rgb(hue, level, max(saturation, 0.06)))
-        for level in ordered[:n_groups]
+        mcolors.to_hex(colorsys.hls_to_rgb(
+            (hue + shift / 360.0) % 1.0, level, saturation))
+        for level, shift in zip(ordered[:n_groups], spread)
     ]
 
 # ── Metric layout: (group name, colour, [metric labels]) ──────────────────────
@@ -258,6 +346,88 @@ def chip_fills(colors, floor: float = CHIP_CONTRAST_FLOOR) -> list[str]:
         adjusted.append(_chip_fill(colour, floor, nudge=moved * CHIP_SEPARATION))
         moved += 1
     return adjusted
+
+
+# Above this percentile a value gets a filled tile; below the second figure it
+# gets an outline only. The middle band keeps a fill at reduced strength.
+CHIP_LOUD = 75.0
+CHIP_QUIET = 35.0
+
+
+def _is_zero(value, displayed: str) -> bool:
+    """Did the player not do this at all?
+
+    A ratio chip reads "won/contested", so 0/6 is a zero even though the string
+    carries a six. Six duels entered and none won is still nothing on the board
+    the wedge is measuring.
+    """
+    numerator = str(displayed).split("/")[0].strip()
+    try:
+        # The printed figure, not the stored one: 0.004 xA is rounded to "0.0"
+        # on the tile, and a tile reading zero should be as quiet as the value
+        # it shows. A negative number is not a zero and keeps its outline.
+        if float(numerator) != 0:
+            return False
+    except ValueError:
+        return True
+    try:
+        return float(value) >= 0
+    except (TypeError, ValueError):
+        return True
+
+
+def _chip_style(chip: str, group: str, percentile: float, zero: bool) -> dict:
+    """How loudly one value should be printed.
+
+    Three tiers rather than one. The border used to be drawn in the group's
+    colour on every tile, which put thirty coloured outlines on a page that
+    already says which group a wedge belongs to by where it sits and by the key
+    above it — so the border is now only what a filled tile needs to hold its
+    edge, and the quiet tiers do without.
+    """
+    if zero:
+        # Present for anyone who looks, silent for anyone who does not.
+        return {
+            "color": TEXT_DIM,
+            "weight": "normal",
+            "effects": [],
+            "bbox": dict(boxstyle="round,pad=0.22", fc="none",
+                         ec=_mix(group, BG_DARK, 0.55), lw=0.8),
+        }
+    if percentile >= CHIP_LOUD:
+        return {
+            "color": _chip_text_color(chip),
+            "weight": "bold",
+            "effects": label_outline(chip, linewidth=1.4),
+            "bbox": dict(boxstyle="round,pad=0.26", fc=chip,
+                         ec=_mix(chip, BG_DARK, 0.35), lw=1.0),
+        }
+    if percentile >= CHIP_QUIET:
+        soft = _mix(chip, BG_DARK, 0.42)
+        return {
+            "color": _chip_text_color(soft),
+            "weight": "bold",
+            "effects": label_outline(soft, linewidth=1.2),
+            "bbox": dict(boxstyle="round,pad=0.24", fc=soft, ec="none", lw=0),
+        }
+    return {
+        "color": _readable_on_page(group, 4.0),
+        "weight": "normal",
+        "effects": [],
+        "bbox": dict(boxstyle="round,pad=0.22", fc="none",
+                     ec=_mix(group, BG_DARK, 0.45), lw=0.9),
+    }
+
+
+def _mix(color: str, towards: str, amount: float) -> str:
+    """Move one colour a fraction of the way towards another."""
+    try:
+        a = mcolors.to_rgb(color)
+        b = mcolors.to_rgb(towards)
+    except (ValueError, TypeError):
+        return color
+    amount = min(max(float(amount), 0.0), 1.0)
+    return mcolors.to_hex(tuple(x + (y - x) * amount for x, y in zip(a, b)))
 
 
 def _readable_on_page(color: str, min_ratio: float = 4.0) -> str:
@@ -1069,11 +1239,10 @@ def make_player_pizza(
     """
     me_m = player_metrics(events, player)
 
-    group_colors = (
-        team_group_colors(team_color, len(GROUPS))
-        if team_color
-        else [gc for _gn, gc, _ms in GROUPS]
-    )
+    # One colour per group, not five steps of the team's. The kit still names
+    # the player's side in the header, on the crest and in the rule beneath it;
+    # the wedges are spent telling attack from defence instead.
+    group_colors = group_palette(len(GROUPS))
 
     labels, colors, vals, disps, pcts, gidx = [], [], [], [], [], []
     for gi, (_gn, _gc, ms) in enumerate(GROUPS):
@@ -1085,7 +1254,11 @@ def make_player_pizza(
             vals.append(v)
             if m in _RATIO_DISPLAY:  # "numerator / denominator"
                 num_k, den_k = _RATIO_DISPLAY[m]
-                disps.append(f"{me_m.get(num_k, 0)}/{me_m.get(den_k, 0)}")
+                # A thin space around the slash separates "won" from
+                # "contested" without widening the tile the way a padded
+                # slash would.
+                disps.append(
+                    f"{me_m.get(num_k, 0)} / {me_m.get(den_k, 0)}")
             else:
                 disps.append(f"{v}")
             pcts.append(_percentile(allm, elig, m, v) if elig else 0)
@@ -1107,7 +1280,10 @@ def make_player_pizza(
     width = np.radians(per) * 0.90
     gap_mid = np.radians((cur + 360) / 2)
 
-    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 113, 130, 140, 154
+    # RVAL sat five units from RLAB, so a two-line label such as CLEARANCES
+    # crowded its own tile. The value moves in towards the ring and the
+    # name stays put, which opens the gap without pushing the arc out.
+    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 110, 132, 142, 156
 
     fig = plt.figure(figsize=(12, 12.6), facecolor=BG_DARK)
     ax = fig.add_axes([0.06, 0.035, 0.88, 0.735], projection="polar")
@@ -1181,7 +1357,7 @@ def make_player_pizza(
     # is legible — a tile carrying an 8pt digit and a wedge carrying a
     # percentile do not have the same job.
     chip_by_group = dict(zip(group_colors, chip_fills(group_colors)))
-    for a, lab, dv, p, c in zip(angs, labels, disps, pcts, colors):
+    for a, lab, dv, p, c, v in zip(angs, labels, disps, pcts, colors, vals):
         chip = chip_by_group.get(c, _chip_fill(c))
         ax.text(
             a,
@@ -1197,13 +1373,20 @@ def make_player_pizza(
             linespacing=0.9,
             clip_on=False,
         )
+
+        # Thirty tiles of equal weight give the eye nothing to prioritise: a
+        # zero shouted as loudly as the best figure on the pitch, and a third
+        # of a defensive midfielder's radar is zeroes. Weight now follows the
+        # percentile the wedge already draws, so the two or three things the
+        # player actually led are the ones that carry filled tiles.
+        style = _chip_style(chip, c, float(p), _is_zero(v, dv))
         ax.text(
             a,
             RVAL,
             dv,
-            color=_chip_text_color(chip),
+            color=style["color"],
             fontsize=9,
-            fontweight="bold",
+            fontweight=style["weight"],
             family="monospace",
             ha="center",
             va="center",
@@ -1211,12 +1394,9 @@ def make_player_pizza(
             clip_on=False,
             # Saturated mid-lightness fills (a red team's middle ramp step)
             # sit where neither tier quite clears 4.5:1 on its own. The stroke
-            # is a no-op everywhere else.
-            path_effects=label_outline(chip, linewidth=1.4),
-            # The fill carries the number's legibility, the border carries the
-            # group: a chip pushed dark enough for white text sits almost on
-            # the black page and stopped reading as a tile at all.
-            bbox=dict(boxstyle="round,pad=0.24", fc=chip, ec=c, lw=1.3),
+            # is a no-op everywhere else, and none at all on an unfilled tile.
+            path_effects=style["effects"],
+            bbox=style["bbox"],
         )
     for sp in ax.spines.values():
         sp.set_visible(False)

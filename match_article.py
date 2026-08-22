@@ -289,18 +289,40 @@ def _finding_result(m: _Match) -> Finding | None:
         )
         weight = m.gap(m.home_xg, m.away_xg) + 0.3
 
+    # Whether the finishing ran anywhere needs the same tolerance the paragraph
+    # below already uses. Without one, three goals from 2.96 xG was reported as
+    # finishing that "ran ahead of the chances" — and then, four lines later, as
+    # conversion that "tracked the chances closely". Both about a gap of 0.04.
+    #
+    # The caveat is tied to the same threshold. Warning a reader about a small
+    # sample when nothing deviated reads as a hedge against the players, and a
+    # side that converted exactly what it created has not been flattered by
+    # anything.
+    overperformance = goals - combined
+    FINISHING_TOLERANCE = 0.8
+
+    if overperformance > FINISHING_TOLERANCE:
+        ran = ("so finishing ran ahead of the chances on the night. Read that as a "
+               "warning about the sample, not a verdict on the players: conversion "
+               "is the noisiest thing in the match and the least likely part of it "
+               "to repeat.")
+    elif overperformance < -FINISHING_TOLERANCE:
+        ran = ("so finishing fell short of the chances on the night. Read that as a "
+               "warning about the sample, not a verdict on the players: conversion "
+               "is the noisiest thing in the match and the least likely part of it "
+               "to repeat.")
+    else:
+        ran = ("so the scoreline and the chances tell the same story. Nothing here "
+               "was taken or spurned against the run of the underlying numbers, "
+               "which makes the rest of the match the part worth reading.")
+
     second = (
         f"{_spell(goals).capitalize()} {_plural(goals, 'goal')} came from {combined:.2f} "
-        f"combined expected goals, so finishing ran "
-        f"{'ahead of' if goals > combined else 'behind'} the chances on the night. "
-        f"Read that as a warning about the sample, not a verdict on the players: "
-        f"conversion is the noisiest thing in the match and the least likely part of "
-        f"it to repeat."
+        f"combined expected goals, {ran}"
     )
     # Which caveat is worth making depends on how far the finishing ran from the
     # chances, so the paragraph is chosen by that distance rather than fixed.
-    overperformance = goals - combined
-    if overperformance > 0.8:
+    if overperformance > FINISHING_TOLERANCE:
         third = (
             f"A gap that size between {goals} scored and {combined:.2f} created is not a "
             f"skill the players demonstrated; it is the shortest sample in football "
@@ -308,7 +330,7 @@ def _finding_result(m: _Match) -> Finding | None:
             f"the chances are the part worth arguing from and the conversion is the part "
             f"worth noting and setting aside."
         )
-    elif overperformance < -0.8:
+    elif overperformance < -FINISHING_TOLERANCE:
         third = (
             f"{combined:.2f} expected goals produced {_spell(goals)} "
             f"{_plural(goals, 'goal')}, so both sides finished below what the chances "

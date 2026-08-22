@@ -169,3 +169,55 @@ def test_no_paragraph_asserts_a_difference_and_then_prints_a_tie(match):
                 assert abs(percentages[0] - percentages[1]) > 0.5, (
                     f"{section.heading}: claims a difference, prints "
                     f"{percentages[0]} and {percentages[1]}")
+
+
+# --------------------------------------------------------------------------
+# the finishing paragraph
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("match", MATCHES)
+def test_the_finishing_verdict_does_not_contradict_itself(match):
+    """One article said both things about the same 0.04.
+
+    "Three goals came from 2.96 combined expected goals, so finishing ran ahead
+    of the chances" and, four lines later, "Conversion tracked the chances
+    closely here — 3 from 2.96". The first sentence had no tolerance at all,
+    the paragraph under it used 0.8, and a gap of four hundredths satisfied
+    both.
+    """
+    article, _frames, _info = _built(match)
+    text = _prose(article)
+    ran = any(phrase in text for phrase in
+              ("finishing ran ahead of the chances", "finishing fell short of the chances"))
+    tracked = "tell the same story" in text or "tracked the chances closely" in text
+    assert not (ran and tracked), text[:400]
+
+
+@pytest.mark.parametrize("match", MATCHES)
+def test_the_finishing_verdict_matches_the_gap(match):
+    """Whichever sentence appears, the numbers have to support it."""
+    article, (_events, xg, _tm, _pm), _info = _built(match)
+    text = _prose(article)
+    goals = float(pd.to_numeric(xg["goals"], errors="coerce").fillna(0).sum())
+    expected = float(pd.to_numeric(xg["xG"], errors="coerce").fillna(0).sum())
+    gap = goals - expected
+
+    if "finishing ran ahead of the chances" in text:
+        assert gap > 0.8, gap
+    if "finishing fell short of the chances" in text:
+        assert gap < -0.8, gap
+    if "tell the same story" in text:
+        assert abs(gap) <= 0.8, gap
+
+
+@pytest.mark.parametrize("match", MATCHES)
+def test_a_match_that_converted_what_it_created_is_not_warned_about(match):
+    """A caveat about a small sample, where nothing deviated, reads as a hedge
+    against the players rather than a note about the data."""
+    article, (_events, xg, _tm, _pm), _info = _built(match)
+    goals = float(pd.to_numeric(xg["goals"], errors="coerce").fillna(0).sum())
+    expected = float(pd.to_numeric(xg["xG"], errors="coerce").fillna(0).sum())
+    if abs(goals - expected) > 0.8:
+        return
+    text = _prose(article)
+    assert "warning about the sample" not in text, text[:400]
