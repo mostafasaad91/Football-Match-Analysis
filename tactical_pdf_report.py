@@ -255,6 +255,16 @@ def _all_player_profiles(events: pd.DataFrame, player_metrics: pd.DataFrame) -> 
     return profiles
 
 
+def _match_verdict(team_metrics, xg, match_info):
+    """The verdict, or None when it cannot be formed."""
+    try:
+        from match_verdict import read_match
+
+        return read_match(team_metrics, xg, match_info)
+    except Exception:
+        return None
+
+
 def build_context(
     events: pd.DataFrame,
     xg: pd.DataFrame,
@@ -297,6 +307,10 @@ def build_context(
         # hyphen here made the same fixture look typeset by two different hands
         # depending on whether you were reading a page or an image on it.
         "score": f"{home_goals} — {away_goals}",
+        # Whether each side's xG describes a performance or a deficit.
+        # Shared with the article so the two documents cannot reach
+        # opposite verdicts about the same two numbers.
+        "verdict": _match_verdict(team_metrics, xg, match_info),
         "winner": winner,
         "loser": loser,
         "goal_rows": goal_rows,
@@ -504,6 +518,23 @@ def _section_copy(c: dict) -> dict[str, dict]:
             f"{transition_team} took more from broken play in a match that stayed level, so "
             f"the transition advantage was structural rather than a product of the scoreline."))
 
+    # An xG total is a record of chances, not of a performance. A losing side
+    # whose total finished higher was left to look like the better team, and a
+    # reader would take that from two numbers printed side by side — even when
+    # the game-state split in the same report says almost all of it arrived
+    # after they went behind, against an opponent that had stopped attacking.
+    quality_card = ("Chance quality separated them",
+                    f"{home} produced {c['home_xG']:.2f} xG; {away} produced "
+                    f"{c['away_xG']:.2f} xG.")
+    verdict = c.get("verdict")
+    if verdict is not None and verdict.loser_was_only_chasing:
+        beaten = verdict.of(verdict.loser)
+        quality_card = ("The higher xG belongs to the chase", (
+            f"{beaten.team} finished on {beaten.xg:.2f} xG against "
+            f"{c['home_xG'] if verdict.winner == home else c['away_xG']:.2f}, but "
+            f"{beaten.chasing_xg:.2f} of it — {100 * beaten.chasing_share:.0f}% — "
+            f"came while behind. Level, they created {beaten.level_xg:.2f}."))
+
     return {
         "Match Story": {
             "subtitle": "Score state, momentum and the moments that changed the tactical problem",
@@ -514,7 +545,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
             ],
             "data": [
                 (shot_volume_head, shot_volume_text),
-                ("Chance quality separated them", f"{home} produced {c['home_xG']:.2f} xG; {away} produced {c['away_xG']:.2f} xG."),
+                quality_card,
                 finishing_card,
             ],
             "implication": f"Read every territorial and pressing metric through game state: {winner} protected a lead for long periods, while {loser} accumulated attacking activity under greater urgency.",

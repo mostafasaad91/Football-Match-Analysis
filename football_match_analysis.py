@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1988981/live/england-championship-2026-2027-burnley-west-ham",
+    "https://www.whoscored.com/matches/1983548/live/england-premier-league-2026-2027-hull-manchester-united",
 ).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,7 +193,20 @@ def _match_output_folder(info: dict, root: str = SAVE_DIR) -> str:
         score = "_" + re.sub(r"\s+", "", score_text.replace(":", "-"))
     elif info.get("home_score") is not None and info.get("away_score") is not None:
         score = f"_{info.get('home_score')}-{info.get('away_score')}"
-    return os.path.join(root, _safe_output_name(f"{home}_vs_{away}{score}"))
+    # Shelve the fixture under its competition, season and round instead of
+    # dropping every match into one flat directory. The competition and season
+    # come out of the URL; the round comes from MATCH_ROUND when the caller
+    # sets it, and otherwise from the week the match was played in.
+    folder = _safe_output_name(f"{home}_vs_{away}{score}")
+    try:
+        from match_fixture import shelf
+
+        parts = shelf(info.get("url") or MATCH_URL,
+                      os.environ.get("MATCH_ROUND", ""),
+                      info.get("date") or info.get("startDate"))
+    except Exception:
+        parts = ()
+    return os.path.join(root, *parts, folder)
 
 
 # Kit colour mode used by every visual and PDF page.

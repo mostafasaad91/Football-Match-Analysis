@@ -157,6 +157,16 @@ class _Match:
 
         self.first_goal = self._first_goal(events)
 
+        # Whether each side's xG describes a performance or a deficit. Read
+        # once, here, so the headline and the opening finding cannot disagree
+        # about the same match.
+        try:
+            from match_verdict import read_match
+
+            self.verdict = read_match(team_metrics, xg, info)
+        except Exception:
+            self.verdict = None
+
         if self.home_goals > self.away_goals:
             self.winner, self.loser = self.home, self.away
         elif self.away_goals > self.home_goals:
@@ -256,7 +266,29 @@ def _finding_result(m: _Match) -> Finding | None:
     combined = m.home_xg + m.away_xg
     goals = m.home_goals + m.away_goals
 
-    if m.winner and not level and leader != m.winner:
+    if m.winner and not level and leader != m.winner and m.verdict is not None \
+            and m.verdict.loser_was_only_chasing:
+        # The xG total says the loser created more. The game-state split says
+        # almost all of it arrived after they went behind, against an opponent
+        # that had stopped attacking — which is a deficit, not a performance.
+        # The article used to print "the match X played better in" and then, two
+        # paragraphs later, the number that contradicts it.
+        beaten = m.verdict.of(m.loser)
+        heading = f"{m.loser}'s numbers are a chase, not a performance"
+        first = (
+            f"{m.loser} finished on {beaten.xg:.2f} expected goals against "
+            f"{m.of(m.winner, m.home_xg, m.away_xg):.2f} and lost, which reads like a "
+            f"side hard done by until the clock is put back on it. "
+            f"{beaten.chasing_xg:.2f} of that total — "
+            f"{100 * beaten.chasing_share:.0f}% — arrived while they were behind. "
+            f"With the match level they managed {beaten.level_xg:.2f}. "
+            f"A trailing side plays a different opponent: one that has dropped its "
+            f"line, stopped committing bodies and is content to concede the ball in "
+            f"front of it. Chances taken from that are not evidence of the better "
+            f"performance, they are evidence of the deficit that produced them."
+        )
+        weight = m.gap(m.home_xg, m.away_xg) + 0.6
+    elif m.winner and not level and leader != m.winner:
         heading = f"{m.winner} won the match {m.loser} played better in"
         first = (
             f"{m.winner} took the points and {m.loser} took the chances. "
@@ -930,7 +962,14 @@ def _title(m: _Match) -> tuple[str, str]:
 
     # -- the result against the process ----------------------------------
     xg_leader, _xg_trailer, xg_level = m.lead(m.home_xg, m.away_xg, tolerance=0.15)
-    if m.winner and not xg_level and xg_leader != m.winner:
+    if m.verdict is not None and m.verdict.loser_was_only_chasing:
+        beaten = m.verdict.of(m.loser)
+        offer(3.4,
+              f"{m.loser}'s xG Is A Chase, Not A Performance",
+              f"{result}. {beaten.chasing_xg:.2f} of {m.loser}'s {beaten.xg:.2f} "
+              f"expected goals arrived while they were behind; level, they made "
+              f"{beaten.level_xg:.2f}.")
+    elif m.winner and not xg_level and xg_leader != m.winner:
         offer(3.0,
               f"{m.loser} Won Everything But The Match",
               f"{result}. The expected goals finished "
