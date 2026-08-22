@@ -17,7 +17,6 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
 import crests
-from cover_art import build_cover_art
 from match_report import compute_ppda_both
 from visualization_components import IS_LIGHT_THEME
 
@@ -99,6 +98,20 @@ TYPE_THESIS, TYPE_FIXTURE = 23, 15
 # because a bare number in a setFont call is a size nothing else can find.
 TYPE_COVER_SCORE, TYPE_COVER_TEAM = 44, 18
 TYPE_COVER_FIGURE, TYPE_COVER_MARK = 21, 27
+
+# The cover's frame and the card inside it. The two rules are fixed to the
+# sheet; everything between them is centred, so the air above the crests and
+# the air under the last figure come out equal whatever COVER_ROWS holds.
+#
+# RISE, GAP and SINK are how far the card's ink actually reaches from the line
+# it is drawn on: the crest half-height above the badge line, the badge line
+# down to the first row, and a row's figures below their own line. They are the
+# measurements the centring needs, so they live next to it rather than being
+# re-derived from the drawing code.
+COVER_MARGIN = 56
+COVER_HEAD_DROP, COVER_FOOT_LIFT = 92, 88
+COVER_CREST_RISE, COVER_ROW_GAP, COVER_ROW_SINK = 46, 104, 12
+COVER_ROW_STEP = 52.0
 
 # Sampled from the publisher's mark in assets/logo.jpg. Brand elements only —
 # never a value, a bar, or anything a reader could mistake for a team. It reads
@@ -2255,38 +2268,41 @@ class TacticalPDF:
         c.setFillColor(NEUTRAL)
         c.setFont("Helvetica-Bold", TYPE_CAPTION)
         competition = self._cover_competition().upper()
-        c.drawString(56, top, _spaced_out(competition or "MATCH ANALYSIS"))
+        c.drawString(COVER_MARGIN, top, _spaced_out(competition or "MATCH ANALYSIS"))
         if competition:
             c.setFillColor(MUTED)
             c.setFont("Helvetica-Bold", TYPE_MICRO)
-            c.drawString(56, top - 19, _spaced_out("MATCH ANALYSIS"))
+            c.drawString(COVER_MARGIN, top - 19, _spaced_out("MATCH ANALYSIS"))
         self._cover_logo(PAGE_W - 92, PAGE_H - 22, 64)
 
+        head_rule = PAGE_H - COVER_HEAD_DROP
+        foot_rule = COVER_FOOT_LIFT
         c.setStrokeColor(GRID)
         c.setLineWidth(0.8)
-        c.line(56, top - 38, PAGE_W - 56, top - 38)
+        c.line(COVER_MARGIN, head_rule, PAGE_W - COVER_MARGIN, head_rule)
+        c.line(COVER_MARGIN, foot_rule, PAGE_W - COVER_MARGIN, foot_rule)
 
-        # Centre the card on the sheet rather than hanging it from the
-        # header: eight rows and a badge cluster left the lower half of
-        # the page empty.
-        badge_y = top - 214
+        # Both rules are fixed to the sheet and the card is centred between
+        # them. Hanging the card from the header and letting the footer float
+        # under the last row put all the slack in one place: 129pt of air
+        # above the crests and 40 below the final figure, on a card that is
+        # meant to read as one block. It also meant the footer's position was
+        # a function of how many rows COVER_ROWS happened to hold.
+        rows = self._cover_rows()
+        body = (COVER_CREST_RISE + COVER_ROW_GAP
+                + (len(rows) - 1) * COVER_ROW_STEP + COVER_ROW_SINK)
+        badge_y = (head_rule + foot_rule + body) / 2 - COVER_CREST_RISE
         self._cover_badges(centre, badge_y)
 
-        rows = self._cover_rows()
-        first = badge_y - 104
-        step = 52.0
+        first = badge_y - COVER_ROW_GAP
         for index, row in enumerate(rows):
-            self._cover_row(centre, first - index * step, *row)
+            self._cover_row(centre, first - index * COVER_ROW_STEP, *row)
 
-        base = first - (len(rows) - 1) * step - 40
-        c.setStrokeColor(GRID)
-        c.setLineWidth(0.8)
-        c.line(56, base, PAGE_W - 56, base)
         c.setFillColor(NEUTRAL)
         c.setFont("Helvetica-Bold", TYPE_MICRO)
         byline = str(self.context.get("byline") or "MOSTAFA SAAD").upper()
-        c.drawString(56, base - 21, _spaced_out(byline))
-        c.drawRightString(PAGE_W - 56, base - 21,
+        c.drawString(COVER_MARGIN, foot_rule - 21, _spaced_out(byline))
+        c.drawRightString(PAGE_W - COVER_MARGIN, foot_rule - 21,
                           _spaced_out("WHOSCORED / OPTA EVENT DATA"))
 
         # The two-colour rule every visual and poster closes on.
@@ -2914,14 +2930,6 @@ def build_tactical_pdf(
     context = build_context(events, xg, team_metrics, player_metrics, match_info)
     context["home_color"] = home_hex
     context["away_color"] = away_hex
-    # The cover's artwork, rendered beside the report. None of this is fatal:
-    # build_cover_art returns None on any failure and the cover falls back to
-    # its typographic form.
-    context["cover_art"] = build_cover_art(
-        events, output.parent / "cover_art.png",
-        home_id=context["home_id"], away_id=context["away_id"],
-        home_colour=home_hex, away_colour=away_hex,
-    )
     section_copy = _section_copy(context)
     groups = _ordered_section_paths(valid_paths)
     core = [

@@ -148,29 +148,43 @@ def test_the_cover_draws_every_band_of_the_page(tmp_path):
         f"the cover's ink spans only {reach:.0%} of the page")
 
 
-def test_the_cover_does_not_depend_on_the_artwork_rendering(tmp_path):
-    """The card is drawn from the frames, so a failed render cannot empty it.
+def test_the_card_sits_between_its_rules_with_equal_air(tmp_path):
+    """The card is one block, so its two margins have to match.
 
-    ``build_cover_art`` still runs — match_article falls back to its PNG when
-    the report cannot be rasterised — but the cover itself no longer places it,
-    and a fixture whose artwork fails must open on the same page as one whose
-    artwork succeeds.
+    The header rule was fixed to the sheet and the footer floated under the
+    last row, which put 129pt of air above the crests and 40 under the final
+    figure — and made the footer's position a function of how many rows
+    COVER_ROWS happened to hold.
+
+    Measured off the render rather than off the arithmetic: reproducing the
+    layout maths here would agree with itself no matter what the page looked
+    like.
     """
-    from cover_art import build_cover_art
+    fitz = pytest.importorskip("fitz")
+    import numpy as np
 
-    out = match_dir("PSG_vs_Aston_Villa_2-1")
-    context = _context()
-    context["cover_art"] = build_cover_art(
-        pd.read_csv(out / "events.csv"), tmp_path / "art.png",
-        home_id=context["home_id"], away_id=context["away_id"],
-        home_colour=context["home_color"], away_colour=context["away_color"],
-    )
-    assert context["cover_art"] is not None, "the artwork failed to render"
-    with_art = _coverage(tmp_path, context)
+    from tactical_pdf_report import COVER_FOOT_LIFT, COVER_HEAD_DROP, PAGE_H
 
-    context["cover_art"] = None
-    assert _coverage(tmp_path, context) == with_art
-    assert with_art[0] > COVER_MIN_FILL
+    _cover(tmp_path, _context())
+    doc = fitz.open(tmp_path / "cover.pdf")
+    pix = doc[0].get_pixmap(dpi=60)
+    image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+        pix.height, pix.width, pix.n)[..., :3].astype(int)
+    doc.close()
+    rows = (np.abs(image - image[4, 4]).sum(axis=2) > 12).any(axis=1)
+
+    # Points up from the foot of the sheet, which is how the layout is written.
+    # Each rule is held 3pt clear: at 60dpi its own antialiased edge lands a
+    # row inside the band and reads as the card reaching all the way down.
+    scale = PAGE_H / len(rows)
+    head, foot = PAGE_H - COVER_HEAD_DROP, COVER_FOOT_LIFT
+    inside = [PAGE_H - i * scale for i, hit in enumerate(rows)
+              if hit and foot + 3 < PAGE_H - i * scale < head - 3]
+    assert inside, "nothing is drawn between the two rules"
+
+    above, below = head - max(inside), min(inside) - foot
+    assert abs(above - below) < 15, (
+        f"{above:.0f}pt of air above the card and {below:.0f}pt below it")
 
 
 def test_the_cover_carries_both_crests(tmp_path):
@@ -250,48 +264,25 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
 
 
 # --------------------------------------------------------------------------
-# the artwork
+# the artwork that used to be here
 # --------------------------------------------------------------------------
-
-def test_the_artwork_lifts_kit_colours_against_its_own_ground():
-    """It is dark on both pages, so the page's own fit is the wrong one.
-
-    On the light page the report hands over PSG's raw #004170, which is
-    correct against paper and all but invisible on the artwork.
-    """
-    from cover_art import GROUND, MARK_FLOOR, _contrast, lift_for_artwork
-    from matplotlib import colors as mcolors
-
-    ground = mcolors.to_rgb(GROUND)
-    for kit in ("#004170", "#7A003C", "#111111", "#2F5BFF"):
-        lifted = lift_for_artwork(kit)
-        assert _contrast(mcolors.to_rgb(lifted), ground) >= MARK_FLOOR - 0.05, kit
+#
+# cover_art.py rendered a pass network for the old full-bleed cover, and four
+# tests held its contrast floor and its pixel size. The cover is the comparison
+# card now and nothing places that picture, so the module was deleted along
+# with them rather than left running on every match to write a PNG no document
+# opens on.
+#
+# match_article kept one reference — a fallback to cover_art.png when page one
+# of the report cannot be rasterised — and it went too. It was the more
+# dangerous half: a stale PNG in an output folder would have opened the article
+# on a picture that appears nowhere in the document it fronts, which is exactly
+# the drift the cover was made to close.
 
 
-def test_a_colour_that_already_carries_is_left_alone():
-    from cover_art import lift_for_artwork
+def test_nothing_reaches_for_the_deleted_artwork(tmp_path):
+    """The fallback is gone, so a stale PNG cannot become the article's cover."""
+    from match_article import _cover_image
 
-    assert lift_for_artwork("#FFD400") == "#FFD400"
-
-
-def test_the_artwork_never_raises(tmp_path):
-    """A cover that cannot draw its picture must still produce a report."""
-    from cover_art import build_cover_art
-
-    assert build_cover_art(pd.DataFrame(), tmp_path / "x.png", home_id=1, away_id=2,
-                           home_colour="#000000", away_colour="#FFFFFF") is None
-
-
-def test_the_artwork_is_the_page_width_and_the_declared_height(tmp_path):
-    from PIL import Image
-
-    from cover_art import HEIGHT_PX, WIDTH_PX, build_cover_art
-
-    out = match_dir("PSG_vs_Aston_Villa_2-1")
-    if not (out / "events.csv").exists():
-        pytest.skip("no rendered fixture available")
-    path = build_cover_art(pd.read_csv(out / "events.csv"), tmp_path / "art.png",
-                           home_id=304, away_id=24,
-                           home_colour="#004170", away_colour="#7A003C")
-    with Image.open(path) as image:
-        assert image.size == (WIDTH_PX, HEIGHT_PX)
+    (tmp_path / "cover_art.png").write_bytes(b"not a real png")
+    assert _cover_image(tmp_path) is None

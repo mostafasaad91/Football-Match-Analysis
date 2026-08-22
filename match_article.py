@@ -1075,11 +1075,16 @@ def _title(m: _Match) -> tuple[str, str]:
 def _cover_image(out_dir: Path) -> Path | None:
     """The report's own cover page, rendered for the article to open on.
 
-    Not the bare artwork: the cover is the artwork plus the badge, both crests,
-    the score, the two-colour rule and the finding underneath, and the article
-    should open on the same page the report does. Rendering page one of the
-    finished PDF makes them identical by construction rather than by two
-    layouts agreeing.
+    The cover is the comparison card — the competition, both crests, the score
+    and the eight rows — and the article should open on the same page the
+    report does. Rendering page one of the finished PDF makes them identical by
+    construction rather than by two layouts agreeing.
+
+    There is deliberately no second source. The old fallback reached for
+    cover_art.png, and once the cover became the card that file stopped being
+    the report's cover: a stale copy left in an output folder would have opened
+    the article on a picture that appears nowhere in the document it fronts.
+    No image is the honest answer when page one cannot be rendered.
     """
     pdf = out_dir / "full_visual_redesign_real_data.pdf"
     target = out_dir / "article_cover.png"
@@ -1098,9 +1103,7 @@ def _cover_image(out_dir: Path) -> Path | None:
                 return target
         except Exception:
             pass
-    # No report yet, or no renderer: the artwork alone is better than nothing.
-    artwork = out_dir / "cover_art.png"
-    return artwork if artwork.exists() else None
+    return None
 
 
 def _closing(m: _Match, used: list[str]) -> Section:
