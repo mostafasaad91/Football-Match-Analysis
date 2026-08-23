@@ -118,14 +118,15 @@ def test_the_real_fixtures_are_judged_from_their_own_frames(match):
     verdict = read_match(*_fixture(match))
     for side in (verdict.home, verdict.away):
         assert 0.0 <= side.chasing_share <= 1.0, side
-        assert abs((side.level_xg + side.chasing_xg) - side.xg) < 0.02, side
+        assert abs((side.not_chasing_xg + side.chasing_xg) - side.xg) < 0.02, side
+        assert side.level_only_xg <= side.not_chasing_xg + 1e-9, side
 
 
 def test_villa_is_the_case_this_exists_for():
     verdict = read_match(*_fixture("PSG_vs_Aston_Villa_2-1"))
     villa = verdict.of("Aston Villa")
     assert villa.chasing_share > 0.9, villa.chasing_share
-    assert villa.level_xg < 0.2, villa.level_xg
+    assert villa.not_chasing_xg < 0.2, villa.not_chasing_xg
     assert verdict.loser_was_only_chasing
 
 

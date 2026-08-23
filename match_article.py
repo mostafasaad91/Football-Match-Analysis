@@ -41,6 +41,16 @@ TARGET_WORDS = (1200, None)
 # Player radars carried per side, matching the report's own appendix.
 RADARS_PER_TEAM = 5
 
+# A side has to have built a real part of its threat in transition before the
+# headline calls the match a transition match. Below this it is one number
+# among several, not the thing that separated the two teams.
+TRANSITION_SHARE = 0.35
+
+# Percentage points between the two sides' box-entry rates before the headline
+# says the last twenty metres separated them. Real gaps on this scale run past
+# forty, so the old eight-point bar was met in almost every match.
+BOX_SURVIVAL_POINTS = 15.0
+
 
 # --------------------------------------------------------------------------
 # reading the frames
@@ -281,7 +291,7 @@ def _finding_result(m: _Match) -> Finding | None:
             f"side hard done by until the clock is put back on it. "
             f"{beaten.chasing_xg:.2f} of that total — "
             f"{100 * beaten.chasing_share:.0f}% — arrived while they were behind. "
-            f"With the match level they managed {beaten.level_xg:.2f}. "
+            f"Before they fell behind they managed {beaten.not_chasing_xg:.2f}. "
             f"A trailing side plays a different opponent: one that has dropped its "
             f"line, stopped committing bodies and is content to concede the ball in "
             f"front of it. Chances taken from that are not evidence of the better "
@@ -363,13 +373,39 @@ def _finding_result(m: _Match) -> Finding | None:
             f"worth noting and setting aside."
         )
     elif overperformance < -FINISHING_TOLERANCE:
+        # This restated the paragraph above it — same two figures, same "do not
+        # over-read it" caveat, one sentence later — and the claim it added was
+        # false. "Both sides finished below what the chances were worth" was
+        # read off the combined total: Hull scored two from 1.64 and finished
+        # comfortably above it, while Man Utd's nought from 1.94 was the whole
+        # shortfall. A gap owned by one side is a different match from a gap
+        # shared, so the paragraph splits it instead of repeating it.
+        home_swing = m.home_goals - m.home_xg
+        away_swing = m.away_goals - m.away_xg
+        fell_short = [(name, swing) for name, swing
+                      in ((m.home, home_swing), (m.away, away_swing))
+                      if swing < -0.3]
+        if len(fell_short) == 2:
+            who = (f"Both sides finished under what they built — {m.home} by "
+                   f"{abs(home_swing):.2f}, {m.away} by {abs(away_swing):.2f}")
+        elif fell_short:
+            name, swing = fell_short[0]
+            other = m.away if name == m.home else m.home
+            other_swing = away_swing if name == m.home else home_swing
+            who = (f"The shortfall belongs to one side. {name} finished "
+                   f"{abs(swing):.2f} under what they created; {other} came out "
+                   + (f"{other_swing:.2f} ahead of theirs"
+                      if other_swing >= 0 else
+                      f"{abs(other_swing):.2f} under theirs"))
+        else:
+            who = ("Neither side missed by much on its own; the combined figure "
+                   "is the sum of two ordinary afternoons rather than one bad one")
         third = (
-            f"{combined:.2f} expected goals produced {_spell(goals)} "
-            f"{_plural(goals, 'goal')}, so both sides finished below what the chances "
-            f"were worth. That is worth naming and not worth over-reading: a match this "
-            f"short cannot separate a genuine finishing problem from an ordinary "
-            f"afternoon in front of goal, and the shape of the chances is the more "
-            f"durable evidence either way."
+            f"{who}. That distinction is the one worth carrying: a shortfall "
+            f"shared between two teams is the sample behaving like a sample, and "
+            f"a shortfall owned by one is a question about that side's finishing "
+            f"or about the positions it was shooting from — and the two have "
+            f"different answers."
         )
     else:
         third = (
@@ -403,12 +439,29 @@ def _finding_territory(m: _Match) -> Finding | None:
     other_boxes = m.of(tilt_trailer, _num(m.hm, "box_entries"),
                        _num(m.am, "box_entries"))
 
+    # "The ground was held, and it paid" fired on the raw expected-goals
+    # comparison alone, so an article whose opening had just shown that the
+    # territory produced nothing until the game was lost went on to say the
+    # territory paid. Two sections, two sources, opposite readings.
+    chased = (m.verdict is not None and m.verdict.loser_was_only_chasing
+              and tilt_leader == m.loser)
     if leader_xg < trailer_xg:
         heading = "Territory is not the same thing as threat"
         opening = (
             f"{tilt_leader} spent {tilt_value:.1f}% of the completed passing in the "
             f"final third and got {leader_xg:.2f} expected goals for it. "
             f"{tilt_trailer}, with the smaller share, got {trailer_xg:.2f}."
+        )
+    elif chased:
+        beaten = m.verdict.of(tilt_leader)
+        heading = "The ground was held, and the deficit spent it"
+        opening = (
+            f"{tilt_leader} took {tilt_value:.1f}% of the field tilt and "
+            f"{leader_xg:.2f} expected goals against {trailer_xg:.2f}, which looks "
+            f"like territory converted until the split is applied: "
+            f"only {beaten.not_chasing_xg:.2f} of it was made before they fell "
+            f"behind. The ground was held for most of the afternoon and used for "
+            f"a fraction of it."
         )
     else:
         heading = "The ground was held, and it paid"
@@ -424,10 +477,14 @@ def _finding_territory(m: _Match) -> Finding | None:
         f": {_ratio(100 * boxes, thirds):.0f}% of the entries survived the last "
         f"twenty metres" if thirds else ""
     )
+    # Espanyol entered Real Madrid's box once, and the sentence read "arrived
+    # in the box 1 times". Counts on a single match are small often enough that
+    # the plural has to be derived rather than assumed.
     second = (
-        f"The funnel is where it becomes concrete. {tilt_leader} reached the final third "
-        f"{int(thirds)} times and the penalty area {int(boxes)}{survived}. "
-        f"{tilt_trailer} arrived in the box {int(other_boxes)} times. Reaching the final "
+        f"The entry counts make it concrete. {tilt_leader} reached the final third "
+        f"{int(thirds)} {_plural(int(thirds), 'time')} and the penalty area "
+        f"{int(boxes)}{survived}. {tilt_trailer} arrived in the box "
+        f"{int(other_boxes)} {_plural(int(other_boxes), 'time')}. Reaching the final "
         f"third is a function of having the ball; reaching the box is a function of "
         f"having somewhere to put it."
     )
@@ -496,15 +553,19 @@ def _finding_quality(m: _Match) -> Finding | None:
         )
     else:
         # "On volume there was little in it" was printed even when one side had
-        # out-shot the other by a third, contradicting the clause after the dash.
-        lead_in = ("On volume there was little in it"
-                   if volume_level else "One side shot more")
+        # out-shot the other by a third, contradicting the clause after the
+        # dash. Naming the leader fixed that and introduced two more: "One side
+        # shot more — Man Utd shot more often, 21 to 8" says it twice, and "On
+        # what those shots were worth there was a great deal" lost the noun the
+        # phrase needs once its opposite number was gone.
+        lead_in = (f"On volume there was little in it — {volume}"
+                   if volume_level else volume)
         opening = (
-            f"{lead_in} — {volume}. On what those shots were "
-            f"worth there was a great deal: {quality_leader} averaged {best:.3f} expected "
-            f"goals a shot, {quality_trailer} {worst:.3f}."
-            + (f" One side's average attempt was worth {ratio:.1f} times the other's."
-               if ratio >= 1.5 else "")
+            f"{lead_in}. What the attempts were worth is where the two separate: "
+            f"{quality_leader} averaged {best:.3f} expected goals a shot, "
+            f"{quality_trailer} {worst:.3f}."
+            + (f" {quality_leader}'s average attempt carried {ratio:.1f} times the "
+               f"value of {quality_trailer}'s." if ratio >= 1.5 else "")
         )
     home_ot, away_ot = _num(m.hx, "on_target"), _num(m.ax, "on_target")
     home_xgot, away_xgot = _num(m.hx, "xGoT"), _num(m.ax, "xGoT")
@@ -789,13 +850,21 @@ def _finding_press(m: _Match) -> Finding | None:
             f"cost, and it is the half of the press most often left unmeasured."
         )
     else:
+        # The transition section carries the same two rates a few paragraphs
+        # earlier, and both sections used to close on the four-seconds
+        # sentence — the same finding, in near-identical prose, twice in one
+        # article. Every finding runs, so the repetition was guaranteed rather
+        # than occasional. This paragraph keeps the numbers, because the press
+        # is where they cost something, and takes a different reading of them.
         third = (
             f"It was not paid for. {presser} turned {presser_rate:.1f}% of regains into "
             f"a shot; {other} managed {other_rate:.1f}% from fewer of them." + ppda +
-            f" The four seconds after a high regain are when an opponent "
-            f"is at its most stretched and has nobody arranged between the ball and the "
-            f"goal; a side that wins it there and takes a touch to settle has spent the "
-            f"advantage it just spent ninety minutes manufacturing."
+            f" That is the press paying for itself in territory and not in threat. "
+            f"Winning the ball {int(presser_hr)} {_plural(int(presser_hr), 'time')} "
+            f"in the opponent's half is a "
+            f"physical cost carried for ninety minutes, and the return on it is "
+            f"settled in the pass immediately after the regain — which is a "
+            f"rehearsable pattern, not a matter of intent."
         )
     return Finding("press", (m.gap(home_hr, away_hr) * 0.8) or 0.10, Section(
         "Two presses, cancelling out" if level else "The press, and what it was worth",
@@ -939,17 +1008,30 @@ BUILDERS = (
 # --------------------------------------------------------------------------
 
 def _title(m: _Match) -> tuple[str, str]:
-    """The headline, taken from whatever actually separated the two sides.
+    """The headline, taken from whatever actually separated the two sides."""
+    _strength, headline, standfirst = max(_title_candidates(m),
+                                          key=lambda row: row[0])
+    return headline, standfirst
+
+
+def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
+    """Every headline this match supports, with the weight that ranks it.
 
     There used to be three titles in the whole file — one per result shape — so
     every ordinary win was published as "How X Took Y Apart" and the headline
     said nothing a reader could not see in the scoreline.
 
-    Each candidate below owns a condition and a strength. The strongest
-    condition writes the headline, which means two matches share a title only
-    when the same thing decided them by the same margin. It is varied because
-    matches differ, not because anything is random: the same fixture always
-    produces the same headline.
+    Each candidate owns a condition and a strength. The strongest condition
+    writes the headline, which means two matches share a title only when the
+    same thing decided them by the same margin. It is varied because matches
+    differ, not because anything is random: the same fixture always produces
+    the same headline.
+
+    Split out from the choosing so the weighting can be measured across a set
+    of fixtures rather than inspected one headline at a time. Ranking bugs here
+    do not raise — they publish, which is how "X Won The Match In The Broken
+    Moments" reached six of fifteen articles, three of them naming a side that
+    had not won.
     """
     candidates: list[tuple[float, str, str]] = []
 
@@ -967,8 +1049,8 @@ def _title(m: _Match) -> tuple[str, str]:
         offer(3.4,
               f"{m.loser}'s xG Is A Chase, Not A Performance",
               f"{result}. {beaten.chasing_xg:.2f} of {m.loser}'s {beaten.xg:.2f} "
-              f"expected goals arrived while they were behind; level, they made "
-              f"{beaten.level_xg:.2f}.")
+              f"expected goals arrived while they were behind; before that, "
+              f"{beaten.not_chasing_xg:.2f}.")
     elif m.winner and not xg_level and xg_leader != m.winner:
         offer(3.0,
               f"{m.loser} Won Everything But The Match",
@@ -993,12 +1075,24 @@ def _title(m: _Match) -> tuple[str, str]:
         thirds = _num(side_row, "final_third_entries")
         return _ratio(100 * _num(side_row, "box_entries"), thirds) if thirds else 0.0
 
+    # "The Last Twenty Metres Decided It" named neither side, so the five
+    # matches it won were published under one identical headline — and it won
+    # them because an 8-point tolerance is met in thirteen fixtures out of
+    # fifteen, on a scale whose real gaps run to forty. Naming the two sides
+    # makes the same finding read as five different headlines, and the wider
+    # tolerance keeps it for the matches where the gap actually separated them.
+    #
+    # Ranked on the points between the two rates rather than m.gap of them:
+    # 4.5% against 32% and 14% against 52% are both a ratio near 0.75, and only
+    # one of them is a difference worth a headline.
     home_survival, away_survival = survival(m.hm), survival(m.am)
     if min(home_survival, away_survival) > 0:
-        better, worse, survival_level = m.lead(home_survival, away_survival, tolerance=8.0)
+        better, worse, survival_level = m.lead(home_survival, away_survival,
+                                               tolerance=BOX_SURVIVAL_POINTS)
         if not survival_level:
-            offer(1.0 + m.gap(home_survival, away_survival),
-                  "The Last Twenty Metres Decided It",
+            points = abs(home_survival - away_survival)
+            offer(0.9 + points / 40,
+                  f"{better} Reached The Box. {worse} Reached The Edge Of It.",
                   f"{result}. {better} turned "
                   f"{m.of(better, home_survival, away_survival):.0f}% of its "
                   f"final-third entries into the box; {worse} "
@@ -1008,7 +1102,12 @@ def _title(m: _Match) -> tuple[str, str]:
     home_per, away_per = _num(m.hx, "xG_per_shot"), _num(m.ax, "xG_per_shot")
     home_shots, away_shots = _num(m.hx, "shots"), _num(m.ax, "shots")
     quality, blunt, quality_level = m.lead(home_per, away_per, tolerance=0.02)
-    if not quality_level and m.of(quality, home_shots, away_shots) < m.of(blunt, home_shots, away_shots):
+    # Not for a side that was beaten heavily. "Monza Shot Less And Meant It
+    # More" is true of the per-shot numbers and indefensible as the headline
+    # of a 4-1 defeat: a reader meets the claim before the scoreline.
+    beaten_badly = quality == m.loser and abs(m.home_goals - m.away_goals) >= 3
+    if (not quality_level and not beaten_badly
+            and m.of(quality, home_shots, away_shots) < m.of(blunt, home_shots, away_shots)):
         offer(1.1 + m.gap(home_per, away_per),
               f"{quality} Shot Less And Meant It More",
               f"{result}. {quality} averaged "
@@ -1016,15 +1115,71 @@ def _title(m: _Match) -> tuple[str, str]:
               f"against {m.of(blunt, home_per, away_per):.3f}, from fewer shots.")
 
     # -- broken play ------------------------------------------------------
+    #
+    # Two things were wrong here and each produced a headline that was false.
+    #
+    # The claim named whoever led on transition xG and said they "won the
+    # match", which is not a fact this candidate has: Monza led the turnovers
+    # and lost 4-1, Liverpool led them and drew. A headline may only assert a
+    # result the result supports — and "won the match in the broken moments"
+    # asserts more than that. Juventus led the transition xG and won 1-0 with
+    # transition_goals of zero: Bremer's header settled it, so the match was
+    # not won there whatever the threat map says. The strong wording is held
+    # for a side that actually scored from a turnover.
+    #
+    # The strength was m.gap of the two figures — a ratio between two small
+    # numbers, which is near 1 in almost every match. 0.12 against 0.85 scores
+    # 0.86, so this candidate sat at ~1.86 every time and took the headline in
+    # six of fifteen fixtures, over findings that actually decided them. What
+    # makes transition the story is how much of a side's own threat arrived
+    # that way, so that is what ranks it now.
     home_txg, away_txg = _num(m.hm, "transition_xG"), _num(m.am, "transition_xG")
     if max(home_txg, away_txg) >= 0.5:
         breaker, held, transition_level = m.lead(home_txg, away_txg, tolerance=0.25)
-        if not transition_level:
-            offer(0.9 + m.gap(home_txg, away_txg),
-                  f"{breaker} Won The Match In The Broken Moments",
-                  f"{result}. Transitions were worth "
-                  f"{m.of(breaker, home_txg, away_txg):.2f} expected goals to "
-                  f"{breaker} and {m.of(held, home_txg, away_txg):.2f} to {held}.")
+        breaker_txg = m.of(breaker, home_txg, away_txg)
+        share = _ratio(breaker_txg, m.of(breaker, m.home_xg, m.away_xg))
+        reading = (f"{result}. Transitions were worth {breaker_txg:.2f} expected "
+                   f"goals to {breaker} and "
+                   f"{m.of(held, home_txg, away_txg):.2f} to {held} — "
+                   f"{share:.0%} of everything {breaker} built.")
+        scored_there = _num(m.of(breaker, m.hm, m.am), "transition_goals") >= 1
+        if not transition_level and share >= TRANSITION_SHARE:
+            if breaker == m.winner and scored_there:
+                offer(0.9 + share,
+                      f"{breaker} Won The Match In The Broken Moments", reading)
+            elif breaker == m.winner:
+                # Led the turnovers and won, but the goals came from somewhere
+                # else: a claim about where the threat was, not about the win.
+                offer(0.8 + share,
+                      f"{breaker}'s Threat Lived In The Turnovers", reading)
+            else:
+                # Still worth the headline — a side whose threat was almost all
+                # turnovers played a particular way — but it did not win, so
+                # the sentence must not say it did.
+                offer(0.7 + share,
+                      f"{breaker} Broke Well And Still Did Not Win", reading)
+
+    # -- chances a side had to keep making ---------------------------------
+    #
+    # Nothing here read big chances, and for a match like Frosinone 0-1
+    # Juventus that is the whole story: four clear openings, one taken, a 1.97
+    # to 0.50 expected-goals win that finished a goal apart. The combined-xG
+    # candidate misses it because it sums both sides and the totals came to
+    # 2.47 against one goal, four hundredths under its bar.
+    for side, other in ((m.home, m.away), (m.away, m.home)):
+        row = m.hx if side == m.home else m.ax
+        big, goals = _num(row, "big_chances"), _num(row, "goals")
+        wasted = big - goals
+        if big >= 3 and wasted >= 2:
+            # Spelled out and stated as a count, because "Needed Every One Of
+            # Those Chances" reads as though the side took them — which is the
+            # opposite of what this candidate fires on.
+            offer(1.2 + wasted / 8,
+                  f"{side} Took {_spell(int(goals)).capitalize()} Of "
+                  f"{_spell(int(big)).capitalize()} Big Chances",
+                  f"{result}. {side} worked {big:.0f} big chances and took "
+                  f"{goals:.0f}, which is the difference between the margin "
+                  f"they had and the one the match was played at.")
 
     # -- an early goal that removed the level phase ------------------------
     if m.first_goal and m.first_goal[2] <= 2 and m.winner:
@@ -1049,8 +1204,15 @@ def _title(m: _Match) -> tuple[str, str]:
               f"{scored}, so the scoreline understates what was built.")
 
     # -- a one-sided scoreline --------------------------------------------
-    if m.winner and abs(m.home_goals - m.away_goals) >= 3:
-        offer(0.85,
+    #
+    # Weighted by the margin rather than fixed at 0.85. A seven-goal win is not
+    # the same event as a three-goal one, and at a flat weight Casa Pia 0-7
+    # Benfica was published under "The Finishing Outran The Football" — a
+    # headline that names neither side, for the most one-sided result in the
+    # set.
+    margin = abs(m.home_goals - m.away_goals)
+    if m.winner and margin >= 3:
+        offer(0.85 + (margin - 3) * 0.25,
               f"{m.winner} Made It Look Simple",
               f"{result}, and the margin was not an accident. This is where it "
               f"came from.")
@@ -1067,9 +1229,7 @@ def _title(m: _Match) -> tuple[str, str]:
               f"{result}. Almost nothing else about the match was level.")
     offer(0.1, f"{m.home} vs {m.away}, Read From The Data",
           f"{result}. What the match record says about how it happened.")
-
-    strength, headline, standfirst = max(candidates, key=lambda row: row[0])
-    return headline, standfirst
+    return candidates
 
 
 def _cover_image(out_dir: Path) -> Path | None:
@@ -1107,8 +1267,28 @@ def _cover_image(out_dir: Path) -> Path | None:
 
 
 def _closing(m: _Match, used: list[str]) -> Section:
+    """The last word, which has to be the same word the opening used.
+
+    This read the raw expected-goals lead and nothing else, so an article
+    headlined "Man Utd's xG Is A Chase, Not A Performance" closed by handing
+    Man Utd the performance: the opening argued from the game-state split and
+    the closing argued from the total, and the two disagreed inside one piece.
+    The verdict is the single source both ends now read.
+    """
     leader, _trailer, level = m.lead(m.home_xg, m.away_xg, tolerance=0.15)
-    if m.winner and not level and leader != m.winner:
+    chased = m.verdict is not None and m.verdict.loser_was_only_chasing
+    if m.winner and chased:
+        beaten = m.verdict.of(m.loser)
+        first = (
+            f"{m.loser}'s expected-goals total is the number this match will be "
+            f"quoted by, and it is the one to distrust. {beaten.chasing_xg:.2f} of "
+            f"{beaten.xg:.2f} arrived once the game had already gone against them, "
+            f"against a side that had stopped defending the same way. Before that "
+            f"they made {beaten.not_chasing_xg:.2f}. {m.winner} won the part of the "
+            f"night that was played on equal terms, and that is the part that "
+            f"carries into the next one."
+        )
+    elif m.winner and not level and leader != m.winner:
         first = (
             f"None of this makes {m.winner}'s win undeserved in any sense that matters "
             f"to a league table. Results are the currency and they took the points. But "
@@ -1126,6 +1306,25 @@ def _closing(m: _Match, used: list[str]) -> Section:
             f"A draw hides more than any other result. On this evidence the two sides "
             f"were not the same team for ninety minutes, whatever the scoreline says."
         )
+    # A chase makes the full-time gap the wrong one to measure. The comparison
+    # is the level phase only: the winner's not_chasing_xg includes whatever
+    # they built once ahead, so quoting it as "level" both overstates them and
+    # disagrees with the game-state section, which prints the drawing figure.
+    if chased:
+        winner_level = m.verdict.of(m.winner).level_only_xg
+        loser_level = m.verdict.of(m.loser).level_only_xg
+        second = (
+            f"One match is never a verdict, and the totals here will read as a "
+            f"closer one than it was. The split is the durable part: with the "
+            f"score level, {m.winner} created {winner_level:.2f} and {m.loser} "
+            f"{loser_level:.2f}. What is worth carrying forward is whether "
+            f"{m.loser} can build that volume against a side that is still "
+            f"defending its own half, because that is the version of the question "
+            f"the next opponent will ask."
+        )
+        return Section("What to take from it", [first, second],
+                       m.visual("14_post_match_advanced_dashboard.png"))
+
     gap = m.gap(m.home_xg, m.away_xg)
     if gap >= 0.35:
         second = (

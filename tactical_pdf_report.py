@@ -553,7 +553,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
             f"{beaten.team} finished on {beaten.xg:.2f} xG against "
             f"{c['home_xG'] if verdict.winner == home else c['away_xG']:.2f}, but "
             f"{beaten.chasing_xg:.2f} of it — {100 * beaten.chasing_share:.0f}% — "
-            f"came while behind. Level, they created {beaten.level_xg:.2f}."))
+            f"came while behind. Before that, {beaten.not_chasing_xg:.2f}."))
 
     return {
         "Match Story": {
@@ -2162,7 +2162,7 @@ class TacticalPDF:
             beaten = verdict.of(loser)
             return (f"{loser}'s xG is a chase, not a performance. "
                     f"{100 * beaten.chasing_share:.0f}% of it arrived behind; "
-                    f"level, they created {beaten.level_xg:.2f}.")
+                    f"before that, {beaten.not_chasing_xg:.2f}.")
         return (f"{loser} created the better chances and lost. "
                 f"{winner} needed fewer of them and took them.")
 

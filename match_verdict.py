@@ -47,13 +47,20 @@ class SideVerdict:
 
     team: str
     xg: float
-    level_xg: float          # created while the match was level or ahead
+    # Called level_xg until an article printed "level, the two sides created
+    # 1.63 and 0.11" for a Hull side that made 0.56 of that 1.63 while ahead —
+    # and printed 1.07 as their level-state figure two sections earlier. The
+    # quantity is everything created before falling behind, which is the right
+    # complement to chasing_xg; the name now says so, and seven sentences that
+    # called it "level" were reworded off the back of it.
+    not_chasing_xg: float    # created while level or ahead
     chasing_xg: float        # created while behind
     chasing_share: float
     xg_per_shot: float
     big_chances: int
     box_entries: int
     final_third_entries: int
+    level_only_xg: float = 0.0   # created with the score level, nothing else
 
     @property
     def was_chasing(self) -> bool:
@@ -68,7 +75,7 @@ class SideVerdict:
         show from the level phase means the total is a record of the deficit,
         not of a performance.
         """
-        return self.was_chasing and self.level_xg < LEVEL_XG_FLOOR
+        return self.was_chasing and self.not_chasing_xg < LEVEL_XG_FLOOR
 
     @property
     def chances_were_thin(self) -> bool:
@@ -83,7 +90,8 @@ def _side_verdict(team: str, metrics, xg_row) -> SideVerdict:
     return SideVerdict(
         team=str(team),
         xg=total,
-        level_xg=leading + drawing,
+        not_chasing_xg=leading + drawing,
+        level_only_xg=drawing,
         chasing_xg=trailing,
         chasing_share=_ratio(trailing, total),
         xg_per_shot=_number(xg_row.get("xG_per_shot")),
