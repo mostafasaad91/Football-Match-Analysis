@@ -225,15 +225,66 @@ def test_no_machine_string_reaches_the_page(out):
                 f"'None' inside a sentence: {body[:160]}")
 
 
+ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b")
+
+
+def _plural_offenders(texts) -> list[str]:
+    found = []
+    for text in texts:
+        for hit in ONE_PLURAL.finditer(str(text)):
+            if not hit.group(0).endswith(("ss", "ess")):
+                found.append(hit.group(0))
+    return sorted(set(found))
+
+
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_no_count_of_one_is_printed_as_a_plural(out):
     article, _frames, _info = _article(out)
-    offenders = []
-    for text in _paragraphs(article) + [article.title, article.standfirst]:
-        for found in re.finditer(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b", text):
-            if not found.group(0).endswith(("ss", "ess")):
-                offenders.append(found.group(0))
-    assert not offenders, sorted(set(offenders))
+    assert not _plural_offenders(
+        _paragraphs(article) + [article.title, article.standfirst])
+
+
+@pytest.mark.parametrize("out", FIXTURES, ids=IDS)
+def test_the_report_writers_agree_with_their_own_counts(out):
+    """The article's own prose was clean; the readings under it were not.
+
+    A 1-0 shipped "the match produced 1 goals" from six separate sentences in
+    tactical_pdf_report, none of which reached for the _count helper that has
+    been in that module since the player pages were fixed for the same thing.
+    Every fixture the older tests used had scored at least twice, so the branch
+    was never taken.
+
+    This sweeps every function that writes words for a board or a card, over
+    every match on disk — which is the only combination that would have caught
+    it.
+    """
+    from tactical_pdf_report import (
+        _legacy_visual_explanation,
+        _section_copy,
+        build_context,
+        visual_data_read,
+        visual_explanation,
+        visual_implication,
+    )
+
+    _article_, frames, info = _article(out)
+    context = build_context(*frames, info)
+
+    boards = sorted(out.glob("[0-9]*.png"))
+    radars = out / "player_radars"
+    if radars.exists():
+        boards += sorted(radars.glob("*/*.png"))
+
+    texts = []
+    for writer in (visual_explanation, visual_implication, visual_data_read,
+                   _legacy_visual_explanation):
+        texts += [writer(path, context) for path in boards]
+    for section in _section_copy(context).values():
+        texts += [t for _, t in
+                  section.get("performance", []) + section.get("data", [])]
+        texts.append(str(section.get("implication", "")))
+
+    assert not _plural_offenders(texts)
 
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)

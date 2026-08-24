@@ -471,19 +471,24 @@ def _section_copy(c: dict) -> dict[str, dict]:
     # the other way. Each now reads its own figures first.
     goals_total = c["home_goals"] + c["away_goals"]
     xg_total = c["home_xG"] + c["away_xG"]
+    # A 1-0 reads "the match produced 1 goals". Six separate sentences in this
+    # module formatted the total the same way and none reached for _count,
+    # which has been here since the player pages were fixed for it. Nothing
+    # caught it because every fixture under test had scored at least twice.
+    scoreline = _count(goals_total, "goal", "goals")
     if goals_total > xg_total + 0.4:
         finishing_card = ("Finishing ran hot", (
-            f"The match produced {goals_total} goals from {xg_total:.2f} combined xG, so "
+            f"The match produced {scoreline} from {xg_total:.2f} combined xG, so "
             f"execution ran ahead of the chances created. Conversion is the noisiest part "
             f"of a match and the least likely to repeat."))
     elif goals_total < xg_total - 0.4:
         finishing_card = ("Finishing ran cold", (
-            f"The match produced {goals_total} goals from {xg_total:.2f} combined xG, so the "
+            f"The match produced {scoreline} from {xg_total:.2f} combined xG, so the "
             f"chances created were not fully taken. The attacking processes were better than "
             f"the scoreline records."))
     else:
         finishing_card = ("Finishing tracked the chances", (
-            f"The match produced {goals_total} goals from {xg_total:.2f} combined xG, so "
+            f"The match produced {scoreline} from {xg_total:.2f} combined xG, so "
             f"conversion neither flattered nor hid either performance. The underlying numbers "
             f"can be read close to face value."))
 
@@ -808,7 +813,7 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
     if "xg_flow" in stem:
         return (
             f"The cumulative curve shows {away} finishing on {context['away_xG']:.2f} xG against {home}'s {context['home_xG']:.2f}. "
-            f"Because the match produced {context['home_goals'] + context['away_goals']} goals from {context['home_xG'] + context['away_xG']:.2f} combined xG, the scoreline contains a large execution component. "
+            f"Because the match produced {_count(context['home_goals'] + context['away_goals'], 'goal', 'goals')} from {context['home_xG'] + context['away_xG']:.2f} combined xG, the scoreline contains a large execution component. "
             "Read each step with the goal markers to separate sustained chance creation from finishing variance."
         )
     if "goals_breakdown" in stem:
@@ -908,7 +913,7 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
         )
     if "box_entries" in stem and side:
         return (
-            f"{team} entered the box {int(context[f'{side}_box_entries'])} times but converted {context[f'{side}_box_entry_to_shot_rate']:.1f}% of those entries into shots. "
+            f"{team} entered the box {_count(context[f'{side}_box_entries'], 'time', 'times')} but converted {context[f'{side}_box_entry_to_shot_rate']:.1f}% of those entries into shots. "
             "Separate controlled entries with support from isolated carries or forced passes. The main improvement target is the decision immediately after entry: shoot, cut back, recycle or secure the second phase."
         )
     if "pass_network" in stem and side:
@@ -1059,12 +1064,17 @@ def visual_explanation(path: Path, context: dict) -> str:
         # match, including three goals from 2.96 combined xG.
         scored = context["home_goals"] + context["away_goals"]
         expected = context["home_xG"] + context["away_xG"]
+        # A 1-0 printed "1 goals came from 1.36 xG". _count already exists in
+        # this module for exactly this and was not reached for here, which is
+        # how the same defect the player pages were fixed for reappeared on the
+        # goalkeeper board.
+        goals = _count(scored, "goal", "goals")
         if scored > expected + 0.75:
-            conversion = f"{scored} goals ran well ahead of the {expected:.2f} xG the chances were worth"
+            conversion = f"{goals} ran well ahead of the {expected:.2f} xG the chances were worth"
         elif scored < expected - 0.75:
-            conversion = f"{scored} goals fell short of the {expected:.2f} xG the chances were worth"
+            conversion = f"{goals} fell short of the {expected:.2f} xG the chances were worth"
         else:
-            conversion = f"{scored} goals came from {expected:.2f} xG, close to par"
+            conversion = f"{goals} came from {expected:.2f} xG, close to par"
         return (
             "This page separates goalkeeper influence from the defensive workload in front of the goalkeeper. Save count alone can reward a keeper for facing several routine attempts, whereas post-shot quality asks how difficult the shots became after placement and power were known. "
             f"The two goalkeepers faced a match in which {conversion}, so the analysis must distinguish defensive access, finishing execution and actual shot-stopping. "
@@ -1426,7 +1436,8 @@ def visual_explanation(path: Path, context: dict) -> str:
             f"from which a player can shoot, slide a runner in behind, or force a centre-back to "
             f"step out and open the space he was occupying. It is the single most valuable place "
             f"to receive and the hardest to occupy repeatedly. "
-            f"{team} reached the final third {int(context[f'{side}_final_third_entries'])} times "
+            f"{team} reached the final third "
+            f"{_count(context[f'{side}_final_third_entries'], 'time', 'times')} "
             f"and the penalty area {int(context[f'{side}_box_entries'])}; these receptions are "
             f"most of the explanation for the gap between those two numbers. "
             f"What makes the reception work is what is happening around it. Without a runner "
@@ -1684,14 +1695,15 @@ def visual_data_read(path: Path, context: dict) -> str:
         bottom = context["home_xG"] if xg_trailer == home else context["away_xG"]
         scored = context["home_goals"] + context["away_goals"]
         expected = context["home_xG"] + context["away_xG"]
+        tally = _count(scored, "goal", "goals")
         if scored > expected + 0.4:
-            finishing = (f"The {scored} goals ran ahead of the combined {expected:.2f} xG, so "
+            finishing = (f"The {tally} ran ahead of the combined {expected:.2f} xG, so "
                          f"finishing widened the score gap beyond the underlying chance gap.")
         elif scored < expected - 0.4:
-            finishing = (f"The {scored} goals fell short of the combined {expected:.2f} xG, so "
+            finishing = (f"The {tally} fell short of the combined {expected:.2f} xG, so "
                          f"the scoreline understates what the chances were worth.")
         else:
-            finishing = (f"The {scored} goals came from a combined {expected:.2f} xG, so the "
+            finishing = (f"The {tally} came from a combined {expected:.2f} xG, so the "
                          f"scoreline and the chances created say the same thing.")
         opening = (
             f"Both sides attempted {int(context['home_shots'])} and "
@@ -1704,7 +1716,7 @@ def visual_data_read(path: Path, context: dict) -> str:
     if "goals_breakdown" in stem:
         first = context["goal_rows"][0] if context["goal_rows"] else None
         first_line = f"{first['team']} scored first {_goal_moment(first)}" if first else "The game remained level early"
-        return f"{first_line}; the match then produced {context['home_goals'] + context['away_goals']} goals. The sequence and assist fields locate the decisive actions, but the score-state split is required before comparing full-match possession or pressure totals."
+        return f"{first_line}; the match then produced {_count(context['home_goals'] + context['away_goals'], 'goal', 'goals')}. The sequence and assist fields locate the decisive actions, but the score-state split is required before comparing full-match possession or pressure totals."
     if "goalkeeper" in stem:
         return (
             f"{home} and {away} produced {int(context['home_on_target'])} and {int(context['away_on_target'])} on-target attempts, with {context['home_xGoT']:.2f} and {context['away_xGoT']:.2f} xGoT. "
@@ -1777,7 +1789,7 @@ def visual_data_read(path: Path, context: dict) -> str:
         return f"{team} attempted {attempts} crosses and completed {completed} ({rate:.1f}%). Completion is a limited measure; shot creation and the position of the next defensive action determine whether the delivery was tactically productive."
     if "box_entries" in stem and side:
         return (
-            f"{team} reached the box {int(context[f'{side}_box_entries'])} times, with {context[f'{side}_box_entry_to_shot_rate']:.1f}% becoming shots. "
+            f"{team} reached the box {_count(context[f'{side}_box_entries'], 'time', 'times')}, with {context[f'{side}_box_entry_to_shot_rate']:.1f}% becoming shots. "
             "The conversion rate is the useful denominator because it distinguishes access from a controlled final action."
         )
     if "pass_network" in stem and side:
@@ -1878,9 +1890,11 @@ def visual_data_read(path: Path, context: dict) -> str:
         )
     if "win_probability" in stem:
         return (
-            f"The curve is driven by the {context['home_goals'] + context['away_goals']} "
-            f"goals and the {context['home_xG'] + context['away_xG']:.2f} combined xG behind "
-            f"them, priced as they arrived. It carries no information the shot record does "
+            f"The curve is driven by the "
+            f"{_count(context['home_goals'] + context['away_goals'], 'goal', 'goals')} "
+            f"and the {context['home_xG'] + context['away_xG']:.2f} combined xG behind "
+            f"{'it' if context['home_goals'] + context['away_goals'] == 1 else 'them'}, "
+            f"priced as they arrived. It carries no information the shot record does "
             f"not, so treat it as a readable summary of sequence rather than as evidence "
             f"of its own."
         )
@@ -1894,7 +1908,9 @@ def visual_data_read(path: Path, context: dict) -> str:
         )
     if "goal_origins" in stem:
         return (
-            f"{context['home_goals'] + context['away_goals']} goals are traced here, of "
+            f"{_count(context['home_goals'] + context['away_goals'], 'goal', 'goals')} "
+            f"{'is' if context['home_goals'] + context['away_goals'] == 1 else 'are'} "
+            f"traced here, of "
             f"which {int(context['home_transition_goals']) + int(context['away_transition_goals'])} "
             f"began as a transition. With a handful of events the classification matters "
             f"more than the count: check each origin against the footage before treating "
