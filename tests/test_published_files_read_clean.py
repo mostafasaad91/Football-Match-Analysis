@@ -68,12 +68,18 @@ def _text(path: Path) -> str:
 ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b")
 MACHINE = re.compile(r"\b(nan|NaN|inf)\b|\{\w+\}|\s\|\s")
 
-# The report's running footer is "PAGE 01 | REAL MATCH EVENTS", so a pipe is
-# page furniture there and a leaked machine string anywhere else. Dropping the
-# rule for PDFs would give up the check that put it here — a pipe-delimited
-# timeline printed as a sentence — so the chrome is removed and the rest is
-# still scanned.
-CHROME = re.compile(r"^\s*PAGE \d+\s*\|.*$", re.MULTILINE)
+# The report's running footer carries a pipe, so one is page furniture there
+# and a leaked machine string anywhere else. Dropping the rule for PDFs would
+# give up the check that put it here — a pipe-delimited timeline printed as a
+# sentence — so the chrome is removed and the rest is still scanned.
+#
+# The footer takes two forms and the first version of this only knew one:
+# section pages read "MATCH STORY  |  PAGE 05" and the plates between them read
+# "PAGE 23  |  REAL MATCH EVENTS". Both are upper case, both are one line, and
+# nothing in the prose is either.
+CHROME = re.compile(
+    r"^\s*(?:PAGE \d+\s*\|\s*[A-Z ]+|[A-Z][A-Z ]+\|\s*PAGE \d+)\s*$",
+    re.MULTILINE)
 
 
 def _prose_only(text: str) -> str:

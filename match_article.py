@@ -164,6 +164,13 @@ class _Match:
         self.away_goals = int(_num(self.ax, "goals"))
         self.home_xg, self.away_xg = _num(self.hx, "xG"), _num(self.ax, "xG")
         self.score = f"{self.home_goals}–{self.away_goals}"
+        # "Leeds beat Nottingham Forest 0–1" shipped in four of fifteen
+        # standfirsts: the sentence names the winner first and self.score is
+        # fixed in home-away order, so an away win printed the winner's total
+        # second and read as though they had scored none. Any sentence that
+        # names the winner first uses this instead.
+        self.winner_score = (f"{max(self.home_goals, self.away_goals)}–"
+                             f"{min(self.home_goals, self.away_goals)}")
 
         self.first_goal = self._first_goal(events)
 
@@ -1039,18 +1046,25 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
         if strength > 0:
             candidates.append((strength, headline, standfirst))
 
-    result = f"{m.winner} beat {m.loser} {m.score}" if m.winner else \
+    result = f"{m.winner} beat {m.loser} {m.winner_score}" if m.winner else \
              f"{m.home} and {m.away} finished {m.score}"
 
     # -- the result against the process ----------------------------------
     xg_leader, _xg_trailer, xg_level = m.lead(m.home_xg, m.away_xg, tolerance=0.15)
     if m.verdict is not None and m.verdict.loser_was_only_chasing:
         beaten = m.verdict.of(m.loser)
+        # Southampton created every one of their 1.40, and the sentence read
+        # "1.40 of Southampton's 1.40 expected goals" — arithmetically right
+        # and not how the finding would be said out loud.
+        split = (f"All {beaten.xg:.2f} of {m.loser}'s expected goals arrived "
+                 f"while they were behind"
+                 if beaten.not_chasing_xg < 0.005 else
+                 f"{beaten.chasing_xg:.2f} of {m.loser}'s {beaten.xg:.2f} "
+                 f"expected goals arrived while they were behind; before that, "
+                 f"{beaten.not_chasing_xg:.2f}")
         offer(3.4,
               f"{m.loser}'s xG Is A Chase, Not A Performance",
-              f"{result}. {beaten.chasing_xg:.2f} of {m.loser}'s {beaten.xg:.2f} "
-              f"expected goals arrived while they were behind; before that, "
-              f"{beaten.not_chasing_xg:.2f}.")
+              f"{result}. {split}.")
     elif m.winner and not xg_level and xg_leader != m.winner:
         offer(3.0,
               f"{m.loser} Won Everything But The Match",

@@ -108,6 +108,31 @@ def test_no_headline_awards_a_win_the_result_did_not(out):
         f"'{article.title}' names {named}; {winner} won {goals}")
 
 
+@pytest.mark.parametrize("out", FIXTURES, ids=IDS)
+def test_a_sentence_naming_the_winner_first_prints_their_goals_first(out):
+    """"Leeds beat Nottingham Forest 0–1" shipped in four of fifteen articles.
+
+    The standfirst names the winner first and the score was held in home-away
+    order, so every away win read as though the winner had scored none. Four
+    fixtures took that branch and none of them was under test.
+    """
+    article, (_events, xg, _tm, _pm), _info = _article(out)
+    goals = {str(r["team"]): int(r["goals"]) for _, r in xg.iterrows()}
+    if len(set(goals.values())) < 2:
+        return
+    winner = max(goals, key=goals.get)
+    loser = min(goals, key=goals.get)
+
+    pattern = re.compile(
+        rf"{re.escape(winner)} beat {re.escape(loser)} (\d+)[–—-](\d+)")
+    for text in _paragraphs(article) + [article.standfirst]:
+        for found in pattern.finditer(text):
+            first, second = int(found.group(1)), int(found.group(2))
+            assert (first, second) == (goals[winner], goals[loser]), (
+                f"'{found.group(0)}' — {winner} scored {goals[winner]}, "
+                f"{loser} {goals[loser]}")
+
+
 def test_two_matches_do_not_share_a_headline():
     """Six of fifteen carried "Won The Match In The Broken Moments"."""
     titles = [_article(out)[0].title for out in FIXTURES]
