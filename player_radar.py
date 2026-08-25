@@ -110,7 +110,7 @@ def group_palette(n_groups: int) -> list[str]:
     return [_hue_at_page_contrast(hue) for hue in hues[:n_groups]]
 
 
-def _hue_at_page_contrast(hue: float) -> str:
+def _hue_at_page_contrast(hue: float, saturation: float | None = None) -> str:
     """One hue, darkened or lightened until it carries its weight on the page.
 
     Walks away from the page rather than towards it — dark ink on a light page,
@@ -119,10 +119,12 @@ def _hue_at_page_contrast(hue: float) -> str:
     """
     import colorsys
 
+    if saturation is None:
+        saturation = GROUP_SATURATION
     step = -0.02 if IS_LIGHT_THEME else 0.02
     level = GROUP_LIGHTNESS
     best = mcolors.to_hex(
-        colorsys.hls_to_rgb(hue / 360.0, level, GROUP_SATURATION))
+        colorsys.hls_to_rgb(hue / 360.0, level, saturation))
     for _ in range(40):
         try:
             if contrast_ratio(best, BG_DARK) >= GROUP_PAGE_CONTRAST:
@@ -131,8 +133,142 @@ def _hue_at_page_contrast(hue: float) -> str:
             return best
         level = min(max(level + step, 0.06), 0.94)
         best = mcolors.to_hex(
-            colorsys.hls_to_rgb(hue / 360.0, level, GROUP_SATURATION))
+            colorsys.hls_to_rgb(hue / 360.0, level, saturation))
     return best
+
+
+# ── One fixture, two palettes ────────────────────────────────────────────────
+#
+# Both sides drew from the same five colours, so nothing on a radar said which
+# team the player belonged to except the crest in the header. Two pages side by
+# side were indistinguishable.
+#
+# Each side's five hues are now rotated a little way towards its own kit, which
+# gives one page a warm cast and the other a cool one while leaving the five
+# groups in the same order, the same spacing and the same meaning. The reader
+# learns the key once.
+#
+# The whole wheel turns by one angle per side, rather than each hue being
+# pulled towards the kit on its own. Pulling individually collapses the wheel —
+# and it also fails at the thing it is for: a hue sitting opposite both kits
+# reaches the cap from both, so Hull's defence came out #6dcf8b and Manchester
+# United's #6ece8b, the same colour by two routes. Turning the wheel keeps the
+# five groups exactly as far apart as they were and moves both sides' palettes
+# by a difference that can be guaranteed.
+#
+# Mixing in RGB was the other candidate and is worse still: 35% of amber into a
+# blue gives an olive grey.
+TEAM_TINT_SHARE = 0.5      # fraction of the way from the anchor hue to the kit
+TEAM_TINT_MAX = 34.0       # ...but never further than this, in degrees
+TEAM_TINT_SATURATION = 0.10  # how much of the kit's saturation is carried over
+
+# How far apart the two sides' wheels are held. Below this the two pages read
+# as the same palette with a slightly different mood, which is not a difference
+# a reader glancing at two radars would notice.
+TEAM_OFFSET_MIN_GAP = 40.0
+
+# Two clubs can wear the same colour. Hull's amber sits 31° from Manchester
+# United's red, so tinting each towards its own kit would have produced two
+# palettes a reader could not tell apart — the exact problem this is for. When
+# the kits are closer than this the two casts are pushed apart symmetrically,
+# so the fixture always yields two distinguishable pages even in a derby.
+TEAM_CAST_MIN_GAP = 70.0
+
+
+def _hue_of(color: str, fallback: float = 36.0) -> float:
+    import colorsys
+
+    try:
+        r, g, b = mcolors.to_rgb(color)
+    except (ValueError, TypeError):
+        return fallback
+    hue, _lightness, saturation = colorsys.rgb_to_hls(r, g, b)
+    # A near-grey kit has no hue to speak of; rotating towards its arbitrary
+    # value would tint the page at random, so it stays where it is.
+    return fallback if saturation < 0.08 else hue * 360.0
+
+
+def _saturation_of(color: str, fallback: float = 0.5) -> float:
+    import colorsys
+
+    try:
+        r, g, b = mcolors.to_rgb(color)
+    except (ValueError, TypeError):
+        return fallback
+    _hue, _lightness, saturation = colorsys.rgb_to_hls(r, g, b)
+    return saturation
+
+
+def _signed_gap(a: float, b: float) -> float:
+    """Shortest signed rotation from a to b, in degrees."""
+    return (b - a + 180.0) % 360.0 - 180.0
+
+
+def cast_hues(home_color: str, away_color: str) -> tuple[float, float]:
+    """The hue each side's palette leans towards, held apart from each other."""
+    home = _hue_of(home_color, 36.0)
+    away = _hue_of(away_color, 212.0)
+    gap = _signed_gap(home, away)
+    if abs(gap) >= TEAM_CAST_MIN_GAP:
+        return home, away
+    # Push both, not one, so neither side is the one that gets moved off its
+    # own kit while the other keeps it.
+    push = (TEAM_CAST_MIN_GAP - abs(gap)) / 2.0
+    direction = 1.0 if gap >= 0 else -1.0
+    return (home - direction * push) % 360.0, (away + direction * push) % 360.0
+
+
+def fixture_hue_offsets(home_color: str, away_color: str) -> tuple[float, float]:
+    """How far each side's wheel turns, guaranteed to differ.
+
+    The turn is read off the first group's hue against the kit, so a warm kit
+    turns the wheel warm and a cool one turns it cool. Two kits close enough to
+    produce nearly the same turn are pushed apart, because two palettes a
+    reader cannot separate is the failure this exists to prevent.
+    """
+    home_cast, away_cast = cast_hues(home_color, away_color)
+    anchor = GROUP_HUES[0]
+
+    def turn(cast: float) -> float:
+        return float(np.clip(_signed_gap(anchor, cast) * TEAM_TINT_SHARE,
+                             -TEAM_TINT_MAX, TEAM_TINT_MAX))
+
+    home, away = turn(home_cast), turn(away_cast)
+    gap = away - home
+    if abs(gap) < TEAM_OFFSET_MIN_GAP:
+        push = (TEAM_OFFSET_MIN_GAP - abs(gap)) / 2.0
+        direction = 1.0 if gap >= 0 else -1.0
+        home, away = home - direction * push, away + direction * push
+    return home, away
+
+
+def group_palette_for(offset: float, kit_color: str,
+                      n_groups: int) -> list[str]:
+    """The five group colours with one side's turn applied to all of them."""
+    hues = list(GROUP_HUES)
+    while len(hues) < n_groups:
+        hues.append((hues[-1] + 360.0 / max(n_groups, 1)) % 360.0)
+
+    # A saturated kit lifts the whole page a little, which is as much of the
+    # club's own colour as the wedges should carry: they are spent saying which
+    # group an action belongs to.
+    kit_saturation = _saturation_of(kit_color, GROUP_SATURATION)
+    saturation = float(np.clip(
+        GROUP_SATURATION * (1 - TEAM_TINT_SATURATION)
+        + kit_saturation * TEAM_TINT_SATURATION, 0.30, 0.70))
+
+    return [_hue_at_page_contrast((hue + offset) % 360.0, saturation)
+            for hue in hues[:n_groups]]
+
+
+def fixture_group_palettes(home_color: str, away_color: str,
+                           n_groups: int) -> dict[str, list[str]]:
+    """Both sides' palettes, built together so they cannot collide."""
+    home_offset, away_offset = fixture_hue_offsets(home_color, away_color)
+    return {
+        "home": group_palette_for(home_offset, home_color, n_groups),
+        "away": group_palette_for(away_offset, away_color, n_groups),
+    }
 
 
 def team_group_colors(team_color: str, n_groups: int) -> list[str]:
@@ -239,10 +375,20 @@ GROUPS = [
 # INTERCEP/TIONS, which reads as a typesetting fault rather than a label. The
 # keys are load-bearing (they index the metric dictionaries and the percentile
 # lookups), so the repair happens at draw time: same key, readable label.
+#
+# Three more were added when the labels stopped wrapping. On one line, the
+# longest names reach back from the arc far enough to sit on the value ring:
+# "BIG CH. CREATED", "FINAL 3RD PASSES" and "SHOT-CR. ACTIONS" all ran into
+# their own numbers. Each has a shorter form that is a real phrase rather than
+# a truncation, which is a better label anyway — "BIG CH. CREATED" was already
+# an abbreviation nobody says out loud.
 _LABEL_OVERRIDES = {
     "Clear\nances": "CLEARANCES",
     "Recov\neries": "RECOVERIES",
     "Intercep\ntions": "INTERCEPTS",
+    "Big ch.\ncreated": "BIG CHANCES",
+    "Final 3rd\npasses": "FINAL THIRD",
+    "Shot-cr.\nactions": "SHOT-CREATING",
 }
 
 
@@ -417,6 +563,37 @@ def _chip_style(chip: str, group: str, percentile: float, zero: bool) -> dict:
         "bbox": dict(boxstyle="round,pad=0.22", fc="none",
                      ec=_mix(group, BG_DARK, 0.45), lw=0.9),
     }
+
+
+def _spoke_rotation(angle: float) -> tuple[float, bool]:
+    """Degrees to rotate text so it runs along its own spoke, and whether the
+    spoke points left.
+
+    The axis is drawn with theta zero at twelve o'clock running clockwise, so a
+    stored angle of 0 is straight up. Text on the left half is flipped end for
+    end and anchored on its right, which keeps every word reading left to right
+    instead of upside down.
+    """
+    screen = (np.pi / 2) - angle          # matplotlib's own frame
+    degrees = np.degrees(screen) % 360.0
+    # bool(), not the numpy scalar np.degrees hands back: callers and
+    # tests compare it with `is True` / `is False`.
+    flipped = bool(90.0 < degrees < 270.0)
+    spin = degrees - 180.0 if flipped else degrees
+    # Normalised to (-180, 180]. matplotlib takes 350 and -10 alike, but one of
+    # them is readable in a traceback and the other is not.
+    return float((spin + 180.0) % 360.0 - 180.0), flipped
+
+
+def _spoke_label(label: str) -> str:
+    """One line, because a rotated spoke has the room the ring did not.
+
+    The two-line wrapping existed to stop horizontal names colliding at twelve
+    o'clock. Rotated labels run outward, so the wrap only made them shorter and
+    harder to read: "BIG CH.\\nCREATED" over two lines is a worse word than
+    "BIG CH. CREATED" along one.
+    """
+    return display_label(label).replace("\n", " ")
 
 
 def _mix(color: str, towards: str, amount: float) -> str:
@@ -1230,19 +1407,35 @@ def _player_role(events: pd.DataFrame, player: str, default="Player") -> str:
 
 def make_player_pizza(
     events, player, team_name, role, allm, elig, subtitle_extra="", opponent_name="",
-    team_color=None,
+    team_color=None, opponent_color=None, side="home",
 ):
     """Build and return the pizza Figure for one player.
 
-    ``team_color`` paints the whole radar in the player's team colour, one
-    lightness step per metric group. Omit it to keep the legacy fixed palette.
+    ``team_color`` and ``opponent_color`` decide which way this side's five
+    group colours lean. Both are needed, not just the player's: the two casts
+    are held apart from each other, so a fixture between two red teams still
+    produces two pages a reader can tell apart. Omit them and the untinted
+    palette is used.
     """
     me_m = player_metrics(events, player)
 
-    # One colour per group, not five steps of the team's. The kit still names
-    # the player's side in the header, on the crest and in the rule beneath it;
-    # the wedges are spent telling attack from defence instead.
-    group_colors = group_palette(len(GROUPS))
+    # One colour per group, not five steps of the team's: five shades of one
+    # kit asks the reader to compare lightness to tell a tackle from a through
+    # ball. The kit decides which way all five lean instead, which names the
+    # side without spending the encoding.
+    if team_color and opponent_color:
+        # ``side`` rather than argument order. Reading the pair as "mine first"
+        # works only while the two kits differ: two white shirts have no hue to
+        # read, both fall back to the same value, and the away radar was drawn
+        # in the home palette — the one case where telling the sides apart
+        # matters most and nothing else on the page does it.
+        home_kit = opponent_color if side == "away" else team_color
+        away_kit = team_color if side == "away" else opponent_color
+        offsets = fixture_hue_offsets(home_kit, away_kit)
+        offset = offsets[1] if side == "away" else offsets[0]
+        group_colors = group_palette_for(offset, team_color, len(GROUPS))
+    else:
+        group_colors = group_palette(len(GROUPS))
 
     labels, colors, vals, disps, pcts, gidx = [], [], [], [], [], []
     for gi, (_gn, _gc, ms) in enumerate(GROUPS):
@@ -1280,10 +1473,23 @@ def make_player_pizza(
     width = np.radians(per) * 0.90
     gap_mid = np.radians((cur + 360) / 2)
 
-    # RVAL sat five units from RLAB, so a two-line label such as CLEARANCES
-    # crowded its own tile. The value moves in towards the ring and the
-    # name stays put, which opens the gap without pushing the arc out.
-    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 110, 132, 142, 156
+    # Every label and every chip used to be drawn horizontally on a ring. That
+    # is fine at three o'clock and unreadable at twelve: two-line names stack
+    # towards the arc above them and the chip below, so "GRD DUELS WON" sat on
+    # the violet arc and "5 / 12" sat on "DUELS WON". Nudging the radii only
+    # moved the collision somewhere else, because the crowding is a property of
+    # horizontal text on a circle, not of the gap between two rings.
+    #
+    # Both now rotate with their own spoke. The spacing between neighbours is
+    # then constant in angle at every clock position, and no two can overlap
+    # however many metrics the radar carries.
+    # Labels grow inwards from RLAB rather than outwards from it. Outward, a
+    # long name such as "FINAL 3RD PASSES" ran through the arc, and pushing the
+    # arc out far enough to clear it left the plot itself small in a wide ring
+    # of empty page. Inward, every label ends flush against the arc whatever
+    # its length, the long ones reach back across space that was empty anyway,
+    # and the plot keeps the room.
+    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 107, 156, 164, 174
 
     fig = plt.figure(figsize=(12, 12.6), facecolor=BG_DARK)
     ax = fig.add_axes([0.06, 0.035, 0.88, 0.735], projection="polar")
@@ -1359,18 +1565,23 @@ def make_player_pizza(
     chip_by_group = dict(zip(group_colors, chip_fills(group_colors)))
     for a, lab, dv, p, c, v in zip(angs, labels, disps, pcts, colors, vals):
         chip = chip_by_group.get(c, _chip_fill(c))
+        spin, flipped = _spoke_rotation(a)
         ax.text(
             a,
             RLAB,
-            display_label(lab),
+            _spoke_label(lab),
             color=TEXT_BRIGHT,
-            fontsize=8.6,
+            fontsize=9.4,
             fontweight="bold",
             family="monospace",
-            ha="center",
+            rotation=spin,
+            rotation_mode="anchor",
+            # Inverted from the usual outward anchoring: the text ends at RLAB
+            # and runs back towards the centre, so every label is flush with
+            # the arc no matter how long it is.
+            ha="left" if flipped else "right",
             va="center",
             zorder=5,
-            linespacing=0.9,
             clip_on=False,
         )
 
@@ -1385,9 +1596,14 @@ def make_player_pizza(
             RVAL,
             dv,
             color=style["color"],
-            fontsize=9,
+            fontsize=10.4,
             fontweight=style["weight"],
             family="monospace",
+            # Deliberately not rotated. A turned label is still a word and the
+            # eye rights it; a turned number is not — "0.01" on the lower arc
+            # read as "10.0" upside down. Numbers stay level at every clock
+            # position, and the rotated labels outside them are what buys the
+            # room that used to force them to collide.
             ha="center",
             va="center",
             zorder=7,
@@ -1684,6 +1900,9 @@ def export_player_radars(events, info, out_dir, dpi=115):
                     events, p, team_name, role, allm, elig,
                     opponent_name=str(opponent or ""),
                     team_color=_side_team_color(info, side),
+                    opponent_color=_side_team_color(
+                        info, "away" if side == "home" else "home"),
+                    side=side,
                 )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
@@ -1728,6 +1947,9 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     events, p, team_name, role, allm, elig,
                     opponent_name=str(opponent or ""),
                     team_color=_side_team_color(info, side),
+                    opponent_color=_side_team_color(
+                        info, "away" if side == "home" else "home"),
+                    side=side,
                 )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
@@ -1753,6 +1975,9 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     subtitle_extra=f"Team rank #{rank}",
                     opponent_name=str(opp[side]),
                     team_color=_side_team_color(info, side),
+                    opponent_color=_side_team_color(
+                        info, "away" if side == "home" else "home"),
+                    side=side,
                 )
                 try:
                     note = player_commentary(
