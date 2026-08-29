@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1983557/live/england-premier-league-2026-2027-crystal-palace-manchester-city",
+    "https://www.whoscored.com/matches/1983546/live/england-premier-league-2026-2027-arsenal-coventry",
 ).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -4496,6 +4496,48 @@ def _build_player_meta(players, events, sub_in, sub_out):
     return meta
 
 
+def _formation_spells(home: dict, away: dict) -> list[dict]:
+    """Every shape either side held, with the minutes it lasted.
+
+    The parse kept the starting formation as a string and threw the rest away,
+    so nothing downstream could say a side changed shape on the hour. The feed
+    carries a row per spell — name, start minute, end minute — and a change of
+    shape is the most basic tactical fact a match report can state.
+
+    Consecutive spells with the same name are merged: the provider opens a new
+    row for a substitution even when the shape does not move, so a side that
+    played 4-2-3-1 throughout could otherwise appear to have changed twice.
+    """
+    spells: list[dict] = []
+    for side, team in (("home", home), ("away", away)):
+        merged: list[dict] = []
+        for spell in team.get("formations") or []:
+            name = str(spell.get("formationName") or "").strip()
+            if not name:
+                continue
+            start = int(spell.get("startMinuteExpanded") or 0)
+            end = int(spell.get("endMinuteExpanded") or start)
+            # The eleven on the pitch for this spell, in formation order. The
+            # feed gives a jersey number per squad member and a slot per one:
+            # slot 1 is the goalkeeper and 2..11 run back to front. Kept as
+            # shirt numbers rather than names so the export stays a table of
+            # facts, and the poster resolves them against players.csv.
+            jerseys = spell.get("jerseyNumbers") or []
+            slots = spell.get("formationSlots") or []
+            on_pitch = {int(slot): int(shirt)
+                        for shirt, slot in zip(jerseys, slots) if slot}
+            lineup = ",".join(str(on_pitch[s]) for s in sorted(on_pitch))
+
+            if merged and merged[-1]["formation"] == name:
+                merged[-1]["end_minute"] = end
+                continue
+            merged.append({"side": side, "formation": name,
+                           "start_minute": start, "end_minute": end,
+                           "shirt_numbers": lineup})
+        spells.extend(merged)
+    return spells
+
+
 def _extract_match_date(md: dict) -> str:
     """The KICK-OFF date of the match (not the report date), pulled from
     WhoScored's matchCentreData. Tries the several keys the feed uses and
@@ -4539,6 +4581,13 @@ def parse_all(md: dict):
         "date": _extract_match_date(md),
         "home_form": (home.get("formations") or [{}])[0].get("formationName", "N/A"),
         "away_form": (away.get("formations") or [{}])[0].get("formationName", "N/A"),
+        # Only the starting shape was kept, and only as a string. The provider
+        # sends every formation either side held, with the minute it started
+        # and the minute it ended, and nothing downstream could say a side
+        # changed shape on the hour — the most basic tactical fact in a match.
+        "formations": _formation_spells(home, away),
+        "managers": {"home": str(home.get("managerName") or ""),
+                     "away": str(away.get("managerName") or "")},
         "matchcentre_stats": _extract_matchcentre_stats(md),
     }
     pnames = {int(k): v for k, v in md.get("playerIdNameDictionary", {}).items()}
@@ -12875,6 +12924,18 @@ def main():
         index=False,
         encoding="utf-8-sig",
     )
+    # The shapes each side held and when they changed. events.csv carries a
+    # FormationChange row but only the qualifier *names*, not their values, so
+    # the shape itself never left the parse. Exported beside the other frames
+    # so a package is self-contained: the posters read this file and skip the
+    # panel when a fixture predates it.
+    spells = (info or {}).get("formations") or []
+    if spells:
+        pd.DataFrame(spells).to_csv(
+            os.path.join(SAVE_DIR, "formations.csv"),
+            index=False,
+            encoding="utf-8-sig",
+        )
 
     # Append this fixture to the persistent history so questions spanning more
     # than one match are answerable. Re-analysing the same fixture replaces its

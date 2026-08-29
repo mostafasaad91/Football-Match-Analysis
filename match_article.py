@@ -51,6 +51,35 @@ TRANSITION_SHARE = 0.35
 # forty, so the old eight-point bar was met in almost every match.
 BOX_SURVIVAL_POINTS = 15.0
 
+# Thresholds for the tactical findings, set from the spread across every
+# rendered fixture rather than picked. Each was chosen to fire on roughly the
+# top third: a condition met in every match is not a finding, and one met in
+# none is a branch nobody reads.
+#
+#   directness gap   0.4 → 39.5 across nineteen fixtures
+#   cross gap          1 → 24
+#   rest-defence gap 0.0 → 14.6
+#   attacking-touch    0 → 19
+DIRECTNESS_POINTS = 22.0
+CROSS_VOLUME = 12.0
+REST_DEFENCE_POINTS = 9.0
+ATTACKING_TOUCH_POINTS = 9.0
+
+# The same readings, as sections rather than as headlines, and the bar is
+# lower. A headline has to be the single strongest thing about a match; a
+# section only has to be worth three paragraphs, and a piece that says nothing
+# about how a side moved the ball because the gap was seventeen points rather
+# than twenty-two has left the reader worse informed to protect a title.
+#
+# Set at roughly the median gap across the rendered fixtures, so each reading
+# appears in about half of them. Arsenal 3-0 Coventry — a match with no sharp
+# pattern anywhere — took none of the five at the headline thresholds and
+# published the same body it always had.
+SECTION_DIRECTNESS = 14.0
+SECTION_CROSS_VOLUME = 6.0
+SECTION_REST_DEFENCE = 4.0
+SECTION_ATTACKING_TOUCH = 5.0
+
 
 # --------------------------------------------------------------------------
 # reading the frames
@@ -172,7 +201,9 @@ class _Match:
         self.winner_score = (f"{max(self.home_goals, self.away_goals)}–"
                              f"{min(self.home_goals, self.away_goals)}")
 
+        self._home_id = info.get("home_id", self.hm.get("team_id"))
         self.first_goal = self._first_goal(events)
+        self.goal_origins = self._goal_origins(events)
 
         # Whether each side's xG describes a performance or a deficit. Read
         # once, here, so the headline and the opening finding cannot disagree
@@ -220,6 +251,34 @@ class _Match:
             return when, _text(row.get("player")), minute
         except Exception:
             return None
+
+    def _goal_origins(self, events) -> dict:
+        """How many of each side's goals started from a dead ball.
+
+        Hull beat Manchester United with a corner and a free kick — every goal
+        in the match came from a restart — and no sentence anywhere in the
+        package could say so, because the headline read the expected-goals
+        totals and the goals log was never asked. match_report has classified
+        goals as Open Play, Set Piece or Penalty all along.
+        """
+        origins = {self.home: {"set": 0, "total": 0},
+                   self.away: {"set": 0, "total": 0}}
+        try:
+            from match_report import classify_goal_type
+
+            goals = events[events["is_goal"] == True]  # noqa: E712
+            for _, row in goals.iterrows():
+                if str(row.get("is_own_goal", "")).lower() == "true":
+                    continue
+                scorer_side = row.get("scoring_team", row.get("team_id"))
+                team = (self.home if scorer_side == self._home_id
+                        else self.away)
+                origins[team]["total"] += 1
+                if classify_goal_type(row, events)[0] in ("Set Piece", "Penalty"):
+                    origins[team]["set"] += 1
+        except Exception:
+            pass
+        return origins
 
     # -- helpers ---------------------------------------------------------
     def lead(self, home_value, away_value, tolerance: float = 0.0):
@@ -1000,12 +1059,227 @@ def _finding_profiles(m: _Match, events) -> Finding | None:
                            visuals, gallery=True))
 
 
+# --------------------------------------------------------------------------
+# the tactical findings
+# --------------------------------------------------------------------------
+#
+# These began as headline candidates and nothing else, which was half a fix.
+# A candidate that lost the headline vanished from the piece entirely, and the
+# one that won contributed a title and a standfirst while the body underneath
+# it — territory, regains, pressing, shooting — was word for word the same
+# article it had always been. The reader got a new sentence on top of an
+# unchanged argument.
+#
+# Each reading is now a section: the figures, and what they mean. The headline
+# still comes from the same conditions, so the piece opens on the finding it
+# then spends three paragraphs on.
+
+
+def _finding_set_pieces(m: _Match) -> Finding | None:
+    """Goals from restarts, which no part of the package could see."""
+    if not m.winner:
+        return None
+    origin = m.goal_origins.get(m.winner, {})
+    dead, total = origin.get("set", 0), origin.get("total", 0)
+    if not total or dead < max(1, total // 2):
+        return None
+
+    share = "every one of" if dead == total else f"{_spell(dead)} of"
+    first = (
+        f"{share} {m.winner}'s {_spell(total)} {_plural(total, 'goal')} came "
+        f"from a dead ball. That is the half of a match a side rehearses on a "
+        f"Thursday, and it arrives whether or not the ninety minutes around it "
+        f"went their way."
+    )
+    second = (
+        "A restart removes almost everything an opponent spends the match "
+        "building. There is no press to play through, no rest defence to "
+        "unbalance, no sequence to interrupt — the ball is stationary, both "
+        "boxes are full, and the contest is reduced to delivery against "
+        "organisation. A side that wins matches this way is not being lucky; "
+        "it is being paid for the part of the week nobody watches."
+    )
+    third = (
+        f"It also changes how the rest of this piece should be read. The "
+        f"territory, the regains and the passing below describe a match whose "
+        f"goals were settled outside them, so the question they answer is not "
+        f"how {m.winner} scored but whether they would have without the "
+        f"restarts — and on this evidence, the honest answer is that nothing "
+        f"else on the page produced a goal."
+    )
+    return Finding("set_pieces", 1.1 + dead * 0.25, Section(
+        f"{m.winner} scored from the dead ball",
+        [first, second, third],
+        m.visual("04_goals_breakdown.png", "44_set_piece_map.png")))
+
+
+def _finding_directness(m: _Match) -> Finding | None:
+    """Two different answers to the same pitch."""
+    home, away = _num(m.hm, "directness"), _num(m.am, "directness")
+    if not max(home, away):
+        return None
+    longer, shorter, level = m.lead(home, away, tolerance=SECTION_DIRECTNESS)
+    if level:
+        return None
+
+    long_value = m.of(longer, home, away)
+    short_value = m.of(shorter, home, away)
+    first = (
+        f"{longer} moved the ball forward {long_value:.0f}% of the distance it "
+        f"travelled; {shorter} {short_value:.0f}%. That is not a small "
+        f"stylistic difference — it is two sides answering the same pitch in "
+        f"opposite ways."
+    )
+    second = (
+        f"Directness is the share of a pass's length that goes towards the "
+        f"goal rather than across the pitch. A high figure means the ball is "
+        f"being sent at the opposition rather than around them: fewer touches "
+        f"between winning it and testing them, and fewer players involved on "
+        f"the way. It buys speed and it costs control, and which of those a "
+        f"side wanted is usually visible in where they were trying to win the "
+        f"ball back."
+    )
+    third = (
+        f"The thing to check against it is what each route produced. A direct "
+        f"side that arrives in the box is playing to a plan; a direct side "
+        f"that keeps conceding possession in midfield is being forced. The "
+        f"entry counts in this piece separate the two, and they are the "
+        f"paragraph {longer}'s afternoon should be judged on."
+    )
+    return Finding("directness", 0.9 + abs(home - away) / 55, Section(
+        f"{longer} went long, {shorter} went through it",
+        [first, second, third],
+        m.visual("18_pass_length_profile.png", "12_progressive_passes.png")))
+
+
+def _finding_crosses(m: _Match) -> Finding | None:
+    """Volume from wide that did not become a clear chance."""
+    home, away = _num(m.hm, "crosses"), _num(m.am, "crosses")
+    crosser, other, level = m.lead(home, away, tolerance=SECTION_CROSS_VOLUME)
+    if level:
+        return None
+    row = m.hx if crosser == m.home else m.ax
+    big = _num(row, "big_chances")
+    if big > 2:
+        return None
+
+    delivered = m.of(crosser, home, away)
+    completed = m.of(crosser, _num(m.hm, "completed_crosses"),
+                     _num(m.am, "completed_crosses"))
+    first = (
+        f"{crosser} sent {delivered:.0f} crosses in and completed "
+        f"{completed:.0f} of them, and the whole afternoon of width produced "
+        f"{_spell(int(big))} big {_plural(int(big), 'chance')}. "
+        f"{other} crossed {m.of(other, home, away):.0f} times."
+    )
+    second = (
+        "A cross is the cheapest way into a penalty area and the least "
+        "reliable. It concedes the first contact to whoever is tallest and "
+        "best positioned, which in a defending box is almost always a "
+        "defender, and it ends the possession either way. Volume from wide is "
+        "usually a symptom rather than a plan: the route through the middle "
+        "has closed, the ball keeps arriving at the touchline, and the man "
+        "with it has nothing else to do with it."
+    )
+    third = (
+        f"The corrective is upstream of the delivery, not in it. More accurate "
+        f"crossing from the same positions changes very little; occupying the "
+        f"box before the ball is struck, or finding the pass inside that makes "
+        f"the cross unnecessary, changes the value of every one that follows. "
+        f"{crosser}'s box entries in this piece are the number that says which "
+        f"of those was missing."
+    )
+    return Finding("crosses", 0.85 + delivered / 80, Section(
+        f"{crosser} worked the width and it stayed there",
+        [first, second, third],
+        m.visual("21_crosses.png", "25_box_entries.png")))
+
+
+def _finding_rest_defence(m: _Match) -> Finding | None:
+    """What it cost to commit bodies."""
+    home = _num(m.hm, "rest_defence_vulnerability")
+    away = _num(m.am, "rest_defence_vulnerability")
+    exposed, solid, level = m.lead(home, away, tolerance=SECTION_REST_DEFENCE)
+    if level or not max(home, away):
+        return None
+
+    high = m.of(exposed, home, away)
+    low = m.of(solid, home, away)
+    first = (
+        f"{high:.1f}% of {exposed}'s losses in the opponent's half turned into "
+        f"a dangerous counter, against {low:.1f}% for {solid}. That gap is the "
+        f"bill for committing bodies, and it comes due whether or not the "
+        f"press that sent them forward worked."
+    )
+    second = (
+        "Rest defence is the shape a side keeps while it is attacking — who "
+        "stays, how square they are, and how far they are from the ball when "
+        "it is lost. It is the least watched part of an attack and the one "
+        "that decides what a turnover costs. A side can be excellent at "
+        "winning the ball high and still lose a match on the fifteen seconds "
+        "after it loses the ball high."
+    )
+    third = (
+        f"Read it against what {exposed} took from the same risk. Committing "
+        f"more players is a trade, not a mistake: it buys sustained pressure "
+        f"and sells the space behind. The transition numbers in this piece are "
+        f"the other half of that trade, and they say whether {exposed} were "
+        f"paid for it."
+    )
+    return Finding("rest_defence", 0.95 + abs(home - away) / 35, Section(
+        f"{exposed} left the space behind them",
+        [first, second, third],
+        m.visual("32_rest_defence.png", "45_sequence_types.png")))
+
+
+def _finding_camp(m: _Match) -> Finding | None:
+    """One side living in the other's half."""
+    home, away = _num(m.hm, "touch_att_pct"), _num(m.am, "touch_att_pct")
+    camped, pinned, level = m.lead(home, away, tolerance=SECTION_ATTACKING_TOUCH)
+    if level or not max(home, away):
+        return None
+
+    high, low = m.of(camped, home, away), m.of(pinned, home, away)
+    camp_xg = m.of(camped, m.home_xg, m.away_xg)
+    first = (
+        f"{high:.0f}% of {camped}'s touches came in the attacking third, "
+        f"against {low:.0f}% for {pinned}. Territory that one-sided decides "
+        f"what the match looked like from the stand; it does not decide what "
+        f"it produced, and {camped} finished on {camp_xg:.2f} expected goals."
+    )
+    second = (
+        f"A side pinned this deep is not necessarily under pressure. Dropping "
+        f"the block concedes the ball in front of it and defends the space "
+        f"that matters, which is why possession in the final third and threat "
+        f"from it come apart so often. The question is what {camped} did with "
+        f"the ground they were given: whether the extra touches arrived in the "
+        f"box or died on the edge of it."
+    )
+    third = (
+        f"For {pinned}, the same figure reads as a plan rather than a "
+        f"surrender if the counters were worth something. A team that spends "
+        f"the match in its own half and takes what it gets from four "
+        f"transitions has played a different game from one that spends it "
+        f"there and never leaves — and the transition numbers below are where "
+        f"those two separate."
+    )
+    return Finding("camp", 0.9 + abs(home - away) / 40, Section(
+        f"{camped} spent the match in {pinned}'s half",
+        [first, second, third],
+        m.visual("19_field_tilt.png", "26_zone_control.png")))
+
+
 BUILDERS = (
     _finding_territory,
     _finding_quality,
     _finding_game_state,
     _finding_transition,
     _finding_press,
+    _finding_set_pieces,
+    _finding_directness,
+    _finding_crosses,
+    _finding_rest_defence,
+    _finding_camp,
     _finding_player,
 )
 
@@ -1013,6 +1287,25 @@ BUILDERS = (
 # --------------------------------------------------------------------------
 # assembly
 # --------------------------------------------------------------------------
+
+def cover_headline(events, xg, team_metrics, player_metrics, info) -> str:
+    """The article's headline, for the report's cover to open on too.
+
+    The report had no tactical line anywhere on its front — the card says what
+    the totals were and nothing said what the match was — while the article
+    beside it opened on a sentence derived from these same frames. Two
+    documents describing one match should not disagree about what it was, so
+    both read this.
+
+    Returns "" rather than raising: a cover with a generic subtitle beats no
+    cover at all.
+    """
+    try:
+        match = _Match(events, xg, team_metrics, player_metrics, info, ".")
+        return _title(match)[0]
+    except Exception:
+        return ""
+
 
 def _title(m: _Match) -> tuple[str, str]:
     """The headline, taken from whatever actually separated the two sides."""
@@ -1194,6 +1487,95 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
                   f"{result}. {side} worked {big:.0f} big chances and took "
                   f"{goals:.0f}, which is the difference between the margin "
                   f"they had and the one the match was played at.")
+
+    # -- how the goals were actually scored ---------------------------------
+    #
+    # Fifteen fixtures produced fifteen different headlines and only five
+    # different sentences: the same template with the names and figures swapped
+    # in. All five read the same handful of totals — expected goals, shots, box
+    # entries — so a match decided by two corners and a match decided by an
+    # hour of pressure came out phrased identically.
+    #
+    # These read what the match did rather than what it added up to. Each
+    # picks out a different set of fixtures, which is the test of whether a
+    # candidate is saying anything: a condition that fires everywhere is not a
+    # finding.
+    if m.winner:
+        origin = m.goal_origins.get(m.winner, {})
+        dead, total = origin.get("set", 0), origin.get("total", 0)
+        if total and dead >= max(2, total - total // 2):
+            how = ("every goal" if dead == total
+                   else f"{_spell(dead)} of {_spell(total)}")
+            offer(3.2,
+                  f"{m.winner} Won It From Dead Balls",
+                  f"{result}. {how} came from a restart, which is the part of "
+                  f"a match a side can rehearse and the part an opponent can "
+                  f"defend without ever touching the ball in open play.")
+        elif total == 1 and dead == 1:
+            # Named, because two 1-0s decided by a restart would otherwise
+            # share a headline — which is the complaint this whole section is
+            # for.
+            offer(2.6,
+                  f"{m.winner} Needed A Dead Ball To Break It",
+                  f"{result}. Ninety minutes of open play separated nobody; a "
+                  f"restart did.")
+
+    # -- long against patient ----------------------------------------------
+    home_direct = _num(m.hm, "directness")
+    away_direct = _num(m.am, "directness")
+    if max(home_direct, away_direct) > 0:
+        longer, shorter, direct_level = m.lead(home_direct, away_direct,
+                                               tolerance=DIRECTNESS_POINTS)
+        if not direct_level:
+            offer(1.35 + abs(home_direct - away_direct) / 60,
+                  f"{longer} Went Long. {shorter} Went Through It.",
+                  f"{result}. {longer} moved the ball forward "
+                  f"{m.of(longer, home_direct, away_direct):.0f}% of the "
+                  f"distance it travelled, against "
+                  f"{m.of(shorter, home_direct, away_direct):.0f}% — two "
+                  f"different answers to the same pitch.")
+
+    # -- crosses that bought nothing ---------------------------------------
+    home_cross = _num(m.hm, "crosses")
+    away_cross = _num(m.am, "crosses")
+    crosser, _other, cross_level = m.lead(home_cross, away_cross,
+                                          tolerance=CROSS_VOLUME)
+    crosser_big = _num(m.hx if crosser == m.home else m.ax, "big_chances")
+    if not cross_level and crosser_big <= 2:
+        offer(1.4 + m.of(crosser, home_cross, away_cross) / 90,
+              f"{crosser} Crossed And Crossed",
+              f"{result}. {m.of(crosser, home_cross, away_cross):.0f} crosses "
+              f"produced {_spell(int(crosser_big))} big "
+              f"{_plural(int(crosser_big), 'chance')}, which is a route into "
+              f"the box rather than a way through it.")
+
+    # -- the space behind the press ----------------------------------------
+    home_rest = _num(m.hm, "rest_defence_vulnerability")
+    away_rest = _num(m.am, "rest_defence_vulnerability")
+    exposed, solid, rest_level = m.lead(home_rest, away_rest,
+                                        tolerance=REST_DEFENCE_POINTS)
+    if not rest_level:
+        offer(1.45 + abs(home_rest - away_rest) / 40,
+              f"{exposed} Left The Space Behind Them",
+              f"{result}. {m.of(exposed, home_rest, away_rest):.1f}% of "
+              f"{exposed}'s losses in the opponent's half turned into a "
+              f"dangerous counter, against {m.of(solid, home_rest, away_rest):.1f}% "
+              f"for {solid}. That is the bill for committing bodies, and it "
+              f"comes due whether or not the press works.")
+
+    # -- one side living in the other's half --------------------------------
+    home_att = _num(m.hm, "touch_att_pct")
+    away_att = _num(m.am, "touch_att_pct")
+    camped, pinned, camp_level = m.lead(home_att, away_att,
+                                        tolerance=ATTACKING_TOUCH_POINTS)
+    if not camp_level:
+        offer(1.5 + abs(home_att - away_att) / 45,
+              f"{camped} Spent The Match In {pinned}'s Half",
+              f"{result}. {m.of(camped, home_att, away_att):.0f}% of "
+              f"{camped}'s touches came in the attacking third, against "
+              f"{m.of(pinned, home_att, away_att):.0f}%. Territory that "
+              f"one-sided decides what the match looked like; whether it "
+              f"decided the result is the rest of this piece.")
 
     # -- an early goal that removed the level phase ------------------------
     if m.first_goal and m.first_goal[2] <= 2 and m.winner:

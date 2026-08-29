@@ -2387,7 +2387,13 @@ class TacticalPDF:
         if competition:
             c.setFillColor(COVER_META)
             c.setFont(COVER_TEXT, TYPE_COVER_META)
-            c.drawString(COVER_MARGIN, top - 19, _spaced_out("MATCH ANALYSIS"))
+            # The article's own headline, not "MATCH ANALYSIS". The report had
+            # no tactical line anywhere on its front — the card says what the
+            # totals were and nothing said what the match was — while the
+            # article next to it opened on a sentence derived from these same
+            # frames. One finding, both documents, or they drift.
+            c.drawString(COVER_MARGIN, top - 19,
+                         _spaced_out(self._cover_headline()))
         self._cover_logo(PAGE_W - 92, PAGE_H - 22, 64)
 
         head_rule = PAGE_H - COVER_HEAD_DROP
@@ -2426,6 +2432,17 @@ class TacticalPDF:
         c.setFillColor(self.away_color)
         c.rect(PAGE_W / 2, 0, PAGE_W / 2, 5, stroke=0, fill=1)
         self._finish()
+
+    def _cover_headline(self) -> str:
+        """The tactical line, read from the article's own candidates.
+
+        Built from the same frames the card is, so the two documents cannot
+        disagree about what the match was. Falls back to the old wording rather
+        than raising: a report with a generic subtitle is a better outcome than
+        no report.
+        """
+        line = str(self.context.get("headline") or "").strip()
+        return line.upper() if line else "MATCH ANALYSIS"
 
     def _cover_competition(self) -> str:
         """The competition line, read from the fixture rather than typed."""
@@ -3047,6 +3064,17 @@ def build_tactical_pdf(
     context = build_context(events, xg, team_metrics, player_metrics, match_info)
     context["home_color"] = home_hex
     context["away_color"] = away_hex
+    # The article's headline, computed here because this is where the frames
+    # are. The cover reads it off the context; match_article derives it from
+    # the same candidates that write the article's own title.
+    try:
+        from match_article import cover_headline
+
+        context["headline"] = cover_headline(
+            events, xg, team_metrics, player_metrics, match_info)
+    except Exception:
+        context["headline"] = ""
+
     section_copy = _section_copy(context)
     groups = _ordered_section_paths(valid_paths)
     core = [

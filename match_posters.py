@@ -265,27 +265,58 @@ def panel_pass_network(ax, events, players, team_id, colour, *, flip=False):
     _footnote(ax, f"node = touches · {len(links)} completed links")
 
 
+# The trailing figure in each row. NEUTRAL measures 3.0:1 against the black
+# page — under the 4.5:1 floor — and it was carrying one number in every row,
+# so half the table was the hard half to read. Same defect as the report's
+# cover, same fix.
+TABLE_DIM = "#909090"
+
+# A tie is not a win for either side. `home_w >= away_w` and `away_w >= home_w`
+# are both true at equality, so "BIG CHANCES 1 — 1" printed both figures in
+# their club colour, as though each had led the row.
+TIE = 1e-9
+
+
 def panel_stat_table(ax, rows, home_colour, away_colour):
-    """Sixteen indicators, each with the split that produced it."""
+    """Sixteen indicators, each with the split that produced it.
+
+    The label used to sit at y + 0.21 and the bar span y − 0.16 to y − 0.01,
+    which are the same band: every one of the sixteen bars was drawn straight
+    through its own name. The row is now three stacked lanes — name, bar,
+    nothing — with the figures centred on the bar.
+    """
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
     n = len(rows)
     step = 1.0 / n
-    bar_l, bar_r = 0.225, 0.775
+    # One lane per row, not two. Sixteen rows in this panel leave each about
+    # 0.06 of the axes, and a 6.6pt name occupies very nearly that on its own —
+    # so a name above a bar was always going to be a name across a bar, and
+    # moving the two apart by a few hundredths only moved where they met. The
+    # name goes to the left instead, the figures flank the bar, and the row is
+    # a single line with nothing stacked on anything.
+    bar_l, bar_r = 0.585, 0.855
     mid = (bar_l + bar_r) / 2
     half = (bar_r - bar_l) / 2
 
     for i, (label, home_text, away_text, home_w, away_w) in enumerate(rows):
         y = 1.0 - (i + 0.5) * step
-        total = float(home_w) + float(away_w)
-        hs = float(home_w) / total if total else 0.5
-        aws = float(away_w) / total if total else 0.5
+        home_w, away_w = float(home_w), float(away_w)
+        # Scaled against the larger of the two rather than against their sum,
+        # which is what the report's cover does. A share of the total cannot
+        # separate 15 against 3 from 46 against 40: both land near the middle
+        # of their own half. Against the larger, the longer bar always fills
+        # its side and the shorter one is drawn in proportion to it, so eight
+        # times as much looks like eight times as much.
+        bigger = max(abs(home_w), abs(away_w))
+        hs = abs(home_w) / bigger if bigger else 0.5
+        aws = abs(away_w) / bigger if bigger else 0.5
 
-        ax.text(0.5, y + step * 0.21, label.upper(), color=MUTED, fontsize=5.5,
-                fontweight="bold", ha="center", va="center")
-        bar_y = y - step * 0.16
-        bar_h = step * 0.15
+        ax.text(0.012, y, label.upper(), color=MUTED, fontsize=5.9,
+                fontweight="bold", ha="left", va="center")
+        bar_y = y - step * 0.13
+        bar_h = step * 0.26
         ax.add_patch(Rectangle((bar_l, bar_y), bar_r - bar_l, bar_h,
                                facecolor=PANEL, edgecolor="none", zorder=2))
         ax.add_patch(Rectangle((mid - hs * half, bar_y), hs * half, bar_h,
@@ -296,12 +327,22 @@ def panel_stat_table(ax, rows, home_colour, away_colour):
                                bar_h + step * 0.10, facecolor=GRID, edgecolor="none",
                                zorder=4))
 
-        ax.text(0.195, y, home_text, color=home_colour if home_w >= away_w else NEUTRAL,
-                fontsize=7.6, fontweight="bold", ha="right", va="center")
-        ax.text(0.805, y, away_text, color=away_colour if away_w >= home_w else NEUTRAL,
-                fontsize=7.6, fontweight="bold", ha="left", va="center")
+        tied = abs(home_w - away_w) <= TIE
+        home_ink = TABLE_DIM if tied or home_w < away_w else home_colour
+        away_ink = TABLE_DIM if tied or away_w < home_w else away_colour
+        ax.text(bar_l - 0.018, y, home_text, color=home_ink,
+                fontsize=6.8, fontweight="bold", ha="right", va="center")
+        ax.text(bar_r + 0.018, y, away_text, color=away_ink,
+                fontsize=6.8, fontweight="bold", ha="left", va="center")
         if i:
             ax.plot([0.03, 0.97], [1.0 - i * step] * 2, color=GRID, lw=0.4, alpha=0.8)
+
+    # Every row but one reads "more is more". PPDA is passes allowed per
+    # defensive action, so a lower figure is a harder press — the bar is
+    # inverted to match, and the note is what tells a reader why.
+    if any(str(label).upper() == "PPDA" for label, *_ in rows):
+        ax.text(0.5, -0.028, "PPDA = passes allowed per defensive action · lower is a harder press",
+                color=MUTED, fontsize=5.4, style="italic", ha="center", va="top")
 
 
 def panel_shot_map(ax, events, home_id, away_id, home_colour, away_colour):
@@ -954,6 +995,346 @@ def panel_pass_length(ax, events, team_id, colour, name):
 # indicators
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# poster 5: the tactical book
+# --------------------------------------------------------------------------
+#
+# Thirty-six panels across four posters and not one of them said what shape
+# either side lined up in, when a manager changed it, who came on, what the
+# goalkeeper did, or where the fouls and corners fell. All of it is in the
+# feed. These nine panels are the missing half of a match report.
+
+
+def _formation_shape(name: str) -> list[int]:
+    """"4231" as [4, 2, 3, 1]. Anything unreadable draws nothing."""
+    digits = [int(c) for c in str(name) if c.isdigit()]
+    return digits if 2 <= len(digits) <= 5 and sum(digits) == 10 else []
+
+
+# Where each position sits, back to front, and how far across the pitch. The
+# provider's formationSlots are its own layout ids, not a back-to-front reading
+# order, and treating them as one put Declan Rice at left-back and Bukayo Saka
+# in the double pivot. players.csv carries the position each man actually
+# started in, which is the thing being drawn.
+POSITION_ROW = {
+    "GK": 0,
+    "DR": 1, "DC": 1, "DL": 1, "DMR": 1, "DML": 1,
+    "DMC": 2, "MC": 2, "MR": 2, "ML": 2,
+    "AMC": 3, "AMR": 3, "AML": 3,
+    "FW": 4, "FWL": 4, "FWR": 4,
+}
+# Across the pitch, left to right as the reader sees it. The side attacks up
+# the panel, so the team's right is the reader's right: a right-back belongs at
+# the largest x and a left winger at the smallest.
+POSITION_ACROSS = {
+    "DL": 1, "DML": 1, "ML": 1, "AML": 1, "FWL": 1,
+    "DC": 2, "DMC": 2, "MC": 2, "AMC": 2, "FW": 2, "GK": 2,
+    "DR": 3, "DMR": 3, "MR": 3, "AMR": 3, "FWR": 3,
+}
+
+
+def lineup_rows(players, team_id) -> list[list[str]]:
+    """The starting eleven as rows of surnames, keeper first.
+
+    Built from the positions the squad export records rather than from the
+    formation string, so the picture is the eleven who started and where they
+    started — not a shape number with names dealt into it in the wrong order.
+    """
+    columns = getattr(players, "columns", [])
+    if players is None or not {"position", "name", "team_id"} <= set(columns):
+        return []
+    squad = players[players["team_id"].eq(team_id)]
+    if "is_first_xi" in columns:
+        starters = squad[squad["is_first_xi"].astype(str).str.lower().eq("true")]
+        if len(starters) == 11:
+            squad = starters
+    if len(squad) < 11:
+        return []
+
+    rows: dict[int, list[tuple[int, str]]] = {}
+    for _, player in squad.iterrows():
+        code = str(player["position"]).strip()
+        row = POSITION_ROW.get(code)
+        if row is None:
+            continue
+        rows.setdefault(row, []).append(
+            (POSITION_ACROSS.get(code, 2), _surname(str(player["name"]))))
+    if sum(len(v) for v in rows.values()) != 11:
+        return []
+    # Left to right, so the right-back is drawn on the right. Sorting the other
+    # way mirrored every wide player: Ben White at right-back appeared on the
+    # left of the back four and Bukayo Saka on the left of the front three.
+    # Players sharing a slot keep the order the squad listed them in.
+    return [[name for _across, name in sorted(rows[r], key=lambda p: p[0])]
+            for r in sorted(rows)]
+
+
+def panel_formation(ax, spells, side: str, colour, name: str,
+                    players=None, team_id=None):
+    """The starting shape, drawn with its eleven, and every change under it."""
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    mine = [s for s in spells if str(s.get("side")) == side]
+    if not mine:
+        _footnote(ax, "no formation recorded for this fixture")
+        return
+
+    opening = mine[0]
+    shape = _formation_shape(opening.get("formation", ""))
+    ax.text(0.5, 0.95, str(opening.get("formation", "")), color=colour,
+            fontsize=15, fontweight="bold", ha="center", va="center")
+
+    # The eleven who started, drawn where they started. The formation string is
+    # the label; the rows come from the positions, because a shape number with
+    # names dealt into it in slot order put a holding midfielder at left-back.
+    lines = lineup_rows(players, team_id)
+    bands = lines or ([[""] * n for n in ([1] + list(shape))] if shape else [])
+    if bands:
+        # Keeper at the bottom, attack at the top.
+        rows = len(bands)
+        for r, band in enumerate(bands):
+            y = 0.16 + r * (0.62 / max(rows - 1, 1))
+            for i, who in enumerate(band):
+                x = (i + 1) / (len(band) + 1)
+                ax.add_patch(Circle((x, y), 0.028, facecolor=colour,
+                                    edgecolor="none", zorder=3))
+                if who:
+                    # A five-man line leaves each name a fifth of the panel,
+                    # and "Thomas-Asante" beside "Onyeka" ran straight through
+                    # it. The type comes down and a long name is cut at the
+                    # hyphen rather than mid-word.
+                    # A four-man line leaves each name a quarter of the panel
+                    # and a five-man line a fifth, so the room a name has is a
+                    # function of how many share its row: "Calafiori" beside
+                    # "Magalhães" ran into it, and "Thomas-Asante" beside
+                    # "Onyeka" ran through it. Long names are cut at the hyphen
+                    # rather than mid-word.
+                    size = {1: 5.4, 2: 5.2, 3: 5.0}.get(len(band), 4.3)
+                    room = {1: 20, 2: 16, 3: 13}.get(len(band), 9)
+                    label = who.upper()
+                    if len(label) > room:
+                        label = label.split("-")[0][:room]
+                    ax.text(x, y - 0.052, label, color=TEXT, fontsize=size,
+                            fontweight="bold", ha="center", va="center",
+                            zorder=4)
+    changes = mine[1:]
+    if changes:
+        note = " · ".join(
+            f"{s['formation']} from {int(s['start_minute'])}'" for s in changes)
+        ax.text(0.5, 0.045, note, color=MUTED, fontsize=6.0,
+                fontweight="bold", ha="center", va="center")
+    _footnote(ax, f"{name} · shape held for {int(opening.get('end_minute', 0))} minutes")
+
+
+def panel_timeline(ax, events, home_id, away_id, home_colour, away_colour,
+                   home_name, away_name):
+    """Goals, substitutions and cards on one ninety-minute strip."""
+    ax.set_xlim(-3, 100)
+    ax.set_ylim(-1.15, 1.15)
+    ax.axis("off")
+    ax.plot([0, 96], [0, 0], color=GRID, lw=1.0, zorder=1)
+    for minute in (0, 15, 30, 45, 60, 75, 90):
+        ax.plot([minute, minute], [-0.06, 0.06], color=GRID, lw=0.8, zorder=1)
+        ax.text(minute, -0.20, str(minute), color=MUTED, fontsize=5.4,
+                ha="center", va="top")
+    ax.plot([45, 45], [-0.85, 0.85], color=GRID, lw=0.7, ls=(0, (3, 3)), zorder=1)
+
+    marks = {"Goal": ("*", 130), "SubstitutionOn": ("^", 34), "Card": ("s", 26)}
+    kind = events.get("type")
+    if kind is None:
+        return
+    for team_id, colour, up in ((home_id, home_colour, 1), (away_id, away_colour, -1)):
+        side = events[events["team_id"].eq(team_id)]
+        for event_type, (marker, size) in marks.items():
+            rows = side[side["type"].astype(str).eq(event_type)]
+            if event_type == "Goal":
+                own = rows.get("is_own_goal")
+                if own is not None:
+                    rows = rows[~own.astype(str).str.lower().eq("true")]
+            if not len(rows):
+                continue
+            lane = {"Goal": 0.62, "SubstitutionOn": 0.34, "Card": 0.10}[event_type]
+            ax.scatter(pd.to_numeric(rows["minute"], errors="coerce"),
+                       [up * lane] * len(rows), marker=marker, s=size,
+                       color=colour, edgecolors="none", zorder=4)
+    ax.text(-2, 0.62, home_name[:3].upper(), color=home_colour, fontsize=5.6,
+            fontweight="bold", ha="right", va="center")
+    ax.text(-2, -0.62, away_name[:3].upper(), color=away_colour, fontsize=5.6,
+            fontweight="bold", ha="right", va="center")
+    _footnote(ax, "★ goal · ▲ substitution · ■ card")
+
+
+def panel_goalkeeper(ax, events, players, team_id, colour, name):
+    """The keeper's own match: stopping, the box, and distribution."""
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    keeper = ""
+    if players is not None and "position" in getattr(players, "columns", []):
+        found = players[(players["team_id"].eq(team_id))
+                        & (players["position"].astype(str).eq("GK"))]
+        if len(found):
+            keeper = str(found.iloc[0]["name"])
+    if not keeper:
+        _footnote(ax, "no goalkeeper identified")
+        return
+    try:
+        from player_radar import goalkeeper_metrics
+
+        metrics = goalkeeper_metrics(events, keeper)
+    except Exception:
+        metrics = {}
+    if not metrics:
+        _footnote(ax, f"{keeper} · no goalkeeping events recorded")
+        return
+
+    ax.text(0.5, 0.94, keeper.upper(), color=colour, fontsize=7.4,
+            fontweight="bold", ha="center", va="center")
+    # Several metric keys carry the radar's own line break, and an f-string
+    # cannot hold a backslash inside its expression. Read them out first.
+    faced = metrics.get("Shots\nfaced", 0)
+    conceded = metrics.get("Goals\nconceded", 0)
+    long_att = metrics.get("Long\nballs", 0)
+    lines = [
+        ("SAVES", f"{metrics.get('Saves', 0)}"),
+        ("SAVE %", f"{metrics.get('Save %', 0)}%"),
+        ("SHOTS FACED", f"{faced}"),
+        ("CONCEDED", f"{conceded}"),
+        ("CLAIMS · PUNCHES",
+         f"{metrics.get('Claims', 0)} · {metrics.get('Punches', 0)}"),
+        ("SWEEPS", f"{metrics.get('Sweeps', 0)}"),
+        ("PASSES", f"{metrics.get('Passes_comp', 0)}/{metrics.get('Passes', 0)}"),
+        ("LONG BALLS", f"{metrics.get('Longballs_comp', 0)}/{long_att}"),
+    ]
+    step = 0.78 / len(lines)
+    for i, (label, value) in enumerate(lines):
+        y = 0.84 - (i + 0.5) * step
+        ax.text(0.04, y, label, color=MUTED, fontsize=5.9, fontweight="bold",
+                ha="left", va="center")
+        ax.text(0.96, y, value, color=colour, fontsize=7.4, fontweight="bold",
+                ha="right", va="center")
+        if i:
+            ax.plot([0.04, 0.96], [0.84 - i * step] * 2, color=GRID, lw=0.4)
+    _footnote(ax, "post-shot xG is left out until the model is calibrated")
+
+
+def panel_xg_race(ax, events, home_id, away_id, home_colour, away_colour):
+    """Cumulative expected goals, with the real goals marked on the curve."""
+    ax.set_xlim(0, 96)
+    ax.axis("off")
+    shots = events[events.get("is_shot", False).fillna(False).astype(bool)]
+    peak = 0.0
+    for team_id, colour in ((home_id, home_colour), (away_id, away_colour)):
+        mine = shots[shots["team_id"].eq(team_id)].sort_values("minute")
+        if not len(mine):
+            continue
+        minutes = pd.to_numeric(mine["minute"], errors="coerce").fillna(0).tolist()
+        running, total = [], 0.0
+        for value in pd.to_numeric(mine["xG"], errors="coerce").fillna(0):
+            total += float(value)
+            running.append(total)
+        peak = max(peak, total)
+        ax.step([0] + minutes + [95], [0] + running + [total], where="post",
+                color=colour, lw=1.6, zorder=3)
+        goals = mine[mine["is_goal"].astype(str).str.lower().eq("true")]
+        for _, row in goals.iterrows():
+            minute = float(pd.to_numeric(row["minute"], errors="coerce") or 0)
+            at = next((r for m, r in zip(minutes, running) if m >= minute), total)
+            ax.scatter([minute], [at], marker="*", s=95, color=colour,
+                       edgecolors="none", zorder=5)
+    ax.set_ylim(0, max(peak * 1.15, 0.4))
+    for minute in (15, 30, 45, 60, 75, 90):
+        ax.plot([minute, minute], [0, max(peak * 1.15, 0.4)], color=GRID,
+                lw=0.5, zorder=1)
+        ax.text(minute, -peak * 0.05, str(minute), color=MUTED, fontsize=5.4,
+                ha="center", va="top")
+    _footnote(ax, "cumulative xG · star = goal")
+
+
+def panel_dead_ball(ax, events, home_id, away_id, home_colour, away_colour,
+                    home_name, away_name):
+    """Corners, fouls and cards — the match's dead-ball economy."""
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    kind = events.get("type")
+    if kind is None:
+        return
+
+    # A foul, a corner and an aerial are each written twice — once for the
+    # player who committed or lost it and once for the player who won it — so
+    # counting rows by team gave both sides the same figure every time: fouls
+    # 23-23, corners 10-10, aerials 28-28. The outcome is what separates them.
+    def count(team_id, event_type, *, won=None):
+        side = events[events["team_id"].eq(team_id)]
+        rows = side[side["type"].astype(str).eq(event_type)]
+        if won is None or "outcome" not in rows:
+            return int(len(rows))
+        wanted = "Successful" if won else "Unsuccessful"
+        return int(rows["outcome"].astype(str).eq(wanted).sum())
+
+    rows = [
+        # A corner is "awarded" to the side that forced it: Successful for the
+        # attacker, Unsuccessful for the defender who put it out.
+        ("CORNERS WON", "CornerAwarded", True),
+        # A foul is Successful for the player fouled and Unsuccessful for the
+        # one who committed it, so conceding is the unsuccessful half.
+        ("FOULS CONCEDED", "Foul", False),
+        ("CARDS", "Card", None),
+        ("OFFSIDES PROVOKED", "OffsideProvoked", None),
+        ("TAKE-ONS WON", "TakeOn", True),
+        ("AERIALS WON", "Aerial", True),
+    ]
+    step = 0.80 / len(rows)
+    for i, (label, event_type, won) in enumerate(rows):
+        y = 0.86 - (i + 0.5) * step
+        home_n = count(home_id, event_type, won=won)
+        away_n = count(away_id, event_type, won=won)
+        ax.text(0.5, y + step * 0.30, label, color=MUTED, fontsize=5.8,
+                fontweight="bold", ha="center", va="center")
+        bigger = max(home_n, away_n) or 1
+        bar_y, bar_h = y - step * 0.20, step * 0.20
+        ax.add_patch(Rectangle((0.30, bar_y), 0.40, bar_h, facecolor=PANEL,
+                               edgecolor="none", zorder=2))
+        ax.add_patch(Rectangle((0.50 - 0.20 * home_n / bigger, bar_y),
+                               0.20 * home_n / bigger, bar_h,
+                               facecolor=home_colour, edgecolor="none", zorder=3))
+        ax.add_patch(Rectangle((0.50, bar_y), 0.20 * away_n / bigger, bar_h,
+                               facecolor=away_colour, edgecolor="none", zorder=3))
+        tied = home_n == away_n
+        ax.text(0.27, y - step * 0.10, str(home_n),
+                color=TABLE_DIM if tied or home_n < away_n else home_colour,
+                fontsize=7.0, fontweight="bold", ha="right", va="center")
+        ax.text(0.73, y - step * 0.10, str(away_n),
+                color=TABLE_DIM if tied or away_n < home_n else away_colour,
+                fontsize=7.0, fontweight="bold", ha="left", va="center")
+    _footnote(ax, "each side's own half of the contest")
+
+
+def panel_duels(ax, events, team_id, colour, *, flip=False):
+    """Where the one-against-ones happened, won and lost."""
+    _pitch(ax, attack=not flip)
+    mine = events[events["team_id"].eq(team_id)]
+    kind = mine["type"].astype(str)
+    outcome = (mine["outcome"].astype(str) if "outcome" in mine
+               else pd.Series(index=mine.index, dtype=str))
+    for types, won, marker, size, alpha in (
+        (("TakeOn",), True, "o", 26, 0.95),
+        (("TakeOn",), False, "x", 24, 0.75),
+        (("Aerial",), True, "^", 22, 0.85),
+        (("Aerial",), False, "v", 20, 0.55),
+    ):
+        rows = mine[kind.isin(types) & outcome.eq("Successful" if won else "Unsuccessful")]
+        if not len(rows):
+            continue
+        x, y = _xy(rows["x"], rows["y"], flip=flip)
+        ax.scatter(x, y, marker=marker, s=size, color=colour, alpha=alpha,
+                   linewidths=0.8, edgecolors="none" if marker != "x" else colour,
+                   zorder=4)
+    _footnote(ax, "● take-on won · ✕ lost · ▲ aerial · ▼ lost")
+
+
 def _side_metrics(team_metrics, side: str) -> pd.Series:
     row = team_metrics[team_metrics["side"].astype(str).eq(side)]
     return row.iloc[0] if not row.empty else pd.Series(dtype=float)
@@ -1002,7 +1383,7 @@ def build_indicator_rows(events, xg, team_metrics, home_id, away_id,
         # the ball crossed the line, so "xG on target" no longer describes it.
         ("Post-shot xG", f"{_num(hx, 'xGoT'):.2f}", f"{_num(ax_, 'xGoT'):.2f}",
          _num(hx, "xGoT"), _num(ax_, "xGoT")),
-        ("Shots (on target)",
+        ("Shots · on target",
          f"{int(_num(hx, 'shots'))} ({int(_num(hx, 'on_target'))})",
          f"{int(_num(ax_, 'shots'))} ({int(_num(ax_, 'on_target'))})",
          _num(hx, "shots"), _num(ax_, "shots")),
@@ -1028,18 +1409,18 @@ def build_indicator_rows(events, xg, team_metrics, home_id, away_id,
         ("Deep completions", f"{int(_num(home, 'deep_completions'))}",
          f"{int(_num(away, 'deep_completions'))}",
          _num(home, "deep_completions"), _num(away, "deep_completions")),
-        ("Crosses (completed)",
+        ("Crosses · found",
          f"{int(_num(home, 'crosses'))} ({int(_num(home, 'completed_crosses'))})",
          f"{int(_num(away, 'crosses'))} ({int(_num(away, 'completed_crosses'))})",
          _num(home, "crosses"), _num(away, "crosses")),
         # A press is better when the number is lower, so the bar is inverted --
         # the wider half is still the side pressing harder.
-        ("PPDA · lower is harder", f"{home_ppda:.2f}", f"{away_ppda:.2f}",
+        ("PPDA", f"{home_ppda:.2f}", f"{away_ppda:.2f}",
          away_ppda, home_ppda),
         ("High regains", f"{int(_num(home, 'high_regains'))}",
          f"{int(_num(away, 'high_regains'))}",
          _num(home, "high_regains"), _num(away, "high_regains")),
-        ("Sequence threat (xT)", f"{_num(home, 'sequence_xT'):.2f}",
+        ("Sequence xT", f"{_num(home, 'sequence_xT'):.2f}",
          f"{_num(away, 'sequence_xT'):.2f}",
          _num(home, "sequence_xT"), _num(away, "sequence_xT")),
     ]
@@ -1235,10 +1616,21 @@ def build_match_posters(
     byline: str = "MOSTAFA SAAD",
     allow_download: bool = True,
 ) -> list[Path]:
-    """Render all four posters for one fixture and return their paths."""
+    """Render the posters for one fixture and return their paths."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     home_id, away_id = int(home_id), int(away_id)
+
+    # Shapes and their changes, exported beside the other frames. A package
+    # written before the export existed simply has no file, and poster five
+    # draws the panel empty rather than failing.
+    spells: list[dict] = []
+    formations_csv = out / "formations.csv"
+    if formations_csv.exists():
+        try:
+            spells = pd.read_csv(formations_csv).to_dict("records")
+        except Exception:
+            spells = []
 
     from match_report import compute_ppda_both
 
@@ -1268,7 +1660,7 @@ def build_match_posters(
 
     # ---- poster 1: the match -------------------------------------------
     fig = _new_figure()
-    _header(fig, poster_label="POST-MATCH REPORT · 1 OF 4", **header)
+    _header(fig, poster_label="POST-MATCH REPORT · 1 OF 5", **header)
 
     _panel_title(fig, "left", 0, f"{home_name} shape")
     panel_pass_network(_axes(fig, "left", 0), events, players, home_id, home_color)
@@ -1306,7 +1698,7 @@ def build_match_posters(
 
     # ---- poster 2: how it was played ------------------------------------
     fig = _new_figure()
-    _header(fig, poster_label="HOW IT WAS PLAYED · 2 OF 4", **header)
+    _header(fig, poster_label="HOW IT WAS PLAYED · 2 OF 5", **header)
 
     _panel_title(fig, "left", 0, f"{home_name} into the box")
     panel_box_entries(_axes(fig, "left", 0), events, home_id, home_color)
@@ -1342,7 +1734,7 @@ def build_match_posters(
 
     # ---- poster 3: the transition game ----------------------------------
     fig = _new_figure()
-    _header(fig, poster_label="THE TRANSITION GAME · 3 OF 4", **header)
+    _header(fig, poster_label="THE TRANSITION GAME · 3 OF 5", **header)
 
     _panel_title(fig, "left", 0, f"{home_name} ball losses")
     panel_ball_losses(_axes(fig, "left", 0), events, home_id, home_color)
@@ -1377,7 +1769,7 @@ def build_match_posters(
 
     # ---- poster 4: the final ball ---------------------------------------
     fig = _new_figure()
-    _header(fig, poster_label="THE FINAL BALL · 4 OF 4", **header)
+    _header(fig, poster_label="THE FINAL BALL · 4 OF 5", **header)
 
     _panel_title(fig, "left", 0, f"{home_name} shots")
     panel_shots(_axes(fig, "left", 0), events, home_id, home_color)
@@ -1409,6 +1801,50 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_4_final_ball.png"
+    fig.savefig(path, facecolor=BG, dpi=DPI)
+    plt.close(fig)
+    generated.append(path)
+    del fig
+    gc.collect()
+
+    # ---- poster 5: the tactical book -------------------------------------
+    #
+    # Thirty-six panels across the four above and not one said what shape
+    # either side lined up in, when a manager changed it, who came on, what
+    # the goalkeeper did, or where the fouls and corners fell.
+    fig = _new_figure()
+    _header(fig, poster_label="THE TACTICAL BOOK · 5 OF 5", **header)
+
+    _panel_title(fig, "left", 0, f"{home_name} shape")
+    panel_formation(_axes(fig, "left", 0), spells, "home", home_color,
+                    home_name, players=players, team_id=home_id)
+    _panel_title(fig, "mid", 0, "The match, minute by minute")
+    panel_timeline(_axes(fig, "mid", 0), events, home_id, away_id,
+                   home_color, away_color, home_name, away_name)
+    _panel_title(fig, "right", 0, f"{away_name} shape")
+    panel_formation(_axes(fig, "right", 0), spells, "away", away_color,
+                    away_name, players=players, team_id=away_id)
+
+    _panel_title(fig, "left", 1, f"{home_name} goalkeeper")
+    panel_goalkeeper(_axes(fig, "left", 1), events, players, home_id,
+                     home_color, home_name)
+    _panel_title(fig, "mid", 1, "The expected-goals race")
+    panel_xg_race(_axes(fig, "mid", 1), events, home_id, away_id,
+                  home_color, away_color)
+    _panel_title(fig, "right", 1, f"{away_name} goalkeeper")
+    panel_goalkeeper(_axes(fig, "right", 1), events, players, away_id,
+                     away_color, away_name)
+
+    _panel_title(fig, "left", 2, f"{home_name} duels")
+    panel_duels(_axes(fig, "left", 2), events, home_id, home_color)
+    _panel_title(fig, "mid", 2, "The dead-ball economy")
+    panel_dead_ball(_axes(fig, "mid", 2), events, home_id, away_id,
+                    home_color, away_color, home_name, away_name)
+    _panel_title(fig, "right", 2, f"{away_name} duels")
+    panel_duels(_axes(fig, "right", 2), events, away_id, away_color, flip=True)
+
+    _footer(fig, home_color, away_color, byline)
+    path = out / "match_poster_5_tactical_book.png"
     fig.savefig(path, facecolor=BG, dpi=DPI)
     plt.close(fig)
     generated.append(path)

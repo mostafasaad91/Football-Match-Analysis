@@ -230,3 +230,67 @@ def test_the_longest_label_is_short_enough_to_clear_the_numbers():
          for _g, _c, metrics in pr.GROUPS for metric in metrics),
         key=len)
     assert len(longest) <= 13, longest
+
+
+# --------------------------------------------------------------------------
+# the ring of numbers
+# --------------------------------------------------------------------------
+
+def test_every_tile_is_the_same_width():
+    """The figures run from one character to seven — "5" against "27 / 58" —
+    and a rounded box around each made the ring a row of unequal blobs."""
+    padded = pr.pad_values(["5", "0.187", "73/80", "-0.09"])
+    assert len({len(v) for v in padded}) == 1, padded
+    assert [v.strip() for v in padded] == ["5", "0.187", "73/80", "-0.09"]
+
+
+def test_padding_an_empty_ring_does_not_raise():
+    assert pr.pad_values([]) == []
+
+
+def test_a_ratio_is_printed_without_spaces_around_the_slash():
+    """Every tile is padded to the widest string on the radar, so two thin
+    spaces inside one ratio set the width of all twenty-six — and near twelve
+    and six o'clock a horizontal tile spends its width across its neighbours'
+    spokes rather than along its own."""
+    import inspect
+
+    source = inspect.getsource(pr.make_player_pizza)
+    assert " / " not in source, "the ratio still pads its slash"
+
+
+def test_the_tiles_share_one_shape():
+    """Five treatments used to share the ring, each with its own padding and
+    border width, so a quarter of the circle could carry four different
+    objects. Only the fill may vary."""
+    group, chip = "#cb8721", "#cb8721"
+    states = [
+        pr._chip_style(chip, group, 90.0, zero=False),
+        pr._chip_style(chip, group, 50.0, zero=False),
+        pr._chip_style(chip, group, 10.0, zero=False),
+        pr._chip_style(chip, group, 0.0, zero=True),
+        pr._chip_style(chip, group, 0.0, zero=False, unmeasured=True),
+    ]
+    pads = {s["bbox"]["boxstyle"] for s in states}
+    assert pads == {f"round,pad={pr.CHIP_PAD}"}, pads
+    widths = {s["bbox"]["lw"] for s in states}
+    assert widths == {pr.CHIP_EDGE}, widths
+
+
+def test_a_zero_is_as_readable_as_every_other_figure():
+    """Quiet was being done with TEXT_DIM — grey on grey, a figure a reader
+    had to hunt for. The empty box is what says he did not do this."""
+    group = "#cb8721"
+    zero = pr._chip_style(group, group, 0.0, zero=True)
+    ordinary = pr._chip_style(group, group, 10.0, zero=False)
+    assert zero["color"] == ordinary["color"]
+    assert pr.contrast_ratio(zero["color"], pr.BG_DARK) >= 4.4
+    # ...and still visibly nothing: no fill behind it.
+    assert zero["bbox"]["fc"] == "none"
+
+
+def test_an_unmeasured_rate_is_readable_too():
+    group = "#cb8721"
+    thin = pr._chip_style(group, group, 0.0, zero=False, unmeasured=True)
+    assert pr.contrast_ratio(thin["color"], pr.BG_DARK) >= 4.4
+    assert "linestyle" in thin["bbox"], "the dashed border is what marks it"

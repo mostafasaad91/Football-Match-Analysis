@@ -22,6 +22,7 @@ from __future__ import annotations
 import colorsys
 import os
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -79,19 +80,27 @@ GROUP_HUES = (
     276.0,   # DUELS    — violet
 )
 
-# Held constant across every hue, which is what makes five different colours
-# read as one family rather than five decisions. The light page needs darker,
-# slightly stronger ink to hold the same weight against white.
+# Saturation is held constant across the five hues — that is what makes them
+# read as one family — but it used to be held low. At S=0.46 and L=0.62 the
+# wedges were pastel: correct, harmonised and washed out on a black page that
+# can carry far more colour than that.
 GROUP_LIGHTNESS = 0.42 if IS_LIGHT_THEME else 0.62
-GROUP_SATURATION = 0.52 if IS_LIGHT_THEME else 0.46
+GROUP_SATURATION = 0.68 if IS_LIGHT_THEME else 0.72
 
 
-# What every group shade has to clear against the page it is drawn on. Equal
-# HLS lightness is not equal weight: at L=0.42 the green measured 2.88 against
-# the light page and the violet 6.95, so five colours built to be siblings
-# arrived as two faint ones and three solid. Each hue is nudged until it hits
-# the same contrast instead, which is the thing the eye is actually reading.
-GROUP_PAGE_CONTRAST = 3.4 if IS_LIGHT_THEME else 4.6
+# The contrast every group shade is solved *to*, not merely held above.
+#
+# Equal HLS lightness is not equal weight: at a fixed L=0.62 and S=0.46 the
+# green measured 10.9:1 against the black page and the violet 5.9:1, so five
+# colours built to be siblings arrived with one nearly twice the weight of
+# another. The old solve was a floor at 4.6 and every hue already cleared it,
+# so it never moved anything — the harmonisation was in the comment rather
+# than in the palette.
+#
+# Solving to a target instead equalises what the eye actually reads, and it is
+# what lets the saturation go up: a hue that would shout is darkened until it
+# weighs the same as its siblings rather than being kept quiet from the start.
+GROUP_PAGE_CONTRAST = 4.6 if IS_LIGHT_THEME else 7.0
 
 
 def group_palette(n_groups: int) -> list[str]:
@@ -111,30 +120,53 @@ def group_palette(n_groups: int) -> list[str]:
 
 
 def _hue_at_page_contrast(hue: float, saturation: float | None = None) -> str:
-    """One hue, darkened or lightened until it carries its weight on the page.
+    """One hue, set to the lightness that lands it on the target contrast.
 
-    Walks away from the page rather than towards it — dark ink on a light page,
-    light ink on a dark one — and stops at the first step that clears the
-    floor, so a hue that already reads well is left where it is.
+    Bisected rather than stepped, and to a target rather than a floor. The
+    stepped version stopped at the first level that cleared the minimum, which
+    for every hue in this palette was the level it started at — so a hue that
+    happened to read heavy stayed heavy and the five were never equalised.
+
+    Contrast is monotonic in lightness on either side of the page's own value,
+    so the search runs from the page's end of the range outwards and takes the
+    first crossing.
     """
     import colorsys
 
     if saturation is None:
         saturation = GROUP_SATURATION
-    step = -0.02 if IS_LIGHT_THEME else 0.02
-    level = GROUP_LIGHTNESS
-    best = mcolors.to_hex(
-        colorsys.hls_to_rgb(hue / 360.0, level, saturation))
-    for _ in range(40):
-        try:
-            if contrast_ratio(best, BG_DARK) >= GROUP_PAGE_CONTRAST:
-                return best
-        except Exception:
-            return best
-        level = min(max(level + step, 0.06), 0.94)
-        best = mcolors.to_hex(
-            colorsys.hls_to_rgb(hue / 360.0, level, saturation))
-    return best
+
+    def at(level: float) -> str:
+        return mcolors.to_hex(colorsys.hls_to_rgb(hue / 360.0, level, saturation))
+
+    # The band spans both sides of the nominal lightness. Starting it at
+    # GROUP_LIGHTNESS meant a hue could only ever be moved away from the page,
+    # so the two that already read heavy — amber at 10.3:1 and green at 13.2 —
+    # had nowhere to go and stayed twice the weight of the violet. Equalising
+    # needs the freedom to darken as well as to lighten.
+    low, high = (0.14, 0.62) if IS_LIGHT_THEME else (0.34, 0.97)
+    try:
+        # Nothing in this range reaches the target: take the end that is
+        # furthest from the page rather than failing.
+        best_end = low if IS_LIGHT_THEME else high
+        if contrast_ratio(at(best_end), BG_DARK) < GROUP_PAGE_CONTRAST:
+            return at(best_end)
+        # Contrast rises as the ink moves away from the page, so the wanted
+        # level is the *nearest* one that reaches the target: any further and
+        # the colour is paler than it needs to be, which is the washed-out
+        # palette this replaces.
+        for _ in range(30):
+            mid = (low + high) / 2
+            reached = contrast_ratio(at(mid), BG_DARK) >= GROUP_PAGE_CONTRAST
+            if IS_LIGHT_THEME:
+                # Darker is higher contrast; keep the lightest that reaches it.
+                low, high = (mid, high) if reached else (low, mid)
+            else:
+                # Lighter is higher contrast; keep the deepest that reaches it.
+                low, high = (low, mid) if reached else (mid, high)
+        return at(low if IS_LIGHT_THEME else high)
+    except Exception:
+        return at(GROUP_LIGHTNESS)
 
 
 # ── One fixture, two palettes ────────────────────────────────────────────────
@@ -346,19 +378,27 @@ GROUPS = [
         ],
     ),
     (
+        # Ten slices, six of them the same shot sample asked six ways. A player
+        # who took two shots filled xG, npxG, xGOT, xG/Shot and G−xG with one
+        # afternoon's worth of information, and the ring read as a busy profile
+        # rather than as two shots.
+        #
+        # Four are kept and they answer different questions: what the chances
+        # were worth (xG), what he did to them (G−xG), what he created for
+        # someone else (xA), and what the possessions he touched were worth
+        # (xGChain). npxG duplicates xG on any player who took no penalty;
+        # xGOT duplicates it for anyone who hit the target; xG/Shot is xG over
+        # a count already on the ring; xGBuildup is xGChain minus the last two
+        # touches, and the pair moved together on every radar.
         "THREAT",
         C_HOME,
         [
             "xG",
-            "npxG",
             "xA",
-            "xGOT",
-            "xG/\nShot",
             "G\N{MINUS SIGN}xG",
+            "xG\nChain",
             "Shot-cr.\nactions",
             "Deep\ncompl.",
-            "xG\nChain",
-            "xG\nBuildup",
         ],
     ),
     (
@@ -368,6 +408,66 @@ GROUPS = [
     ),
     ("DUELS", C_AWAY, ["Grd duels\nwon", "Aerials\nwon", "Duels\nwon"]),
 ]
+
+
+# ── The goalkeeper's own radar ───────────────────────────────────────────────
+#
+# A keeper was drawn on the outfield layout: goals, dribbles, expected goals,
+# aerial duels. Twenty-two of his thirty slices were structurally zero and not
+# one of them described his match.
+#
+# Sixteen slices, all of them things a goalkeeper does. Post-shot expected
+# goals is absent on purpose — see goalkeeper_metrics for why.
+GK_GROUPS = [
+    ("SHOT STOPPING", C_GOLD,
+     ["Saves", "Save %", "Shots\nfaced", "Goals\nconceded", "Penalties\nfaced"]),
+    ("BOX COMMAND", C_HOME,
+     ["Claims", "Punches", "Pickups", "Smothers"]),
+    ("OFF THE LINE", C_AWAY,
+     ["Sweeps", "Recov\neries", "Clear\nances", "Errors"]),
+    ("DISTRIBUTION", C_HOME,
+     ["Passes", "Pass %", "Long\nballs", "Long ball %"]),
+]
+
+
+# What counts as a full bar, per action, measured from every goalkeeper match
+# this project has rendered — thirty-eight of them — at the ninetieth
+# percentile. There are two keepers in a match, so a percentile against the
+# other one is either 0% or 100%; a reference drawn from real keeper matches
+# is the honest alternative to a pool of two.
+GK_FULL_BAR = {
+    "Saves": 5, "Save %": 100, "Shots\nfaced": 8,
+    "Claims": 2, "Punches": 2, "Pickups": 9, "Smothers": 1,
+    "Sweeps": 2, "Recov\neries": 3, "Clear\nances": 2,
+    "Passes": 51, "Pass %": 88, "Long\nballs": 12, "Long ball %": 64,
+}
+
+# More of these is worse, so they carry the figure and no bar. A long wedge
+# beside GOALS CONCEDED reads as an achievement whatever the label says.
+GK_NO_BAR = ("Goals\nconceded", "Errors", "Penalties\nfaced")
+
+
+def gk_bar(metric: str, value) -> float:
+    """How far a goalkeeper's wedge reaches, as a percentage of a full one.
+
+    Not a percentile. There are two keepers in a match, so ranking one against
+    the other returns 0 or 100 and says nothing; the scale is a strong keeper
+    match for that action, measured from every fixture this project has
+    rendered rather than chosen.
+
+    The metrics where more is worse draw nothing, because a long wedge beside
+    GOALS CONCEDED reads as an achievement whatever the label says.
+    """
+    if metric in GK_NO_BAR:
+        return 0.0
+    full = GK_FULL_BAR.get(metric)
+    if not full:
+        return 0.0
+    try:
+        share = float(value) / float(full)
+    except (TypeError, ValueError):
+        return 0.0
+    return float(min(max(share, 0.0), 1.0) * 100)
 
 
 # Three metric keys were written with the line break inside the word so they
@@ -522,47 +622,70 @@ def _is_zero(value, displayed: str) -> bool:
         return True
 
 
-def _chip_style(chip: str, group: str, percentile: float, zero: bool) -> dict:
+# One shape for every tile on the ring. Five treatments used to share the
+# space — solid fill, soft fill, plain outline, dashed outline, and a fifth
+# padding value — each with its own padding, its own border width and its own
+# text weight, so a quarter of the circle could carry four different objects.
+# Around a ring that reads as scatter rather than as a scale.
+#
+# The shape, the padding and the border are now fixed. Only the fill changes,
+# which is the one thing that has to: a tile the player led on should not look
+# like a tile he did nothing on.
+CHIP_PAD = 0.30
+CHIP_EDGE = 1.0
+
+
+def _chip_style(chip: str, group: str, percentile: float, zero: bool,
+                unmeasured: bool = False) -> dict:
     """How loudly one value should be printed.
 
-    Three tiers rather than one. The border used to be drawn in the group's
-    colour on every tile, which put thirty coloured outlines on a page that
-    already says which group a wedge belongs to by where it sits and by the key
-    above it — so the border is now only what a filled tile needs to hold its
-    edge, and the quiet tiers do without.
+    Four states, one shape. ``unmeasured`` is a rate whose denominator is too
+    small to rank — 100% from three passes is a true statement about the match
+    and a false one about the player — so it keeps the figure, loses the wedge,
+    and is the only state that changes the border rather than the fill.
     """
+    def tile(fill, text, edge, weight="bold", dashed=False, effects=None):
+        box = dict(boxstyle=f"round,pad={CHIP_PAD}", fc=fill, ec=edge,
+                   lw=CHIP_EDGE)
+        if dashed:
+            box["linestyle"] = (0, (2.5, 1.6))
+        return {"color": text, "weight": weight,
+                "effects": effects or [], "bbox": box}
+
+    # A zero and an unmeasurable rate are both quiet, and quiet was being done
+    # with TEXT_DIM — grey on grey, a figure a reader had to hunt for. The
+    # digit is now the same ink as every other figure in its group; the empty
+    # box around it is what says the player did not do this, which is a job for
+    # the shape rather than for the contrast.
+    quiet_ink = _readable_on_page(group, 4.5)
+    if unmeasured:
+        return tile("none", quiet_ink, _mix(group, BG_DARK, 0.30),
+                    weight="normal", dashed=True)
     if zero:
         # Present for anyone who looks, silent for anyone who does not.
-        return {
-            "color": TEXT_DIM,
-            "weight": "normal",
-            "effects": [],
-            "bbox": dict(boxstyle="round,pad=0.22", fc="none",
-                         ec=_mix(group, BG_DARK, 0.55), lw=0.8),
-        }
+        return tile("none", quiet_ink, _mix(group, BG_DARK, 0.55),
+                    weight="normal")
     if percentile >= CHIP_LOUD:
-        return {
-            "color": _chip_text_color(chip),
-            "weight": "bold",
-            "effects": label_outline(chip, linewidth=1.4),
-            "bbox": dict(boxstyle="round,pad=0.26", fc=chip,
-                         ec=_mix(chip, BG_DARK, 0.35), lw=1.0),
-        }
+        return tile(chip, _chip_text_color(chip), _mix(chip, BG_DARK, 0.35),
+                    effects=label_outline(chip, linewidth=1.4))
     if percentile >= CHIP_QUIET:
         soft = _mix(chip, BG_DARK, 0.42)
-        return {
-            "color": _chip_text_color(soft),
-            "weight": "bold",
-            "effects": label_outline(soft, linewidth=1.2),
-            "bbox": dict(boxstyle="round,pad=0.24", fc=soft, ec="none", lw=0),
-        }
-    return {
-        "color": _readable_on_page(group, 4.0),
-        "weight": "normal",
-        "effects": [],
-        "bbox": dict(boxstyle="round,pad=0.22", fc="none",
-                     ec=_mix(group, BG_DARK, 0.45), lw=0.9),
-    }
+        return tile(soft, _chip_text_color(soft), _mix(soft, BG_DARK, 0.35),
+                    effects=label_outline(soft, linewidth=1.2))
+    return tile("none", _readable_on_page(group, 4.5),
+                _mix(group, BG_DARK, 0.45), weight="normal")
+
+
+def pad_values(values: list[str]) -> list[str]:
+    """Every tile the same width, so the ring reads as a scale.
+
+    The figures run from one character to seven — "5" against "27 / 58" — and
+    a rounded box drawn around each one made the ring a row of unequal blobs.
+    The font is monospace, so padding to a common count makes every box the
+    same size without moving a single digit off its own spoke.
+    """
+    widest = max((len(str(v)) for v in values), default=0)
+    return [str(v).center(widest) for v in values]
 
 
 def _spoke_rotation(angle: float) -> tuple[float, bool]:
@@ -637,6 +760,47 @@ _RATIO_DISPLAY = {
     "Duels\nwon": ("Duels\nwon", "Duels_att"),
 }
 MIN_POOL_TOUCHES = 12  # players below this don't seed the percentile pool
+
+
+# ── Rates need a denominator before they mean anything ───────────────────────
+#
+# Lucas Herrington came on for thirty-three minutes, played three passes and
+# completed all three. That is 100%, which ranked him in the 95th percentile
+# for passing accuracy — above Bruno Fernandes, who played ninety-two at 80%
+# and scored 53. The radar said the substitute was the better passer, from a
+# sample of three.
+#
+# A rate is a ratio, and a ratio built on almost nothing carries almost no
+# information. Below the floor the value is still printed — it happened — but
+# it is not ranked against anyone, so it draws no bar and claims nothing.
+#
+# The floors are per metric because the denominators are not comparable: a
+# player can reasonably contest four aerials in a match and would have to be
+# uninvolved to play only fifteen passes.
+RATE_FLOORS = {
+    "Pass %": ("Passes", 15),
+    "Grd duels\nwon": ("Grd_duels_att", 4),
+    "Aerials\nwon": ("Aer_att", 4),
+    "Duels\nwon": ("Duels_att", 5),
+    "Long\nballs": ("Long\nballs", 4),
+    "Shots": ("Shots", 2),
+}
+
+
+def rate_is_measured(metrics: dict, metric: str) -> bool:
+    """Does this player's rate rest on enough attempts to be ranked?
+
+    True for every metric that is not a rate, so callers can ask about any
+    slice without knowing which is which.
+    """
+    floor = RATE_FLOORS.get(metric)
+    if floor is None:
+        return True
+    key, minimum = floor
+    try:
+        return float(metrics.get(key, 0) or 0) >= minimum
+    except (TypeError, ValueError):
+        return False
 
 
 def _safe(name: str) -> str:
@@ -1123,6 +1287,105 @@ def _get_carries(events) -> dict:
     return cached
 
 
+def goalkeeper_metrics(events: pd.DataFrame, player: str) -> dict:
+    """Per-match goalkeeping from the event stream.
+
+    Nothing here existed. A keeper was drawn on the outfield radar — goals,
+    dribbles, expected goals, aerial duels — so twenty-two of his thirty
+    slices were structurally zero and not one of them described his match. The
+    provider had been sending Save, Claim, Punch, KeeperSweeper, Smother,
+    KeeperPickup and PenaltyFaced the whole time.
+
+    Shot-stopping is measured against post-shot expected goals rather than
+    against saves alone: a keeper who faces eight tame shots and saves all
+    eight has had an easier afternoon than one who faces three that were going
+    in, and the save count cannot tell them apart.
+    """
+    from match_metrics import post_shot_xg
+
+    ev = events
+    mine = ev[ev["player"].astype(str) == str(player)]
+    if not len(mine):
+        return {}
+    kind = mine["type"].astype(str) if "type" in mine else pd.Series([], dtype=str)
+    outcome = (mine["outcome"].astype(str) if "outcome" in mine
+               else pd.Series(index=mine.index, dtype=str))
+    ok = outcome.eq("Successful")
+
+    def count(*types, only_successful=False):
+        hit = kind.isin(types)
+        if only_successful:
+            hit &= ok
+        return int(hit.sum())
+
+    # Everything the opposition put on target while he was the keeper.
+    team_id = mine["team_id"].dropna()
+    team_id = int(team_id.iloc[0]) if len(team_id) else None
+    faced = ev[ev["team_id"].ne(team_id)] if team_id is not None else ev.iloc[0:0]
+    on_target = faced[faced.get("is_shot", False).fillna(False).astype(bool)]
+    psxg = float(post_shot_xg(on_target).sum()) if len(on_target) else 0.0
+
+    conceded = 0
+    if "is_goal" in faced and team_id is not None:
+        goals = faced[faced["is_goal"].astype(str).str.lower().eq("true")]
+        own = goals.get("is_own_goal")
+        if own is not None:
+            goals = goals[~own.astype(str).str.lower().eq("true")]
+        conceded = int(len(goals))
+
+    saves = count("Save")
+    shots_faced = saves + conceded
+
+    passes = int((kind.eq("Pass")).sum())
+    passes_done = int((kind.eq("Pass") & ok).sum())
+    long_att = long_done = 0
+    if "pass_length" in mine:
+        lengths = pd.to_numeric(mine["pass_length"], errors="coerce")
+        is_long = kind.eq("Pass") & lengths.ge(32)
+        long_att = int(is_long.sum())
+        long_done = int((is_long & ok).sum())
+
+    return {
+        # shot stopping
+        "Saves": saves,
+        "Save %": int(round(100 * saves / shots_faced)) if shots_faced else 0,
+        "Goals\nconceded": conceded,
+        "Shots\nfaced": shots_faced,
+        "Penalties\nfaced": count("PenaltyFaced"),
+        # Kept in the dictionary, kept off the radar. Post-shot expected goals
+        # is the measure a keeper should be judged on, and this project's
+        # implementation is a heuristic rather than a fitted model: across
+        # every rendered fixture it totals 30.0 against 60 goals actually
+        # scored, a ratio of 0.50. "Goals prevented" off that baseline would
+        # put every keeper in every report eight tenths of a goal below
+        # expectation — a statement about the model that reads as one about
+        # the man. It returns to the radar when the model is calibrated.
+        "PSxG\nfaced": round(psxg, 2),
+        # command of the box
+        "Claims": count("Claim", only_successful=True),
+        "Punches": count("Punch"),
+        "Pickups": count("KeeperPickup"),
+        "Smothers": count("Smother"),
+        # off the line
+        "Sweeps": count("KeeperSweeper"),
+        "Recov\neries": count("BallRecovery"),
+        "Clear\nances": count("Clearance"),
+        "Errors": count("Error"),
+        # distribution
+        "Passes": passes,
+        "Passes_comp": passes_done,
+        # int, not round(): "47.0" is a percentage printed with a decimal it
+        # does not have. And the long-ball slice holds the attempt count,
+        # because _RATIO_DISPLAY reads the metric itself as the denominator —
+        # holding the completed count in both places printed "9 / 9" beside a
+        # long-ball accuracy of 22%.
+        "Pass %": int(round(100 * passes_done / passes)) if passes else 0,
+        "Long\nballs": long_att,
+        "Longballs_comp": long_done,
+        "Long ball %": int(round(100 * long_done / long_att)) if long_att else 0,
+    }
+
+
 def player_metrics(events: pd.DataFrame, player: str) -> dict:
     """Raw per-match stats for one player from the event stream."""
     ev = events
@@ -1374,6 +1637,58 @@ def compute_metrics_pool(events: pd.DataFrame):
     return allm, elig
 
 
+# ── Who a player is measured against ─────────────────────────────────────────
+#
+# Every bar was a percentile against all twenty-nine players on the pitch, so a
+# centre-back was ranked on expected goals against forwards and a forward on
+# clearances against centre-backs. Half of every radar came out empty — the
+# median player had fifteen of thirty slices at zero — and the shape described
+# the position rather than the performance. Two centre-backs looked alike
+# because they were centre-backs, not because they played alike.
+#
+# Comparing within a line makes a long bar mean something a reader can act on:
+# this defender did that more than the other defenders did.
+#
+# Three lines rather than eleven positions, because a match has about ten
+# players a side and splitting further leaves a pool of two. A pool that small
+# says more about who else was picked than about the player, so a line that
+# thin falls back to the whole pitch.
+POSITION_LINES = {
+    "GK": "keeper",
+    "DC": "defence", "DL": "defence", "DR": "defence",
+    "DMC": "midfield", "MC": "midfield", "ML": "midfield", "MR": "midfield",
+    "AMC": "attack", "AML": "attack", "AMR": "attack", "FW": "attack",
+}
+MIN_LINE_POOL = 5
+
+
+def position_line(code: str) -> str:
+    """Which of the three lines a position belongs to, or "" if unknown."""
+    return POSITION_LINES.get(str(code).strip(), "")
+
+
+def line_pool(players: pd.DataFrame | None, elig, line: str) -> list:
+    """The eligible players in one line, or the whole pool if too few.
+
+    A keeper is never pooled with outfielders — there is only one a side, and
+    ranking him against ten players who are not keepers is what produced a
+    radar of thirty empty slices. He falls through to the full pool, where the
+    passing metrics at least mean something, until the goalkeeper's own
+    measures exist.
+    """
+    if not line or line == "keeper" or players is None:
+        return list(elig)
+    if "name" not in getattr(players, "columns", []):
+        return list(elig)
+    same = {
+        str(row["name"])
+        for _, row in players.iterrows()
+        if position_line(row.get("position", "")) == line
+    }
+    pool = [p for p in elig if str(p) in same]
+    return pool if len(pool) >= MIN_LINE_POOL else list(elig)
+
+
 def _percentile(allm, elig, metric, val):
     """Where this value sits among the players on the pitch, as a percentage.
 
@@ -1398,6 +1713,27 @@ def _percentile(allm, elig, metric, val):
     return (below + 0.5 * equal) / n * 100
 
 
+# Opta's position codes, spelled out. The subtitle used to print the value of
+# ``player_role``, which is a participation status and not a position: the
+# goalkeeper was labelled "Player" and Semi Ajayi, who scored, was labelled
+# "sub_out". players.csv has carried the real position all along.
+POSITION_NAMES = {
+    "GK": "Goalkeeper",
+    "DC": "Centre-back",
+    "DL": "Left-back",
+    "DR": "Right-back",
+    "DMC": "Defensive midfielder",
+    "MC": "Central midfielder",
+    "ML": "Left midfielder",
+    "MR": "Right midfielder",
+    "AMC": "Attacking midfielder",
+    "AML": "Left winger",
+    "AMR": "Right winger",
+    "FW": "Forward",
+    "Sub": "Substitute",
+}
+
+
 def _player_role(events: pd.DataFrame, player: str, default="Player") -> str:
     if "player_role" not in events.columns:
         return default
@@ -1405,9 +1741,24 @@ def _player_role(events: pd.DataFrame, player: str, default="Player") -> str:
     return str(s.iloc[0]) if len(s) else default
 
 
+def player_position(players: pd.DataFrame | None, player: str) -> str:
+    """Opta's code for where this player lined up, or "" if it is not known."""
+    if players is None or "position" not in getattr(players, "columns", []):
+        return ""
+    if "name" not in players.columns:
+        return ""
+    found = players[players["name"].astype(str) == str(player)]["position"].dropna()
+    return str(found.iloc[0]) if len(found) else ""
+
+
+def describe_position(code: str, fallback: str = "Player") -> str:
+    """The position as a reader would say it."""
+    return POSITION_NAMES.get(str(code).strip(), fallback if not code else str(code))
+
+
 def make_player_pizza(
     events, player, team_name, role, allm, elig, subtitle_extra="", opponent_name="",
-    team_color=None, opponent_color=None, side="home",
+    team_color=None, opponent_color=None, side="home", players=None,
 ):
     """Build and return the pizza Figure for one player.
 
@@ -1416,8 +1767,20 @@ def make_player_pizza(
     are held apart from each other, so a fixture between two red teams still
     produces two pages a reader can tell apart. Omit them and the untinted
     palette is used.
+
+    ``players`` is the squad export. It carries the position, which decides two
+    things the radar was getting wrong without it: what the subtitle calls the
+    player, and who the bars measure him against.
     """
-    me_m = player_metrics(events, player)
+    # Ranked within his own line rather than against everyone on the pitch.
+    position = player_position(players, player)
+    keeper = position_line(position) == "keeper"
+    groups = GK_GROUPS if keeper else GROUPS
+    me_m = goalkeeper_metrics(events, player) if keeper else player_metrics(events, player)
+    if keeper and not me_m:
+        # No keeper events at all: fall back rather than draw an empty ring.
+        keeper, groups, me_m = False, GROUPS, player_metrics(events, player)
+    pool = line_pool(players, elig, position_line(position))
 
     # One colour per group, not five steps of the team's: five shades of one
     # kit asks the reader to compare lightness to tell a tackle from a through
@@ -1433,12 +1796,12 @@ def make_player_pizza(
         away_kit = team_color if side == "away" else opponent_color
         offsets = fixture_hue_offsets(home_kit, away_kit)
         offset = offsets[1] if side == "away" else offsets[0]
-        group_colors = group_palette_for(offset, team_color, len(GROUPS))
+        group_colors = group_palette_for(offset, team_color, len(groups))
     else:
-        group_colors = group_palette(len(GROUPS))
+        group_colors = group_palette(len(groups))
 
-    labels, colors, vals, disps, pcts, gidx = [], [], [], [], [], []
-    for gi, (_gn, _gc, ms) in enumerate(GROUPS):
+    labels, colors, vals, disps, pcts, gidx, thin = [], [], [], [], [], [], []
+    for gi, (_gn, _gc, ms) in enumerate(groups):
         gc = group_colors[gi]
         for m in ms:
             v = me_m.get(m, 0)
@@ -1447,18 +1810,32 @@ def make_player_pizza(
             vals.append(v)
             if m in _RATIO_DISPLAY:  # "numerator / denominator"
                 num_k, den_k = _RATIO_DISPLAY[m]
-                # A thin space around the slash separates "won" from
-                # "contested" without widening the tile the way a padded
-                # slash would.
-                disps.append(
-                    f"{me_m.get(num_k, 0)} / {me_m.get(den_k, 0)}")
+                # No space around the slash. Every tile is padded to the
+                # widest string on the radar, so the two thin spaces that
+                # separated "won" from "contested" set the width of all
+                # twenty-six — and near twelve and six o'clock a horizontal
+                # tile spends its width across its neighbours' spokes rather
+                # than along its own, so the widest string is what decides
+                # whether the ring collides with itself.
+                disps.append(f"{me_m.get(num_k, 0)}/{me_m.get(den_k, 0)}")
             else:
                 disps.append(f"{v}")
-            pcts.append(_percentile(allm, elig, m, v) if elig else 0)
+            # A rate resting on three passes is printed and not ranked: the
+            # wedge is a comparison and there is nothing here to compare with.
+            measured = rate_is_measured(me_m, m)
+            thin.append(not measured and not keeper)
+            if keeper:
+                pcts.append(gk_bar(m, v))
+            else:
+                pcts.append(
+                    _percentile(allm, pool, m, v) if (pool and measured) else 0)
             gidx.append(gi)
 
+    # Every tile the same width: monospace plus a common character count.
+    disps = pad_values(disps)
+
     N = len(labels)
-    n_groups = len(GROUPS)
+    n_groups = len(groups)
     GAP_DEG = 6.0
     # one equal gap per group boundary (internal boundaries + the wrap gap)
     per = (360 - GAP_DEG * n_groups) / N
@@ -1489,7 +1866,7 @@ def make_player_pizza(
     # of empty page. Inward, every label ends flush against the arc whatever
     # its length, the long ones reach back across space that was empty anyway,
     # and the plot keeps the room.
-    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 107, 156, 164, 174
+    R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = 14, 100, 112, 168, 176, 186
 
     fig = plt.figure(figsize=(12, 12.6), facecolor=BG_DARK)
     ax = fig.add_axes([0.06, 0.035, 0.88, 0.735], projection="polar")
@@ -1514,7 +1891,7 @@ def make_player_pizza(
         )
 
     # faint per-category background zones
-    for gi, (_gn, _gc, _ms) in enumerate(GROUPS):
+    for gi, (_gn, _gc, _ms) in enumerate(groups):
         gc = group_colors[gi]
         ids = [i for i in range(N) if gidx[i] == gi]
         a0 = angs[ids[0]] - width / 2 - np.radians(1.2)
@@ -1543,7 +1920,7 @@ def make_player_pizza(
     )
 
     # category arcs
-    for gi, (_gn, _gc, _ms) in enumerate(GROUPS):
+    for gi, (_gn, _gc, _ms) in enumerate(groups):
         gc = group_colors[gi]
         ids = [i for i in range(N) if gidx[i] == gi]
         a0 = angs[ids[0]] - width / 2 - np.radians(1.5)
@@ -1563,7 +1940,8 @@ def make_player_pizza(
     # is legible — a tile carrying an 8pt digit and a wedge carrying a
     # percentile do not have the same job.
     chip_by_group = dict(zip(group_colors, chip_fills(group_colors)))
-    for a, lab, dv, p, c, v in zip(angs, labels, disps, pcts, colors, vals):
+    for a, lab, dv, p, c, v, unmeasured in zip(
+            angs, labels, disps, pcts, colors, vals, thin):
         chip = chip_by_group.get(c, _chip_fill(c))
         spin, flipped = _spoke_rotation(a)
         ax.text(
@@ -1590,7 +1968,7 @@ def make_player_pizza(
         # of a defensive midfielder's radar is zeroes. Weight now follows the
         # percentile the wedge already draws, so the two or three things the
         # player actually led are the ones that carry filled tiles.
-        style = _chip_style(chip, c, float(p), _is_zero(v, dv))
+        style = _chip_style(chip, c, float(p), _is_zero(v, dv), unmeasured)
         ax.text(
             a,
             RVAL,
@@ -1624,7 +2002,20 @@ def make_player_pizza(
 
     participation = _get_participation(events).get(str(player), {})
     played_time = participation.get("played_time", "0′ 00″")
-    sub = f"{str(team_name).upper()}  ·  {role}  ·  {played_time} played"
+    # ``role`` is a participation status — "Player", "sub_in", "sub_out" — and
+    # was printed where a reader expects a position, so the goalkeeper read
+    # "Player" and a centre-back who scored read "sub_out". The position comes
+    # from the squad export; whether he started is said in the words for it.
+    described = describe_position(position, fallback=str(role))
+    entrance = {"sub_in": "on as a substitute",
+                "sub_out": "substituted"}.get(str(role), "")
+    # A player listed as "Sub" has no position recorded, so "Substitute" is all
+    # the squad knows about him and the entrance note would only repeat it.
+    if described == "Substitute":
+        entrance = ""
+    sub = f"{str(team_name).upper()}  ·  {described}  ·  {played_time} played"
+    if entrance:
+        sub += f" ({entrance})"
     if subtitle_extra:
         sub += f"  ·  {subtitle_extra}"
     if _identity is not None:
@@ -1633,11 +2024,11 @@ def make_player_pizza(
             active_team=team_name,
         )
 
-    ng = len(GROUPS)
+    ng = len(groups)
     step = min(0.135, 0.90 / max(ng - 1, 1))
     lfs = 11 if ng <= 5 else 9
     lx = 0.5 - (ng - 1) * step / 2 - 0.02  # centre the legend row
-    for gi, (gn, _gc, _ms) in enumerate(GROUPS):
+    for gi, (gn, _gc, _ms) in enumerate(groups):
         gc = group_colors[gi]
         fig.add_artist(
             mpatches.Circle(
@@ -1658,15 +2049,34 @@ def make_player_pizza(
             va="center",
         )
         lx += step
+    # The caption has to name the pool the bars were actually drawn against.
+    # It said "vs all match players" while the comparison was being made
+    # against every player on the pitch, which was the defect; saying it still,
+    # now that the comparison is within the line, would be the same sentence
+    # telling a different lie.
+    against = {"defence": "the defenders", "midfield": "the midfielders",
+               "attack": "the attackers"}.get(position_line(position),
+                                              "all match players")
+    if keeper:
+        measured_against = "share of a strong goalkeeping match for that action"
+    elif len(pool) < len(elig):
+        measured_against = f"percentile among {against} on the pitch"
+    else:
+        measured_against = "percentile vs all match players"
+    # Two lines. Naming the pool made the single line wide enough to run off
+    # both edges of the page, and the half a reader needs first — what the bar
+    # length means — was the half that got cut.
     fig.text(
-        0.5,
-        0.022,
-        "bar length = percentile vs all match players   ·   chip = match value "
-        "(passes/long balls = completed/total · shots = on-target/total · duels = won/contested)",
-        ha="center",
-        color="#555",
-        fontsize=9,
-        style="italic",
+        0.5, 0.030,
+        f"bar length = {measured_against}   ·   "
+        "dashed chip = too few attempts to rank",
+        ha="center", color="#5f5f5f", fontsize=9.5, style="italic",
+    )
+    fig.text(
+        0.5, 0.010,
+        "chip = match value   ·   passes and long balls = completed/total   ·   "
+        "shots = on-target/total   ·   duels = won/contested",
+        ha="center", color="#4a4a4a", fontsize=8.5, style="italic",
     )
     return fig
 
@@ -1877,12 +2287,32 @@ def _side_team_color(info, side: str) -> str:
     return C_HOME if side == "home" else C_AWAY
 
 
-def export_player_radars(events, info, out_dir, dpi=115):
+def _squad_frame(out_dir, squad=None):
+    """The squad export, which carries each player's position.
+
+    Read from the package the radars are being written into rather than passed
+    down through four call sites, and treated as optional throughout: a fixture
+    without it still renders, in the shape the radar had before positions were
+    read.
+    """
+    if squad is not None:
+        return squad
+    path = Path(str(out_dir)) / "players.csv"
+    if not path.exists():
+        return None
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        return None
+
+
+def export_player_radars(events, info, out_dir, dpi=115, squad=None):
     """Save one pizza PNG per participating player into per-team folders.
 
     Returns {"home": [(player, rating), ...], "away": [...]} best-first.
     """
     allm, elig = compute_metrics_pool(events)
+    squad = _squad_frame(out_dir, squad)
     split = _team_split(events, info)
     base = os.path.join(out_dir, "player_radars")
     ranking = {"home": [], "away": []}
@@ -1903,6 +2333,7 @@ def export_player_radars(events, info, out_dir, dpi=115):
                     opponent_color=_side_team_color(
                         info, "away" if side == "home" else "home"),
                     side=side,
+                    players=squad,
                 )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
@@ -1926,6 +2357,7 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
     Caller owns the returned figures and must close them.
     """
     allm, elig = compute_metrics_pool(events)
+    squad = _squad_frame(out_dir)
     split = _team_split(events, info)
     opp = {
         "home": _text(info.get("away_name"), "the opponent"),
@@ -1950,6 +2382,7 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     opponent_color=_side_team_color(
                         info, "away" if side == "home" else "home"),
                     side=side,
+                    players=squad,
                 )
                 fig.savefig(
                     os.path.join(team_dir, f"{_safe(p)}.png"),
@@ -1978,6 +2411,7 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     opponent_color=_side_team_color(
                         info, "away" if side == "home" else "home"),
                     side=side,
+                    players=squad,
                 )
                 try:
                     note = player_commentary(

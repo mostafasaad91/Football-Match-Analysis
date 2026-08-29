@@ -327,3 +327,73 @@ def test_the_article_reaches_the_length_it_promises(out):
     article, _frames, _info = _article(out)
     words = sum(len(p.split()) for p in _paragraphs(article))
     assert words >= TARGET_WORDS[0], f"{words} words"
+
+
+# --------------------------------------------------------------------------
+# a headline that says what the match was
+# --------------------------------------------------------------------------
+
+def test_the_headlines_use_more_than_a_handful_of_sentences():
+    """Fifteen different strings and five different sentences.
+
+    Every candidate read the same few totals — expected goals, shots, box
+    entries — so a match decided by two corners and a match decided by an hour
+    of pressure were phrased identically with the names swapped. Distinct
+    strings were never the goal; distinct findings were.
+    """
+    # Variety is a property of a set of matches, not of one. With a handful of
+    # fixtures on disk the count says more about how many were rendered than
+    # about how many sentences the generator can reach for.
+    if len(FIXTURES) < 10:
+        pytest.skip(f"only {len(FIXTURES)} fixtures rendered")
+
+    # Strip the fill-ins and compare what is left. The club names come from
+    # each fixture's own info rather than from a pattern: every word in a
+    # headline is title case, so a regex for "a proper noun" swallows the
+    # sentence along with the names and reports every title as identical.
+    shapes = set()
+    spelled = ("one", "two", "three", "four", "five", "six", "seven", "eight",
+               "nine", "ten", "eleven", "twelve")
+    for out in FIXTURES:
+        article, _frames, info = _article(out)
+        shape = article.title
+        for name in (str(info["home_name"]), str(info["away_name"])):
+            shape = shape.replace(name, "X")
+        shape = re.sub(r"\d+(?:\.\d+)?", "#", shape)
+        shape = re.sub(r"\b(?:%s)\b" % "|".join(spelled), "#", shape,
+                       flags=re.IGNORECASE)
+        shapes.add(shape)
+    assert len(shapes) >= 7, (
+        f"{len(FIXTURES)} fixtures share only {len(shapes)} sentences: "
+        + " | ".join(sorted(shapes)))
+
+
+@pytest.mark.parametrize("out", FIXTURES, ids=IDS)
+def test_a_set_piece_headline_is_only_claimed_when_the_goals_were_dead_balls(out):
+    """Hull beat Manchester United with a corner and a free kick and nothing
+    in the package could say so. The claim now exists, so it needs a guard."""
+    from match_report import classify_goal_type
+
+    article, (events, _xg, _tm, _pm), _info = _article(out)
+    if "Dead Ball" not in article.title and "dead ball" not in article.title.lower():
+        return
+    goals = events[events["is_goal"] == True]  # noqa: E712
+    origins = [classify_goal_type(row, events)[0] for _, row in goals.iterrows()]
+    dead = sum(1 for kind in origins if kind in ("Set Piece", "Penalty"))
+    assert dead >= 1, f"{article.title!r} over {origins}"
+
+
+@pytest.mark.parametrize("out", FIXTURES, ids=IDS)
+def test_the_report_and_the_article_open_on_the_same_finding(out):
+    """Two documents, one match. The cover carried "MATCH ANALYSIS" while the
+    article beside it opened on a sentence drawn from the same frames."""
+    from match_article import cover_headline
+
+    article, frames, info = _article(out)
+    assert cover_headline(*frames, info) == article.title
+
+
+def test_a_broken_frame_gives_a_generic_subtitle_rather_than_no_report():
+    from match_article import cover_headline
+
+    assert cover_headline(None, None, None, None, {}) == ""
