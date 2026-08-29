@@ -44,7 +44,18 @@ def shots_from_snapshots() -> pd.DataFrame:
                 "match": path.stem,
                 "x": event.get("x"), "y": event.get("y"),
                 "is_goal": bool(event.get("isGoal")),
-                "qualifier_names": ",".join(names),
+                # Pipe, not comma. _qnames splits this field on "|", so a
+                # comma-joined string came back as one nonsense qualifier and
+                # every name in it was lost — BigChance, Cross and Head with
+                # them. The model then priced every shot as an ordinary foot
+                # shot from open play, 22% below what the pipeline gives the
+                # same thirty shots, and the calibration fitted here was
+                # measuring a model the package does not ship.
+                "qualifier_names": "|".join(names),
+                # The geometry reads these as columns rather than through the
+                # qualifier set, so supplying the set alone is not enough.
+                "big_chance": "BigChance" in names,
+                "is_cross": "Cross" in names,
                 "is_header": "Head" in names,
                 "is_penalty": "Penalty" in names,
                 "is_own_goal": "OwnGoal" in names,
@@ -81,13 +92,29 @@ def main(argv: list[str]) -> int:
     print(f"Brier     {report['brier']:.4f}")
 
     print("\ncalibration by predicted band")
-    bands = [(0, .05), (.05, .10), (.10, .20), (.20, .40), (.40, 1.01)]
-    for low, high in bands:
+    for low, high in xc.BANDS:
         inside = shots[(shots["xG"] >= low) & (shots["xG"] < high)]
         if inside.empty:
             continue
         print(f"  {low:.2f}-{high:.2f}  n={len(inside):4d}  "
               f"predicted {inside['xG'].mean():.3f}  actual {inside['is_goal'].mean():.3f}")
+    print(f"  {xc.banded_error(shots['xG'], shots['is_goal'].astype(float)):.1f} "
+          f"goals mispriced once the bands are counted apart")
+
+    # The total hides this and the bands only hint at it: the error runs with
+    # distance, not with the model's own probability, which is why no Platt
+    # correction can reach it.
+    print("\ncalibration by distance")
+    reach = (((100 - shots["x"]) * 1.05) ** 2 + ((shots["y"] - 50) * 0.68) ** 2) ** 0.5
+    for low, high, name in [(0, 11, "inside 11 m"), (11, 999, "11 m and out")]:
+        inside = shots[(reach >= low) & (reach < high)]
+        if inside.empty:
+            continue
+        predicted, goals = inside["xG"].sum(), inside["is_goal"].sum()
+        spread = float((inside["xG"] * (1 - inside["xG"])).sum()) ** 0.5
+        print(f"  {name:14s} n={len(inside):4d}  predicted {predicted:6.1f}  "
+              f"goals {int(goals):4d}  {(goals - predicted) / max(spread, 1e-9):+.1f} "
+              f"standard deviations")
 
     if "--fit" not in argv:
         print(f"\nMeasure only. Pass --fit to write a correction when one is earned.")

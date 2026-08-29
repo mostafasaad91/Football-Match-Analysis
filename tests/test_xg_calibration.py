@@ -105,54 +105,115 @@ def test_evaluate_reports_the_distance_in_standard_deviations():
     assert report["ratio"] == pytest.approx(1.0)
 
 
-def test_the_shipped_model_is_being_corrected_now():
-    """The archive grew and the correction earned its place.
+def test_the_shipped_model_is_not_being_corrected():
+    """No correction has been earned, and the last one was an artifact.
 
-    This asserted the opposite for as long as the archive was small. At 955
-    shots and 108 goals the model was reading 90.4 xG against 108 goals and
-    over-pricing its best chances — 0.601 predicted against 0.400 actual — and
-    a two-parameter Platt correction beat it on held-out folds by 0.0031.
+    It was fitted against scripts/xg_report, which rebuilt each shot from the
+    stored snapshot and joined its qualifier names with a comma while the model
+    splits that field on a pipe. BigChance, Cross and Head never reached it, so
+    every shot was priced as an ordinary foot shot from open play — 22% under
+    what the pipeline gives the same shots — and the 16% shortfall the
+    correction was written to close belonged to a model the package does not
+    ship. Measured properly: 109.6 xG against 108 goals.
     """
     import football_match_analysis as fa
     import xg_calibration as xc
 
     fa._XG_CALIBRATION = "unread"
-    assert xc.load() is not None, "no correction has been written"
-    # A clear chance comes down; a long shot is left where the geometry put it.
-    assert fa._apply_xg_calibration(0.60) < 0.55
-    assert fa._apply_xg_calibration(0.03) == pytest.approx(0.03)
+    assert xc.load() is None, "a correction was written; check it was earned"
+    for value in (0.03, 0.20, 0.60):
+        assert fa._apply_xg_calibration(value) == pytest.approx(value)
 
 
-def test_the_correction_leaves_the_far_tail_to_the_geometry():
-    """Two parameters cannot fix this model's shape.
+def test_the_correction_the_archive_would_fit_today_is_refused():
+    """Slope 0.752 is the right shape and still not good enough.
 
-    The fit is driven by the four hundred shots below 0.05, which hold almost
-    none of the goals, and applied everywhere it lifts a thirty-metre shot to
-    0.0525 — roughly double what any published model puts there, on every shot
-    map in the package.
+    The model is over-confident at the top, so a slope below one is what a fit
+    reaches for — and pulling the top down drags the four hundred shots below
+    0.05 up with it, from a mean of 0.035 against an observed 0.035 to 0.049.
+    Log-loss barely notices, because those shots are already cheap. The banded
+    gate does.
     """
-    import xg_calibration as xc
+    rng = np.random.default_rng(11)
+    # A model whose error runs the way this one's does: too high where it is
+    # confident, too low in the middle, correct at the bottom.
+    predicted = rng.beta(1.4, 9.0, size=6000)
+    truth = np.where(predicted > 0.40, predicted * 0.61,
+                     np.where(predicted > 0.10, predicted * 1.35, predicted))
+    outcomes = (rng.random(6000) < truth).astype(float)
 
-    correction = xc.load()
-    assert correction is not None
-    assert correction.apply(0.02) == pytest.approx(0.02)
-    assert correction.apply(xc.TAIL_FLOOR) == pytest.approx(xc.TAIL_FLOOR)
-    # ...and no step for a shot to fall either side of.
-    just_above = correction.apply(xc.TAIL_FLOOR + 1e-6)
-    assert abs(just_above - xc.TAIL_FLOOR) < 1e-3
+    found = xc.fit(predicted, outcomes)
+    if found is not None:                       # only if it left the bands better
+        corrected = np.array([found.apply(v) for v in predicted])
+        assert (xc.banded_error(corrected, outcomes)
+                < xc.banded_error(predicted, outcomes))
 
 
-def test_the_correction_pulls_the_biggest_chances_down():
-    """The complaint that started this: a match full of clear chances read
-    high while the totals across every match read low."""
-    import xg_calibration as xc
+def test_the_banded_gate_sees_what_log_loss_cannot():
+    """Most of the shots are cheap, so they decide the mean log-loss.
 
-    correction = xc.load()
-    assert correction is not None
-    for clear in (0.45, 0.60, 0.83):
-        assert correction.apply(clear) < clear, clear
-    for middling in (0.10, 0.15):
-        assert correction.apply(middling) > middling, middling
+    A correction that halves the error on nine hundred shots priced near zero
+    and doubles it on the fifty that carry a shot map still improves log-loss.
+    banded_error counts each band on its own, so it does not.
+    """
+    predicted = np.concatenate([np.full(900, 0.04), np.full(50, 0.60)])
+    outcomes = np.concatenate([np.zeros(900), np.zeros(50)])
+    outcomes[:36] = 1.0                          # 0.04 is exactly right
+    outcomes[900:920] = 1.0                      # 0.60 should have been 0.40
+
+    # Thirty predicted against twenty scored in the top band, nothing in the
+    # bottom one — which is what a shot map shows and log-loss shrugs at.
+    assert xc.banded_error(predicted, outcomes) == pytest.approx(10.0, abs=0.5)
+    # Move the top band onto the truth and the error is gone, though the shots
+    # that decide log-loss never moved at all.
+    fixed = np.concatenate([np.full(900, 0.04), np.full(50, 0.40)])
+    assert xc.banded_error(fixed, outcomes) < 1.0
+
+
+# --------------------------------------------------------------------------
+# the measurement has to price shots the way the package does
+# --------------------------------------------------------------------------
+
+def test_the_report_prices_a_shot_the_way_the_pipeline_does():
+    """A calibration fitted on one scoring path and applied to another is worse
+    than no calibration at all, and this is how that happened.
+
+    xg_report rebuilds each shot from the stored snapshot. It joined the
+    qualifier names with a comma; _qnames splits that field on a pipe. So the
+    whole list came back as one nonsense qualifier, BigChance and Cross and Head
+    went missing, and every shot was priced as an ordinary foot shot from open
+    play — 22% below what the pipeline gives the same thirty shots. Nothing in
+    the report looked wrong: it was internally consistent, and consistently
+    measuring a model that is not shipped.
+    """
+    import football_match_analysis as fa
+    from scripts.xg_report import shots_from_snapshots
+
+    event = {
+        "isShot": True, "isGoal": False, "x": 91.0, "y": 47.0,
+        "qualifiers": [{"type": {"displayName": "BigChance"}},
+                       {"type": {"displayName": "RegularPlay"}}],
+    }
+    names = [q["type"]["displayName"] for q in event["qualifiers"]]
+    # However the report chooses to carry them, the model has to see them.
+    rebuilt = {"x": event["x"], "y": event["y"], "is_shot": True,
+               "qualifier_names": "|".join(names),
+               "big_chance": "BigChance" in names}
+    assert "BigChance" in fa._qnames(rebuilt)
+    assert fa._opta_like_local_xg_from_row(rebuilt) > fa._opta_like_local_xg_from_row(
+        {"x": event["x"], "y": event["y"], "is_shot": True, "qualifier_names": ""})
+
+    # And the real path, if there are snapshots to read.
+    shots = shots_from_snapshots()
+    if shots.empty:
+        pytest.skip("no snapshots stored")
+    assert shots["big_chance"].any(), "no shot reached the model as a big chance"
+    # Exactly, not as a substring: BigChanceCreated rides the same event and
+    # belongs to whoever made the pass.
+    named = shots["qualifier_names"].map(lambda v: "BigChance" in str(v).split("|"))
+    assert int(named.sum()) == int(shots["big_chance"].sum())
+    for _, row in shots[named].head(20).iterrows():
+        assert "BigChance" in fa._qnames(row)
 
 
 # --------------------------------------------------------------------------
@@ -202,6 +263,27 @@ def test_the_near_field_is_untouched_by_the_far_tail_fix():
     assert 0.03 <= _xg(83) <= 0.09
 
 
+def test_the_error_that_is_left_runs_with_distance_not_with_probability():
+    """What is actually wrong with this model, recorded so it is not mistaken
+    for the thing a calibration can fix.
+
+    Across the archive it is 2.5 standard deviations too high inside eleven
+    metres and 2.0 too low outside, and the two cancel in a total that reads
+    109.6 against 108 goals. A slope and an intercept on the model's own answer
+    move both ends together, so no correction shaped like Platt can reach it.
+    The missing information is what the shot faced: Opta's big-chance flag
+    converts near 36% wherever it is taken, while a seven-metre shot Opta
+    declined to flag converts at 3% and this model, which sees geometry and not
+    goalkeepers, prices it at 10%.
+    """
+    close_unflagged = _xg(93)                 # about seven metres, no flag
+    far_flagged = _xg(80, q="BigChance", big_chance=True)   # about eighteen
+    assert close_unflagged > 0.09, close_unflagged
+    assert far_flagged < close_unflagged * 3.0
+    # The archive says the second of these converts more often than the first.
+    # Until the model can see why, it says the opposite, and that is the gap.
+
+
 def test_a_wider_angle_is_worth_less_than_a_central_one():
     straight = _xg(88, 50)
     wide = _xg(88, 85)
@@ -218,19 +300,15 @@ def test_headers_and_free_kicks_were_already_monotone():
 # the floor the correction had to clear
 # --------------------------------------------------------------------------
 
-def test_the_size_floor_is_below_a_season_but_above_a_handful():
-    """1500 shots is the right target for a model fitted from scratch and the
-    wrong one for a two-parameter correction.
+def test_the_size_floor_was_not_lowered_to_admit_a_fit():
+    """It was, once, and the fit it admitted was measuring a broken model.
 
-    Fitting a slope and an intercept on a hundred events is generous by any
-    events-per-parameter rule, and the binding test was never the count — it is
-    the cross-validated improvement, measured on folds the fit never saw.
+    600 and 75 were chosen because 955 shots and 108 goals were reading a 16%
+    shortfall that did not exist. With the measurement repaired there is no
+    shortfall, so the reason for lowering the floor is gone with it.
     """
-    import xg_calibration as xc
-
-    assert xc.MIN_GOALS >= 50, "a floor this low would fit noise"
-    assert xc.MIN_SHOTS >= 400
-    assert xc.MIN_SHOTS < 1500 and xc.MIN_GOALS < 150
+    assert xc.MIN_SHOTS >= 1500
+    assert xc.MIN_GOALS >= 150
 
 
 def test_the_cross_validated_test_still_gates_it():
@@ -258,18 +336,20 @@ def test_a_correction_is_refused_below_the_floor_however_good_it_looks():
     assert xc.fit(p, y) is None, "100 shots is not evidence"
 
 
-def test_the_ramp_cannot_reorder_two_shots():
-    """Platt on its own is monotone; a ramp bolted onto it need not be.
+def test_nothing_is_bolted_onto_platt():
+    """Platt is monotone; the ramp that used to sit on top of it was not.
 
-    Below the floor a shot keeps its own value, so a correction that lowers the
-    band above — any slope steep enough with a negative intercept — would push
-    a better chance under a worse one.
+    That ramp held the correction off the far tail and needed a clamp to stop
+    it pushing a better chance under a worse one — shape written to make one
+    fit survive a shot map, and that fit is gone. What is left has to be Platt
+    exactly, or the gates above are testing something other than what ships.
     """
-    import numpy as np
-
     for slope, intercept in ((1.4, -0.3), (0.7, -0.35), (2.2, -1.1), (0.5, 0.2)):
         correction = xc.Calibration(slope, intercept, 2000, 200, 0.30, 0.29)
         values = np.linspace(0.001, 0.99, 400)
         out = [correction.apply(v) for v in values]
         assert out == sorted(out), (slope, intercept)
         assert all(0.0 < v < 1.0 for v in out), (slope, intercept)
+        for value in values[::37]:
+            expected = xc._sigmoid(slope * xc._logit(value) + intercept)
+            assert out[list(values).index(value)] == pytest.approx(expected)
