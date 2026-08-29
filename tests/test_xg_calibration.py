@@ -68,6 +68,12 @@ def test_a_correction_only_bends_the_curve_it_was_given():
 
 
 def test_the_identity_when_nothing_was_earned(tmp_path):
+    """Passing None means "do not correct".
+
+    It used to mean "go and find one", which is the same thing a caller writes
+    when it wants the identity — so there was no way to ask for an uncorrected
+    value at all, and this test passed only while no correction existed.
+    """
     assert xc.load(tmp_path) is None
     for value in (0.01, 0.25, 0.94):
         assert xc.calibrated(value, None) == pytest.approx(value)
@@ -99,12 +105,54 @@ def test_evaluate_reports_the_distance_in_standard_deviations():
     assert report["ratio"] == pytest.approx(1.0)
 
 
-def test_the_shipped_model_is_not_being_corrected_today():
-    """The archive is too small, so the pipeline must run uncorrected."""
+def test_the_shipped_model_is_being_corrected_now():
+    """The archive grew and the correction earned its place.
+
+    This asserted the opposite for as long as the archive was small. At 955
+    shots and 108 goals the model was reading 90.4 xG against 108 goals and
+    over-pricing its best chances — 0.601 predicted against 0.400 actual — and
+    a two-parameter Platt correction beat it on held-out folds by 0.0031.
+    """
     import football_match_analysis as fa
+    import xg_calibration as xc
 
     fa._XG_CALIBRATION = "unread"
-    assert fa._apply_xg_calibration(0.25) == pytest.approx(0.25)
+    assert xc.load() is not None, "no correction has been written"
+    # A clear chance comes down; a long shot is left where the geometry put it.
+    assert fa._apply_xg_calibration(0.60) < 0.55
+    assert fa._apply_xg_calibration(0.03) == pytest.approx(0.03)
+
+
+def test_the_correction_leaves_the_far_tail_to_the_geometry():
+    """Two parameters cannot fix this model's shape.
+
+    The fit is driven by the four hundred shots below 0.05, which hold almost
+    none of the goals, and applied everywhere it lifts a thirty-metre shot to
+    0.0525 — roughly double what any published model puts there, on every shot
+    map in the package.
+    """
+    import xg_calibration as xc
+
+    correction = xc.load()
+    assert correction is not None
+    assert correction.apply(0.02) == pytest.approx(0.02)
+    assert correction.apply(xc.TAIL_FLOOR) == pytest.approx(xc.TAIL_FLOOR)
+    # ...and no step for a shot to fall either side of.
+    just_above = correction.apply(xc.TAIL_FLOOR + 1e-6)
+    assert abs(just_above - xc.TAIL_FLOOR) < 1e-3
+
+
+def test_the_correction_pulls_the_biggest_chances_down():
+    """The complaint that started this: a match full of clear chances read
+    high while the totals across every match read low."""
+    import xg_calibration as xc
+
+    correction = xc.load()
+    assert correction is not None
+    for clear in (0.45, 0.60, 0.83):
+        assert correction.apply(clear) < clear, clear
+    for middling in (0.10, 0.15):
+        assert correction.apply(middling) > middling, middling
 
 
 # --------------------------------------------------------------------------
@@ -164,3 +212,64 @@ def test_headers_and_free_kicks_were_already_monotone():
     """Only the foot submodel carried the positive quadratic."""
     header = [_xg(x, is_header=True, q="Head") for x in range(99, 40, -1)]
     assert header == sorted(header, reverse=True)
+
+
+# --------------------------------------------------------------------------
+# the floor the correction had to clear
+# --------------------------------------------------------------------------
+
+def test_the_size_floor_is_below_a_season_but_above_a_handful():
+    """1500 shots is the right target for a model fitted from scratch and the
+    wrong one for a two-parameter correction.
+
+    Fitting a slope and an intercept on a hundred events is generous by any
+    events-per-parameter rule, and the binding test was never the count — it is
+    the cross-validated improvement, measured on folds the fit never saw.
+    """
+    import xg_calibration as xc
+
+    assert xc.MIN_GOALS >= 50, "a floor this low would fit noise"
+    assert xc.MIN_SHOTS >= 400
+    assert xc.MIN_SHOTS < 1500 and xc.MIN_GOALS < 150
+
+
+def test_the_cross_validated_test_still_gates_it():
+    """Lowering the size floor must not lower the evidence bar."""
+    import numpy as np
+
+    import xg_calibration as xc
+
+    # A model that is already perfectly calibrated has nothing to gain, so the
+    # held-out folds refuse the correction however many shots are supplied.
+    rng = np.random.default_rng(7)
+    p = rng.uniform(0.02, 0.6, 4000)
+    y = (rng.uniform(size=4000) < p).astype(float)
+    assert xc.fit(p, y) is None
+
+
+def test_a_correction_is_refused_below_the_floor_however_good_it_looks():
+    import numpy as np
+
+    import xg_calibration as xc
+
+    rng = np.random.default_rng(3)
+    p = rng.uniform(0.02, 0.6, 100)
+    y = (rng.uniform(size=100) < p * 2).astype(float)
+    assert xc.fit(p, y) is None, "100 shots is not evidence"
+
+
+def test_the_ramp_cannot_reorder_two_shots():
+    """Platt on its own is monotone; a ramp bolted onto it need not be.
+
+    Below the floor a shot keeps its own value, so a correction that lowers the
+    band above — any slope steep enough with a negative intercept — would push
+    a better chance under a worse one.
+    """
+    import numpy as np
+
+    for slope, intercept in ((1.4, -0.3), (0.7, -0.35), (2.2, -1.1), (0.5, 0.2)):
+        correction = xc.Calibration(slope, intercept, 2000, 200, 0.30, 0.29)
+        values = np.linspace(0.001, 0.99, 400)
+        out = [correction.apply(v) for v in values]
+        assert out == sorted(out), (slope, intercept)
+        assert all(0.0 < v < 1.0 for v in out), (slope, intercept)

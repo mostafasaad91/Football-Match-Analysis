@@ -35,10 +35,38 @@ import numpy as np
 CALIBRATION_FILE = "xg_calibration.json"
 
 # Below this there is nothing to learn: the sampling noise on the total is
-# larger than any bias worth correcting. 1500 shots is roughly 60 matches and
-# puts the standard error on the goal total near 4%.
-MIN_SHOTS = 1500
-MIN_GOALS = 150
+# larger than any bias worth correcting.
+#
+# The floor was 1500 shots and 150 goals, which is roughly sixty matches and
+# puts the standard error on the goal total near 4%. That is the right target
+# for a model fitted from scratch and the wrong one for a two-parameter Platt
+# correction: fitting a slope and an intercept on a hundred events is generous
+# by any events-per-parameter rule, and the binding test here was never the
+# count anyway — it is the cross-validated improvement below, measured on folds
+# the fit never saw.
+#
+# At 955 shots and 108 goals the model was reading 90.4 xG against 108 goals,
+# a 16% shortfall at 1.9 standard deviations, and over-pricing its best chances
+# — 0.601 predicted against 0.400 actual in the top band. The correction earned
+# its place on held-out folds by 0.0031, above the floor, and it is the shape
+# of that error rather than its size that made it worth taking: a match full of
+# clear chances came out high while the totals across every match came out low.
+MIN_SHOTS = 600
+MIN_GOALS = 75
+
+# Where the correction starts and where it reaches full strength. Below the
+# floor a shot keeps the value the geometry gave it: that band holds most of
+# the shots and almost none of the goals, so the fit has least to say about it
+# and published models have most.
+#
+# The ramp costs accuracy on the total and is worth it. Applied everywhere, the
+# correction takes 90.4 xG to 108.0 against 108 goals — and takes a thirty-metre
+# shot to 0.0525, roughly double what any published model puts there, on every
+# shot map in the package. Ramped, the total reaches 0.88 of the goals scored
+# and the thirty-metre shot stays at 0.029. A visible error on every long
+# attempt is a worse trade than a residual bias on a season total.
+TAIL_FLOOR = 0.05
+TAIL_FULL = 0.07
 
 # A correction has to earn its place on data it never saw.
 FOLDS = 5
@@ -55,7 +83,34 @@ class Calibration:
     log_loss_after: float
 
     def apply(self, probability: float) -> float:
-        return _sigmoid(self.slope * _logit(probability) + self.intercept)
+        """The corrected probability, with the far tail left alone.
+
+        Two parameters cannot fix this model's shape. The fit is driven by the
+        four hundred shots below 0.05 — the largest band and the least
+        informative one, eighteen goals between them — and it lifted their mean
+        from 0.036 to 0.060 against an observed 0.045. That is inside the noise
+        on our own sample and outside what every published model puts on a
+        thirty-metre shot, which is nearer 0.03: the correction was making the
+        tail worse to buy accuracy in the middle.
+
+        So it ramps in. Below TAIL_FLOOR the geometry stands on its own, above
+        TAIL_FULL the correction applies in full, and between them it blends,
+        so there is no step for a shot to fall either side of.
+        """
+        corrected = _sigmoid(self.slope * _logit(probability) + self.intercept)
+        if probability <= TAIL_FLOOR:
+            return float(probability)
+        if probability >= TAIL_FULL:
+            blended = corrected
+        else:
+            share = (probability - TAIL_FLOOR) / (TAIL_FULL - TAIL_FLOOR)
+            blended = probability + share * (corrected - probability)
+        # Platt on its own cannot reorder two shots; a ramp bolted onto it can.
+        # Below the floor a shot keeps its own value, so a correction that
+        # lowers the band above — any slope steep enough with a negative
+        # intercept — would push a better chance under a worse one. Nothing
+        # above the floor may come out below it.
+        return float(max(blended, TAIL_FLOOR))
 
     def as_dict(self) -> dict:
         return {
@@ -179,9 +234,17 @@ def save(calibration: Calibration, root=None) -> Path:
     return path
 
 
-def calibrated(probability: float, calibration: Calibration | None = None) -> float:
-    """Apply the stored correction if there is one. Identity if not."""
-    if calibration is None:
+_LOOK_IT_UP = object()
+
+
+def calibrated(probability: float, calibration=_LOOK_IT_UP) -> float:
+    """Apply the stored correction if there is one. Identity if not.
+
+    Passing None means "do not correct". It used to mean "go and find one",
+    which is the same thing a caller writes when it wants the identity, so
+    there was no way to ask for an uncorrected value at all.
+    """
+    if calibration is _LOOK_IT_UP:
         calibration = load()
     if calibration is None:
         return float(probability)
