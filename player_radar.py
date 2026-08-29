@@ -45,6 +45,7 @@ from visualization_components import (
     C_HOME,
     C_GOLD,
     IS_LIGHT_THEME,
+    USE_REAL_TEAM_KIT_COLORS,
     contrast_ratio,
     label_outline,
     text_on_fill,
@@ -535,6 +536,78 @@ CHIP_CONTRAST_FLOOR = 7.0
 CHIP_SEPARATION = 0.055
 
 
+# How far a chip tile stands off a light page.
+#
+# On black the tile takes care of itself: a group colour deepened until its
+# figure is legible is still plainly a tile, and the quiet tier lands at 2.87
+# against the page. On white the same rule collapsed. The light palette is built
+# darker than the dark one — L=0.42 against 0.62 — so no group cleared the text
+# floor as it stood and every one of them drove to the near-black end: five
+# black blobs punched into a white page, and the quiet tier, which is the loud
+# fill mixed 42% back toward the page, came out grey. A low figure read as
+# disabled rather than as quiet.
+#
+# Driving to the pale end instead fixed the ink and lost the tile: the search
+# stops at the first level whose figure is legible, and paling a colour raises
+# that fast, so DEFENCE settled at 1.59 against the page and DUELS at 1.17 —
+# a number floating on nothing.
+#
+# So the tile is solved to a target the way the ring's own hues are, and the
+# target is the most presence the legibility floor will allow. At 2.4 the
+# darkest ink on every group clears CHIP_CONTRAST_FLOOR with 7.5 to spare; at
+# 2.8 it does not clear it at all.
+CHIP_PAGE_CONTRAST = 2.4
+
+
+def _chip_at_page_contrast(hue: float, saturation: float, floor: float,
+                           nudge: float) -> str:
+    """The lightest tile of this hue that still reads as a tile on the page.
+
+    Lightest, because contrast against a white page rises as the tile darkens
+    and the figure's own contrast falls with it: the lightest level that clears
+    CHIP_PAGE_CONTRAST is the one that leaves the most room for the ink.
+    """
+    def at(level: float) -> str:
+        return mcolors.to_hex(colorsys.hls_to_rgb(hue, level, saturation))
+
+    def legible(level: float) -> bool:
+        tile = at(level)
+        return contrast_ratio(text_on_fill(tile), tile) >= floor
+
+    low, high = 0.0, 1.0
+    for _ in range(30):
+        mid = (low + high) / 2
+        if contrast_ratio(at(mid), BG_DARK) >= CHIP_PAGE_CONTRAST:
+            low = mid
+        else:
+            high = mid
+
+    if not legible(low):
+        # This hue cannot carry a figure at the level the page wants. Deepen
+        # until it can and take the loss in tile weight, which is the old
+        # behaviour and the right one for the few hues that need it.
+        level = low
+        for _ in range(40):
+            level = max(level - 0.02, 0.0)
+            if legible(level):
+                break
+        return at(level)
+
+    # A nudge deepens, which lifts the tile further off the page and keeps two
+    # groups that landed together apart. It stops at the point the figure would
+    # stop reading — unclamped it walked straight through the band where
+    # neither black nor white ink clears the floor and came out at the dark end,
+    # which is the black-blob tile this function exists to avoid.
+    level = low
+    for _ in range(40):
+        step = max(low - nudge, 0.06)
+        step = level - (level - step) / 2 if level > step else level
+        if step >= level - 1e-4 or not legible(step):
+            break
+        level = step
+    return at(level)
+
+
 def _chip_fill(color: str, floor: float = CHIP_CONTRAST_FLOOR,
                nudge: float = 0.0) -> str:
     """Move a group colour's lightness until a label on it is properly legible.
@@ -555,6 +628,8 @@ def _chip_fill(color: str, floor: float = CHIP_CONTRAST_FLOOR,
         return color
 
     hue, lightness, saturation = colorsys.rgb_to_hls(*rgb)
+    if IS_LIGHT_THEME:
+        return _chip_at_page_contrast(hue, saturation, floor, nudge)
     # A fill that is already light goes lighter; anything else goes darker.
     target = 1.0 if lightness > 0.62 else 0.0
     low, high = lightness, target
@@ -2276,6 +2351,11 @@ def _rating(allm, elig, events, player):
 def _side_team_color(info, side: str) -> str:
     """Resolve the fixture colour for one side, so a player's radar carries
     their own team's colour rather than a fixed category palette."""
+    # Stored packages may contain kit colours from an older run. The active
+    # production identity must win when those packages are regenerated, just
+    # as it does for a newly collected fixture.
+    if not USE_REAL_TEAM_KIT_COLORS:
+        return C_HOME if side == "home" else C_AWAY
     key = "home_color" if side == "home" else "away_color"
     supplied = str((info or {}).get(key) or "").strip()
     if supplied:

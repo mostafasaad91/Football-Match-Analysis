@@ -306,3 +306,68 @@ def test_report_chrome_reads_on_its_own_page(theme):
     assert result["focus_contrast"] >= 3.0, result
     assert result["brand_contrast"] >= 3.0, result
     assert result["value_contrast"] >= 3.0, result
+
+
+# ---------------------------------------------------------------------------
+# the radars have to survive the change of page too
+# ---------------------------------------------------------------------------
+
+def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
+    """A number needs a tile under it, and the tile needs the page under that.
+
+    The chip fill chose which way to move by reading the group colour's own
+    lightness: light colours went lighter, everything else went darker. On black
+    that is right by accident — the dark palette sits around L=0.62. The light
+    palette is built at L=0.42, so all five groups drove to the near-black end
+    and the light radars carried a row of black blobs, with the quiet tier,
+    which is the loud fill mixed back toward the page, coming out grey enough to
+    look disabled.
+
+    Driving to the pale end instead loses the tile: the search stops at the
+    first level whose figure is legible, and DEFENCE settled at 1.59 against the
+    page with DUELS at 1.17 — a figure floating on nothing. So both ends are
+    checked here, on both pages.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import player_radar as pr;"
+        "from visualization_components import BG_DARK, contrast_ratio;"
+        "g = pr.group_palette(5);"
+        "print([(round(contrast_ratio(c, BG_DARK), 2),"
+        " round(contrast_ratio(pr._chip_text_color(c), c), 2)) for c in pr.chip_fills(g)])"
+    )
+    for theme, floor in (("light", 2.0), ("dark", 1.1)):
+        out = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True, text=True, cwd=str(ROOT),
+            env={**os.environ, "MATCH_ANALYSIS_THEME": theme},
+        )
+        assert out.returncode == 0, out.stderr
+        measured = eval(out.stdout.strip())          # noqa: S307 - our own output
+        assert len(measured) == 5
+        for tile_vs_page, ink_vs_tile in measured:
+            assert tile_vs_page >= floor, (theme, measured)
+            assert ink_vs_tile >= 5.0, (theme, measured)
+
+
+def test_the_light_package_carries_the_squad_its_radars_need():
+    """The radar names a player's position, and only players.csv knows it.
+
+    It falls back to reading that file out of the folder it writes into. The
+    light package wrote every frame except that one, so every light radar lost
+    the position and printed the player's substitution role in its place —
+    "sub_out" where the black copy of the same player said "Defensive
+    midfielder".
+    """
+    import inspect
+
+    import visual_redesign_full as vrf
+
+    source = inspect.getsource(vrf.generate_match_package)
+    assert 'players.csv' in source, "the squad is not written beside the frames"
+    # And handed straight down, so a package rendered in one call never depends
+    # on what happens to be on disk.
+    assert "squad=players" in inspect.getsource(vrf.player_pizzas)
+    assert "player_pizzas(events, players)" in source

@@ -3041,7 +3041,7 @@ def build_catalog(paths: list[Path]):
 PDF_RADARS_PER_TEAM = 5
 
 
-def player_pizzas(events: pd.DataFrame) -> list[Path]:
+def player_pizzas(events: pd.DataFrame, players: pd.DataFrame | None = None) -> list[Path]:
     """Export every player's radar, and return the five per side for the report."""
     from player_radar import export_player_radars
 
@@ -3054,7 +3054,12 @@ def player_pizzas(events: pd.DataFrame) -> list[Path]:
         "away_color": AWAY,
         "score": MATCH_SCORE,
     }
-    ranking = export_player_radars(events, info, str(OUT), dpi=135)
+    # The squad is handed down rather than left to be found on disk. The radar
+    # falls back to reading players.csv out of the folder it writes into, which
+    # the dark package has and the light one did not, so every light radar lost
+    # its position and printed the player's substitution role instead — "sub_out"
+    # where the black copy of the same player said "Defensive midfielder".
+    ranking = export_player_radars(events, info, str(OUT), dpi=135, squad=players)
 
     # Every participant's radar is written to disk — the folders are the
     # reference and the article picks its own three a side from them. The
@@ -3148,6 +3153,11 @@ def generate_match_package(
     xg.to_csv(OUT / "xg.csv", index=False, encoding="utf-8-sig")
     team_metrics.to_csv(OUT / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
     player_metrics.to_csv(OUT / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
+    # The squad too. It is what carries each player's position, and anything
+    # reading the folder back — the radars first among them — has no other
+    # source for it. The light package went without one and its radars named
+    # every substitute "sub_out".
+    players.to_csv(OUT / "players.csv", index=False, encoding="utf-8-sig")
     # The fixture's identity, next to the frames it describes. Without it the
     # output folder held every number about the match and no record of which
     # match it was, so nothing downstream could re-render from it.
@@ -3213,7 +3223,7 @@ def generate_match_package(
         unlocking_the_block(events, AWAY_ID, HOME_ID, 48),
         press_and_rest(events),
     ]
-    paths.extend(player_pizzas(events))
+    paths.extend(player_pizzas(events, players))
     paths = sorted({path.resolve() for path in paths}, key=lambda path: path.name)
     catalog = build_catalog(paths)
     pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
