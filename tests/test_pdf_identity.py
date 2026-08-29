@@ -93,6 +93,11 @@ ALLOWED_SIZE_NAMES = set(SCALE_NAMES) | {
     # scale because it is read across a room rather than at reading distance.
     "TYPE_COVER_SCORE", "TYPE_COVER_TEAM",
     "TYPE_COVER_FIGURE", "TYPE_COVER_MARK",
+    # The cover's own small type. It had been borrowed from the body scale,
+    # where 6.5pt grey inside a dense column reads as the footnote it is; on a
+    # cover the same setting is the only text between the score and the
+    # figures, and the row labels are what say what each bar measures.
+    "TYPE_COVER_LABEL", "TYPE_COVER_META",
 }
 
 

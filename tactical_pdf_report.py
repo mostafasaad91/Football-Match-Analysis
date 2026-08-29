@@ -26,6 +26,77 @@ PAGE_H = 12.0 * 72
 BASE_PAGE_H = 9 * 72
 VISUAL_NOTE_H = PAGE_H - BASE_PAGE_H
 
+
+# ── The cover's face ─────────────────────────────────────────────────────────
+#
+# The report was set entirely in Helvetica, which is what reportlab gives you
+# for free and reads as the absence of a decision. The cover is the one surface
+# that is looked at rather than read, and a condensed grotesque is the register
+# the rest of football's graphics are in.
+#
+# Condensed is the practical half of the argument as well as the aesthetic one:
+# Bahnschrift sets "POSSESSION" 9% narrower than Helvetica-Bold at the same
+# size, so the labels can be set larger without the letter-spaced caps growing
+# wider than the card.
+#
+# Every candidate is a font Windows ships, and the chain ends at Helvetica, so
+# a machine without any of them still builds the same report in the face it
+# always used. Nothing about the layout depends on which one wins.
+# Two faces, because the two jobs on this page want opposite things.
+#
+# The display line — the score, the club names, the figure at each end of a bar
+# — is large enough that weight is not what makes it legible, and a condensed
+# grotesque is what gives the page its character. Bahnschrift ships only as a
+# variable font and reportlab takes its default instance, which is light; at
+# 44pt that reads as elegant and at 11pt it reads as faint.
+#
+# So the small letter-spaced caps get a face with a real bold instead. They are
+# the ones that were unreadable, and weight is the whole fix.
+_DISPLAY_CANDIDATES = (
+    ("Bahnschrift", "bahnschrift.ttf"),
+    ("SegoeUI-Semilight", "segoeuisl.ttf"),
+)
+_TEXT_CANDIDATES = (
+    ("SegoeUI-Bold", "segoeuib.ttf"),
+    ("Tahoma-Bold", "tahomabd.ttf"),
+    ("Verdana-Bold", "verdanab.ttf"),
+)
+
+_FONT_DIRS = (
+    Path("C:/Windows/Fonts"),
+    Path.home() / "AppData/Local/Microsoft/Windows/Fonts",
+    Path("/usr/share/fonts"),
+    Path("/Library/Fonts"),
+)
+
+
+def _register_first(candidates, fallback: str) -> str:
+    """Register the first candidate that exists, or keep the built-in face.
+
+    Attempted once at import. A font that fails — missing, unreadable, or a
+    format reportlab will not take — is skipped rather than raised on: a report
+    in the wrong face is a better outcome than no report, and the chain ends at
+    a face reportlab always has.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    for name, filename in candidates:
+        for directory in _FONT_DIRS:
+            path = directory / filename
+            if not path.exists():
+                continue
+            try:
+                pdfmetrics.registerFont(TTFont(name, str(path)))
+                return name
+            except Exception:
+                continue
+    return fallback
+
+
+COVER_DISPLAY = _register_first(_DISPLAY_CANDIDATES, "Helvetica-Bold")
+COVER_TEXT = _register_first(_TEXT_CANDIDATES, "Helvetica-Bold")
+
 # Aligned to the values the rendered visuals use, so the page chrome and the
 # images sitting on it are the same ground rather than two near-matches.
 #
@@ -42,6 +113,14 @@ if IS_LIGHT_THEME:
     NEUTRAL = colors.HexColor("#8A8F97")
     HOME = colors.HexColor("#0A0A0A")
     AWAY = colors.HexColor("#E76F51")
+    # Cover-only greys. Letter-spaced small caps lose stroke weight, so they
+    # are held well above the 4.5:1 floor rather than at it.
+    COVER_LABEL = colors.HexColor("#3A3F47")   # 9.9:1 on the light page
+    COVER_META = colors.HexColor("#4A5058")    # 7.9:1
+    # The trailing side's figure on each row. Quieter than the leader's, which
+    # keeps its kit colour, but still a number a reader has to be able to read:
+    # it is half the comparison the row exists to make.
+    COVER_FIGURE_DIM = colors.HexColor("#666D78")   # 5.0:1
 else:
     BG = colors.HexColor("#000000")
     PANEL = colors.HexColor("#0A0A0A")
@@ -52,6 +131,9 @@ else:
     NEUTRAL = colors.HexColor("#5A5A5A")
     HOME = colors.HexColor("#2F5BFF")
     AWAY = colors.HexColor("#FFD400")
+    COVER_LABEL = colors.HexColor("#C8C8C8")   # 11.6:1 on the black page
+    COVER_META = colors.HexColor("#A8A8A8")    # 8.0:1
+    COVER_FIGURE_DIM = colors.HexColor("#909090")   # 5.7:1
 
 # Fixture colours fall back to these when the caller supplies none, so the
 # fallback has to follow the page too.
@@ -98,6 +180,21 @@ TYPE_THESIS, TYPE_FIXTURE = 23, 15
 # because a bare number in a setFont call is a size nothing else can find.
 TYPE_COVER_SCORE, TYPE_COVER_TEAM = 44, 18
 TYPE_COVER_FIGURE, TYPE_COVER_MARK = 21, 27
+
+# The cover's small type had been borrowed from the body pages, where 6.5pt
+# grey sits inside a dense column and reads as a footnote should. On a cover it
+# is the only text between the score and the figures, at arm's length, and the
+# row labels are the part that says what each bar measures — "POSSESSION" is
+# not a footnote, it is the axis.
+#
+# The greys were the other half. NEUTRAL measures 3.0:1 against the black page,
+# under the 4.5:1 floor before the letter-spacing thins the strokes further,
+# and the byline and the source line were both drawn in it.
+#
+# Set against the condensed face, which is why they are larger than they look:
+# Bahnschrift at 11.5 occupies about the width Helvetica-Bold did at 10.5, so
+# the labels grew without the card having to.
+TYPE_COVER_LABEL, TYPE_COVER_META = 11.5, 10.0
 
 # The cover's frame and the card inside it. The two rules are fixed to the
 # sheet; everything between them is centred, so the air above the crests and
@@ -2066,8 +2163,10 @@ class TacticalPDF:
                 self.canvas.addOutlineEntry(outline, bookmark, level=level, closed=False)
 
     def _finish(self):
-        self.canvas.setFillColor(NEUTRAL)
-        self.canvas.setFont("Helvetica-Bold", TYPE_MICRO)
+        # NEUTRAL is 3.0:1 against the black page, under the 4.5:1 floor, and
+        # this is the one line that appears on all seventy-four of them.
+        self.canvas.setFillColor(COVER_META)
+        self.canvas.setFont(COVER_TEXT, TYPE_COVER_META)
         self.canvas.drawRightString(PAGE_W - 24, 14, f"PAGE {self.page:02d}  |  REAL MATCH EVENTS")
         self.canvas.saveState()
         self.canvas.setStrokeColor(GRID)
@@ -2281,13 +2380,13 @@ class TacticalPDF:
         centre = PAGE_W / 2
 
         top = PAGE_H - 54
-        c.setFillColor(NEUTRAL)
-        c.setFont("Helvetica-Bold", TYPE_CAPTION)
+        c.setFillColor(COVER_LABEL)
+        c.setFont(COVER_TEXT, TYPE_COVER_LABEL)
         competition = self._cover_competition().upper()
         c.drawString(COVER_MARGIN, top, _spaced_out(competition or "MATCH ANALYSIS"))
         if competition:
-            c.setFillColor(MUTED)
-            c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.setFillColor(COVER_META)
+            c.setFont(COVER_TEXT, TYPE_COVER_META)
             c.drawString(COVER_MARGIN, top - 19, _spaced_out("MATCH ANALYSIS"))
         self._cover_logo(PAGE_W - 92, PAGE_H - 22, 64)
 
@@ -2314,11 +2413,11 @@ class TacticalPDF:
         for index, row in enumerate(rows):
             self._cover_row(centre, first - index * COVER_ROW_STEP, *row)
 
-        c.setFillColor(NEUTRAL)
-        c.setFont("Helvetica-Bold", TYPE_MICRO)
+        c.setFillColor(COVER_META)
+        c.setFont(COVER_TEXT, TYPE_COVER_META)
         byline = str(self.context.get("byline") or "MOSTAFA SAAD").upper()
-        c.drawString(COVER_MARGIN, foot_rule - 21, _spaced_out(byline))
-        c.drawRightString(PAGE_W - COVER_MARGIN, foot_rule - 21,
+        c.drawString(COVER_MARGIN, foot_rule - 23, _spaced_out(byline))
+        c.drawRightString(PAGE_W - COVER_MARGIN, foot_rule - 23,
                           _spaced_out("WHOSCORED / OPTA EVENT DATA"))
 
         # The two-colour rule every visual and poster closes on.
@@ -2391,14 +2490,14 @@ class TacticalPDF:
                 c.setFillColor(colour)
                 c.circle(x, y, crest / 2, stroke=0, fill=1)
                 c.setFillColor(colors.white)
-                c.setFont("Helvetica-Bold", TYPE_COVER_MARK)
+                c.setFont(COVER_DISPLAY, TYPE_COVER_MARK)
                 c.drawCentredString(x, y - 10, _club_initials(name))
             c.setFillColor(TEXT)
-            c.setFont("Helvetica-Bold", TYPE_COVER_TEAM)
+            c.setFont(COVER_DISPLAY, TYPE_COVER_TEAM)
             c.drawCentredString(x, y - crest / 2 - 25, str(name).upper())
 
         c.setFillColor(TEXT)
-        c.setFont("Helvetica-Bold", TYPE_COVER_SCORE)
+        c.setFont(COVER_DISPLAY, TYPE_COVER_SCORE)
         c.drawCentredString(centre, y - 15, str(self.context["score"]))
 
     def _cover_rows(self):
@@ -2436,9 +2535,11 @@ class TacticalPDF:
         left = centre - width / 2
         half = width / 2
 
-        c.setFillColor(MUTED)
-        c.setFont("Helvetica-Bold", TYPE_MICRO)
-        c.drawCentredString(centre, y + 15, _spaced_out(label))
+        # The label is what the row measures, so it is set at the cover's own
+        # size rather than the body pages' footnote size.
+        c.setFillColor(COVER_LABEL)
+        c.setFont(COVER_TEXT, TYPE_COVER_LABEL)
+        c.drawCentredString(centre, y + 16, _spaced_out(label))
 
         # The track, so a short bar still reads against a measured length.
         c.setFillColor(GRID)
@@ -2467,10 +2568,10 @@ class TacticalPDF:
         # The leader's figure is printed in its own colour; the other stays
         # neutral, so the winner of each row is readable without the bar.
         leads = share >= 0.5
-        c.setFillColor(self.home_color if leads else NEUTRAL)
-        c.setFont("Helvetica-Bold", TYPE_COVER_FIGURE)
+        c.setFillColor(self.home_color if leads else COVER_FIGURE_DIM)
+        c.setFont(COVER_DISPLAY, TYPE_COVER_FIGURE)
         c.drawRightString(left - 20, y - 7, home_text)
-        c.setFillColor(self.away_color if not leads else NEUTRAL)
+        c.setFillColor(self.away_color if not leads else COVER_FIGURE_DIM)
         c.drawString(left + width + 20, y - 7, away_text)
 
     def _cover_thesis(self, centre: float, top: float, text: str, measure: float):
