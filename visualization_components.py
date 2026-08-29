@@ -772,3 +772,40 @@ def legend_chips(ax, items, y: float = -0.10, fontsize: float = 10):
         )
         # Approximate width per char to advance x
         x += 0.022 + 0.0085 * len(lbl) + 0.030
+
+
+# ── Saving a figure when the machine is out of commit ────────────────────────
+#
+# A four-hour run died on its first PNG with "MemoryError: bad allocation" from
+# matplotlib's Agg renderer. The data was ordinary — 1450 events, minutes 0 to
+# 95 — and the machine was the problem: 22.5 GB of a 23.7 GB commit limit was
+# already spoken for, so a fourteen-by-eight figure at 155 dpi could not get
+# the ten megabytes its buffer needs.
+#
+# That is a fair reason for one image to fail and a bad reason to lose the
+# whole package. bbox_inches="tight" renders twice, and every step down in dpi
+# quarters the buffer, so a save that cannot fit is retried smaller before it
+# is allowed to raise.
+SAVE_DPI_STEPS = (1.0, 0.72, 0.5)
+
+
+def save_figure(fig, path, *, dpi=155, **kwargs):
+    """Write a figure, stepping the resolution down rather than dying.
+
+    Returns the dpi it managed. A MemoryError at the smallest step is re-raised
+    — at that point the machine genuinely cannot draw and a silent half-sized
+    image would be worse than the failure.
+    """
+    last = None
+    for step in SAVE_DPI_STEPS:
+        try:
+            fig.savefig(path, dpi=max(int(dpi * step), 40), **kwargs)
+            return max(int(dpi * step), 40)
+        except MemoryError as error:            # pragma: no cover - machine state
+            last = error
+            # The half-built buffer is still held until the next allocation
+            # fails too, and the retry needs the room.
+            import gc
+
+            gc.collect()
+    raise last

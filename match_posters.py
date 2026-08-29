@@ -55,7 +55,7 @@ from match_metrics import (
     turnover_events,
     xg_momentum,
 )
-from visualization_components import IS_LIGHT_THEME, text_on_fill
+from visualization_components import IS_LIGHT_THEME, save_figure, text_on_fill
 
 if IS_LIGHT_THEME:
     BG, PANEL, GRID = "#F5F5F5", "#FFFFFF", "#CCCCCC"
@@ -1700,7 +1700,7 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_1_report.png"
-    fig.savefig(path, facecolor=BG, dpi=DPI)
+    save_figure(fig, path, dpi=DPI, facecolor=BG)
     plt.close(fig)
     generated.append(path)
     del fig
@@ -1736,7 +1736,7 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_2_tactics.png"
-    fig.savefig(path, facecolor=BG, dpi=DPI)
+    save_figure(fig, path, dpi=DPI, facecolor=BG)
     plt.close(fig)
     generated.append(path)
     del fig
@@ -1771,7 +1771,7 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_3_transitions.png"
-    fig.savefig(path, facecolor=BG, dpi=DPI)
+    save_figure(fig, path, dpi=DPI, facecolor=BG)
     plt.close(fig)
     generated.append(path)
     del fig
@@ -1811,7 +1811,7 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_4_final_ball.png"
-    fig.savefig(path, facecolor=BG, dpi=DPI)
+    save_figure(fig, path, dpi=DPI, facecolor=BG)
     plt.close(fig)
     generated.append(path)
     del fig
@@ -1855,7 +1855,7 @@ def build_match_posters(
 
     _footer(fig, home_color, away_color, byline)
     path = out / "match_poster_5_tactical_book.png"
-    fig.savefig(path, facecolor=BG, dpi=DPI)
+    save_figure(fig, path, dpi=DPI, facecolor=BG)
     plt.close(fig)
     generated.append(path)
     del fig

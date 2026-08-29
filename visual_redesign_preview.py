@@ -24,6 +24,7 @@ from visualization_components import (
     IS_LIGHT_THEME,
     PITCH_LINE,
     PITCH_LINE_ALPHA,
+    save_figure,
 )
 
 from match_metrics import (
@@ -324,7 +325,7 @@ def page(title: str, subtitle: str, figsize=(14, 8)) -> tuple[plt.Figure, plt.Ax
 
 def save(fig: plt.Figure, name: str) -> Path:
     path = OUT_DIR / name
-    fig.savefig(path, dpi=155, bbox_inches="tight", pad_inches=0.16)
+    save_figure(fig, path, dpi=155, bbox_inches="tight", pad_inches=0.16)
     plt.close(fig)
     return path
 

@@ -268,3 +268,54 @@ def test_a_foul_is_counted_once_against_the_side_that_committed_it():
     # One foul conceded and one aerial won each, not two of everything.
     assert figures.count("2") == 0, figures
     assert figures.count("1") >= 4, figures
+
+
+# --------------------------------------------------------------------------
+# saving when the machine cannot allocate
+# --------------------------------------------------------------------------
+
+def test_a_save_that_cannot_allocate_is_retried_smaller():
+    """A four-hour run died on its first PNG with "bad allocation".
+
+    The data was ordinary and the machine was the problem: 22.5 GB of a 23.7 GB
+    commit limit was already spoken for. That is a fair reason for one image to
+    fail and a bad reason to lose the whole package.
+    """
+    from visualization_components import SAVE_DPI_STEPS, save_figure
+
+    class Stubborn:
+        def __init__(self, fails):
+            self.fails, self.tried = fails, []
+
+        def savefig(self, path, *, dpi, **kwargs):
+            self.tried.append(dpi)
+            if len(self.tried) <= self.fails:
+                raise MemoryError("bad allocation")
+
+    fig = Stubborn(fails=2)
+    got = save_figure(fig, "x.png", dpi=200)
+    assert len(fig.tried) == 3, fig.tried
+    assert fig.tried == sorted(fig.tried, reverse=True), fig.tried
+    assert got == fig.tried[-1]
+
+
+def test_a_machine_that_cannot_draw_at_all_still_raises():
+    """A silent half-sized image would be worse than the failure."""
+    from visualization_components import save_figure
+
+    class Hopeless:
+        def savefig(self, path, *, dpi, **kwargs):
+            raise MemoryError("bad allocation")
+
+    with pytest.raises(MemoryError):
+        save_figure(Hopeless(), "x.png", dpi=155)
+
+
+def test_the_step_down_actually_reduces_the_buffer():
+    from visualization_components import SAVE_DPI_STEPS
+
+    assert SAVE_DPI_STEPS[0] == 1.0
+    assert list(SAVE_DPI_STEPS) == sorted(SAVE_DPI_STEPS, reverse=True)
+    # Each step has to be worth taking: a buffer scales with dpi squared, so
+    # the smallest step must at least halve the memory the first one wanted.
+    assert SAVE_DPI_STEPS[-1] ** 2 <= 0.5
