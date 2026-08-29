@@ -87,8 +87,15 @@ def _prose_only(text: str) -> str:
 
 
 def _plural_offenders(text: str) -> list[str]:
+    """Every "1 <plural noun>", and nothing that only looks like one.
+
+    The pattern reads the word after the digit non-greedily, so an adjective
+    ending in s trips it: "conceding 1 dangerous counter" is correct English and
+    was reported as "1 dangerous". No English plural ends in "us", so skipping
+    that ending cannot hide a real one.
+    """
     return [found.group(0) for found in ONE_PLURAL.finditer(text)
-            if not found.group(0).endswith(("ss", "ess"))]
+            if not found.group(0).endswith(("ss", "ess", "us"))]
 
 
 @pytest.mark.parametrize("path", ARTICLES, ids=ARTICLE_IDS)

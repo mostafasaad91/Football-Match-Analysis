@@ -2,6 +2,7 @@ import football_match_analysis as analysis
 import visual_redesign_full as complete_visuals
 import visual_redesign_preview as preview
 from football_match_analysis import WHITE_KIT_SILVER, choose_matchup_colors
+from player_radar import _side_team_color
 from tactical_visualizations import _clean_dark_navy, _team_identity_color
 from visualization_components import (
     BG_PITCH,
@@ -41,6 +42,24 @@ def test_matchup_colours_follow_the_active_team_colour_mode():
     else:
         assert france_england == (C_HOME, C_AWAY)
         assert merseyside == (C_HOME, C_AWAY)
+
+
+def test_tottenham_newcastle_cannot_resolve_to_two_neutral_colours():
+    resolved = choose_matchup_colors("Tottenham", "Newcastle")
+    assert resolved[0].lower() != resolved[1].lower()
+    if not USE_REAL_TEAM_KIT_COLORS:
+        assert resolved == (C_HOME, C_AWAY)
+    else:
+        # Kit mode is opt-in, but even there this fixture must not regress to
+        # the old silver-v-grey pair (#DCE3EC / #A3A3A3).
+        assert resolved != (WHITE_KIT_SILVER, "#A3A3A3")
+
+
+def test_player_pages_ignore_stale_kit_colours_in_role_mode():
+    stale = {"home_color": "#DCE3EC", "away_color": "#A3A3A3"}
+    if not USE_REAL_TEAM_KIT_COLORS:
+        assert _side_team_color(stale, "home") == C_HOME
+        assert _side_team_color(stale, "away") == C_AWAY
 
 
 def test_white_kit_teams_keep_a_white_identity():

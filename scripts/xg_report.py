@@ -8,9 +8,9 @@ Reads the raw snapshots the collector keeps, recomputes each shot with the
 shipped model, and compares the predictions with what actually happened.
 
 Nothing is written unless the correction clears every gate in xg_calibration:
-enough shots, enough goals, and an improvement on folds it was not fitted to.
-Today it does not, and that is the honest result — the model's total sits well
-inside the sampling noise of the goals scored.
+enough shots, goals and matches, plus an improvement on complete matches it was
+not fitted to. The report always scores the raw submodels first, so an existing
+correction can never be fitted to its own already-corrected output.
 """
 from __future__ import annotations
 
@@ -80,6 +80,11 @@ def main(argv: list[str]) -> int:
         print("No stored snapshots under output/raw_snapshots.")
         return 1
 
+    # Always measure the raw submodels. Otherwise an existing calibration is
+    # applied here and then fitted a second time on its own output.
+    fa._XG_CALIBRATION = None
+    shots["distance"] = shots.apply(
+        lambda row: fa._shot_geometry_features(row)["distance"], axis=1)
     shots["xG"] = shots.apply(fa._opta_like_local_xg_from_row, axis=1)
     report = xc.evaluate(shots["xG"], shots["is_goal"].astype(float))
 
@@ -105,13 +110,13 @@ def main(argv: list[str]) -> int:
     # distance, not with the model's own probability, which is why no Platt
     # correction can reach it.
     print("\ncalibration by distance")
-    reach = (((100 - shots["x"]) * 1.05) ** 2 + ((shots["y"] - 50) * 0.68) ** 2) ** 0.5
-    for low, high, name in [(0, 11, "inside 11 m"), (11, 999, "11 m and out")]:
-        inside = shots[(reach >= low) & (reach < high)]
+    for low, high in xc.DISTANCE_BANDS:
+        inside = shots[(shots["distance"] >= low) & (shots["distance"] < high)]
         if inside.empty:
             continue
         predicted, goals = inside["xG"].sum(), inside["is_goal"].sum()
         spread = float((inside["xG"] * (1 - inside["xG"])).sum()) ** 0.5
+        name = f"{low:g}-{high:g} m" if high < 999 else f"{low:g}+ m"
         print(f"  {name:14s} n={len(inside):4d}  predicted {predicted:6.1f}  "
               f"goals {int(goals):4d}  {(goals - predicted) / max(spread, 1e-9):+.1f} "
               f"standard deviations")
@@ -120,7 +125,8 @@ def main(argv: list[str]) -> int:
         print(f"\nMeasure only. Pass --fit to write a correction when one is earned.")
         return 0
 
-    found = xc.fit(shots["xG"], shots["is_goal"].astype(float))
+    found = xc.fit(shots["xG"], shots["is_goal"].astype(float),
+                   shots["distance"], shots["match"])
     if found is None:
         print(f"\nNo correction written. Needs {xc.MIN_SHOTS} shots and "
               f"{xc.MIN_GOALS} goals (have {report['shots']} and {report['goals']}), "
@@ -128,8 +134,15 @@ def main(argv: list[str]) -> int:
         return 0
 
     path = xc.save(found)
-    print(f"\nWrote {path.name}: slope {found.slope:.3f}, intercept {found.intercept:+.3f}")
+    corrected = pd.Series(
+        [found.apply(p, d) for p, d in zip(shots["xG"], shots["distance"])],
+        index=shots.index)
+    print(f"\nWrote {path.name}: excess above {xc.HIGH_KNEE:.2f} keeps "
+          f"{found.high_gain:.0%}; shooting-range term {found.range_logit:+.3f}")
     print(f"held-out log-loss {found.log_loss_before:.4f} → {found.log_loss_after:.4f}")
+    print(f"distance-banded mispricing "
+          f"{xc.distance_banded_error(shots['xG'], shots['is_goal'], shots['distance']):.1f} "
+          f"→ {xc.distance_banded_error(corrected, shots['is_goal'], shots['distance']):.1f} goals")
     return 0
 
 

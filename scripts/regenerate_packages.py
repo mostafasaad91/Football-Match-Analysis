@@ -54,9 +54,25 @@ def fixtures(patterns: list[str]) -> list[Path]:
 
 def rebuild(out: Path) -> dict:
     """One fixture, rebuilt in place from its own exports."""
+    from football_match_analysis import choose_matchup_colors
     from visual_redesign_full import generate_match_package
 
-    info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
+    info_path = out / "match_info.json"
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    # Resolve again instead of trusting colours stored by an older version.
+    # In the default kit mode this selects a real alternate kit on a clash; in
+    # explicit role mode choose_matchup_colors returns the fixed pair.
+    home_color, away_color = choose_matchup_colors(
+        str(info.get("home_name") or "Home"),
+        str(info.get("away_name") or "Away"),
+        info.get("home_kit_type"),
+        info.get("away_kit_type"),
+    )
+    if (info.get("home_color"), info.get("away_color")) != (home_color, away_color):
+        info["home_color"], info["away_color"] = home_color, away_color
+        info_path.write_text(
+            json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     frames = {name: pd.read_csv(out / name) for name in FRAMES}
     return generate_match_package(
         frames["events.csv"],

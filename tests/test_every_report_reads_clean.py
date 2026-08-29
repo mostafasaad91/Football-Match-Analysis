@@ -254,10 +254,18 @@ ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b")
 
 
 def _plural_offenders(texts) -> list[str]:
+    """Every "1 <plural noun>" in the text, and nothing that only looks like one.
+
+    The pattern reads the word after the digit non-greedily, so it also fires on
+    an adjective that happens to end in s: "conceding 1 dangerous counter" is
+    correct English and was reported as "1 dangerous". No English plural ends in
+    "us", so skipping that ending cannot hide a real one, and it covers the
+    whole -ous family along with focus, status and bonus.
+    """
     found = []
     for text in texts:
         for hit in ONE_PLURAL.finditer(str(text)):
-            if not hit.group(0).endswith(("ss", "ess")):
+            if not hit.group(0).endswith(("ss", "ess", "us")):
                 found.append(hit.group(0))
     return sorted(set(found))
 

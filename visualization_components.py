@@ -90,10 +90,11 @@ IS_LIGHT_THEME = _THEME == "light"
 #                       from team_palettes.py. Two teams whose kits are too
 #                       close, or a kit that is unreadable on the page, fall
 #                       back to the fixed roles below.
-#   "roles"           — every fixture uses the same two role colours, so the
-#                       reader learns one visual language across all matches.
+#   "roles"           — every fixture uses the same two production colours.
+# Real kits are the production default; the fixture resolver selects an
+# alternate kit whenever the two primaries are too similar.
 TEAM_COLOR_MODE = os.environ.get("MATCH_ANALYSIS_TEAM_COLORS", "kit").strip().lower()
-USE_REAL_TEAM_KIT_COLORS = TEAM_COLOR_MODE != "roles"
+USE_REAL_TEAM_KIT_COLORS = TEAM_COLOR_MODE in {"kit", "kits", "real", "real_kits"}
 if IS_LIGHT_THEME:
     # LIGHT_PALETTE — "Ink & Burnt Orange" print identity. This block is the
     # single source of truth for the light theme; every light value used by the

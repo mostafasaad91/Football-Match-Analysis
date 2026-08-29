@@ -1,35 +1,9 @@
-"""Let the xG model correct itself, but only once the data says it should.
+"""Distance calibration for the local (non-provider) xG model.
 
-The shipped model is a logistic on distance, angle and context whose
-coefficients were reasoned from published research rather than fitted. On the
-matches collected so far its level holds up: 955 non-penalty shots produced 108
-goals against 109.6 predicted, two tenths of a standard deviation.
-
-Its shape does not, and no correction here can repair that. The model is 2.5
-standard deviations too high inside eleven metres and 2.0 too low outside, the
-two errors cancelling in the total that looks so good. What it is missing is
-what the shot faced — Opta's own big-chance flag converts at 36% wherever it is
-taken, while a shot from seven metres that Opta declined to flag converts at 3%,
-and the model, which sees geometry and not goalkeepers, prices that one at 10%.
-That is a coefficient the archive is nowhere near large enough to fit, and it is
-not a slope and an intercept on the answer the model already gave.
-
-That number is the whole reason this file is careful. Fitting a full xG model
-takes tens of thousands of shots — around ten goals per coefficient is the
-usual floor, and the model has fifteen. Fitting fifteen on forty-one goals does
-not learn the game, it memorises fourteen matches and gets worse everywhere
-else. So nothing here fits the model.
-
-What it fits is two numbers: a slope and an intercept on the model's own log
-odds, which is Platt scaling. Two parameters is a defensible ask of a few
-hundred shots, and it can only stretch or shift the existing curve, never
-invent a new shape.
-
-Even that is gated. The correction is accepted only when there are enough
-shots to see it, and only when it beats the uncorrected model on data it was
-not fitted to. Otherwise the file it would have written is not written, and
-the model ships exactly as it is — which is the expected outcome today and for
-a while yet.
+The archive exposes two cancelling errors: its highest probabilities (almost
+all very close chances) are over-priced while normal shooting-range attempts
+are under-priced. The first term is a monotone high-probability bend; the second
+is a smooth distance gate. Validation always holds out complete matches.
 """
 from __future__ import annotations
 
@@ -37,242 +11,215 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-
-import numpy as np
+from typing import Sequence
 
 CALIBRATION_FILE = "xg_calibration.json"
-
-# Below this there is nothing to learn: the sampling noise on the total is
-# larger than any bias worth correcting. Roughly sixty matches, which puts the
-# standard error on the goal total near 4%.
-#
-# This floor was briefly 600 and 75, lowered to admit a correction that read a
-# 16% shortfall across 955 shots. That shortfall was not real. scripts/xg_report
-# rebuilt each shot from the stored snapshot and joined its qualifier names with
-# a comma, while the model splits that field on a pipe — so BigChance, Cross and
-# Head never reached it and every shot was priced as an ordinary foot shot from
-# open play, 22% under what the pipeline gives the same shots. The correction was
-# fitted against a model the package does not ship. Measured properly the total
-# is 109.6 xG against 108 goals, two tenths of a standard deviation, and there
-# was never a level to correct.
-MIN_SHOTS = 1500
-MIN_GOALS = 150
-
-# A correction has to earn its place on data it never saw.
+METHOD = "monotone_close_and_distance_range_v1"
+MIN_SHOTS, MIN_GOALS, MIN_MATCHES = 800, 90, 20
+MIN_HIGH_SHOTS, MIN_RANGE_SHOTS = 40, 250
 FOLDS = 5
-SEEDS = 8                 # one shuffle is a coin flip; see fit()
-MIN_IMPROVEMENT = 0.002   # in log-loss, per shot
-
-# Bands to hold the correction to, and how much of the mispricing it has to
-# clear. Log-loss alone cannot police this model: seven hundred of its nine
-# hundred shots sit below 0.10 and are priced correctly, so they decide the
-# mean, and the fifty shots above 0.40 that carry the visible error cannot move
-# it by MIN_IMPROVEMENT however wrong they are. A correction that halves the
-# error where nobody looks and doubles it on every shot map passes on log-loss.
-# So calibration is measured directly, per band, on pooled out-of-fold
-# predictions — pooled because the absolute error of eleven shots in one fold is
-# mostly the shuffle.
-BANDS = ((0.0, 0.05), (0.05, 0.10), (0.10, 0.20), (0.20, 0.40), (0.40, 1.01))
-MIN_BAND_GAIN = 0.05      # share of the banded mispricing the fit has to remove
-
-
-@dataclass(frozen=True)
-class Calibration:
-    slope: float
-    intercept: float
-    shots: int
-    goals: int
-    log_loss_before: float
-    log_loss_after: float
-
-    def apply(self, probability: float) -> float:
-        """The corrected probability.
-
-        Platt and nothing else. There was a ramp here that held the correction
-        off the far tail, and a clamp to stop the ramp reordering two shots,
-        both of them written to make one particular fit survive contact with a
-        shot map — the fit that turned out to be measuring a crippled model.
-        With the measurement repaired, the fit it existed for is not the fit
-        this file would produce, and a piece of shape nobody can derive from the
-        data is worse than no correction at all.
-        """
-        return float(_sigmoid(self.slope * _logit(probability) + self.intercept))
-
-    def as_dict(self) -> dict:
-        return {
-            "slope": self.slope, "intercept": self.intercept,
-            "shots": self.shots, "goals": self.goals,
-            "log_loss_before": self.log_loss_before,
-            "log_loss_after": self.log_loss_after,
-        }
+MIN_LOG_LOSS_GAIN = 0.004
+MIN_DISTANCE_ERROR_GAIN = 0.10
+DISTANCE_BANDS = ((0.0, 4.0), (4.0, 7.0), (7.0, 11.0),
+                  (11.0, 16.0), (16.0, 22.0), (22.0, 999.0))
+PROBABILITY_BANDS = ((0, .05), (.05, .10), (.10, .20), (.20, .40), (.40, 1.01))
+BANDS = PROBABILITY_BANDS  # public diagnostic name retained for xg_report
+HIGH_KNEE = 0.37
 
 
 def _sigmoid(z: float) -> float:
     if z >= 0:
-        return 1.0 / (1.0 + math.exp(-z))
-    exp = math.exp(z)
+        return 1.0 / (1.0 + math.exp(-min(z, 40.0)))
+    exp = math.exp(max(z, -40.0))
     return exp / (1.0 + exp)
 
 
 def _logit(p: float) -> float:
-    p = min(max(float(p), 1e-6), 1 - 1e-6)
-    return math.log(p / (1 - p))
+    p = min(max(float(p), 1e-6), 1.0 - 1e-6)
+    return math.log(p / (1.0 - p))
 
 
-def _log_loss(p: np.ndarray, y: np.ndarray) -> float:
-    p = np.clip(p, 1e-6, 1 - 1e-6)
-    return float(-(y * np.log(p) + (1 - y) * np.log(1 - p)).mean())
+def _range_basis(distance: float) -> float:
+    """Lift grows from 7m to full strength at 25m, then stays bounded."""
+    d = max(float(distance), 0.0)
+    return max(0.0, min(1.0, (d - 7.0) / 18.0))
 
 
-def _fit_platt(logits: np.ndarray, y: np.ndarray) -> tuple[float, float]:
-    """Slope and intercept on the model's log odds."""
-    from sklearn.linear_model import LogisticRegression
+@dataclass(frozen=True)
+class Calibration:
+    high_gain: float
+    range_logit: float
+    shots: int
+    goals: int
+    matches: int
+    log_loss_before: float
+    log_loss_after: float
+    method: str = METHOD
 
-    model = LogisticRegression(C=1e6, solver="lbfgs", max_iter=1000)
-    model.fit(logits.reshape(-1, 1), y)
-    return float(model.coef_[0][0]), float(model.intercept_[0])
+    def apply(self, probability: float, distance: float | None = None) -> float:
+        """Correct a local-model probability; missing distance is identity."""
+        value = float(probability)
+        if distance is None:
+            return value
+        # This bend is monotone in the original probability, so a farther shot
+        # cannot become better merely because it crossed a distance threshold.
+        if value > HIGH_KNEE:
+            value = HIGH_KNEE + (value - HIGH_KNEE) * self.high_gain
+        shooting_range = _range_basis(distance)
+        if shooting_range:
+            value = _sigmoid(_logit(value) + self.range_logit * shooting_range)
+        return value
+
+    def as_dict(self) -> dict:
+        return {"method": self.method, "high_knee": HIGH_KNEE,
+                "high_gain": self.high_gain,
+                "range_logit": self.range_logit, "shots": self.shots,
+                "goals": self.goals, "matches": self.matches,
+                "log_loss_before": self.log_loss_before,
+                "log_loss_after": self.log_loss_after}
+
+
+def _log_loss(probabilities, outcomes) -> float:
+    values = list(probabilities)
+    total = 0.0
+    for p, y in zip(values, outcomes):
+        p = min(max(float(p), 1e-6), 1.0 - 1e-6)
+        y = float(y)
+        total -= y * math.log(p) + (1.0 - y) * math.log(1.0 - p)
+    return total / max(len(values), 1)
+
+
+def distance_banded_error(probabilities, outcomes, distances,
+                          bands=DISTANCE_BANDS) -> float:
+    p, y, d = list(probabilities), list(outcomes), list(distances)
+    return float(sum(abs(sum(float(p[i]) for i in range(len(p)) if lo <= float(d[i]) < hi)
+                         - sum(float(y[i]) for i in range(len(y)) if lo <= float(d[i]) < hi))
+                     for lo, hi in bands))
+
+
+def banded_error(probabilities, outcomes, bands=None) -> float:
+    p, y = list(probabilities), list(outcomes)
+    bands = bands or PROBABILITY_BANDS
+    return float(sum(abs(sum(float(p[i]) for i in range(len(p)) if lo <= float(p[i]) < hi)
+                         - sum(float(y[i]) for i in range(len(y)) if lo <= float(p[i]) < hi))
+                     for lo, hi in bands))
 
 
 def evaluate(probabilities, outcomes) -> dict:
-    """What the current model is worth on these shots. No fitting."""
-    p = np.asarray(probabilities, dtype=float)
-    y = np.asarray(outcomes, dtype=float)
-    if not len(p):
+    p, y = [float(v) for v in probabilities], [float(v) for v in outcomes]
+    if not p:
         return {}
-    base = float(y.mean()) or 1e-6
-    return {
-        "shots": int(len(p)),
-        "goals": int(y.sum()),
-        "predicted": float(p.sum()),
-        "ratio": float(p.sum() / max(y.sum(), 1)),
-        "log_loss": _log_loss(p, y),
-        "baseline_log_loss": _log_loss(np.full_like(p, base), y),
-        "brier": float(((p - y) ** 2).mean()),
-        # How far the total sits from the goals scored, in standard deviations
-        # of a Poisson count. Under about two, the difference is the sample.
-        "sigma": float((y.sum() - p.sum()) / math.sqrt(max(p.sum(), 1e-9))),
-    }
+    goals, predicted = sum(y), sum(p)
+    base = goals / len(y)
+    return {"shots": len(p), "goals": int(goals), "predicted": predicted,
+            "ratio": predicted / max(goals, 1.0), "log_loss": _log_loss(p, y),
+            "baseline_log_loss": _log_loss([base] * len(p), y),
+            "brier": sum((a-b)**2 for a, b in zip(p, y)) / len(p),
+            "sigma": (goals-predicted) / math.sqrt(max(predicted, 1e-9))}
 
 
-def banded_error(probabilities, outcomes, bands=BANDS) -> float:
-    """Goals mispriced, summed over the bands. Zero is perfect calibration.
-
-    Errors are added band by band rather than over the whole sample, because a
-    model that prices its clear chances high and its half-chances low reads as
-    flawless on the total. This one does: 109.6 xG against 108 goals, and 2.5
-    standard deviations too high inside eleven metres.
-    """
-    p = np.asarray(probabilities, dtype=float)
-    y = np.asarray(outcomes, dtype=float)
-    return float(sum(
-        abs(p[(p >= low) & (p < high)].sum() - y[(p >= low) & (p < high)].sum())
-        for low, high in bands
-    ))
+def _fit_coefficients(p, y, d) -> tuple[float, float]:
+    """Small deterministic search over the two constrained shape parameters."""
+    best = None
+    for high_gain in (step / 20.0 for step in range(1, 21)):
+        for range_logit in (step / 20.0 for step in range(0, 21)):
+            candidate = Calibration(high_gain, range_logit, 0, 0, 0, 0.0, 0.0)
+            corrected = [candidate.apply(probability, distance)
+                         for probability, distance in zip(p, d)]
+            score = _log_loss(corrected, y)
+            if best is None or score < best[0]:
+                best = (score, high_gain, range_logit)
+    return best[1], best[2]
 
 
-def _out_of_fold(logits: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray | None:
-    """One corrected probability per shot, each from a fit that never saw it."""
-    order = np.random.default_rng(seed).permutation(len(logits))
-    folds = np.array_split(order, FOLDS)
-    corrected = np.empty(len(logits), dtype=float)
-    for index in range(FOLDS):
-        test = folds[index]
-        train = np.concatenate([folds[j] for j in range(FOLDS) if j != index])
-        if len(np.unique(y[train])) < 2:
-            return None
-        slope, intercept = _fit_platt(logits[train], y[train])
-        corrected[test] = 1.0 / (1.0 + np.exp(-(slope * logits[test] + intercept)))
-    return corrected
+def _apply_many(p, d, coefficients):
+    calibration = Calibration(coefficients[0], coefficients[1], 0, 0, 0, 0.0, 0.0)
+    return [calibration.apply(probability, distance)
+            for probability, distance in zip(p, d)]
 
 
-def fit(probabilities, outcomes, *, min_shots: int = MIN_SHOTS,
-        min_goals: int = MIN_GOALS) -> Calibration | None:
-    """A correction, or None when the data does not support one.
+def _group_folds(groups: Sequence[str], folds: int = FOLDS) -> list[set[str]]:
+    counts = {}
+    for group in groups:
+        counts[str(group)] = counts.get(str(group), 0) + 1
+    buckets = [(set(), 0) for _ in range(min(folds, len(counts)))]
+    for group, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+        target = min(range(len(buckets)), key=lambda i: buckets[i][1])
+        buckets[target][0].add(group)
+        buckets[target] = (buckets[target][0], buckets[target][1]+count)
+    return [bucket[0] for bucket in buckets]
 
-    Returns None for four separate reasons, and they are all good ones: too few
-    shots, too few goals, no improvement in log-loss on held-out folds, or a
-    correction that leaves the bands worse calibrated than it found them.
 
-    The last gate is the one with teeth. On the archive as it stands the fit
-    comes out at slope 0.752 — the right shape for a model that is too
-    confident at the top — and it still fails, because pulling the top down
-    drags the four hundred shots below 0.05 up with it, from a mean of 0.035
-    against an observed 0.035 to 0.049. Two parameters move the whole curve
-    together, and this model's error does not run with its own probability: it
-    runs with distance, too high inside eleven metres and too low outside, the
-    two cancelling in the total. Nothing shaped like Platt can find that.
-    """
-    p = np.asarray(probabilities, dtype=float)
-    y = np.asarray(outcomes, dtype=float)
-    if len(p) < min_shots or y.sum() < min_goals:
+def fit(probabilities, outcomes, distances=None, groups=None, *,
+        min_shots: int = MIN_SHOTS, min_goals: int = MIN_GOALS) -> Calibration | None:
+    """Fit only if the correction wins on complete held-out matches."""
+    p, y = [float(v) for v in probabilities], [float(v) for v in outcomes]
+    if distances is None or groups is None:
         return None
-    if len(np.unique(y)) < 2:
+    d, g = [float(v) for v in distances], [str(v) for v in groups]
+    if not (len(p) == len(y) == len(d) == len(g)):
+        raise ValueError("probabilities, outcomes, distances and groups must align")
+    if len(p) < min_shots or sum(y) < min_goals or len(set(g)) < MIN_MATCHES:
+        return None
+    if sum(value > HIGH_KNEE for value in p) < MIN_HIGH_SHOTS:
+        return None
+    if sum(7.0 <= v < 30.0 for v in d) < MIN_RANGE_SHOTS:
         return None
 
-    logits = np.array([_logit(v) for v in p])
-
-    # Cross-validated, and over several shuffles: with one, whether a
-    # correction is accepted comes down to which shots landed in which fold.
-    # Across eight seeds this model's fit ranged from -0.0008 to +0.0036
-    # against a floor of 0.002 — three seeds would have written a file and five
-    # would not.
-    before, after, banded = [], [], []
-    baseline_bands = banded_error(p, y)
-    for seed in range(SEEDS):
-        corrected = _out_of_fold(logits, y, seed)
-        if corrected is None:
-            return None
-        before.append(_log_loss(p, y))
-        after.append(_log_loss(corrected, y))
-        banded.append(banded_error(corrected, y))
-
-    if float(np.mean(before) - np.mean(after)) < MIN_IMPROVEMENT:
+    corrected = [None] * len(p)
+    for held_out in _group_folds(g):
+        train = [i for i, group in enumerate(g) if group not in held_out]
+        test = [i for i, group in enumerate(g) if group in held_out]
+        coefficients = _fit_coefficients([p[i] for i in train], [y[i] for i in train],
+                                         [d[i] for i in train])
+        for index, value in zip(test, _apply_many([p[i] for i in test],
+                                                  [d[i] for i in test], coefficients)):
+            corrected[index] = value
+    if any(value is None for value in corrected):
         return None
-    if max(banded) > baseline_bands * (1.0 - MIN_BAND_GAIN):
+    before, after = _log_loss(p, y), _log_loss(corrected, y)
+    distance_before = distance_banded_error(p, y, d)
+    distance_after = distance_banded_error(corrected, y, d)
+    if before-after < MIN_LOG_LOSS_GAIN:
         return None
-
-    slope, intercept = _fit_platt(logits, y)
-    return Calibration(slope, intercept, int(len(p)), int(y.sum()),
-                       float(np.mean(before)), float(np.mean(after)))
+    if distance_after > distance_before*(1.0-MIN_DISTANCE_ERROR_GAIN):
+        return None
+    coefficients = _fit_coefficients(p, y, d)
+    return Calibration(coefficients[0], coefficients[1], len(p), int(sum(y)),
+                       len(set(g)), before, after)
 
 
 def load(root=None) -> Calibration | None:
-    """The stored correction, if one was ever earned."""
-    base = Path(root) if root else Path(__file__).resolve().parent
-    path = base / CALIBRATION_FILE
+    path = (Path(root) if root else Path(__file__).resolve().parent) / CALIBRATION_FILE
     if not path.exists():
         return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return Calibration(
-            float(raw["slope"]), float(raw["intercept"]),
-            int(raw.get("shots", 0)), int(raw.get("goals", 0)),
-            float(raw.get("log_loss_before", 0.0)),
-            float(raw.get("log_loss_after", 0.0)),
-        )
+        if raw.get("method") != METHOD:
+            return None
+        if abs(float(raw.get("high_knee", HIGH_KNEE)) - HIGH_KNEE) > 1e-9:
+            return None
+        return Calibration(float(raw["high_gain"]), float(raw["range_logit"]),
+                           int(raw.get("shots", 0)), int(raw.get("goals", 0)),
+                           int(raw.get("matches", 0)), float(raw.get("log_loss_before", 0.0)),
+                           float(raw.get("log_loss_after", 0.0)), METHOD)
     except Exception:
         return None
 
 
 def save(calibration: Calibration, root=None) -> Path:
-    base = Path(root) if root else Path(__file__).resolve().parent
-    path = base / CALIBRATION_FILE
-    path.write_text(json.dumps(calibration.as_dict(), indent=2) + "\n", encoding="utf-8")
+    path = (Path(root) if root else Path(__file__).resolve().parent) / CALIBRATION_FILE
+    path.write_text(json.dumps(calibration.as_dict(), indent=2)+"\n", encoding="utf-8")
     return path
 
 
 _LOOK_IT_UP = object()
 
 
-def calibrated(probability: float, calibration=_LOOK_IT_UP) -> float:
-    """Apply the stored correction if there is one. Identity if not.
-
-    Passing None means "do not correct". It used to mean "go and find one",
-    which is the same thing a caller writes when it wants the identity, so
-    there was no way to ask for an uncorrected value at all.
-    """
+def calibrated(probability: float, distance: float | None = None,
+               calibration=_LOOK_IT_UP) -> float:
     if calibration is _LOOK_IT_UP:
         calibration = load()
     if calibration is None:
         return float(probability)
-    return calibration.apply(float(probability))
+    return calibration.apply(float(probability), distance)

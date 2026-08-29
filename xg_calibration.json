@@ -1,0 +1,11 @@
+{
+  "method": "monotone_close_and_distance_range_v1",
+  "high_knee": 0.37,
+  "high_gain": 0.15,
+  "range_logit": 0.4,
+  "shots": 955,
+  "goals": 108,
+  "matches": 37,
+  "log_loss_before": 0.31094883493774106,
+  "log_loss_after": 0.30125048849001773
+}

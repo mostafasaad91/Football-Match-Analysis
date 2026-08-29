@@ -18,7 +18,12 @@ from reportlab.platypus import Paragraph
 
 import crests
 from match_report import compute_ppda_both
-from visualization_components import IS_LIGHT_THEME
+from visualization_components import (
+    C_AWAY,
+    C_HOME,
+    IS_LIGHT_THEME,
+    USE_REAL_TEAM_KIT_COLORS,
+)
 
 
 PAGE_W = 14 * 72
@@ -712,7 +717,7 @@ def _section_copy(c: dict) -> dict[str, dict]:
                 ("PPDA", f"{home}: {c['home_ppda']:.2f}; {away}: {c['away_ppda']:.2f}. Lower means more aggressive pressure."),
                 ("High regains", f"{home}: {int(c['home_high_regains'])}; {away}: {int(c['away_high_regains'])}."),
                 ("Counterpress success", f"{home}: {c['home_counterpress_success_rate']:.1f}%; {away}: {c['away_counterpress_success_rate']:.1f}%."),
-                ("Rest-defence vulnerability", f"{home}: {c['home_rest_defence_vulnerability']:.1f}% with {int(c['home_rest_defence_dangerous_counters'])} dangerous counters conceded; {away}: {c['away_rest_defence_vulnerability']:.1f}% and {int(c['away_rest_defence_dangerous_counters'])}."),
+                ("Rest-defence vulnerability", f"{home}: {c['home_rest_defence_vulnerability']:.1f}% with {_count(c['home_rest_defence_dangerous_counters'], 'dangerous counter', 'dangerous counters')} conceded; {away}: {c['away_rest_defence_vulnerability']:.1f}% and {int(c['away_rest_defence_dangerous_counters'])}."),
             ],
             "implication": "The tactical priority is the connection between the press and the cover behind it: pressure without compact rest defence can increase territorial control while also increasing opponent shot quality.",
         },
@@ -1074,11 +1079,11 @@ def _legacy_visual_explanation(path: Path, context: dict) -> str:
     if "defensive_activity" in stem and side:
         return (
             f"The action locations show where {team}'s block engaged: higher interventions indicate proactive pressure, while deeper clusters indicate protection close to goal. "
-            f"Pair the map with {context[f'{side}_rest_defence_exposures']:.0f} rest-defence exposures and {context[f'{side}_rest_defence_dangerous_counters']:.0f} dangerous counters to judge whether challenges were supported by cover."
+            f"Pair the map with {_count(context[f'{side}_rest_defence_exposures'], 'rest-defence exposure', 'rest-defence exposures')} and {_count(context[f'{side}_rest_defence_dangerous_counters'], 'dangerous counter', 'dangerous counters')} to judge whether challenges were supported by cover."
         )
     if "defensive_summary" in stem:
         return (
-            f"The defensive comparison separates ball-winning volume from structural security. {home} allowed {int(context['home_rest_defence_dangerous_counters'])} dangerous counters and {away} allowed {int(context['away_rest_defence_dangerous_counters'])}; "
+            f"The defensive comparison separates ball-winning volume from structural security. {home} allowed {_count(context['home_rest_defence_dangerous_counters'], 'dangerous counter', 'dangerous counters')} and {away} allowed {int(context['away_rest_defence_dangerous_counters'])}; "
             "that difference matters more than raw tackle volume when evaluating the protection behind attacks."
         )
     if "transition_outcomes" in stem:
@@ -1956,7 +1961,7 @@ def visual_data_read(path: Path, context: dict) -> str:
         )
     if "defensive_activity" in stem and side:
         return (
-            f"{team} faced {int(context[f'{side}_rest_defence_exposures'])} rest-defence exposures and conceded {int(context[f'{side}_rest_defence_dangerous_counters'])} dangerous counters. The locations of interventions show where the defence acted; those outcomes qualify whether the activity represented control or emergency response."
+            f"{team} faced {_count(context[f'{side}_rest_defence_exposures'], 'rest-defence exposure', 'rest-defence exposures')} and conceded {_count(context[f'{side}_rest_defence_dangerous_counters'], 'dangerous counter', 'dangerous counters')}. The locations of interventions show where the defence acted; those outcomes qualify whether the activity represented control or emergency response."
         )
     if "defensive_summary" in stem:
         return (
@@ -3052,11 +3057,14 @@ def build_tactical_pdf(
     match_info: dict,
 ) -> Path:
     global HOME, AWAY
-    # Use the fixture's resolved kit colours. These were hard-coded to the role
-    # pair, so the PDF framed images drawn in the teams' real colours with a
-    # blue/yellow border belonging to neither side.
-    home_hex = str((match_info or {}).get("home_color") or "").strip() or "#2F5BFF"
-    away_hex = str((match_info or {}).get("away_color") or "").strip() or "#FFD400"
+    # Fixed roles are the production default and must also override colours
+    # stored in packages created before that decision. Kit colours are read
+    # only in the explicit opt-in mode.
+    if USE_REAL_TEAM_KIT_COLORS:
+        home_hex = str((match_info or {}).get("home_color") or "").strip() or C_HOME
+        away_hex = str((match_info or {}).get("away_color") or "").strip() or C_AWAY
+    else:
+        home_hex, away_hex = C_HOME, C_AWAY
     HOME = _as_pdf_color(home_hex, _DEFAULT_HOME)
     AWAY = _as_pdf_color(away_hex, _DEFAULT_AWAY)
     output.parent.mkdir(parents=True, exist_ok=True)

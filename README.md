@@ -299,10 +299,13 @@ as a ranking.
 
 - Pure black grounds with white pitch markings, and a light `#F5F5F5`
   counterpart that is a second publishing target rather than a recolour.
-- **Real home-kit colours** for roughly 975 clubs and national teams, resolved
-  from `team_palettes.py`. When two kits clash, or one fails the contrast floor
-  against black, the renderer substitutes a readable variant rather than
-  shipping two indistinguishable sides.
+- **Real kit colours** for roughly 975 clubs and national teams are the
+  production default across PNGs, dashboards, player pages, QA contact sheets
+  and PDFs. When the two primary kits are too similar, the renderer selects a
+  real alternate kit before considering a generic fallback.
+- A fixed role pair remains available as an explicit option: the first-listed
+  (home) side uses electric blue `#2F5BFF`; the second-listed (away) side uses
+  true yellow `#FFD400`.
 - A team name matching several palette entries is **refused, not guessed** —
   the unresolved name is reported instead of rendering the wrong club's colours.
 - Both sides are resolved once and every surface reads that decision, so a team
@@ -317,8 +320,8 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 
 | Value | Behaviour |
 | --- | --- |
-| `kit` (default) | Each side in its real home-kit colour |
-| `roles` | The former fixed pair — home `#2F5BFF`, away `#FFD400` |
+| `kit` (default) | Each side in a resolved real-kit colour, with alternate-kit clash protection |
+| `roles` | Fixed pair — home `#2F5BFF`, away `#FFD400` |
 
 ---
 

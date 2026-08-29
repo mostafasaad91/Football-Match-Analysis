@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1983563/live/england-premier-league-2026-2027-coventry-hull",
+    "https://www.whoscored.com/matches/1980894/live/italy-serie-a-2026-2027-torino-ac-milan",
 ).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -278,7 +278,7 @@ XG_USE_OFFICIAL_TEAM_TOTAL_CALIBRATION = (
     False  # do NOT calibrate to WhoScored/Opta/provider team xG totals
 )
 XG_USE_INTERNAL_TEAM_STAT_CALIBRATION = False
-XG_LOCAL_MODEL_VERSION = "xg_v3_submodel_calibrated_2025"
+XG_LOCAL_MODEL_VERSION = "xg_v5_submodel_distance_calibrated_2026"
 XG_SINGLE_SHOT_CAP = 0.95
 XG_PENALTY_VALUE = 0.79
 
@@ -454,11 +454,11 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Liverpool": ["#C8102E", "#22C55E", "#F6EB61"],  # Home: Red | Away: Teal/Yellow
     "Manchester City": ["#6CABDD", "#FFFFFF", "#1C2C5B"],  # Home: Sky Blue | Away: Navy
     "Manchester United": ["#DA291C", "#FBE122", "#000000"],  # Home: Red | Away: Black
-    "Newcastle": ["#2D2D2D", "#FFFFFF", "#A3A3A3"],  # Home: Black/White | Away: Blue
+    "Newcastle": ["#2D2D2D", "#FFFFFF", "#1D5BA4"],  # Home: Black/White | Away: Blue
     "Newcastle United": [
         "#2D2D2D",
         "#FFFFFF",
-        "#A3A3A3",
+        "#1D5BA4",
     ],  # Home: Black/White | Away: Blue
     "Nottm Forest": ["#DD0000", "#FFFFFF", "#FDB913"],  # Home: Red | Away: Yellow
     "Nottingham Forest": ["#DD0000", "#FFFFFF", "#FDB913"],  # Home: Red | Away: Yellow
@@ -1459,14 +1459,13 @@ def choose_matchup_colors(
     """
     Return the two display colours for a fixture.
 
-    With ``USE_REAL_TEAM_KIT_COLORS`` (the default, set
-    ``MATCH_ANALYSIS_TEAM_COLORS=roles`` to turn it off) each side is drawn in
-    its real home-kit colour resolved through ``TOP5_2025_26_TEAM_PALETTES``
-    and the bulk table in ``team_palettes.py``, with the clash- and
-    contrast-resolution passes below. In ``roles`` mode team names, kits and
-    competition do not alter the mapping: the first-listed (home) side is
-    always electric blue and the second-listed (away) side is always true
-    yellow, which keeps every chart, report and QA sheet visually stable.
+    In the default ``kit`` mode each side uses its real kit colour resolved
+    through ``TOP5_2025_26_TEAM_PALETTES`` and the bulk table in
+    ``team_palettes.py``. When the primary colours are too similar, the away
+    palette is searched first and then the home palette, so a real alternate
+    kit is preferred over a generic fallback. Set
+    ``MATCH_ANALYSIS_TEAM_COLORS=roles`` only when a fixed blue/yellow pair is
+    explicitly required.
 
     Kit-colour resolution:
       - White/off-white primary kits are replaced with the team's accent or
@@ -1566,6 +1565,14 @@ def choose_matchup_colors(
 
     explicit_away_kit = _kit_palette_index(away_kit_type) == 2
 
+    def _both_achromatic(first: str, second: str) -> bool:
+        """True when a pair differs mainly by brightness, not by team hue."""
+        first_rgb = _hex_to_rgb01(first)
+        second_rgb = _hex_to_rgb01(second)
+        first_chroma = max(first_rgb) - min(first_rgb)
+        second_chroma = max(second_rgb) - min(second_rgb)
+        return first_chroma < 0.18 and second_chroma < 0.18
+
     # ── Step 1: Home primary + Away alternate (explicit away kit only) ───────
     if explicit_away_kit and away_alternate != away_primary:
         alt_score = _color_distance(home_primary, away_alternate) - _light_penalty(
@@ -1581,7 +1588,10 @@ def choose_matchup_colors(
             return home_primary, away_alternate
 
     # ── Step 2: Home primary + Away primary if contrast is OK ──────
-    if _color_distance(home_primary, away_primary) >= 0.34:
+    if (
+        _color_distance(home_primary, away_primary) >= 0.34
+        and not _both_achromatic(home_primary, away_primary)
+    ):
         return home_primary, away_primary
 
     # ── Step 3: Try away palette colours for better contrast ───────
@@ -1600,7 +1610,11 @@ def choose_matchup_colors(
 
     for ac in away_candidates:
         ac = _usable_on_dark(ac, "#9CA3AF")
-        if _color_distance(home_primary, ac) >= 0.34 and _light_penalty(ac) == 0.0:
+        if (
+            _color_distance(home_primary, ac) >= 0.34
+            and _light_penalty(ac) == 0.0
+            and not _both_achromatic(home_primary, ac)
+        ):
             return home_primary, ac
 
     # No kit colour separated cleanly: fall back to the widest-separation
@@ -2572,7 +2586,7 @@ OPENPLAY_ADVANCED_COLUMNS = [
     "shot_angle_a2",
 ]
 FREEKICK_COLUMNS = ["start_dist_to_goal_a0", "start_angle_to_goal_a0"]
-XG_MODEL_USED = "provider_or_opta_like_v4"
+XG_MODEL_USED = "provider_or_opta_like_v5_calibrated"
 
 
 def _qnames(row_or_event) -> set[str]:
@@ -2927,7 +2941,7 @@ def _xg_direct_free_kick(f: dict) -> float:
 
 def _opta_like_local_xg_from_row(row) -> float:
     """
-    xG v2 engine: Submodel architecture (foot / header / direct free kick / penalty).
+    xG v5 engine: submodels plus held-out distance calibration.
 
     Research-backed logistic regression models:
     - Anzer & Bauer (2021): 105K shots, separate submodels by shot type
@@ -2940,7 +2954,8 @@ def _opta_like_local_xg_from_row(row) -> float:
       2. Direct free kick → _xg_direct_free_kick()
       3. Header → _xg_header_shot()
       4. Foot shot → _xg_foot_shot()
-      5. Clamp result to [0.001, 0.95]
+      5. Apply the stored monotone/distance correction to local non-penalty xG
+      6. Clamp result to [0.001, 0.95]
     """
     q = _qnames(row)
     provider_xg = _extract_provider_shot_xg(row)
@@ -2961,13 +2976,12 @@ def _opta_like_local_xg_from_row(row) -> float:
     else:
         xg = _xg_foot_shot(f, ctx)
 
-    # A correction the project earned from its own collected matches, if it
-    # ever did. xg_calibration refuses to write one until there are enough
-    # shots to see a bias and it beats the uncomputed model on held-out folds,
-    # so this is the identity until the archive is large enough — which is the
-    # honest state today: 358 shots produced 41 goals against 37.4 predicted,
-    # six tenths of a standard deviation, no bias to correct.
-    xg = _apply_xg_calibration(xg)
+    # The archive exposed two cancelling distance errors: very close shots were
+    # over-priced and shots from normal shooting range were under-priced.  The
+    # stored correction has only two constrained terms (a monotone high-chance
+    # bend and a bounded distance lift) and earned its place with complete-match
+    # holdouts. Provider xG and penalties return above and are never recalibrated.
+    xg = _apply_xg_calibration(xg, f["distance"])
 
     # Simple bounds — no complex rule-based caps needed
     return round(float(_clamp(xg, 0.001, XG_SINGLE_SHOT_CAP)), 4)
@@ -2976,8 +2990,8 @@ def _opta_like_local_xg_from_row(row) -> float:
 _XG_CALIBRATION: object = "unread"
 
 
-def _apply_xg_calibration(value: float) -> float:
-    """Stretch the model's own curve, if a correction was earned. Cached."""
+def _apply_xg_calibration(value: float, distance: float | None = None) -> float:
+    """Apply the earned distance correction; missing distance is identity."""
     global _XG_CALIBRATION
     if _XG_CALIBRATION == "unread":
         try:
@@ -2989,7 +3003,7 @@ def _apply_xg_calibration(value: float) -> float:
     if _XG_CALIBRATION is None:
         return float(value)
     try:
-        return float(_XG_CALIBRATION.apply(float(value)))
+        return float(_XG_CALIBRATION.apply(float(value), distance))
     except Exception:
         return float(value)
 
@@ -12825,7 +12839,7 @@ def main():
     info["away_kit_type"] = AWAY_KIT_TYPE
 
     console.print(
-        f"[dim]  Fixed visual roles: {info.get('home_name', '?')} = {home_col}  |  "
+        f"[dim]  Resolved visual colours: {info.get('home_name', '?')} = {home_col}  |  "
         f"{info.get('away_name', '?')} = {away_col}[/dim]"
     )
     # A name the palette could not pin down produced a placeholder colour, not
