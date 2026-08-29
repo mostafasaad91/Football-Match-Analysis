@@ -94,6 +94,48 @@ def test_nothing_is_drawn_across_its_own_label():
         assert x < min(left_edges), f"{text} starts at {x}, bars start at {min(left_edges)}"
 
 
+def test_no_table_label_is_wider_than_the_column_it_sits_in():
+    """The name column ends where the home figure begins.
+
+    Every row is one lane, so a name that runs past the column runs into its
+    own number: "FINISHING VS EXPECTED0.36", "SEQUENCE XT PER POSSESSION0.552".
+    Three tables feed the same renderer and each was written without knowing
+    what the others' longest name was, so the cap is asserted here rather than
+    remembered.
+    """
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(4, 6))
+    ax = fig.add_axes([0, 0, 1, 1])
+    mp.panel_stat_table(ax, _table_rows(), "#EF0107", "#78D2F2")
+    figures = [t for t in ax.texts if t.get_text().strip() == "1.67"]
+    assert figures, "the home figure is no longer drawn"
+    column_ends = figures[0].get_position()[0]
+    plt.close(fig)
+
+    tables = {
+        "shooting": mp.build_shooting_rows,
+        "transition": mp.build_transition_rows,
+    }
+    longest = max(
+        (str(label) for source in _table_labels(tables) for label in source),
+        key=len)
+    # 5.9pt monospace-ish caps run about 0.0105 of the panel per character.
+    assert len(longest) * 0.0105 < column_ends - 0.012, (
+        f"{longest!r} is {len(longest)} characters; the column holds about "
+        f"{int((column_ends - 0.012) / 0.0105)}")
+
+
+def _table_labels(tables):
+    """The label column of every stat table, without building the frames."""
+    import inspect
+    import re
+
+    for build in tables.values():
+        source = inspect.getsource(build)
+        yield re.findall(r'\(\s*"([^"]+)"\s*,', source)
+
+
 def test_the_bar_is_scaled_against_the_larger_side_not_the_sum():
     """A share of the sum cannot separate 15-3 from 46-40."""
     _texts, patches = _drawn(_table_rows())

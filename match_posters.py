@@ -603,11 +603,20 @@ def panel_player_leaders(ax, player_metrics, home_id, away_id, home_colour, away
     ):
         side = (frame[frame["team_id"].eq(team_id)]
                 .sort_values("sequence_xT", ascending=False).head(6))
+        # Three columns with their own x, rather than a name that runs as far
+        # as it likes and two numbers hung off the right edge. "Bryan Mbeumo"
+        # is twelve characters, which was the truncation limit, so it ran into
+        # its own xT — and the two figures were 0.085 apart, which a five-digit
+        # xT beside a four-digit chain closes: "42.161.49".
         x0 = 0.02 + column * 0.51
         width = 0.45
+        xt_at = x0 + width - 0.115
+        chain_at = x0 + width
         ax.text(x0, 0.965, name.upper()[:14], color=colour, fontsize=6.2,
                 fontweight="bold", va="top")
-        ax.text(x0 + width, 0.965, "xT     xGC", color=NEUTRAL, fontsize=5.2,
+        ax.text(xt_at, 0.965, "xT", color=NEUTRAL, fontsize=5.2,
+                fontweight="bold", va="top", ha="right")
+        ax.text(chain_at, 0.965, "xGC", color=NEUTRAL, fontsize=5.2,
                 fontweight="bold", va="top", ha="right")
         for i, row in enumerate(side.itertuples()):
             y = 0.855 - i * 0.142
@@ -616,14 +625,15 @@ def panel_player_leaders(ax, player_metrics, home_id, away_id, home_colour, away
                                    facecolor=colour, alpha=0.55, edgecolor="none",
                                    zorder=2))
             # str(nan) prints "nan", and a name of nothing but spaces is
-            # longer than twelve characters and splits to an empty list.
-            label = _text(row.player, "—")
-            if len(label) > 12:
-                label = _surname(row.player, label)
-            ax.text(x0, y, label[:12], color=TEXT, fontsize=6.4, va="center", zorder=3)
-            ax.text(x0 + width - 0.085, y, f"{row.sequence_xT:.2f}", color=TEXT,
+            # longer than the limit and splits to an empty list. The surname is
+            # taken always rather than only when the full name is long: the
+            # column is the same width either way.
+            label = _surname(row.player, _text(row.player, "—"))
+            ax.text(x0, y, label[:11], color=TEXT, fontsize=6.4, va="center",
+                    zorder=3)
+            ax.text(xt_at, y, f"{row.sequence_xT:.2f}", color=TEXT,
                     fontsize=6.4, fontweight="bold", ha="right", va="center", zorder=3)
-            ax.text(x0 + width, y, f"{row.xGChain:.2f}", color=MUTED,
+            ax.text(chain_at, y, f"{row.xGChain:.2f}", color=MUTED,
                     fontsize=6.4, ha="right", va="center", zorder=3)
 
 
@@ -1445,7 +1455,7 @@ def build_transition_rows(team_metrics):
         ("Transition → shot", f"{_num(home, 'transition_shot_rate'):.1f}%",
          f"{_num(away, 'transition_shot_rate'):.1f}%",
          _num(home, "transition_shot_rate"), _num(away, "transition_shot_rate")),
-        ("Metres per transition", f"{_num(home, 'avg_transition_progress'):.1f}",
+        ("Metres per break", f"{_num(home, 'avg_transition_progress'):.1f}",
          f"{_num(away, 'avg_transition_progress'):.1f}",
          _num(home, "avg_transition_progress"), _num(away, "avg_transition_progress")),
         ("Possession regains", f"{int(_num(home, 'possession_regains'))}",
@@ -1454,12 +1464,12 @@ def build_transition_rows(team_metrics):
         ("Regain → shot", f"{_num(home, 'regain_to_shot_rate'):.1f}%",
          f"{_num(away, 'regain_to_shot_rate'):.1f}%",
          _num(home, "regain_to_shot_rate"), _num(away, "regain_to_shot_rate")),
-        ("Counterpress success", f"{_num(home, 'counterpress_success_rate'):.1f}%",
+        ("Counterpress won", f"{_num(home, 'counterpress_success_rate'):.1f}%",
          f"{_num(away, 'counterpress_success_rate'):.1f}%",
          _num(home, "counterpress_success_rate"), _num(away, "counterpress_success_rate")),
         # Being exposed more often is worse, so the bar is inverted: the wider
         # half is the side that kept its shape.
-        ("Rest-defence vulnerability", f"{_num(home, 'rest_defence_vulnerability'):.1f}%",
+        ("Rest-defence risk", f"{_num(home, 'rest_defence_vulnerability'):.1f}%",
          f"{_num(away, 'rest_defence_vulnerability'):.1f}%",
          _num(away, "rest_defence_vulnerability"), _num(home, "rest_defence_vulnerability")),
         ("Dangerous counters", f"{int(_num(home, 'rest_defence_dangerous_counters'))}",
@@ -1494,7 +1504,7 @@ def build_shooting_rows(xg, team_metrics, home_name, away_name):
          _num(hx, "goals"), _num(ax_, "goals")),
         ("Expected goals", f"{_num(hx, 'xG'):.2f}", f"{_num(ax_, 'xG'):.2f}",
          _num(hx, "xG"), _num(ax_, "xG")),
-        ("Finishing vs expected", f"{home_over:+.2f}", f"{away_over:+.2f}",
+        ("Goals vs xG", f"{home_over:+.2f}", f"{away_over:+.2f}",
          home_over - min(home_over, away_over, 0.0) + 0.01,
          away_over - min(home_over, away_over, 0.0) + 0.01),
         ("xG per shot", f"{per_shot(hx, 'xG'):.3f}", f"{per_shot(ax_, 'xG'):.3f}",
@@ -1513,12 +1523,12 @@ def build_shooting_rows(xg, team_metrics, home_name, away_name):
         # while xGoT was a subset of xG. Priced from the placement it is not:
         # a side that finishes into the corners ends above 100%, and that is
         # the finding, not an error.
-        ("Post-shot vs pre-shot xG",
+        ("Post-shot vs xG",
          f"{100 * _num(hx, 'xGoT') / _num(hx, 'xG'):.0f}%" if _num(hx, "xG") else "—",
          f"{100 * _num(ax_, 'xGoT') / _num(ax_, 'xG'):.0f}%" if _num(ax_, "xG") else "—",
          _num(hx, "xGoT") / max(_num(hx, "xG"), 1e-9),
          _num(ax_, "xGoT") / max(_num(ax_, "xG"), 1e-9)),
-        ("Final-third efficiency", f"{_num(home, 'final_third_entry_efficiency'):.1f}%",
+        ("Final-third rate", f"{_num(home, 'final_third_entry_efficiency'):.1f}%",
          f"{_num(away, 'final_third_entry_efficiency'):.1f}%",
          _num(home, "final_third_entry_efficiency"),
          _num(away, "final_third_entry_efficiency")),
@@ -1527,7 +1537,7 @@ def build_shooting_rows(xg, team_metrics, home_name, away_name):
         ("Off target", f"{int(_num(hx, 'off_target'))}", f"{int(_num(ax_, 'off_target'))}",
          # Missing more is worse, so the bar is inverted.
          _num(ax_, "off_target"), _num(hx, "off_target")),
-        ("Sequence xT per possession",
+        ("xT per possession",
          f"{_num(home, 'sequence_xT_per_possession'):.3f}",
          f"{_num(away, 'sequence_xT_per_possession'):.3f}",
          _num(home, "sequence_xT_per_possession"), _num(away, "sequence_xT_per_possession")),
