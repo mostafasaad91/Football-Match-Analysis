@@ -250,7 +250,11 @@ def test_no_machine_string_reaches_the_page(out):
                 f"'None' inside a sentence: {body[:160]}")
 
 
-ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b")
+# The "1" has to be a count, not the tail of something longer. A digit or a
+# dash before it is already excluded; so is a decimal point, because
+# "carried 2.1 times the value" is correct English and was being reported
+# as "1 times".
+ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d.—–-])\b1 (\w+?)(s|es)\b")
 
 
 def _plural_offenders(texts) -> list[str]:

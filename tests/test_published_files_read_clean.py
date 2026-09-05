@@ -62,10 +62,12 @@ def _text(path: Path) -> str:
     return _CACHE[path]
 
 
-# A count of one followed by a plural. The lookbehind keeps a scoreline out of
-# it — "the final 2 — 1 makes it look like" is not a count — and the suffix
-# guard keeps "1 less" and "1 series" out.
-ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d—–-])\b1 (\w+?)(s|es)\b")
+# A count of one followed by a plural. The "1" has to be the whole number, not
+# the tail of something longer: the lookbehind keeps a scoreline out — "the
+# final 2 — 1 makes it look like" is not a count — and a decimal point with it,
+# because "carried 2.1 times the value" is correct English and was being
+# reported as "1 times". The suffix guard keeps "1 less" and "1 series" out.
+ONE_PLURAL = re.compile(r"(?<![\d—–-]\s)(?<![\d.—–-])\b1 (\w+?)(s|es)\b")
 MACHINE = re.compile(r"\b(nan|NaN|inf)\b|\{\w+\}|\s\|\s")
 
 # The report's running footer carries a pipe, so one is page furniture there

@@ -18,6 +18,8 @@ import colorsys
 import matplotlib.colors as mcolors
 import pytest
 
+from football_match_analysis import USE_REAL_TEAM_KIT_COLORS, WHITE_KIT_SILVER
+
 import football_match_analysis as fa
 from visualization_components import contrast_ratio
 
@@ -75,3 +77,62 @@ def test_both_near_white_tests_agree():
         bright_and_plain = (fa._relative_luminance(colour) >= 0.82
                             and _saturation(colour) < 0.45)
         assert kept != bright_and_plain, colour
+
+
+def test_a_fallback_never_competes_with_a_team_s_own_colours():
+    """The generic colour is the last resort, not a candidate.
+
+    _readable_kit_candidate ran every palette entry through _usable_on_dark
+    first, so an entry too dark for the page came back as the fallback and then
+    scored against the team's real colours. The fallback is chosen for being
+    bright, so it usually won: Newcastle's black #2D2D2D became #B91C1C and beat
+    their own colours outright.
+    """
+    chosen = fa._readable_kit_candidate("Nobody", ["#2D2D2D", "#1D5BA4"],
+                                        "#B91C1C", allow_light=False)
+    assert chosen.upper() == "#1D5BA4", chosen
+    # And when nothing in the palette can carry the page, the fallback is still
+    # what comes back — the last resort still exists.
+    assert fa._readable_kit_candidate("Nobody", ["#000000", "#050505"],
+                                      "#B91C1C").upper() == "#B91C1C"
+
+
+def test_a_white_entry_is_a_white_shirt_not_an_unusable_colour():
+    """Only a side whose *primary* is white was reaching the silver stand-in.
+
+    Newcastle play in black and white; their primary is the black. So the search
+    moved on to the rest of the palette, scored #FFFFFF at -10 for being light
+    and took the blue alternate — a real Newcastle colour, and not the one they
+    were wearing.
+    """
+    chosen = fa._readable_kit_candidate("Nobody", ["#2D2D2D", "#FFFFFF", "#1D5BA4"],
+                                        "#B91C1C", allow_light=False)
+    assert chosen.upper() == WHITE_KIT_SILVER.upper(), chosen
+    # A bright kit that is not white still survives: Watford play in yellow.
+    assert fa._white_kit_stand_in("#FBEE23") is None
+    assert fa._white_kit_stand_in("#FFFFFF") == WHITE_KIT_SILVER
+
+
+def test_a_white_side_keeps_its_kit_at_home_and_changes_only_on_a_clash():
+    """Which is what the away side does on a real pitch.
+
+    Newcastle took the home fallback red because their primary is black, which
+    collided with Bournemouth's real red and pushed Bournemouth out to the grey
+    away fallback: the two sides swapped and neither was in its own kit.
+    """
+    if not USE_REAL_TEAM_KIT_COLORS:
+        pytest.skip("kit colours are off in this mode")
+
+    # No clash: each side wears its own, whichever end it is at.
+    assert fa.choose_matchup_colors("Newcastle", "Bournemouth") == (
+        WHITE_KIT_SILVER, "#DA291C")
+    assert fa.choose_matchup_colors("Bournemouth", "Newcastle") == (
+        "#DA291C", WHITE_KIT_SILVER)
+
+    # Two white sides: the home team keeps the white and the away team moves to
+    # a real alternate of its own, both ways round.
+    home, away = fa.choose_matchup_colors("Tottenham", "Newcastle")
+    assert home == WHITE_KIT_SILVER and away != WHITE_KIT_SILVER
+    assert away.upper() == "#1D5BA4", away
+    home, away = fa.choose_matchup_colors("Newcastle", "Tottenham")
+    assert home == WHITE_KIT_SILVER and away != WHITE_KIT_SILVER

@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1980894/live/italy-serie-a-2026-2027-torino-ac-milan",
+    "https://www.whoscored.com/matches/1983584/live/england-premier-league-2026-2027-newcastle-bournemouth",
 ).strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1319,6 +1319,27 @@ def _contrast_ratio_hex(fg: str, bg: str = "#000000") -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
+def _white_kit_stand_in(hex_color: str) -> str | None:
+    """WHITE_KIT_SILVER when this colour is a white shirt, else None.
+
+    Bright *and* colourless. A test on luminance alone sent Watford's #FBEE23,
+    which measures 0.818, to silver — a side that plays in yellow drawn grey,
+    with less contrast against Southampton's red (4.01) than the yellow it
+    replaced (4.29). White is saturation 0.00; a yellow at 0.96 is not near it.
+    """
+    if _relative_luminance(hex_color) < 0.80:
+        return None
+    try:
+        import colorsys
+
+        import matplotlib.colors as _mc
+
+        _hue, _light, saturation = colorsys.rgb_to_hls(*_mc.to_rgb(hex_color))
+    except Exception:
+        saturation = 0.0
+    return WHITE_KIT_SILVER if saturation < 0.45 else None
+
+
 def _readable_kit_candidate(
     team_name: str,
     palette: list[str],
@@ -1331,6 +1352,26 @@ def _readable_kit_candidate(
     best_score = -999.0
     for raw in palette or []:
         c = _usable_on_dark(raw, fallback)
+        # The fallback is the last resort, not a candidate. This scored it as
+        # though it were one: an entry too dark to use came back as the generic
+        # colour and then competed against the team's own, and because the
+        # fallback is picked for being bright it usually won. Newcastle's black
+        # #2D2D2D became #B91C1C, which outscored their real blue 3.60 to 3.08,
+        # so a fixture against Bournemouth drew Newcastle in Bournemouth's red
+        # and pushed Bournemouth to grey — the two sides swapped, and neither
+        # was wearing its own colour.
+        if c != raw:
+            continue
+        # A white entry is a white shirt, not an unusable colour. Rejecting it
+        # outright is why a black-and-white side could never reach its own kit:
+        # Newcastle's primary is black, so the search moved to the rest of the
+        # palette, scored #FFFFFF at -10 and took the blue alternate instead of
+        # the white half of the stripe. _visible_on_dark already makes this
+        # substitution for a team whose *primary* is white, which is the only
+        # reason Tottenham and Juventus come out right.
+        stand_in = _white_kit_stand_in(c)
+        if stand_in:
+            c = stand_in
         lum = _relative_luminance(c)
         contrast = _contrast_ratio_hex(c, BG_DARK)
         if lum >= 0.82 and not allow_light:
@@ -1399,23 +1440,9 @@ def _visible_on_dark(team_name: str, hex_color: str, fallback: str = "#9CA3AF") 
     # readable colour there is, and it is also the honest one. Substitute a soft
     # silver instead: it still reads as "the white kit team", but stays clear of
     # pure #FFFFFF, which the highlight layer and pitch markings already own.
-    # Bright *and* colourless. The docstring above already promises that
-    # yellows and golds survive this branch, but the test was on luminance
-    # alone: Watford's #FBEE23 measures 0.818 and was sent to silver, so a side
-    # that plays in yellow was drawn grey — and against Southampton's red the
-    # substitute had less contrast (4.01) than the yellow it replaced (4.29).
-    # White is saturation 0.00; a yellow at 0.96 is not near it.
-    if lum >= 0.80:
-        try:
-            import colorsys
-
-            import matplotlib.colors as _mc
-
-            _hue, _light, saturation = colorsys.rgb_to_hls(*_mc.to_rgb(hex_color))
-        except Exception:
-            saturation = 0.0
-        if saturation < 0.45:
-            return WHITE_KIT_SILVER
+    stand_in = _white_kit_stand_in(hex_color)
+    if stand_in:
+        return stand_in
 
     return hex_color
 
