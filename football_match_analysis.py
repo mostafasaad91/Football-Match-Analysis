@@ -169,8 +169,11 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1983584/live/england-premier-league-2026-2027-newcastle-bournemouth",
+    "https://www.whoscored.com/matches/1993942/live/spain-laliga-2026-2027-deportivo-alaves-osasuna",
 ).strip()
+# اكتب رقم الجولة هنا، مثل: "Matchweek 3" أو "الجولة 3".
+# اتركه فارغًا ليستخدم البرنامج أسبوع التاريخ تلقائيًا.
+MATCH_ROUND = ""
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
@@ -202,7 +205,7 @@ def _match_output_folder(info: dict, root: str = SAVE_DIR) -> str:
         from match_fixture import shelf
 
         parts = shelf(info.get("url") or MATCH_URL,
-                      os.environ.get("MATCH_ROUND", ""),
+                      os.environ.get("MATCH_ROUND", "").strip() or MATCH_ROUND,
                       info.get("date") or info.get("startDate"))
     except Exception:
         parts = ()
@@ -1365,10 +1368,10 @@ def _readable_kit_candidate(
         # A white entry is a white shirt, not an unusable colour. Rejecting it
         # outright is why a black-and-white side could never reach its own kit:
         # Newcastle's primary is black, so the search moved to the rest of the
-        # palette, scored #FFFFFF at -10 and took the blue alternate instead of
-        # the white half of the stripe. _visible_on_dark already makes this
-        # substitution for a team whose *primary* is white, which is the only
-        # reason Tottenham and Juventus come out right.
+        # palette, scored #FFFFFF at -10 for being light and took the blue
+        # alternate instead of the white half of the stripe. _visible_on_dark
+        # already makes this substitution for a team whose *primary* is white,
+        # which is the only reason Tottenham and Juventus come out right.
         stand_in = _white_kit_stand_in(c)
         if stand_in:
             c = stand_in
@@ -3076,7 +3079,7 @@ def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════
-#  xT MODEL  (Karun Singh 12×8 grid)
+#  xT MODEL  (local hand-specified 12×8 grid; not a fitted public model)
 #  Rows = 12 pitch-length zones (0→100), Cols = 8 pitch-width zones
 # ══════════════════════════════════════════════════════
 XT_GRID = np.array(
@@ -3098,7 +3101,7 @@ XT_GRID = np.array(
 
 
 def get_xt(x, y) -> float:
-    """Look up xT value from Karun Singh 12×8 grid. Safe for any input."""
+    """Look up the local hand-specified 12×8 xT approximation."""
     try:
         fx, fy = float(x), float(y)
     except (TypeError, ValueError):
@@ -6689,7 +6692,7 @@ def _lbl(ax, txt, col=TEXT_BRIGHT, size=8.5):
 # ═══════════════════════════════════════════════════════════════════
 
 CREDIT_MAIN = "Created by Mostafa Saad"
-CREDIT_TOOLS = "Data: WhoScored  |  xG: Internal V7 event-context/team-stat model  |  xT: Karun Singh"
+CREDIT_TOOLS = "Data: WhoScored  |  xG: Internal V7 event-context/team-stat model  |  xT: Local 12x8 approximation"
 
 
 def _watermark(fig):
@@ -11998,7 +12001,7 @@ def _render_cover_page(pdf, info, stats, events, total_pages):
     ax.text(
         0.5,
         0.40,
-        "Data: WhoScored | xG: Internal V7 event-context/team-stat model | xT: Karun Singh",
+        "Data: WhoScored | xG: Internal V7 event-context/team-stat model | xT: Local 12x8 approximation",
         ha="center",
         va="center",
         color=PDF_TEXT_DIM,
@@ -12835,6 +12838,16 @@ def main():
     global SAVE_DIR
     os.makedirs(SAVE_DIR, exist_ok=True)
 
+    # Say which fixture is about to be analysed, and where the address came
+    # from. MATCH_ANALYSIS_URL overrides the constant in this file, and a shell
+    # that has one exported keeps winning for the life of that terminal — so
+    # editing MATCH_URL appears to do nothing and the same match is analysed
+    # again, with no line anywhere saying why.
+    _source = ("the MATCH_ANALYSIS_URL environment variable"
+               if os.environ.get("MATCH_ANALYSIS_URL") else "MATCH_URL in this file")
+    console.print(f"[cyan]  Fixture -> {MATCH_URL}[/cyan]")
+    console.print(f"[dim]  Address read from {_source}[/dim]")
+
     md = scrape_match(
         MATCH_URL,
         chromedriver_path=CHROMEDRIVER_PATH,
@@ -12843,6 +12856,16 @@ def main():
     )
 
     info, events, players = parse_all(md)
+    # Attach competition, season and round to the match identity. A caller can
+    # provide the official matchweek through MATCH_ROUND; otherwise the saved
+    # date gives an honest calendar-week classification.
+    try:
+        from match_fixture import from_url, round_from_date
+        fixture = from_url(MATCH_URL)
+        info["region"], info["competition"], info["season"] = fixture.region, fixture.competition, fixture.season
+        info["round_name"] = os.environ.get("MATCH_ROUND", "").strip() or MATCH_ROUND or round_from_date(info.get("date"))
+    except Exception:
+        info.setdefault("round_name", os.environ.get("MATCH_ROUND", "").strip() or MATCH_ROUND)
     SAVE_DIR = _match_output_folder(info)
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.environ["MATCH_ANALYSIS_OUTPUT_DIR"] = SAVE_DIR

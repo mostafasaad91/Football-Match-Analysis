@@ -27,7 +27,6 @@ import pytest
 
 from conftest import match_dir
 from tactical_pdf_report import (
-    _legacy_visual_explanation,
     _section_copy,
     _visual_team,
     build_context,
@@ -208,8 +207,7 @@ def test_no_count_of_one_is_printed_as_a_plural(match):
     # Sweep every function that puts words on a page, not only the one that
     # writes the board readings: the same "1 shots" survived in two other
     # paragraphs about the same player because only one was checked.
-    writers = [visual_explanation, visual_implication, visual_data_read,
-               _legacy_visual_explanation]
+    writers = [visual_explanation, visual_implication, visual_data_read]
     boards = sorted(out.glob("[0-9]*.png"))
     radars = out / "player_radars"
     if radars.exists():

@@ -911,7 +911,9 @@ def _creation_credits(events: pd.DataFrame) -> dict:
     if "is_shot" not in events.columns:
         return credits
 
-    ev = events.reset_index(drop=True)
+    from match_metrics import build_possessions
+    ev, _ = build_possessions(events)
+    ev = ev.reset_index(drop=True)
     is_shot = ev["is_shot"].fillna(False) == True
     is_kp = (
         ev.get("is_key_pass", pd.Series(False, index=ev.index)).fillna(False) == True
@@ -942,10 +944,13 @@ def _creation_credits(events: pd.DataFrame) -> dict:
         shooter = ev["player"].iloc[i]
         creator = None
         j = i - 1
-        while j >= 0 and (i - j) <= 6 and abs(minute.iloc[i] - minute.iloc[j]) <= 1:
+        while j >= 0 and (i - j) <= 6 and 0 <= ev['_clock_seconds'].iloc[i] - ev['_clock_seconds'].iloc[j] <= 15:
+            if ev['possession_id'].iloc[j] != ev['possession_id'].iloc[i]:
+                break
             if (
                 is_kp.iloc[j]
                 and typ.iloc[j] == "Pass"
+                and str(ev['outcome'].iloc[j]).lower() == 'successful'
                 and team.iloc[j] == t
                 and _valid_name(ev["player"].iloc[j])
                 and ev["player"].iloc[j] != shooter

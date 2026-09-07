@@ -29,6 +29,8 @@ from match_store import (
     player_match_log,
     team_match_log,
     team_totals,
+    team_form,
+    player_form,
 )
 
 # Columns that identify the row rather than describe the performance; shown
@@ -63,11 +65,11 @@ def cmd_team(args: argparse.Namespace) -> int:
         return 1
 
     if args.summary:
-        totals = team_totals(args.team, limit=args.last)
+        totals = team_form(args.team, window=args.last or 5)
         if args.metrics:
             wanted = {name.strip() for name in args.metrics.split(",") if name.strip()}
             totals = totals[totals["metric"].isin(wanted)]
-        print(f"{args.team} — {len(log)} match(es)\n")
+        print(f"{args.team} — recent form ({args.last or 5} matches)\n")
         return _print(totals, "No numeric metrics stored.")
 
     columns = [c for c in CONTEXT_COLUMNS if c in log.columns]
@@ -94,6 +96,13 @@ def cmd_player(args: argparse.Namespace) -> int:
     if log.empty:
         print(f"No stored matches for {args.player!r}.")
         return 1
+    if args.summary:
+        totals=player_form(args.player, window=args.last or 5)
+        if args.metrics:
+            wanted={name.strip() for name in args.metrics.split(',') if name.strip()}
+            totals=totals[totals.metric.isin(wanted)]
+        print(f"{args.player} — recent form ({args.last or 5} matches)\n")
+        return _print(totals, "No numeric metrics stored.")
     columns = [c for c in ["played_on", "team", "home_team", "away_team", "score"]
                if c in log.columns]
     if args.metrics:
@@ -173,6 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     player.add_argument("player")
     player.add_argument("--last", type=int)
     player.add_argument("--metrics")
+    player.add_argument("--summary", action="store_true", help="recent form averages and trend")
     player.set_defaults(func=cmd_player)
 
     export = sub.add_parser("export", help="write a team's match log to CSV")

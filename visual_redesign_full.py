@@ -127,7 +127,7 @@ TEAM_NAME = base.TEAM_NAME
 MATCH_SCORE = "4-6"
 
 PITCH_LENGTH = 105.0
-PITCH_WIDTH = 58.0
+PITCH_WIDTH = 68.0
 
 # Overlay accents for marks drawn on top of a team-colour heatmap.
 _HEATMAP_ACCENT_WARM = "#FFC23C"
@@ -508,6 +508,9 @@ def save(fig, filename: str) -> Path:
         base.amoled_header(fig, title, subtitle, active_team=active_team)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / filename
+    from visual_guide import guide
+    import textwrap
+    fig.text(.055,-.015,textwrap.fill(guide(filename),140),color=MUTED,fontsize=9,va='top')
     try:
         fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0.16, facecolor=BG)
     finally:
@@ -725,6 +728,9 @@ def shot_map(events, xg, team_id, number):
     fig, pitch, side = pitch_axes(f"Shot Map · {TEAM_NAME[team_id]}", "Shot location, outcome and chance quality · marker size = xG")
     draw_long_pitch(pitch)
     # Colour carries the outcome (shared shot palette, one key across the whole
+    if not shots.empty:
+        # Zoom without dropping any recorded shot, including unusual long shots.
+        pitch.set_ylim(max(-3, min(48, float(shots['x'].min())*1.05-5)), PITCH_LENGTH+3)
     # report); marker shape repeats it so the map still reads in grayscale.
     # Goals are listed last so they draw on top of the other outcomes, and the
     # star glyph is scaled up because it reads much smaller than a disc of the
@@ -938,14 +944,24 @@ def pass_network(events, players, team_id, number, half):
         display[str(name)] = (float(px[0]), float(py[0]), float(row["touches"]))
     display = _separate_network_positions(display, min_gap=6.3)
     _link_low, link_color, _link_strong = network_link_palette(TEAM_COLOR[team_id])
+    edges = edges.sort_values("passes", ascending=False).copy()
     max_edge = max(float(edges["passes"].max()) if not edges.empty else 1, 1)
+    if not edges.empty:
+        strong_cut = float(edges["passes"].quantile(.75))
+        medium_cut = float(edges["passes"].quantile(.40))
+    else:
+        strong_cut, medium_cut = 1.0, 1.0
     for _, edge in edges.iterrows():
         a, b = str(edge["player"]), str(edge["next_player"])
         if a not in display or b not in display:
             continue
         ax, ay, _ = display[a]; bx, by, _ = display[b]
-        pitch.plot([ax, bx], [ay, by], color=link_color, alpha=0.52,
-                   lw=0.75 + 4.4 * float(edge["passes"]) / max_edge, zorder=2)
+        passes = float(edge["passes"])
+        strength = "strong" if passes >= strong_cut else ("medium" if passes >= medium_cut else "weak")
+        alpha = {"strong": .90, "medium": .58, "weak": .24}[strength]
+        width = {"strong": 4.2, "medium": 2.5, "weak": 1.0}[strength]
+        pitch.plot([ax, bx], [ay, by], color=link_color, alpha=alpha,
+                   lw=width * (.55 + .45 * passes / max_edge), zorder=2)
     max_touch = max([value[2] for value in display.values()] or [1])
     shirts = shirt_number_map(players)
     radii = {name: _network_node_radius(touches, max_touch)
@@ -964,11 +980,14 @@ def pass_network(events, players, team_id, number, half):
     side_title(side, "TOP HALF CONNECTIONS")
     side.text(0.92, 0.94, f"{len(positions)} players", color=TEXT, fontsize=8,
               fontweight="bold", ha="right", va="top")
-    # Four link rows rather than five: the fifth was the weakest pair anyway,
-    # and the space now carries the centrality read instead.
-    # Two names share this row, so each gets less room than a single-name row
-    # further down — but still far more than the pitch-side default.
-    side_rows(side, [(f"{compact_player_label(r.player, 11)} → {compact_player_label(r.next_player, 11)}", str(int(r.passes))) for r in edges.head(4).itertuples()], start=0.81, gap=0.075)
+    # Decode relationship strength outside the pitch so the network itself
+    # stays clean and the same key works for every team/half.
+    for y, label, width, alpha in [
+        (.875, "Strong", 4.0, .90), (.845, "Medium", 2.5, .58), (.815, "Weak", 1.0, .24)
+    ]:
+        side.plot([.08, .18], [y, y], color=link_color, lw=width, alpha=alpha, solid_capstyle="round")
+        side.text(.22, y, label, color=TEXT, fontsize=7.2, va="center")
+    side_rows(side, [(f"{compact_player_label(r.player, 11)} → {compact_player_label(r.next_player, 11)}", str(int(r.passes))) for r in edges.head(5).itertuples()], start=0.755, gap=0.065)
 
     # Link volume names the busiest pair. Betweenness names the player the
     # network routes through — take them out and it splits in two.
@@ -980,20 +999,20 @@ def pass_network(events, players, team_id, number, half):
     ]
     centrality = network_centrality(half_events, team_id)
     if not centrality.empty:
-        side.text(0.08, 0.520, "CONNECTORS", color=MUTED, fontsize=7.5, fontweight="bold")
+        side.text(0.08, 0.455, "CONNECTORS", color=MUTED, fontsize=7.5, fontweight="bold")
         for idx, row in enumerate(centrality.head(3).itertuples()):
-            y = 0.472 - idx * 0.043
+            y = 0.412 - idx * 0.043
             side.text(0.08, y, compact_player_label(row.player, 16), color=TEXT, fontsize=8, va="center")
             side.text(0.92, y, f"{row.betweenness:.3f}", color=TEXT, fontsize=8.5,
                       fontweight="bold", ha="right", va="center")
 
-    side.text(0.08, 0.325, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
+    side.text(0.08, 0.255, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
     if substitutions:
         # A fixed 0.042 step fits four rows above the footer and puts a fifth
         # exactly on top of it. Tighten the step only when the extra row needs
         # it, so the common case keeps its existing spacing.
         shown = substitutions[:5]
-        top, floor = 0.278, 0.150
+        top, floor = 0.215, 0.135
         gap = 0.042 if len(shown) < 2 else min(0.042, (top - floor) / (len(shown) - 1))
         for idx, (minute, on_name, off_name) in enumerate(shown):
             y = top - idx * gap
@@ -1001,7 +1020,7 @@ def pass_network(events, players, team_id, number, half):
             change = f"{off_name} OFF AT INTERVAL" if on_name == "—" else f"{on_name} IN  ·  {off_name} OFF"
             side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
     else:
-        side.text(0.08, 0.278, "No in-half changes", color=MUTED, fontsize=8)
+        side.text(0.08, 0.215, "No in-half changes", color=MUTED, fontsize=8)
     side.text(0.08, 0.105, f"Completed pass links: {completed_links}", color=TEXT, fontsize=8, fontweight="bold")
     # "Began half" is wider than the old 0.19 gap between markers, so it ran
     # under the next swatch. Spaced to the widest label rather than to an
@@ -1016,14 +1035,15 @@ def pass_network(events, players, team_id, number, half):
 
 
 def xt_map(events, team_id, number):
-    team = events[events["team_id"].eq(team_id) & events["type"].astype(str).eq("Pass")].copy().dropna(subset=["x", "y", "end_x", "end_y"])
+    eligible = events[events['type'].isin(['Pass', 'Carry']) & events['outcome'].astype(str).str.lower().eq('successful')].dropna(subset=['x', 'y', 'end_x', 'end_y'])
+    team = eligible[eligible['team_id'].eq(team_id)].copy()
     team["xT"] = pd.to_numeric(team["xT"], errors="coerce").fillna(0).clip(lower=0)
     heat, _, _ = np.histogram2d(
         team["y"], team["x"], bins=[7, 12], range=[[0, 100], [0, 100]], weights=team["xT"]
     )
     fig, pitch, side = pitch_axes(
         f"xT Heatmap · {TEAM_NAME[team_id]}",
-        "Full-pitch 7 × 12 square grid · every cell sums threat added from pass origins",
+        "7 × 12 grid · positive successful-movement xT at origins · shared scale for both teams",
     )
     team_mark = _team_mark_color(team_id)
     team_rgb = np.asarray(mcolors.to_rgb(team_mark), dtype=float)
@@ -1031,8 +1051,8 @@ def xt_map(events, team_id, number):
     cmap = LinearSegmentedColormap.from_list(
         f"xt_full_grid_{team_id}", [BG, PANEL_2, team_dark, team_mark]
     )
-    nonzero = heat[heat > 0]
-    vmax = max(float(np.percentile(nonzero, 92)) if nonzero.size else 0.0, 0.001)
+    grids = [np.histogram2d(g['y'], g['x'], bins=[7,12], range=[[0,100],[0,100]], weights=pd.to_numeric(g['xT'], errors='coerce').fillna(0).clip(lower=0))[0] for _,g in eligible.groupby('team_id')]
+    vmax = max([float(grid.max()) for grid in grids]+[.001])
     x_grid = np.linspace(-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 8)
     y_grid = np.linspace(0, PITCH_LENGTH, 13)
     image = pitch.pcolormesh(
@@ -1086,7 +1106,7 @@ def xt_map(events, team_id, number):
     side_title(side, "TOP 10 xT PASSES")
     side_rows(
         side,
-        [(f"{rank}. {_surname(row['player'])}", f"{float(row['xT']):.3f}") for rank, (_, row) in enumerate(top.iterrows(), start=1)],
+        [(f"{rank}. {_surname(row['player'])} {int(row['minute']):02d}:{int(row.get('second',0)):02d}", f"{float(row['xT']):.3f}") for rank, (_, row) in enumerate(top.iterrows(), start=1)],
         start=0.835,
         gap=0.063,
         value_color=TEXT,
@@ -1107,11 +1127,18 @@ def pass_map(events, team_id, number):
     key_pass = as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index)))
     fig, pitch, side = pitch_axes(
         f"Pass Map · {TEAM_NAME[team_id]}",
-        "Every pass in the match · completed, incomplete and key passes are explicitly distinguished",
+        "Passes separated by starting third · solid: completed · dashed: incomplete · star: key pass",
     )
-    draw_long_pitch(pitch)
+    fig.delaxes(pitch)
+    pass_panels=[]
+    for panel_index,third in enumerate(['Defensive third','Middle third','Attacking third']):
+        panel=fig.add_axes([.045+panel_index*.18,.24,.16,.48])
+        draw_long_pitch(panel)
+        panel.set_title(third,color=TEXT,fontsize=9)
+        pass_panels.append(panel)
     team_mark = _team_mark_color(team_id)
     for idx, row in frame.iterrows():
+        pitch=pass_panels[min(2,max(0,int(float(row['x'])/ (100/3))))]
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         if bool(key_pass.loc[idx]):
@@ -1359,8 +1386,8 @@ def gk_saves(events, xg, players):
             ("Saves", f"{saves}"),
             ("Conceded", f"{conceded}"),
             ("Save rate", f"{100 * saves / max(on_target, 1):.0f}%"),
-            ("PSxG faced", f"{psxg:.2f}"),
-            ("Prevented", f"{psxg - conceded:+.2f}"),
+            ("Claims", f"{int(events[events['team_id'].eq(keeper_team) & events['type'].eq('Claim')].shape[0])}"),
+            ("Sweeps", f"{int(events[events['team_id'].eq(keeper_team) & events['type'].eq('KeeperSweeper')].shape[0])}"),
         ]
         card_w = 0.40 / len(cards)
         for idx, (label, value) in enumerate(cards):
@@ -1551,7 +1578,7 @@ def post_match_advanced_dashboard(events, xg, team_metrics):
         ("Shots on target", float(home_xg.get("on_target", 0)), float(away_xg.get("on_target", 0)), "{:.0f}", False),
         ("Big chances", float(home_xg.get("big_chances", 0)), float(away_xg.get("big_chances", 0)), "{:.0f}", False),
         ("Expected goals (xG)", float(home_xg.get("xG", 0)), float(away_xg.get("xG", 0)), "{:.2f}", False),
-        ("xG on target (xGoT)", float(home_xg.get("xGoT", 0)), float(away_xg.get("xGoT", 0)), "{:.2f}", False),
+        ("Local post-shot estimate*", float(home_xg.get("xGoT", 0)), float(away_xg.get("xGoT", 0)), "{:.2f}", False),
         ("xG per shot", float(home_xg.get("xG_per_shot", 0)), float(away_xg.get("xG_per_shot", 0)), "{:.3f}", False),
         ("Transition xG", metric("home", "transition_xG"), metric("away", "transition_xG"), "{:.2f}", False),
         ("Transition shot rate", metric("home", "transition_shot_rate"), metric("away", "transition_shot_rate"), "{:.1f}%", False),
@@ -1668,6 +1695,8 @@ def crosses(events, team_id, number):
     success = frame["outcome"].astype(str).str.lower().eq("successful")
     fig, pitch, side = pitch_axes(f"Crosses · {TEAM_NAME[team_id]}", "Cross origins and targets · completed deliveries use filled arrowheads")
     draw_long_pitch(pitch)
+    if not frame.empty:
+        pitch.set_ylim(max(-3,min(48,float(frame[['x','end_x']].min().min())*1.05-5)),PITCH_LENGTH+3)
     team_mark = _team_mark_color(team_id)
     for idx, row in frame.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
@@ -1874,6 +1903,8 @@ def box_entries(events, team_id, number):
     frame = events[box_entry_mask(events) & events["team_id"].eq(team_id)].copy().dropna(subset=["x", "y", "end_x", "end_y"])
     fig, pitch, side = pitch_axes(f"Box Entries · {TEAM_NAME[team_id]}", "Completed actions entering the penalty area · entry method encoded by shape")
     draw_long_pitch(pitch)
+    if not frame.empty:
+        pitch.set_ylim(max(-3,min(48,float(frame[['x','end_x']].min().min())*1.05-5)),PITCH_LENGTH+3)
     team_mark = _team_mark_color(team_id)
     for _, row in frame.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
@@ -2278,7 +2309,7 @@ def player_sequence(player_metrics):
     fig.text(0.055, 0.91, "Top players by xGChain, xGBuildup and sequence xT involvement", fontsize=11, color=MUTED)
     axes = fig.subplots(1, 3); fig.subplots_adjust(left=0.075, right=0.96, top=0.82, bottom=0.10, wspace=0.42)
     for ax, (title, column) in zip(axes, metrics):
-        top = player_metrics.sort_values(column, ascending=False).head(8).sort_values(column)
+        top = player_metrics.sort_values(column, ascending=False).head(5).sort_values(column)
         colors = [HOME if str(team).lower() == HOME_NAME.lower() else AWAY for team in top["team"]]
         ax.barh(top["player"].astype(str).str.split().str[-1], top[column], color=colors, alpha=0.9)
         base.clean_ax(ax); ax.grid(axis="x", color=GRID, lw=0.65); ax.set_title(title.upper(), loc="left", color=MUTED, fontsize=10, fontweight="bold")
@@ -2433,7 +2464,7 @@ def shape_over_time(events):
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
     base.amoled_header(
         fig,
-        "Defensive Shape Over Time",
+        "Defensive Action Height and Touch Spread",
         "Engagement height and compactness per five-minute window \u00b7 a single average hides when a side dropped off",
     )
     height_ax = fig.add_axes([0.075, 0.475, 0.86, 0.29])
@@ -2461,9 +2492,19 @@ def shape_over_time(events):
     height_ax.axhline(50, color=PITCH_LINE, lw=0.8, alpha=0.35)
     height_ax.text(1, 51, "halfway", color=MUTED, fontsize=6.5, va="bottom")
     height_ax.legend(loc="upper right", frameon=False, labelcolor=TEXT, fontsize=8, ncol=2)
+    all_heights = pd.concat([defensive_line_height(events, HOME_ID), defensive_line_height(events, AWAY_ID)])
+    if not all_heights.empty:
+        median_height = float(all_heights["height"].median())
+        height_ax.axhline(median_height, color=TEXT, lw=0.8, ls=(0, (2, 3)), alpha=0.45)
+        height_ax.text(99, median_height + 1.5, f"match median {median_height:.0f}", color=MUTED, fontsize=6.5, ha="right")
 
     spread_ax.set_ylabel("Vertical spread of touches (IQR)", fontsize=8.5, color=MUTED)
     spread_ax.set_xlabel("Match minute", fontsize=9, color=MUTED)
+    all_spread = pd.concat([team_compactness(events, HOME_ID), team_compactness(events, AWAY_ID)])
+    if not all_spread.empty:
+        median_spread = float(all_spread["vertical_spread"].median())
+        spread_ax.axhline(median_spread, color=TEXT, lw=0.8, ls=(0, (2, 3)), alpha=0.45)
+        spread_ax.text(99, median_spread + 1.5, f"match median {median_spread:.0f}", color=MUTED, fontsize=6.5, ha="right")
 
     fig.text(0.945, 0.035, "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
              ha="right", fontsize=8, color=NEUTRAL)
@@ -2519,7 +2560,7 @@ def playing_through(events, team_id, opponent_id, number):
     """Passes that beat the opponent's line, and how the side held up when pressed."""
     breaks = line_breaking_passes(events, team_id, opponent_id)
     fig, pitch, side = pitch_axes(
-        f"Playing Through \u00b7 {TEAM_NAME[team_id]}",
+        f"Reception and Progression Routes \u00b7 {TEAM_NAME[team_id]}",
         "Passes starting behind the opponent's defensive line and finishing beyond it \u00b7 line height per five-minute window",
     )
     draw_long_pitch(pitch)
@@ -2645,8 +2686,8 @@ def control_surface(events):
     """Which side held which parts of the pitch, and where it was contested."""
     grid, shares = pitch_control(events, HOME_ID, AWAY_ID)
     fig, pitch, side = pitch_axes(
-        "Pitch Control",
-        "Influence decays with distance · space is held strongly, weakly, or genuinely contested",
+        "Average-position Influence",
+        "Time-weighted touch windows split at substitutions · illustrative event model, not tracking",
     )
     cmap = LinearSegmentedColormap.from_list("control", [AWAY, PANEL_2, HOME])
     # grid is indexed [pitch_y, pitch_x]; this display puts pitch x up the page,
@@ -2687,7 +2728,7 @@ def control_surface(events):
         ("Contested", f"{shares['contested']:.0f}%"),
     ], start=0.82, gap=0.14)
     side.text(0.08, 0.36,
-              "Contested space is not neutral: it is\nwhere both sides committed bodies and\nneither held a clear advantage.",
+              "Contested = similar modeled influence.\nAverages include different participants\nat different times; this is not tracking.",
               color=MUTED, fontsize=7.6, va="top", linespacing=1.6)
     return save(fig, "44_pitch_control.png")
 
@@ -2868,7 +2909,7 @@ def press_and_rest(events):
     base.amoled_header(
         fig,
         "Press Triggers & Rest Defence",
-        "What the opponent was doing when the ball was won high, and how many bodies were behind the ball when it was lost",
+        "Recorded actions preceding high regains and opponent shots within 12 seconds after losses",
     )
     for column, (team_id, team_name, color) in enumerate(
         [(HOME_ID, HOME_NAME, HOME), (AWAY_ID, AWAY_NAME, AWAY)]
@@ -2906,11 +2947,11 @@ def press_and_rest(events):
                 ax.text(count + top * 0.045, index, f"{count}  ({share:.0f}%)",
                         color=TEXT, fontsize=7.8, va="center", fontweight="bold")
 
-        structure = rest_defence_structure(events, team_id)
+        losses = turnover_events(events, team_id)
         second = second_ball_recovery(events, team_id)
         rows = [
-            ("Players behind the ball at loss", f"{structure['avg_players_behind']:.1f}"),
-            ("Losses with three or fewer behind", f"{structure['exposed_losses']} ({structure['exposed_share']:.0f}%)"),
+            ("Open-play losses", f"{len(losses)}"),
+            ("Opponent shot within 12 seconds", f"{int(losses['punished'].sum())}/{len(losses)}"),
             ("Second balls won", f"{second['won']}/{second['contests']} ({second['win_rate']:.0f}%)"),
         ]
         fig.text(left, 0.30, "REST DEFENCE & SECOND BALLS", color=MUTED, fontsize=7.8, fontweight="bold")
@@ -2980,6 +3021,7 @@ def build_pdf(
             "home_color": HOME,
             "away_color": AWAY,
             "score": MATCH_SCORE,
+            "date": events.attrs.get('match_date', ''),
         },
     )
 
@@ -3123,6 +3165,10 @@ def _corrected_xgot(events: pd.DataFrame, xg: pd.DataFrame, match_info: dict) ->
     return corrected
 
 
+from package_io import transactional_package
+
+
+@transactional_package
 def generate_match_package(
     events: pd.DataFrame,
     players: pd.DataFrame,
@@ -3172,7 +3218,6 @@ def generate_match_package(
         generated["01_xg_flow.png"],
         shot_map(events, xg, HOME_ID, 2),
         shot_map(events, xg, AWAY_ID, 3),
-        goals_breakdown(events),
         pass_network(events, players, HOME_ID, 5, 1),
         pass_network(events, players, HOME_ID, 5, 2),
         pass_network(events, players, AWAY_ID, 6, 1),
@@ -3184,7 +3229,6 @@ def generate_match_package(
         gk_saves(events, xg, players),
         zone14(events, HOME_ID, 12),
         zone14(events, AWAY_ID, 13),
-        post_match_advanced_dashboard(events, xg, team_metrics),
         generated["15_xt_per_minute.png"],
         progressive(events, HOME_ID, 16),
         progressive(events, AWAY_ID, 17),
@@ -3192,10 +3236,6 @@ def generate_match_package(
         crosses(events, AWAY_ID, 19),
         defensive_activity(events, HOME_ID, 20),
         defensive_activity(events, AWAY_ID, 21),
-        average_positions(events, players, HOME_ID, 22, 1),
-        average_positions(events, players, HOME_ID, 22, 2),
-        average_positions(events, players, AWAY_ID, 23, 1),
-        average_positions(events, players, AWAY_ID, 23, 2),
         dominating_zones(events),
         box_entries(events, HOME_ID, 25),
         box_entries(events, AWAY_ID, 26),
@@ -3209,22 +3249,23 @@ def generate_match_package(
         player_sequence(player_metrics),
         momentum(events),
         set_pieces(events),
-        turnovers(events, HOME_ID, 37),
-        turnovers(events, AWAY_ID, 38),
         shape_over_time(events),
-        win_probability_curve(events),
         playing_through(events, HOME_ID, AWAY_ID, 41),
         playing_through(events, AWAY_ID, HOME_ID, 42),
         action_value_leaders(events),
         control_surface(events),
         sequence_types(events),
         goal_origins(events),
-        unlocking_the_block(events, HOME_ID, AWAY_ID, 47),
-        unlocking_the_block(events, AWAY_ID, HOME_ID, 48),
         press_and_rest(events),
     ]
-    paths.extend(player_pizzas(events, players))
+    # Role profiles supersede the old pizza/radar export in new packages.
+    from insight_visuals import build_insight_visuals
+    new_paths, _insights = build_insight_visuals(events, players, match_info, OUT)
+    paths.extend(new_paths)
+    events.attrs['match_date'] = match_info.get('date', '')
     paths = sorted({path.resolve() for path in paths}, key=lambda path: path.name)
+    from visual_numbering import number_visuals
+    paths = number_visuals(paths, OUT, events.attrs.get('chart_contracts', {}))
     catalog = build_catalog(paths)
     pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
     from match_posters import build_match_posters
@@ -3270,6 +3311,8 @@ def generate_match_package(
     # this runs in a child process. That child is given LIGHT_COPY=0, which is
     # what stops this from recursing. A failure here never costs the package
     # that is already written.
+    # Normal renders always publish both themes.  The light child sets this to
+    # 0 so it does not recursively launch another child process.
     if os.environ.get("MATCH_ANALYSIS_LIGHT_COPY", "1").strip().lower() not in {
         "0", "false", "no", "off"
     }:

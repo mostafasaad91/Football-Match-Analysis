@@ -135,7 +135,14 @@ def test_a_sentence_naming_the_winner_first_prints_their_goals_first(out):
 
 def test_two_matches_do_not_share_a_headline():
     """Six of fifteen carried "Won The Match In The Broken Moments"."""
-    titles = [_article(out)[0].title for out in FIXTURES]
+    # Copies/themes of one fixture are expected to retain its editorial identity.
+    fixtures = {}
+    for out in FIXTURES:
+        article, _, info = _article(out)
+        identity = (info.get('home_name'), info.get('away_name'), info.get('date'),
+                    info.get('competition'), info.get('score'))
+        fixtures.setdefault(identity, article.title)
+    titles = list(fixtures.values())
     repeated = {t: n for t, n in Counter(titles).items() if n > 1}
     assert not repeated, repeated
 
@@ -296,7 +303,6 @@ def test_the_report_writers_agree_with_their_own_counts(out):
     it.
     """
     from tactical_pdf_report import (
-        _legacy_visual_explanation,
         _section_copy,
         build_context,
         visual_data_read,
@@ -313,8 +319,7 @@ def test_the_report_writers_agree_with_their_own_counts(out):
         boards += sorted(radars.glob("*/*.png"))
 
     texts = []
-    for writer in (visual_explanation, visual_implication, visual_data_read,
-                   _legacy_visual_explanation):
+    for writer in (visual_explanation, visual_implication, visual_data_read):
         texts += [writer(path, context) for path in boards]
     for section in _section_copy(context).values():
         texts += [t for _, t in

@@ -90,8 +90,10 @@ htmlcov/
 .coverage.*
 coverage.xml
 
-# Local deliverables — not published to the repository
-docs/
+# Local deliverables — generated PDFs stay ignored, while project
+# documentation remains publishable.
+docs/*.pdf
+docs/*.docx
 
 # Cached club crests. Fetched per fixture and rendered on the posters with
 # attribution; the crests themselves are club trademarks and are not ours to
@@ -100,3 +102,4 @@ assets/crests/
 
 # A roster is the user's own opinion about who plays for whom, not project data.
 squads.json
+.runtime_packages/

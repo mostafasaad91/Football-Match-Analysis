@@ -451,7 +451,16 @@ def _finding_result(m: _Match) -> Finding | None:
         fell_short = [(name, swing) for name, swing
                       in ((m.home, home_swing), (m.away, away_swing))
                       if swing < -0.3]
-        if len(fell_short) == 2:
+        if len(fell_short) == 2 and not m.home_goals and not m.away_goals:
+            # A goalless draw makes each side's shortfall its whole expected
+            # total, so naming the two figures here reprints the pair the
+            # paragraph above already gave — "Nottingham Forest 1.10, Tottenham
+            # 1.30" and then "Nottingham Forest by 1.10, Tottenham by 1.30",
+            # with the second reading as though it were a different quantity.
+            # The point survives without them.
+            who = ("Neither side scored, so each fell short by the whole of what "
+                   "it built and the gap belongs to both of them")
+        elif len(fell_short) == 2:
             who = (f"Both sides finished under what they built — {m.home} by "
                    f"{abs(home_swing):.2f}, {m.away} by {abs(away_swing):.2f}")
         elif fell_short:
@@ -1288,23 +1297,6 @@ BUILDERS = (
 # assembly
 # --------------------------------------------------------------------------
 
-def cover_headline(events, xg, team_metrics, player_metrics, info) -> str:
-    """The article's headline, for the report's cover to open on too.
-
-    The report had no tactical line anywhere on its front — the card says what
-    the totals were and nothing said what the match was — while the article
-    beside it opened on a sentence derived from these same frames. Two
-    documents describing one match should not disagree about what it was, so
-    both read this.
-
-    Returns "" rather than raising: a cover with a generic subtitle beats no
-    cover at all.
-    """
-    try:
-        match = _Match(events, xg, team_metrics, player_metrics, info, ".")
-        return _title(match)[0]
-    except Exception:
-        return ""
 
 
 def _title(m: _Match) -> tuple[str, str]:
@@ -1789,62 +1781,6 @@ def _gallery(m: _Match, used: set[str]) -> Section | None:
     return Section("The rest of the evidence", [opening], remaining, gallery=True)
 
 
-def build_article(
-    events: pd.DataFrame,
-    xg: pd.DataFrame,
-    team_metrics: pd.DataFrame,
-    player_metrics: pd.DataFrame,
-    match_info: dict,
-    out_dir: Path | str,
-    *,
-    max_sections: int = 5,
-) -> Article:
-    """Derive one article from a fixture's frames."""
-    m = _Match(events, xg, team_metrics, player_metrics, match_info, out_dir)
-
-    opener = _finding_result(m)
-    rest = [f for f in (builder(m) for builder in BUILDERS) if f is not None]
-    profiles = _finding_profiles(m, events)
-    if profiles is not None:
-        rest.append(profiles)
-    rest.sort(key=lambda f: f.weight, reverse=True)
-
-    # Take the strongest findings, then keep taking while the piece is short of
-    # the length it was commissioned at. An even match has weaker findings, not
-    # fewer things worth saying, and stopping at a fixed count left one at 773
-    # words against a 1200 floor.
-    # Every finding, strongest first. There is no ceiling to trim against, and
-    # a finding the match actually supports is not worth dropping to save
-    # words the reader was never promised.
-    del max_sections
-    chosen = ([opener] if opener else []) + rest
-
-    title, standfirst = _title(m)
-    strap = " · ".join(
-        part for part in (m.competition.upper(),
-                          f"{m.home.upper()} {m.score} {m.away.upper()}") if part)
-    # The profiles section is the one finding that always earns its place: an
-    # article about a match that never shows a player is missing the people.
-    if profiles is not None and profiles not in chosen:
-        chosen.append(profiles)
-
-    closing = _closing(m, [f.key for f in chosen])
-
-    sections = [f.section for f in chosen] + [closing]
-    used = {Path(v).name for s in sections for v in s.visuals}
-    gallery = _gallery(m, used)
-    if gallery is not None:
-        sections.append(gallery)
-    cover = _cover_image(m.out)
-    context = None
-    try:
-        from tactical_pdf_report import build_context
-
-        context = build_context(events, xg, team_metrics, player_metrics, match_info)
-    except Exception:
-        context = None
-    return Article(title, standfirst, strap, sections,
-                   cover, m.home, m.away, context)
 
 
 # --------------------------------------------------------------------------
@@ -1867,10 +1803,24 @@ def render_docx(article: Article, path: Path | str,
     document = Document()
 
     normal = document.styles["Normal"]
-    normal.font.name = "Georgia"
-    normal.font.size = Pt(12)
+    normal.font.name = "Calibri"
+    normal.font.size = Pt(11)
     normal.paragraph_format.space_after = Pt(10)
-    normal.paragraph_format.line_spacing = 1.45
+    normal.paragraph_format.line_spacing = 1.25
+    for name in ('Title', 'Heading 1', 'Heading 2'):
+        document.styles[name].font.name = 'Calibri'
+        document.styles[name].font.color.rgb = RGBColor(0x17, 0x2C, 0x36)
+        document.styles[name].paragraph_format.keep_with_next = True
+    document.styles['Title'].font.size = Pt(25)
+    document.styles['Heading 2'].font.size = Pt(16)
+    section = document.sections[0]
+    section.left_margin = section.right_margin = Inches(.9)
+    section.header.paragraphs[0].add_run('MOSTAFA SAAD  /  MATCH STUDY').font.color.rgb = RGBColor(0x13,0x7F,0x82)
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    page_field=OxmlElement('w:fldSimple');page_field.set(qn('w:instr'),'PAGE')
+    section.footer.paragraphs[0].alignment=WD_ALIGN_PARAGRAPH.RIGHT
+    section.footer.paragraphs[0]._p.append(page_field)
 
     if article.cover is not None and Path(article.cover).exists():
         cover = document.add_paragraph()
@@ -1883,7 +1833,7 @@ def render_docx(article: Article, path: Path | str,
     run.bold = True
     run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
-    document.add_heading(article.title, level=1)
+    document.add_paragraph(article.title, style='Title')
 
     stand = document.add_paragraph()
     stand_run = stand.add_run(article.standfirst)
@@ -1904,10 +1854,12 @@ def render_docx(article: Article, path: Path | str,
         for visual in section.visuals:
             holder = document.add_paragraph()
             holder.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            holder.paragraph_format.keep_with_next = True
             holder.add_run().add_picture(str(visual), width=Inches(6.2))
             caption = document.add_paragraph()
             caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            caption_run = caption.add_run(_caption(visual, home, away))
+            from match_editorial import commentary_title
+            caption_run = caption.add_run(commentary_title(visual, article.context or {}))
             caption_run.italic = True
             caption_run.font.size = Pt(9)
             caption_run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
@@ -2069,6 +2021,8 @@ def build_match_article(
         article = build_article(events, xg, team_metrics, player_metrics,
                                 match_info, out_dir)
         target = Path(out_dir) / "match_article.docx"
+        from publication_v2 import write_markdown
+        write_markdown(article,Path(out_dir))
         return render_docx(article, target, article.home, article.away)
     except Exception as error:
         # The article is optional — a failure here must not take the package
@@ -2076,3 +2030,6 @@ def build_match_article(
         # and debugging one costs an hour. Say what broke.
         print(f"  ! article not written — {type(error).__name__}: {error}")
         return None
+
+
+from publication_v2 import build_article, cover_headline

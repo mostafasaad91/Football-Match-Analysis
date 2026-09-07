@@ -4,11 +4,11 @@
 
 # Football Match Analysis
 
-**One WhoScored URL in. A 53-visual, 80-page tactical report out.**
+**One WhoScored URL in. An evidence-led match report, article and visual package out.**
 
 An end-to-end Python pipeline that turns Opta event data into a post-match
-analysis package: 30 advanced metrics, a written tactical report opening on
-artwork drawn from the match itself, four posters built to be published the
+analysis package: advanced metrics, a written tactical report opening on
+a fixture-specific analytical title, four posters built to be published the
 moment the whistle goes, and the whole thing rendered twice — once on black,
 once on paper.
 
@@ -27,22 +27,24 @@ python football_match_analysis.py
 
 | Output | Detail |
 | --- | --- |
-| **53 visuals** | Shot maps, pass networks by half, xT surfaces, pressing maps, pitch control, goal-frame keeper plots |
-| **80-page PDF** | Every visual with a written tactical reading underneath it, in one analyst voice — opening on a cover drawn from the match itself |
-| **4 match posters** | Every panel drawn natively at poster scale, club crests included — built to be posted the moment the whistle goes |
-| **Player radars** | A full role profile per player, coloured to their team; the report and the article carry the five per side that mattered |
-| **Publishable article** | A `.docx` argued from the fixture's own numbers, with every visual and a reading under each |
+| **Visuals** | Core maps plus player/possession scatters, nested possession funnel, entry routes, score-state rates, loss consequences, reception links and substitution windows. Counts depend on available observations. |
+| **Reference PDF** | All selected visuals with shared evidence-led commentary; dynamic page count and fixture-specific title. Draws have a result-neutral conclusion. |
+| **4 rebuilt match posters** | Match story; progression; pressure and transitions; players and finishing. Native chart panels, shared team scales, AMOLED and light themes. |
+| **Player profiles** | Every participant receives an advanced role profile and action map, with xGChain, xGBuildup, xT per 100 touches and progressive-pass share. Percentile dots require 8 eligible same-role players; small groups, short appearances and keepers show raw values. Old radars are no longer exported. |
+| **Publishable article** | Editable `.docx` and portable Markdown, with a selected visual argument instead of a gallery of every chart. |
 | **Light copy** | The same package again on `#F5F5F5`, in `light/` |
-| **CSV exports** | Events, players and every calculated metric |
+| **CSV exports** | Source frames and `analysis_tables/`: player observations, possessions, receptions, score spells, routes, losses and substitution windows. |
+| **Provenance** | `package_manifest.json` records input hashes, metric version, model limitations, chart definitions and output paths. |
 | **Match history** | Appended to a SQLite database, with the raw payload archived for replay |
 
 Everything lands in `output/<home>_vs_<away>_<score>/`.
 
 ### Two pages
 
-The identity is AMOLED black. A light "Ink & Petrol" palette renders the same
-package on `#F5F5F5`, so a fixture can be published on whichever page suits
-where it is going. Set `MATCH_ANALYSIS_LIGHT_COPY=0` to skip it.
+The identity is AMOLED black: the primary package uses `#000000` and is the
+default output. A light "Ink & Petrol" palette is available only when you set
+`MATCH_ANALYSIS_LIGHT_COPY=1`; it is intended for print or a light editorial
+page and does not replace the dark package.
 
 The theme is read when `visualization_components` is first imported and every
 renderer copies its colours into module constants there and then, so one
@@ -112,19 +114,23 @@ python visual_redesign_full.py
 
 ## The posters
 
-Four 1640x2048 boards, sized to the tallest frame a timeline shows without
-cropping, each complete on its own:
+Four 2400×3000 boards in a 4:5 format, each with a fixture masthead, club
+crests, explicitly attributed KPI rows and six numbered chart sections:
 
-| | Left and right columns | Centre |
-| --- | --- | --- |
-| **1 · Post-match report** | Passing shape, threat zones, defensive work | Sixteen indicators, shot map, game control |
-| **2 · How it was played** | Box entries, progression, pressing | Pitch control, zone dominance, sequence leaders |
-| **3 · The transition game** | Ball losses, delivery from wide, zone 14 | Game-state splits, twelve transition and press indicators, touch distribution |
-| **4 · The final ball** | Shots, restarts, passing profile | The goal frame, the possession-to-goal funnel, twelve shooting indicators |
+| Board | Contents |
+| --- | --- |
+| **1 · Match story** | Cumulative xG, chance balance, shot maps, score-state xG and goal sequence |
+| **2 · Progression** | Box entries, nested possession stages, entry lanes and movement-value scatters |
+| **3 · Pressure and transitions** | Pressing totals, outcomes after losses, loss locations and score-state rates |
+| **4 · Players and finishing** | Player creation, shot quality, chance involvement, goalkeeper actions and delivery |
 
-Forty indicators across the three tables, and no indicator appears on two of
-them — a test enforces it, because a repeated cell is a cell the match did not
-get.
+Dark and light copies share the same layout. Rebuild only the posters from a
+saved match without downloading data or regenerating the report:
+
+```bash
+python render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/dark
+python render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/light --theme light
+```
 
 Every panel is drawn straight onto the poster canvas from the event frame.
 An earlier version composited the already-rendered PNGs into a contact sheet,
@@ -182,8 +188,9 @@ The report is a reference: every visual, a paragraph under each. An article is
 not that, so `match_article.py` does not walk the visuals and describe them. It
 derives a set of findings from the frames, ranks them by how far apart the two
 sides actually were, and gives each one a section with the visuals that
-evidence it. Behind the argument sits an appendix carrying every remaining
-board with the report's own reading under it, and five player radars a side.
+evidence it. The article selects the figures supporting that argument and two
+advanced player profiles. The reference PDF carries the complete retained chart
+set and six featured profiles; all participants have separate profile images.
 The output is a `.docx` with real heading styles and no tables, which is what
 pastes cleanly into an editor.
 
@@ -275,8 +282,29 @@ python team_history.py matches
 python team_history.py team Arsenal --last 6
 python team_history.py team Arsenal --last 6 --summary
 python team_history.py player "Bukayo Saka" --last 5
+python team_history.py player "Bukayo Saka" --last 10 --summary
 python team_history.py export Arsenal --last 10 --out arsenal_last10.csv
 ```
+
+Every stored match carries its region, competition, season and round. Set
+`MATCH_ROUND` to the official competition label when the calendar provides it
+(for example `Matchweek 3`); when it is absent, the pipeline records the
+honest calendar grouping such as `Week_of_2026-08-17`.
+
+The history layer is the model's training set. Each analysed match stores team
+and player observations plus the untouched provider snapshot. A form query
+uses the newest 5 or 10 rows, reports recent averages, and shows the change
+against the preceding window when enough matches exist:
+
+```powershell
+python team_history.py team Arsenal --last 10 --summary
+python team_history.py player "Bukayo Saka" --last 5 --summary --metrics xG,xA,progressions
+```
+
+Counts remain available as per-match observations; rates are averaged. No
+metric is fabricated when its denominator or source value is missing. Run
+`python team_history.py replay` after adding a new metric to retrain the saved
+history from the archived source payloads.
 
 A fixture is keyed on its provider id, so re-analysing a match replaces its row
 rather than double-counting it. The fallback key is competition, season and the
@@ -344,12 +372,16 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `match_report.py` | Report pages, PPDA analysis, player tables, PDF assembly |
 | `tactical_pdf_report.py` | Cover, tactical commentary and page chrome |
 | `tactical_visualizations.py` | Metric adapters and chart helpers |
-| `visual_redesign_full.py` | The production renderer and its 53 visuals |
+| `visual_redesign_full.py` | Production chart renderer and package orchestration |
 | `visual_redesign_preview.py` | Shared fixture identity and page furniture |
-| `player_radar.py` | Player role profiles |
+| `advanced_profiles.py` | Advanced role profiles with direct values and eligible-peer dots |
+| `scatter_labels.py` | Direct player labels, collision-aware placement and leader lines |
+| `player_radar.py` | Shared participation/creation calculations and legacy export compatibility |
 | `visualization_components.py` | Shared chart components and readability helpers |
 | `visualization_design.py` | Visual tokens, typography, reusable frames |
-| `match_posters.py` | The four post-match posters |
+| `poster_dashboard.py` | Production layout and charts for the four match posters |
+| `match_posters.py` | Legacy chart helpers and poster entry-point compatibility |
+| `render_posters.py` | Offline poster-only rebuild from saved match frames |
 | `render_light.py` | The light-page copy of a finished package |
 | `crests.py` | Club crest fetch, cache, plate and fallback |
 | `cover_art.py` | The report cover's hero image |

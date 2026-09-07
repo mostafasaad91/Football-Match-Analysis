@@ -352,22 +352,12 @@ def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
             assert ink_vs_tile >= 5.0, (theme, measured)
 
 
-def test_the_light_package_carries_the_squad_its_radars_need():
-    """The radar names a player's position, and only players.csv knows it.
-
-    It falls back to reading that file out of the folder it writes into. The
-    light package wrote every frame except that one, so every light radar lost
-    the position and printed the player's substitution role in its place —
-    "sub_out" where the black copy of the same player said "Defensive
-    midfielder".
-    """
+def test_the_light_package_carries_the_squad_for_advanced_profiles():
+    """Both themes keep the squad frame for the role-aware profile renderer."""
     import inspect
 
     import visual_redesign_full as vrf
 
     source = inspect.getsource(vrf.generate_match_package)
     assert 'players.csv' in source, "the squad is not written beside the frames"
-    # And handed straight down, so a package rendered in one call never depends
-    # on what happens to be on disk.
-    assert "squad=players" in inspect.getsource(vrf.player_pizzas)
-    assert "player_pizzas(events, players)" in source
+    assert "build_insight_visuals(events, players, match_info, OUT)" in source

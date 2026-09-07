@@ -1752,24 +1752,30 @@ def turnover_events(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
     if possessions.empty:
         return pd.DataFrame(columns=columns)
 
-    ordered = possessions.sort_values("start_time", kind="stable").reset_index(drop=True)
+    ordered = possessions.sort_values(["period_order", "start_time"], kind="stable").reset_index(drop=True)
     rows = []
     for position in range(len(ordered) - 1):
         current = ordered.iloc[position]
         following = ordered.iloc[position + 1]
         if current["team_id"] != team_id or following["team_id"] == team_id:
             continue
+        if current['period_order'] != following['period_order']:
+            continue
         if str(following["start_reason"]) not in {"opponent_turnover", "recovery"}:
             continue
-        gap = float(following["end_time"]) - float(following["start_time"])
-        punished = bool(following["shots"] > 0 and gap <= TURNOVER_PUNISH_SECONDS)
+        opponent = _annotated[_annotated['possession_id'].eq(following['possession_id']) & _annotated['team_id'].eq(following['team_id'])]
+        shots = opponent[_bool_series(opponent, 'is_shot')]
+        deltas = shots['_clock_seconds'] - float(current['end_time'])
+        quick = shots[deltas.between(0, TURNOVER_PUNISH_SECONDS)]
+        gap = float(deltas.min()) if not quick.empty else np.nan
+        punished = not quick.empty
         rows.append(
             {
                 "minute": int(float(current["end_time"]) // 60),
                 "x": float(current["end_x"]),
                 "y": float(current["end_y"]),
                 "punished": punished,
-                "conceded_xG": round(float(following["xG"]), 3) if punished else 0.0,
+                "conceded_xG": round(float(_numeric_series(quick,'xG').sum()), 3) if punished else 0.0,
                 "seconds_to_shot": round(gap, 1) if punished else np.nan,
             }
         )
@@ -2098,7 +2104,7 @@ def line_breaking_passes(events: pd.DataFrame, team_id: Any, opponent_id: Any, w
     moves with the game rather than sitting at a fixed x. A pass counts when it
     starts behind that line and finishes at least a few metres past it.
     """
-    columns = ["minute", "x", "y", "end_x", "end_y", "line_height", "successful"]
+    columns = ["minute", "x", "y", "end_x", "end_y", "line_height", "successful", "player"]
     if events is None or events.empty:
         return pd.DataFrame(columns=columns)
 
@@ -2138,6 +2144,7 @@ def line_breaking_passes(events: pd.DataFrame, team_id: Any, opponent_id: Any, w
                     "end_y": float(_numeric_series(passes, "end_y", np.nan).at[idx]),
                     "line_height": round(line, 1),
                     "successful": bool(successful.at[idx]),
+                    "player": passes.at[idx, "player"] if "player" in passes.columns else "",
                 }
             )
     return pd.DataFrame(rows, columns=columns)
@@ -2173,7 +2180,7 @@ def win_probability(events: pd.DataFrame, home_id: Any, away_id: Any, window: in
 
     full_time = max(90, int(live["_minute"].max()))
     rows = []
-    for minute in range(0, full_time + 1, window):
+    for minute in sorted(set(range(0, full_time + 1, max(1, window))) | {full_time}):
         scored = goals[goals["_minute"] <= minute]
         home_goals = int((scored["_credited"] == home_id).sum())
         away_goals = int((scored["_credited"] == away_id).sum())
@@ -2212,6 +2219,11 @@ def win_probability(events: pd.DataFrame, home_id: Any, away_id: Any, window: in
                 "away_win": round(away_raw / total, 3),
             }
         )
+    # Terminal outcomes are known only for a completed feed.
+    ends = events[events.get('type', pd.Series('', index=events.index)).eq('End')]
+    if rows and not ends.empty and _numeric_series(ends, 'minute').max() >= 89:
+        difference = rows[-1]['goal_difference']
+        rows[-1].update(home_win=float(difference > 0), draw=float(difference == 0), away_win=float(difference < 0))
     return pd.DataFrame(rows, columns=columns)
 
 
@@ -2367,6 +2379,7 @@ def player_action_value(events: pd.DataFrame, team_id: Any | None = None) -> pd.
 # Pitch control
 # ═════════════════════════════════════════════════════════════════════════════
 CONTROL_DECAY = 11.0
+from influence_surface import surface as pitch_control
 
 
 def average_positions(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
@@ -2387,55 +2400,6 @@ def average_positions(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
     return grouped[grouped["touches"] >= 3].reset_index(drop=True)
 
 
-def pitch_control(
-    events: pd.DataFrame, home_id: Any, away_id: Any, cells_x: int = 60, cells_y: int = 40
-) -> tuple[np.ndarray, dict[str, float]]:
-    """Return a control surface and each side's share of the pitch.
-
-    A hard Voronoi split says a cell belongs entirely to whoever is nearest,
-    which is a poor description of football: two players a metre apart do not
-    share a boundary, they contest the same space. Influence decays with
-    distance instead, so a cell can be strongly held, weakly held or genuinely
-    contested, and the surface stays smooth.
-
-    Returns ``(grid, shares)`` where grid values run 0 (away control) to 1
-    (home control), with 0.5 contested. Built from average positions, so it
-    describes the shape a side held on average, not any single moment.
-    """
-    grid = np.full((cells_y, cells_x), 0.5, dtype=float)
-    shares = {"home": 50.0, "away": 50.0, "contested": 0.0}
-
-    home = average_positions(events, home_id)
-    away = average_positions(events, away_id)
-    if home.empty or away.empty:
-        return grid, shares
-
-    xs = np.linspace(0, 100, cells_x)
-    ys = np.linspace(0, 100, cells_y)
-    mesh_x, mesh_y = np.meshgrid(xs, ys)
-
-    def influence(frame: pd.DataFrame, mirror: bool) -> np.ndarray:
-        total = np.zeros_like(mesh_x, dtype=float)
-        for row in frame.itertuples():
-            px = 100.0 - float(row.x) if mirror else float(row.x)
-            py = 100.0 - float(row.y) if mirror else float(row.y)
-            distance = np.sqrt((mesh_x - px) ** 2 + (mesh_y - py) ** 2)
-            total += np.exp(-distance / CONTROL_DECAY)
-        return total
-
-    # Both sides are placed in the home team's attacking frame.
-    home_influence = influence(home, mirror=False)
-    away_influence = influence(away, mirror=True)
-    denominator = home_influence + away_influence
-    grid = np.where(denominator > 0, home_influence / np.maximum(denominator, 1e-9), 0.5)
-
-    contested = float(np.mean((grid > 0.45) & (grid < 0.55))) * 100
-    shares = {
-        "home": round(float(np.mean(grid > 0.55)) * 100, 1),
-        "away": round(float(np.mean(grid < 0.45)) * 100, 1),
-        "contested": round(contested, 1),
-    }
-    return grid, shares
 
 
 

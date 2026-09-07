@@ -294,13 +294,11 @@ def amoled_header(
              fontweight="bold", va="center", zorder=95)
     fig.text(0.055, 0.909, title, color=TEXT, fontsize=17.5,
              fontweight="bold", va="center", zorder=95, path_effects=glow)
-    fig.text(0.055, 0.881, "STAT INFO", color=FOCUS, fontsize=6.3,
-             fontweight="bold", va="center", zorder=95)
     # A bare slice cut "…this shows who was on top and when" to "…who was",
     # which reads as a rendering fault rather than an abbreviation. Mark the
     # cut so an over-long subtitle is obviously shortened, not broken.
     trimmed = subtitle if len(subtitle) <= 115 else subtitle[:114].rstrip() + "…"
-    fig.text(0.113, 0.881, trimmed, color=MUTED, fontsize=6.8,
+    fig.text(0.055, 0.881, trimmed, color=MUTED, fontsize=7.5,
              va="center", zorder=95)
 
     fixture_cluster(fig, glow)
@@ -325,6 +323,9 @@ def page(title: str, subtitle: str, figsize=(14, 8)) -> tuple[plt.Figure, plt.Ax
 
 def save(fig: plt.Figure, name: str) -> Path:
     path = OUT_DIR / name
+    from visual_guide import guide
+    import textwrap
+    fig.text(.055,-.015,textwrap.fill(guide(name),140),color=MUTED,fontsize=9,va='top')
     save_figure(fig, path, dpi=155, bbox_inches="tight", pad_inches=0.16)
     plt.close(fig)
     return path
@@ -596,7 +597,7 @@ def xg_flow(events: pd.DataFrame) -> Path:
     fig.text(
         0.045,
         0.878,
-        "STAT INFO",
+        "",
         color=FOCUS,
         fontsize=6.3,
         fontweight="bold",
@@ -681,7 +682,8 @@ def xg_flow(events: pd.DataFrame) -> Path:
             # str(nan) is "nan" and "".split()[-1] raises: the chart used to
             # either label a goal "nan" or stop drawing altogether.
             surname = _surname(goal.get("player"))[:12]
-            label = f"{surname} {int(goal['minute'])}′" if surname else f"{int(goal['minute'])}′"
+            from match_clock import event_label
+            label = f"{surname} {event_label(goal)}" if surname else event_label(goal)
             offset = 13 if goal_idx % 2 == 0 else 22
             ax.annotate(
                 label, (goal["minute"], upto), xytext=(0, offset),
@@ -730,7 +732,8 @@ def xg_flow(events: pd.DataFrame) -> Path:
         goals_ax.scatter([minute], [0.50], s=36, facecolor=color, edgecolor=BG, linewidth=0.7, zorder=3)
         surname = (_surname(goal.get("player"), "GOAL")[:10]).upper()
         own = " (OG)" if _bool(pd.Series([goal.get("is_own_goal", False)])).iloc[0] else ""
-        goals_ax.text(minute, y, f"{int(minute)}′  {surname}{own}", color=TEXT, fontsize=5.4, fontweight="bold", ha="center", va="center")
+        from match_clock import event_label
+        goals_ax.text(minute, y, f"{event_label(goal)}  {surname}{own}", color=TEXT, fontsize=5.4, fontweight="bold", ha="center", va="center")
     fig.text(0.945, 0.030, "PURE BLACK MATCH INTELLIGENCE · REAL EVENT DATA", ha="right", fontsize=6.5, color=NEUTRAL)
     fig._amoled_header_applied = True
     return save(fig, "03_xg_flow_redesign.png")

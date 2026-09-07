@@ -66,6 +66,8 @@ def _init_schema(connection: sqlite3.Connection) -> None:
             match_id     TEXT PRIMARY KEY,
             played_on    TEXT,
             competition  TEXT,
+            season       TEXT,
+            round_name   TEXT,
             home_team    TEXT NOT NULL,
             away_team    TEXT NOT NULL,
             home_goals   INTEGER,
@@ -106,7 +108,7 @@ def _init_schema(connection: sqlite3.Connection) -> None:
     # columns, so any column added after the first release has to be applied
     # separately or every insert against an existing file fails.
     existing = {row["name"] for row in connection.execute("PRAGMA table_info(matches)")}
-    for column, definition in (("raw_path", "TEXT"),):
+    for column, definition in (("raw_path", "TEXT"), ("season", "TEXT"), ("round_name", "TEXT")):
         if column not in existing:
             connection.execute(f"ALTER TABLE matches ADD COLUMN {column} {definition}")
     connection.commit()
@@ -182,11 +184,12 @@ def save_match(
     with _connect(db_path) as connection:
         connection.execute(
             """
-            INSERT INTO matches (match_id, played_on, competition, home_team, away_team,
-                                 home_goals, away_goals, score, url, stored_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO matches (match_id, played_on, competition, season, round_name,
+                                 home_team, away_team, home_goals, away_goals, score, url, stored_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(match_id) DO UPDATE SET
                 played_on=excluded.played_on, competition=excluded.competition,
+                season=excluded.season, round_name=excluded.round_name,
                 home_team=excluded.home_team, away_team=excluded.away_team,
                 home_goals=excluded.home_goals, away_goals=excluded.away_goals,
                 score=excluded.score, url=excluded.url, stored_at=excluded.stored_at
@@ -195,6 +198,8 @@ def save_match(
                 match_id,
                 str(info.get("date") or info.get("played_on") or "")[:10] or None,
                 str(info.get("competition") or "") or None,
+                str(info.get("season") or "") or None,
+                str(info.get("round_name") or "") or None,
                 home,
                 away,
                 home_goals,
@@ -315,7 +320,7 @@ def list_matches(team: str | None = None, db_path: Path | str | None = None) -> 
 def team_match_log(team: str, limit: int | None = None, db_path: Path | str | None = None) -> pd.DataFrame:
     """Return one row per stored match for a team, newest first."""
     query = """
-        SELECT s.*, m.played_on, m.competition, m.score, m.url
+        SELECT s.*, m.played_on, m.competition, m.season, m.round_name, m.score, m.url
         FROM team_match_stats s
         JOIN matches m ON m.match_id = s.match_id
         WHERE s.team = ? COLLATE NOCASE
@@ -355,7 +360,8 @@ def team_totals(team: str, limit: int | None = None, db_path: Path | str | None 
 def player_match_log(player: str, limit: int | None = None, db_path: Path | str | None = None) -> pd.DataFrame:
     """Return one row per stored match for a player, newest first."""
     query = """
-        SELECT p.*, m.played_on, m.competition, m.home_team, m.away_team, m.score
+        SELECT p.*, m.played_on, m.competition, m.season, m.round_name,
+               m.home_team, m.away_team, m.score
         FROM player_match_stats p
         JOIN matches m ON m.match_id = p.match_id
         WHERE p.player = ? COLLATE NOCASE
@@ -367,6 +373,43 @@ def player_match_log(player: str, limit: int | None = None, db_path: Path | str 
     if limit is not None and not frame.empty:
         frame = frame.head(int(limit))
     return frame.reset_index(drop=True)
+
+
+def rolling_summary(frame: pd.DataFrame, *, window: int = 5,
+                    id_columns: tuple[str, ...] = ()) -> pd.DataFrame:
+    """Learn a compact recent form profile from stored match rows.
+
+    Numeric counts are summed, rates and percentages are averaged, and the
+    latest window is compared with the previous window when available. This is
+    deliberately transparent: it is a history feature layer for player/team
+    form, not a black-box prediction claim.
+    """
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=["metric", "matches", "recent_average", "previous_average", "trend"])
+    n=max(1,int(window)); recent=frame.head(n)
+    previous=frame.iloc[n:2*n]
+    numeric=recent.select_dtypes(include="number")
+    excluded=set(id_columns)|{"team_id","goals_for","goals_against"}
+    rows=[]
+    for metric in [c for c in numeric.columns if c not in excluded]:
+        values=pd.to_numeric(recent[metric],errors="coerce").dropna()
+        if values.empty: continue
+        old=pd.to_numeric(previous[metric],errors="coerce").dropna() if metric in previous else pd.Series(dtype=float)
+        recent_avg=float(values.mean()); previous_avg=float(old.mean()) if not old.empty else None
+        rows.append({"metric":metric,"matches":int(len(values)),"recent_average":round(recent_avg,3),
+                     "previous_average":None if previous_avg is None else round(previous_avg,3),
+                     "trend":None if previous_avg is None else round(recent_avg-previous_avg,3)})
+    return pd.DataFrame(rows)
+
+
+def team_form(team: str, window: int = 5, db_path: Path | str | None = None) -> pd.DataFrame:
+    return rolling_summary(team_match_log(team, limit=2*int(window), db_path=db_path), window=window,
+                           id_columns=("match_id","team","opponent","side"))
+
+
+def player_form(player: str, window: int = 5, db_path: Path | str | None = None) -> pd.DataFrame:
+    return rolling_summary(player_match_log(player, limit=2*int(window), db_path=db_path), window=window,
+                           id_columns=("match_id","player","team"))
 
 
 def metric_percentile(
@@ -417,4 +460,7 @@ __all__ = [
     "stored_snapshots",
     "team_match_log",
     "team_totals",
+    "rolling_summary",
+    "team_form",
+    "player_form",
 ]

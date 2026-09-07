@@ -20,7 +20,6 @@ import pytest
 from conftest import match_dir
 from tactical_pdf_report import (
     _lead,
-    _legacy_visual_explanation,
     _section_copy,
     build_context,
     visual_explanation,
@@ -113,7 +112,7 @@ def test_chance_quality_names_the_side_with_the_better_xg_per_shot(mirror):
     leader, _trailer, level = _lead(
         context["home"], context["away"],
         context["home_xG_per_shot"], context["away_xG_per_shot"], tolerance=0.005)
-    text = _legacy_visual_explanation(Path("xg_summary.png"), context)
+    text = visual_explanation(Path("xg_summary.png"), context)
     if not level:
         assert f"favoured {leader}" in text, text
 
@@ -128,7 +127,7 @@ def test_the_overview_names_the_territory_and_the_xg_sides_correctly(mirror):
     xg_leader, _x, xg_level = _lead(context["home"], context["away"],
                                     context["home_xG"], context["away_xG"],
                                     tolerance=0.05)
-    text = _legacy_visual_explanation(Path("match_stats.png"), context)
+    text = visual_explanation(Path("match_stats.png"), context)
     assert tilt_leader in text, text
     if not xg_level and xg_leader != tilt_leader:
         assert f"while {xg_leader} produced the stronger xG return" in text, text
@@ -139,6 +138,6 @@ def test_the_contradiction_is_only_claimed_when_there_is_one():
     context = _context()
     context["home_field_tilt"], context["away_field_tilt"] = 70.0, 30.0
     context["home_xG"], context["away_xG"] = 2.0, 1.0
-    text = _legacy_visual_explanation(Path("match_stats.png"), context)
+    text = visual_explanation(Path("match_stats.png"), context)
     assert "central contradiction" not in text, text
     assert "the xG return followed the territory" in text, text

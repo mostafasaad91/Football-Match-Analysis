@@ -1,0 +1,13 @@
+name: Analysis invariants
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.lock
+      - run: python -m pytest tests/test_insight_publication.py tests/test_direct_player_labels.py tests/test_match_metrics.py tests/test_radar_meaning.py tests/test_post_shot_xg.py -q
