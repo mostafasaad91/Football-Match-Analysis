@@ -23,6 +23,29 @@ from conftest import match_dir
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_article_failure_stops_pdf_instead_of_silent_fallback(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import match_article
+
+    sections = ["Match Story", "Chance Creation", "Possession and Progression",
+                "Pressing and Rest Defence", "Transitions and Efficiency",
+                "Player Impact Appendix"]
+    monkeypatch.setattr(report, "build_context", lambda *args: {})
+    monkeypatch.setattr(report, "_section_copy", lambda c: {
+        name: {"subtitle": name} for name in sections})
+    monkeypatch.setattr(report, "TacticalPDF", lambda *args: SimpleNamespace(article_readings={}))
+    monkeypatch.setattr(match_article, "cover_headline", lambda *args: "Test")
+    cause = ValueError("Invalid article data")
+
+    def broken_article(*args):
+        raise cause
+
+    monkeypatch.setattr(match_article, "build_article", broken_article)
+    with pytest.raises(RuntimeError, match="Word/PDF text would diverge") as caught:
+        report.build_tactical_pdf([], tmp_path / "report.pdf", None, None, None, None, {})
+    assert caught.value.__cause__ is cause
+
+
 def _context():
     out = match_dir("PSG_vs_Aston_Villa_2-1")
     if not (out / "match_info.json").exists():

@@ -1766,8 +1766,8 @@ def build_tactical_pdf(
             prose = " ".join(str(p).strip() for p in section.paragraphs if str(p).strip())
             for visual_path in section.visuals:
                 report.article_readings[Path(visual_path).name] = prose
-    except Exception:
-        pass
+    except Exception as error:
+        raise RuntimeError("Cannot build PDF article commentary; Word/PDF text would diverge") from error
     report.cover()
     report.executive_summary(section_copy)
     report.toc(toc_entries)

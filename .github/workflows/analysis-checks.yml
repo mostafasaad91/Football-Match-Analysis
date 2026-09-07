@@ -11,3 +11,4 @@ jobs:
           cache: pip
       - run: pip install -r requirements.lock
       - run: python -m pytest tests/test_insight_publication.py tests/test_direct_player_labels.py tests/test_match_metrics.py tests/test_radar_meaning.py tests/test_post_shot_xg.py -q
+      - run: python -m pytest tests/test_pdf_identity.py tests/test_pdf_cover.py tests/test_history_form.py tests/test_match_store.py tests/test_poster_visual_comparisons.py -q
