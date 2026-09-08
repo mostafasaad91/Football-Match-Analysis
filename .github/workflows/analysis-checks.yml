@@ -10,5 +10,9 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.lock
-      - run: python -m pytest tests/test_insight_publication.py tests/test_direct_player_labels.py tests/test_match_metrics.py tests/test_radar_meaning.py tests/test_post_shot_xg.py -q
-      - run: python -m pytest tests/test_pdf_identity.py tests/test_pdf_cover.py tests/test_history_form.py tests/test_match_store.py tests/test_poster_visual_comparisons.py -q
+      # Naming ten files by hand is how the headline regression shipped. The
+      # suite that caught it — 55 fixtures sharing one sentence — was written,
+      # committed, and never run here, because it was not on the list. The
+      # whole suite runs now, minus the slow package builds, so a test only
+      # has to exist to be gating.
+      - run: python -m pytest tests -q -m "not slow"

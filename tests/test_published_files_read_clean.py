@@ -24,10 +24,34 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "output"
 
-ARTICLES = [p for p in sorted(OUTPUT.rglob("match_article.docx"))
-            if p.parent.name != "light"]
+
+
+def _published(path: Path) -> bool:
+    """A file a reader could actually be handed.
+
+    The light copy is the same match rendered twice, so it is read once. The
+    dot-prefixed folders are transactional_package's staging and rollback
+    trees: it removes a backup with ``ignore_errors=True``, so one that
+    Windows still has open survives as ``.<match>.previous-<hash>`` and was
+    then scanned as though it had been published. A withdrawn draft failing a
+    prose check is noise, and it cannot be fixed by regenerating anything.
+    """
+    if path.parent.name == "light":
+        return False
+    parts = path.relative_to(OUTPUT).parts
+    if any(part.startswith(".") for part in parts):
+        return False
+    # A published match is shelved under competition / season / round, so its
+    # file sits at least four levels down. A folder straight inside output/ is
+    # a scratch render -- pdf_preview_arsenal_coventry_v4, poster_redesign,
+    # profile_preview -- and holding a preview to the prose contract of a
+    # published report fails a test that regenerating nothing can fix.
+    return len(parts) >= 4
+
+
+ARTICLES = [p for p in sorted(OUTPUT.rglob("match_article.docx")) if _published(p)]
 REPORTS = [p for p in sorted(OUTPUT.rglob("full_visual_redesign_real_data.pdf"))
-           if p.parent.name != "light"]
+           if _published(p)]
 ARTICLE_IDS = [p.parent.name for p in ARTICLES]
 REPORT_IDS = [p.parent.name for p in REPORTS]
 
@@ -168,11 +192,25 @@ def test_no_shipped_article_says_a_beaten_side_won_the_match(path):
 def test_two_shipped_articles_do_not_open_on_the_same_headline():
     """Six of fifteen carried one headline; the reader sees the file, not the
     weighting that produced it."""
+    # Keyed by the fixture, not the folder. The same match is sometimes on
+    # disk twice -- Arsenal_vs_Coventry_3-0 beside Arsenal_vs_Coventry_3-0_Final
+    # -- and the headline engine is deterministic by design, so two renders of
+    # one match are required to agree. What must differ is two different
+    # matches.
+    import json
+
     headlines = {}
     for path in ARTICLES:
+        info_file = path.parent / "match_info.json"
+        if info_file.exists():
+            info = json.loads(info_file.read_text(encoding="utf-8-sig"))
+            fixture = (str(info.get("home_name")), str(info.get("away_name")),
+                       str(info.get("score")), str(info.get("date")))
+        else:
+            fixture = (path.parent.name,)
         lines = [line.strip() for line in _text(path).splitlines() if line.strip()]
         # The strap is first (competition and score), the headline follows.
-        headlines[path.parent.name] = lines[1] if len(lines) > 1 else ""
+        headlines[fixture] = lines[1] if len(lines) > 1 else ""
     repeated = {h: n for h, n in Counter(headlines.values()).items()
                 if n > 1 and h}
     assert not repeated, repeated

@@ -29,7 +29,7 @@ python football_match_analysis.py
 | --- | --- |
 | **Visuals** | Core maps plus player/possession scatters, nested possession funnel, entry routes, score-state rates, loss consequences, reception links and substitution windows. Counts depend on available observations. |
 | **Reference PDF** | All selected visuals with shared evidence-led commentary; dynamic page count and fixture-specific title. Draws have a result-neutral conclusion. |
-| **4 rebuilt match posters** | Match story; progression; pressure and transitions; players and finishing. Native chart panels, shared team scales, AMOLED and light themes. |
+| **8 match posters** | Two sets of four on the same 4:5 frame: the reference boards, and a timeline set sized for posting. Native chart panels, touch-density heatmaps, shared team scales, AMOLED and light themes. |
 | **Player profiles** | Every participant receives an advanced role profile and action map, with xGChain, xGBuildup, xT per 100 touches and progressive-pass share. Percentile dots require 8 eligible same-role players; small groups, short appearances and keepers show raw values. Old radars are no longer exported. |
 | **Publishable article** | Editable `.docx` and portable Markdown, with a selected visual argument instead of a gallery of every chart. |
 | **Light copy** | The same package again on `#F5F5F5`, in `light/` |
@@ -123,6 +123,13 @@ crests, explicitly attributed KPI rows and six numbered chart sections:
 | **2 · Progression** | Box entries, nested possession stages, entry lanes and movement-value scatters |
 | **3 · Pressure and transitions** | Pressing totals, outcomes after losses, loss locations and score-state rates |
 | **4 · Players and finishing** | Player creation, shot quality, chance involvement, goalkeeper actions and delivery |
+
+A second set, `thread_1`–`thread_4`, covers the same match on the same frame
+for posting rather than printing. 4:5 is the tallest ratio X shows uncropped in
+a timeline, so the frame is unchanged; the type is a step larger throughout,
+and the boards carry the passing sonar and the finishing slope from the report
+pages. Shot, box-entry and loss pitches on both sets are shaded by touch
+density, so a mark is read against the territory that produced it.
 
 Dark and light copies share the same layout. Rebuild only the posters from a
 saved match without downloading data or regenerating the report:
@@ -379,8 +386,7 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 | `player_radar.py` | Shared participation/creation calculations and legacy export compatibility |
 | `visualization_components.py` | Shared chart components and readability helpers |
 | `visualization_design.py` | Visual tokens, typography, reusable frames |
-| `poster_dashboard.py` | Production layout and charts for the four match posters |
-| `match_posters.py` | Legacy chart helpers and poster entry-point compatibility |
+| `poster_dashboard.py` | Production layout and charts for both poster sets, posters |
 | `render_posters.py` | Offline poster-only rebuild from saved match frames |
 | `render_light.py` | The light-page copy of a finished package |
 | `crests.py` | Club crest fetch, cache, plate and fallback |

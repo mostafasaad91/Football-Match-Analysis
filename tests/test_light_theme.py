@@ -108,15 +108,19 @@ def test_the_dark_page_still_lifts_upward():
 
 _POSTER_PROBE = """
     import json
-    import match_posters as mp
-    from visualization_components import contrast_ratio
+    # These used to read match_posters, whose colour constants no shipped
+    # pixel used: its drawing code was unreachable. poster_dashboard is what
+    # renders both poster sets, so its palette is the one worth a contrast
+    # guarantee.
+    import poster_dashboard as mp
+    from visualization_components import contrast_ratio, TEXT_MAIN, TEXT_DIM, BG_DARK
     print(json.dumps({
-        "bg": mp.BG,
-        "ink": mp.INK,
-        "ink_contrast": contrast_ratio(mp.INK, mp.BG),
-        "text_contrast": contrast_ratio(mp.TEXT, mp.BG),
-        "muted_contrast": contrast_ratio(mp.MUTED, mp.BG),
-        "neutral_contrast": contrast_ratio(mp.NEUTRAL, mp.BG),
+        "bg": BG_DARK,
+        "ink": TEXT_MAIN,
+        "ink_contrast": contrast_ratio(TEXT_MAIN, BG_DARK),
+        "text_contrast": contrast_ratio(TEXT_MAIN, BG_DARK),
+        "muted_contrast": contrast_ratio(TEXT_DIM, BG_DARK),
+        "neutral_contrast": contrast_ratio(mp.Poster.__init__.__globals__["TEXT_DIM"], BG_DARK),
     }))
 """
 
