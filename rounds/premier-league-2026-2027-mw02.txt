@@ -1,0 +1,13 @@
+# England Premier League 2026-2027 - Matchweek 2
+# Verified from the stage page: 10 fixtures, 20 clubs, none repeated.
+# Run with:  python run_round.py --round 2 --urls rounds/premier-league-2026-2027-mw02.txt
+https://www.whoscored.com/matches/1983556/live/england-premier-league-2026-2027-bournemouth-everton
+https://www.whoscored.com/matches/1983557/live/england-premier-league-2026-2027-crystal-palace-manchester-city
+https://www.whoscored.com/matches/1983558/live/england-premier-league-2026-2027-aston-villa-arsenal
+https://www.whoscored.com/matches/1983559/live/england-premier-league-2026-2027-leeds-brentford
+https://www.whoscored.com/matches/1983560/live/england-premier-league-2026-2027-liverpool-nottingham-forest
+https://www.whoscored.com/matches/1983561/live/england-premier-league-2026-2027-chelsea-brighton
+https://www.whoscored.com/matches/1983562/live/england-premier-league-2026-2027-manchester-united-ipswich
+https://www.whoscored.com/matches/1983563/live/england-premier-league-2026-2027-coventry-hull
+https://www.whoscored.com/matches/1983564/live/england-premier-league-2026-2027-sunderland-fulham
+https://www.whoscored.com/matches/1983565/live/england-premier-league-2026-2027-tottenham-newcastle
