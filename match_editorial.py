@@ -187,7 +187,21 @@ def section_copy(c):
             digits=2 if 'xG' in key or key=='ppda' else 1 if any(x in key for x in ['rate','tilt','vulnerability']) else 0
             unit='%' if digits==1 else ''
             data.append((label(key),comparison(c,key,digits,unit)))
+        # The report's section page carried three rows that were a metric, a
+        # score-state note and a question -- the same three shapes whatever the
+        # match did. The tactical reading replaces the first with what this
+        # match's own figures mean, and it is the same paragraph the article
+        # opens that section on, so the two documents argue one case.
+        from match_prose import section_reading, handoff
+        reading = section_reading(c, section)
+        rows=[('Observed output',data[0][1])]
+        if reading:
+            rows.append(('What the figures mean', reading))
+        rows.append(('Score-state context',state_read(c)))
+        rows.append(('Question for review',questions[section]))
         result[section]={'subtitle':questions[section], 'data':data,
-            'performance':[('Observed output',data[0][1]),('Score-state context',state_read(c)),('Question for review',questions[section])],
+            'performance':rows,
+            'reading':reading,
+            'handoff':handoff(section),
             'implication':questions[section]}
     return result

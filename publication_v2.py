@@ -52,42 +52,85 @@ def build_article(events, xg, team_metrics, player_metrics, match_info, out_dir,
         candidate=next((p for p in paths if token in p.stem and p not in selected),None)
         if candidate is not None:selected.append(candidate)
     selected=selected[:10]
-    sections=[Section('The result and the chances', [result_read(c),
-        'Expected goals describe the chances recorded before their outcomes. The difference from the final score is worth explaining through individual attempts, including penalties and own goals where present. It cannot establish repeatable finishing quality from one match.'],
+    from match_prose import section_reading, handoff, finishing_reading, player_section
+    # Every section: what this match's figures say, the mechanism behind them,
+    # then the question they leave for the section that follows. The templated
+    # "X recorded more Y" opener and the constant methodology paragraph that
+    # used to fill this space said the same words in every match.
+    sections=[Section('The result and the chances',
+        [result_read(c), finishing_reading(c), handoff('The result and the chances')],
         [p for p in selected if 'xg_flow' in p.stem])]
     copies=section_copy(c)
-    for group in ['Chance Creation','Possession and Progression','Pressing and Rest Defence','Transitions and Efficiency','Match Story','Player Impact Appendix']:
+    groups=['Chance Creation','Possession and Progression','Pressing and Rest Defence',
+            'Transitions and Efficiency','Match Story','Player Impact Appendix']
+    for group in groups:
         chosen=[p for p in selected if visual_section(p)==group and 'xg_flow' not in p.stem]
-        data=copies[group]
-        paragraphs=[observed_contrast(c,group)]
-        # The reading appears alongside its figure, so the main text develops the question.
-        paragraphs.append(review_method(c,group)+' '+data['implication'])
-        sections.append(Section('Player involvement' if group=='Player Impact Appendix' else group,paragraphs,chosen))
+        heading='Player involvement' if group=='Player Impact Appendix' else group
+        paragraphs=[]
+        reading=section_reading(c,group)
+        if reading:
+            # The tactical reading already states the figures it argues from,
+            # so observed_contrast repeated them a sentence later and then
+            # followed with a methodology note identical in every match. It is
+            # only used where no reading exists for the section.
+            paragraphs.append(reading)
+        else:
+            paragraphs.append(observed_contrast(c,group))
+        paragraphs.append(copies[group]['implication'])
+        if group=='Player Impact Appendix':
+            from match_insights import player_observations
+            if players is None:
+                import pandas as _pd
+                players=_pd.read_csv(out/'players.csv')
+            from player_advanced import enrich
+            observed=enrich(player_observations(events,players), events, players)
+            paragraphs.extend(player_section(observed, c))
+        else:
+            paragraphs.append(handoff(group))
+        sections.append(Section(heading,[p for p in paragraphs if p],chosen))
     profiles=sorted((out/'player_profiles').glob('*/*.png'))
     if profiles:
         # Select two leaders per side from the match observations, then show
         # their advanced profile cards. The ranking is explicitly match-only.
+        # The profile cards go to the same five the section above names. A
+        # second, differently-weighted shortlist of two per side put a "key
+        # players" heading over a set that disagreed with the ranking a page
+        # earlier, and a reader had no way to tell which the article meant.
         from match_insights import player_observations
+        from player_advanced import enrich
+        from match_prose import top_players
         if players is None:
             import pandas as pd
             players=pd.read_csv(out/'players.csv')
-        observations=player_observations(events, players).copy()
-        for key in ['positive_xT','xGChain','xA','xG','progressive_passes']:
-            if key not in observations: observations[key]=0
-        observations['selection_score']=(observations.positive_xT.fillna(0)+observations.xGChain.fillna(0)+2*observations.xA.fillna(0)+observations.xG.fillna(0)+.01*observations.progressive_passes.fillna(0))
-        leaders=observations[observations.minutes>=20].sort_values(['team_id','selection_score'],ascending=[True,False]).groupby('team_id').head(2)
-        leader_names={str(row.player) for _,row in leaders.iterrows()}
-        chosen=[p for p in profiles if p.stem.replace('_',' ') in leader_names or p.stem.lower() in {n.lower().replace(' ','_') for n in leader_names}]
-        sections.append(Section('Key players from both teams',[
-            'The player cards combine a role-aware radar, raw match values and the player’s action map. The selected names are leaders in this match-only comparison using positive xT, sequence xG credit, xA, xG and progressive passing; minutes are required before selection.',
-            'This is a shortlist for video review, not a season rating. The radar compares the player with eligible same-role observations when the sample is large enough, while the map shows where the recorded actions occurred. '+ ' '.join(f"{observations[observations.player.eq(name)].iloc[0].player} ({observations[observations.player.eq(name)].iloc[0].team_id})" for name in leader_names if not observations[observations.player.eq(name)].empty)+'.'],chosen))
+        observations=enrich(player_observations(events, players), events, players)
+        named=[]
+        for side in ('home','away'):
+            named.extend(str(row.player)
+                         for row in top_players(observations, c.get(f'{side}_id')))
+        wanted={name.lower() for name in named}
+        chosen=[p for p in profiles
+                if p.stem.replace('_',' ').lower() in wanted
+                or p.stem.lower() in {n.replace(' ','_') for n in wanted}]
+        if chosen:
+            sections.append(Section('The players named above',[
+                'A profile card for each of the ten. The radar compares the player with '
+                'eligible same-role observations when the sample is large enough; the map '
+                'shows where his recorded actions happened. Read both through his minutes '
+                'and his role.',
+                'This is a shortlist for video review, not a season rating: one match is a '
+                'small sample, and a card describes what a player did here rather than how '
+                'good he is.'],chosen))
     sections.append(Section('What to take into the video review',[state_read(c),
         'Start with the three selected possession chains. Locate the entry, the reception and the shot in order, then review the surrounding video to test the proposed mechanism. Event data shows the recorded actions but cannot establish off-ball spacing, receiving orientation or the coach’s intent.',
         'Separate observed output from an explanation of why it happened. Compare attacks under the same score state, and keep the number of possessions or minutes beside every conversion rate. This makes the next review question specific without presenting an association as a cause.',
         'The complete chart set, role profiles and analysis tables accompany the reference PDF. Local xG, post-shot estimates, expected threat and average-position influence are model outputs, not tracking measurements or calibrated forecasts. Their definitions and versions are recorded in the package manifest.']))
-    # The article now documents every exported figure, including the four
-    # posters, so the Word copy can stand alone beside the PDF.
-    all_visuals=sorted(out.glob('*.png'))+sorted((out/'player_profiles').glob('*/*.png'))
+    # A poster is a summary of this article, not a figure in it. Including the
+    # four of them put the whole argument in picture form inside a document
+    # that then went on to make the same argument in prose, and a reader who
+    # met the summary first had no reason to read what followed. They ship
+    # beside the package for posting; the appendix is the chart set.
+    numbered=[p for p in sorted(out.glob('[0-9]*.png'))]
+    all_visuals=numbered+sorted((out/'player_profiles').glob('*/*.png'))
     already={p.resolve() for section in sections for p in section.visuals}
     appendix=[p for p in all_visuals if p.resolve() not in already]
     sections.append(Section('Complete visual guide',[
