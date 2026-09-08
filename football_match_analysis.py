@@ -176,7 +176,11 @@ MATCH_URL = os.environ.get(
 # يقبل "Matchweek 3" أو "الجولة 3" أو "3"، ويحفظها كلها تحت Matchweek_03
 # حتى تترتب الجولات ترتيبًا صحيحًا حتى بعد الجولة التاسعة.
 # اتركه فارغًا ليستخدم البرنامج أسبوع التاريخ تلقائيًا.
-MATCH_ROUND = os.environ.get("MATCH_ANALYSIS_ROUND", "1").strip()
+# The default is empty, not a round number: an unset variable means the round
+# is unknown, and the date fallback names it Week_of_<Monday>. A default of "1"
+# would file every fixture whose round nobody stated under Matchweek_01, which
+# is a guess wearing a fact's clothes.
+MATCH_ROUND = os.environ.get("MATCH_ANALYSIS_ROUND", "").strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
