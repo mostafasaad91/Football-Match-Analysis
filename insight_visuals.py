@@ -31,12 +31,25 @@ class Charts:
         self.colors = {info['home_id']: lift_to_floor(home), info['away_id']: lift_to_floor(away)}
 
     def figure(self, title, subtitle, columns=1, height=7):
-        fig, axes = plt.subplots(1, columns, figsize=(12, height), squeeze=False)
+        """One figure, wearing the same head as every other page in the package.
+
+        These charts carried their own header — a teal "MOSTAFA SAAD / MATCH
+        STUDY" line, no crests, no scoreline, its own type scale — so a reader
+        turning from page 41 to page 42 of one PDF crossed into what looked
+        like a different publication. The pages either side of that boundary
+        describe the same match.
+
+        The shared strip is the one already on the other forty: badge, section
+        label, title, subtitle, both crests and the score. It occupies the top
+        of the figure, so the axes start lower than they used to.
+        """
+        fig, axes = plt.subplots(1, columns, figsize=(14, height), squeeze=False)
         fig.patch.set_facecolor(BG)
-        fig.subplots_adjust(left=.09, right=.96, bottom=.19, top=.76, wspace=.30)
-        fig.text(.055, .952, 'MOSTAFA SAAD  /  MATCH STUDY', color=BRAND, size=10, weight='bold')
-        fig.text(.055, .89, title, color=FG, size=22, weight='bold')
-        fig.text(.055, .825, subtitle, color=MUTED, size=10)
+        # The shared strip ends at 0.865, so anything below 0.79 leaves a
+        # visible band of empty page between the head and the first axis.
+        fig.subplots_adjust(left=.09, right=.955, bottom=.17, top=.79, wspace=.30)
+        from visual_redesign_preview import amoled_header
+        amoled_header(fig, title, subtitle)
         for ax in axes.flat:
             ax.set_facecolor(BG)
             ax.tick_params(colors=MUTED, labelsize=10)
@@ -72,9 +85,12 @@ class Charts:
                     ax.text(0, 1-i/max(len(data), 8), f'{row.player}  |  {getattr(row,x):.2f} {xlabel}  |  {getattr(row,y):.2f} {ylabel}',
                             transform=ax.transAxes, color=self.colors[row.team_id], size=11)
                 return self.save(fig, filename, title, f'Only {len(data)} players meet the minimum minutes and metric availability. Read individual values; no quadrant ranking is drawn.', 'Minimum 30 minutes; undefined ratios omitted', len(data))
-            self.skipped.append({'chart': filename, 'reason': f'Only {len(data)} valid observations'})
+            self.skipped.append({'chart': filename, 'reason': f'Only {len(data)} valid observation{"" if len(data)==1 else "s"}'})
             return
-        fig, axes = self.figure(title, f'{len(data)} observations  |  '+('Players with at least 30 minutes; match totals' if player else 'One point per possession; both teams share the same axes'),height=8)
+        # "1 observations" reached a shipped article; a single eligible point
+        # is rare but legal, so the noun agrees with the count.
+        observed=len(data)
+        fig, axes = self.figure(title, f'{observed} observation{"" if observed==1 else "s"}  |  '+('Players with at least 30 minutes; match totals' if player else 'One point per possession; both teams share the same axes'),height=8)
         fig.subplots_adjust(bottom=.23)
         ax = axes[0]
         for marker, (tid, group) in zip(['o','s'],data.groupby('team_id')):
@@ -161,7 +177,10 @@ def build_insight_visuals(events, players, info, out):
         counts = stage_counts(p,tid)
         stage_flow(ax,counts,charts.colors[tid],FG,MUTED)
         ax.set_xlim(-4,max(p.groupby('team_id').size().max(),1)*1.5);ax.set_title(name,color=FG,size=14)
-        readings.append(f'{name}: '+', '.join(map(str,counts))+' possessions at successive stages.')
+        # The noun leads the list. Written the other way round the sentence
+        # ended "8, 1 possessions" whenever a funnel narrowed to one, which
+        # agrees with the list but reads as a plural on the number beside it.
+        readings.append(f'{name}: possessions at successive stages: '+', '.join(map(str,counts))+'.')
     charts.save(fig,'55_possession_funnel.png','Which possessions reached the box and a shot','This identifies where attacks stop: the largest drop between two stages is the access problem to review, rather than possession volume alone. '+' '.join(readings),'Rates use all possessions; one possession is counted once at each stage.',len(p))
     routes=data['routes']
     fig,axes=charts.figure('Box-entry routes and their next outcome','A shot must follow the entry in the same possession; multiple entries can precede one shot',columns=2)
@@ -182,79 +201,23 @@ def build_insight_visuals(events, players, info, out):
         ax.legend(handles=[Line2D([0],[0],marker='o',color='none',markerfacecolor=MUTED,markersize=8,label='All entries'),Line2D([0],[0],marker='s',color='none',markerfacecolor=charts.colors[tid],markersize=8,label='Shot followed')],facecolor=BG,labelcolor=FG,edgecolor='none',fontsize=9,loc='upper right')
         readings.append(f'{name}: {len(g)} entries, {int(g.shot_followed.sum())} followed by a shot in that possession.')
     charts.save(fig,'56_entry_routes.png','Entry route and subsequent shot','This compares the quality of access, not only the number of entries. More entries without more following shots means access did not become sustained threat. '+' '.join(readings),'The lane identifies entry origin; a following shot is descriptive, not proof of cause.',len(routes))
-    spells=data['spells']
-    fig,axes=charts.figure('Chance production under each score state','Rates per 30 minutes in that state; spells shorter than 5 minutes do not receive rates',columns=2)
-    readings=[]
-    for ax,(tid,name) in zip(axes,charts.names.items()):
-        g=spells[spells.team_id.eq(tid)].groupby('state')[['minutes','shots','xG']].sum().reindex(['level','leading','trailing'],fill_value=0)
-        rates=(g.xG*30/g.minutes).where(g.minutes>=5)
-        ax.hlines(np.arange(3),0,rates,color=charts.colors[tid],lw=2,alpha=.5)
-        ax.scatter(rates,np.arange(3),s=100,color=charts.colors[tid],marker='D',zorder=3)
-        ax.set_yticks(np.arange(3),g.index,color=FG);ax.set_ylim(2.6,-.6)
-        ax.set_title(name,color=FG); ax.set_xlabel('xG / 30 state minutes')
-        ax.set_xlim(0,max(float(rates.max()) if rates.notna().any() else 0,1)*1.5)
-        for i,(state,row) in enumerate(g.iterrows()):
-            value=rates.loc[state]
-            text=f'{value:.2f}' if pd.notna(value) else 'Insufficient exposure'
-            ax.annotate(f'{text}\n{row.minutes:.1f} min · {row.xG:.2f} xG',(value if pd.notna(value) else 0,i),xytext=(9,0),textcoords='offset points',va='center',color=FG,size=9)
-        readings.append(name+': '+'; '.join(f'{s} for {r.minutes:.1f} minutes, {r.xG:.2f} xG' for s,r in g.iterrows())+'.')
-    charts.save(fig,'57_game_state_rates.png','Score-state exposure and chance output','The split shows how chance output changed with the score. Never read the rate without exposure time: a short spell can inflate it. '+' '.join(readings),'Within-period clock; a goal belongs to the state before it. Zero exposure means unavailable.',len(spells))
-    receptions=data['receptions']
-    fig,axes=charts.figure('Reception locations and forward continuations','Top: all attacking-half receptions. Bottom: up to 12 longest forward actions from those receptions.',columns=2,height=10)
-    for ax,(tid,name) in zip(axes,charts.names.items()):
-        g=receptions[receptions.team_id.eq(tid)]
-        g=g[g.x.between(50,100)&g.y.between(0,100)]
-        left=.08 if tid==next(iter(charts.names)) else .56
-        ax.set_position([left,.48,.38,.27])
-        continuation=fig.add_axes([left,.14,.38,.25],facecolor=BG)
-        continuation.set_xlim(50,100);continuation.set_ylim(0,100)
-        continuation.set_xticks([]);continuation.set_yticks([])
-        for spine in continuation.spines.values(): spine.set_color(MUTED)
-        continuation.set_title('Selected forward actions →',color=FG,size=10)
-        ax.set_xlim(50,100);ax.set_ylim(0,100)
-        if len(g):
-            # A raw arrow for every event turns this chart into a hairball. Use
-            # a density layer for the complete sample and reserve arrows for
-            # the most informative, longest forward continuations.
-            ax.scatter(g.x,g.y,s=28,c=charts.colors[tid],alpha=.92,zorder=5,edgecolors=FG,linewidths=.25)
-            links=g[g.next_type.isin(['Pass','Carry'])].dropna(subset=['end_x','end_y']).copy()
-            if len(links):
-                links['advance']=links.end_x-links.x
-                # Keep annotation geometry inside the displayed attacking-half
-                # panel; otherwise Matplotlib can draw an arrow across the
-                # gap into the opponent's subplot.
-                links=links[(links.advance>2)&links.x.between(50,100)&links.y.between(0,100)&links.end_x.between(50,100)&links.end_y.between(0,100)].nlargest(12,'advance')
-                for r in links.itertuples():
-                    continuation.scatter(r.x,r.y,s=24,color=charts.colors[tid],edgecolors=FG,linewidths=.3)
-                    continuation.annotate('',(r.end_x,r.end_y),(r.x,r.y),annotation_clip=True,arrowprops={'arrowstyle':'->','lw':1.0,'color':charts.colors[tid],'alpha':.72})
-        ax.set_title(f'{name} · {len(g)} receptions · {len(links)} continuations',color=FG,size=11)
-        ax.set_xlabel('Attacking x (cropped at halfway)');ax.set_ylabel('Pitch y')
-    charts.save(fig,'58_reception_map.png','Reception zones and selected continuations',f'{len(receptions)} pass-to-touch links meet the conservative spatial and time rules. Density shows every link; only the 12 longest forward continuations per team are drawn as arrows so the tactical pattern stays readable.','Event-inferred receiver; does not establish body orientation or pressure.',len(receptions))
-    # Select complete real possessions; each row lists ordered actions and their clock.
-    best=p.nlargest(3,'xG')
-    fig,axes=charts.figure('Three possessions behind the chance totals','Recorded actions up to the final shot in each selected possession. Attacks →',columns=3,height=11)
-    summaries=[]
-    for i,(_,row) in enumerate(best.iterrows()):
-        g=data['actions'];g=g[g.possession_id.eq(row.possession_id)&g.team_id.eq(row.team_id)]
-        shot_positions=np.flatnonzero(flags(g,'is_shot').to_numpy())
-        if len(shot_positions): g=g.iloc[:shot_positions[-1]+1]
-        meaningful=g[g.type.isin(['Pass','Carry','TakeOn','Shot','Goal','SavedShot','MissedShots','ShotOnPost'])|flags(g,'is_shot')].tail(6)
-        chain=' → '.join(f"{int(e.minute):02d}:{int(e.second):02d} {e.player} ({e.type})" for e in meaningful.itertuples())
-        heading=f'{charts.names[row.team_id]} | {row.xG:.2f} xG | {row.duration:.0f}s | last {len(meaningful)} actions'
-        ax=axes[i];ax.set_position([.055,.57-i*.22,.38,.19]);ax.set_xlim(0,105);ax.set_ylim(0,68);ax.set_aspect('equal');ax.set_xticks([]);ax.set_yticks([])
-        ax.add_patch(Rectangle((0,0),105,68,fill=False,ec=MUTED,lw=.7))
-        ax.add_patch(Rectangle((88.5,13.84),16.5,40.32,fill=False,ec=MUTED,lw=.7))
-        for j,(_,e) in enumerate(meaningful.iterrows(),1):
-            ax.scatter(e.x*1.05,e.y*.68,s=80,color=charts.colors[row.team_id],edgecolor=FG,zorder=4)
-            ax.annotate(str(j),(e.x*1.05,e.y*.68),xytext=(3,8),textcoords='offset points',color=FG,size=10,weight='bold',zorder=5)
-            if e.type in ['Pass','Carry'] and pd.notna(e.end_x) and pd.notna(e.end_y):
-                ax.annotate('',(e.end_x*1.05,e.end_y*.68),(e.x*1.05,e.y*.68),arrowprops={'arrowstyle':'->','color':charts.colors[row.team_id],'lw':1.5})
-        ax.set_title(heading,color=FG,size=10,pad=8)
-        from match_clock import event_label
-        labels='\n'.join(textwrap.fill(f'{j}. {event_label(e)} {e.player} — {e.type}',35) for j,(_,e) in enumerate(meaningful.iterrows(),1))
-        fig.text(.51,.75-i*.22,labels,color=FG,size=9,va='top',linespacing=1.4)
-        summaries.append(heading+'. '+chain)
-    charts.save(fig,'59_sequence_story.png','The action chains behind the largest chances',' '.join(summaries),'Elapsed event timestamps; arrows mean chronological order, not inferred off-ball runs.',len(best))
+    # 57_game_state_rates was folded into the Game-State Output card, which
+    # already listed the totals for the same three states. Two pages showing
+    # the same split with different denominators made a reader hold both open
+    # to answer one question; the rate now sits under the totals it qualifies.
+    # Two charts were cut here rather than redrawn.
+    #
+    # 58_reception_map gave each side a scatter of every attacking-half
+    # reception over a second panel of twelve arrows. Two hundred undifferentiated
+    # dots on a blank rectangle is a texture, not a finding: nothing in it
+    # separated a reception that mattered from one that did not, and the arrows
+    # underneath repeated what the progression pages already show.
+    #
+    # 59_sequence_story drew the three largest chances as three pitches stacked
+    # at a fifth of the page each, with the action list set beside them at 9pt.
+    # At the size the layout allowed, neither the numbered dots nor the chain
+    # text could be read, and the same three possessions are described in prose
+    # in the article.
     loss=data['losses']
     fig,axes=charts.figure('Where possession was lost and what followed','Each point is a team loss. Colour shows the most advanced opponent outcome recorded within 12 seconds.',columns=2,height=7)
     summaries=[]
