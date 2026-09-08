@@ -61,15 +61,28 @@ def read_urls(args) -> list[str]:
     return ordered
 
 
-def run_one(url: str, round_name: str, both_themes: bool) -> tuple[bool, str]:
+def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
     environment = dict(os.environ)
     environment["MATCH_ANALYSIS_URL"] = url
     environment["MATCH_ANALYSIS_ROUND"] = round_name
-    environment["MATCH_ANALYSIS_LIGHT_COPY"] = "1" if both_themes else "0"
+    # The package builds the light copy unless told otherwise - the default in
+    # visual_redesign_full is "1". Writing "0" here turned it off for every
+    # fixture in a round, silently, because the flag looked like it was opting
+    # in to something rather than out of it. Only an explicit --dark-only says
+    # anything now; otherwise the pipeline's own default stands.
+    if dark_only:
+        environment["MATCH_ANALYSIS_LIGHT_COPY"] = "0"
+    # The pipeline prints Arabic, and text=True decodes with the console's
+    # code page, which on Windows is cp1252. The reader thread then dies with
+    # a UnicodeDecodeError and the child's output is lost - so a fixture that
+    # failed reported no reason at all. Read it as UTF-8 and never raise on a
+    # byte that is not: a mangled character in a log is a smaller problem than
+    # a missing log.
+    environment["PYTHONIOENCODING"] = "utf-8"
     started = time.time()
     finished = subprocess.run([sys.executable, "football_match_analysis.py"],
-                              cwd=ROOT, env=environment,
-                              capture_output=True, text=True)
+                              cwd=ROOT, env=environment, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
     took = f"{(time.time() - started) / 60:.1f} min"
     if finished.returncode == 0:
         return True, took
@@ -86,8 +99,8 @@ def main() -> int:
     parser.add_argument("--url", action="append", help="One fixture URL; repeatable")
     parser.add_argument("--urls", action="append",
                         help="A file holding fixture URLs; repeatable")
-    parser.add_argument("--both-themes", action="store_true",
-                        help="Render the light copy beside the dark one")
+    parser.add_argument("--dark-only", action="store_true",
+                        help="Skip the light copy (it is built by default)")
     parser.add_argument("--dry-run", action="store_true",
                         help="List what would run, and where it would be shelved")
     args = parser.parse_args()
@@ -116,7 +129,7 @@ def main() -> int:
     for index, url in enumerate(urls, start=1):
         label = url.rsplit("/", 1)[-1]
         print(f"[{index}/{len(urls)}] {label} ... ", end="", flush=True)
-        ok, detail = run_one(url, round_name, args.both_themes)
+        ok, detail = run_one(url, round_name, args.dark_only)
         print("ok " + detail if ok else "FAILED " + detail)
         if not ok:
             failures.append((url, detail))
