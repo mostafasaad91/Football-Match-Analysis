@@ -525,7 +525,14 @@ def xg_flow(events: pd.DataFrame) -> Path:
     shots["minute"] = pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
     max_minute = max(90, int(shots["minute"].max()) + 3 if not shots.empty else 90)
     totals = shots.groupby("team_id")["xG"].sum()
-    shot_counts = shots.groupby("team_id").size()
+    # An own goal is logged as a shot by the team that scored it, which made
+    # this header read "18 SHOTS" for a side the cover, the posters and the
+    # prose all credited with 17. The row has to stay in `shots` — the goal
+    # timeline and the match-state band below are built from it — so only the
+    # attempt count drops it. Nobody attempted anything on the opponent's goal.
+    shot_counts = shots[
+        ~_bool(shots.get("is_own_goal", pd.Series(False, index=shots.index)))
+    ].groupby("team_id").size()
     home_total = float(totals.get(HOME_ID, 0.0))
     away_total = float(totals.get(AWAY_ID, 0.0))
     match_goals = shots[

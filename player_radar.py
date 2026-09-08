@@ -1516,23 +1516,34 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
     cross_comp = int((is_cross & (o == "Successful")).sum())
     pass_tot = int(isp.sum())
     pass_comp = int(len(pc))
+    # An own goal is filed against the player who put it in, with is_goal and
+    # is_shot both true and a "Goal" type, so every count below picked it up as
+    # a finish. João Pedro scored once for Chelsea and once past his own keeper
+    # and his profile read GOALS 2 — a scorer's line built half from a goal he
+    # conceded. The keeper metrics have always excluded own goals; the outfield
+    # ones did not.
+    own_goal = d.get("is_own_goal", pd.Series(False, index=d.index)).fillna(False) == True
+    scored = d.loc[~own_goal]
     shots_tot = int(
-        (d.get("is_shot", pd.Series(False, index=d.index)).fillna(False) == True).sum()
+        (scored.get("is_shot", pd.Series(False, index=scored.index)).fillna(False) == True).sum()
     )
     shots_ot = int(
-        d.get("shot_whoscored_type", pd.Series(index=d.index, dtype=object))
+        scored.get("shot_whoscored_type", pd.Series(index=scored.index, dtype=object))
         .isin(["Goal", "SavedShot"])
         .sum()
     )
 
-    goals = int((d["is_goal"].fillna(False) == True).sum()) if "is_goal" in d else 0
-    xg_tot = float(d["xG"].fillna(0).sum()) if "xG" in d else 0.0
-    pen = d.get("is_penalty", pd.Series(False, index=d.index)).fillna(False) == True
+    goals = int((scored["is_goal"].fillna(False) == True).sum()) if "is_goal" in d else 0
+    # This feed leaves an own goal's xG empty, so these two sums happen to be
+    # right already; they read from `scored` so they stay right on a feed that
+    # fills it in.
+    xg_tot = float(scored["xG"].fillna(0).sum()) if "xG" in d else 0.0
+    pen = scored.get("is_penalty", pd.Series(False, index=scored.index)).fillna(False) == True
     pso = (
-        d.get("is_penalty_shootout", pd.Series(False, index=d.index)).fillna(False)
+        scored.get("is_penalty_shootout", pd.Series(False, index=scored.index)).fillna(False)
         == True
     )
-    npxg = float(d.loc[~(pen | pso), "xG"].fillna(0).sum()) if "xG" in d else 0.0
+    npxg = float(scored.loc[~(pen | pso), "xG"].fillna(0).sum()) if "xG" in d else 0.0
     deep = 0
     if "end_x" in d.columns:
         dp = d[isp & (o == "Successful") & ~is_cross]

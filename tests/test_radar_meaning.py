@@ -271,3 +271,66 @@ def test_no_metric_appears_in_two_groups():
 def test_the_outfield_radar_lost_the_duplicates_and_kept_the_rest():
     slices = [m for _g, _c, ms in pr.GROUPS for m in ms]
     assert len(slices) == 26, len(slices)
+
+
+# --------------------------------------------------------------------------
+# an own goal is not a finish
+# --------------------------------------------------------------------------
+
+def test_an_own_goal_is_not_credited_to_the_player_who_scored_it():
+    """João Pedro's profile read GOALS 2 for one goal and one own goal.
+
+    An own goal is filed against the player who put it in, carrying is_goal,
+    is_shot and a "Goal" type, so the outfield counts read it as a finish. The
+    keeper metrics had excluded own goals all along; the outfield ones had not,
+    which is how a scorer's line was built half from a goal he conceded.
+    """
+    out = match_dir("Chelsea_vs_Brighton_4-3")
+    if not (out / "events.csv").exists():
+        pytest.skip("Chelsea_vs_Brighton_4-3 has not been rendered")
+    events = pd.read_csv(out / "events.csv")
+    own = events[events["is_own_goal"].fillna(False) == True]
+    if own.empty:
+        pytest.skip("fixture carries no own goal")
+
+    scorer = str(own.iloc[0]["player"])
+    allm, _elig = pr.compute_metrics_pool(events)
+    assert scorer in allm, f"{scorer} is missing from the pool"
+
+    rows = events[events["player"].astype(str) == scorer]
+    real = int(((rows["is_goal"].fillna(False) == True)
+                & ~(rows["is_own_goal"].fillna(False) == True)).sum())
+    assert allm[scorer]["Goals"] == real
+    # and the own goal is not counted as an attempt on the opponent either
+    attempts = int(((rows["is_shot"].fillna(False) == True)
+                    & ~(rows["is_own_goal"].fillna(False) == True)).sum())
+    assert allm[scorer]["Shots"] == attempts
+
+
+def test_the_profile_card_does_not_credit_an_own_goal_either():
+    """The same defect, in the other engine that counts a player's goals.
+
+    player_observations builds the advanced profile card and the poster player
+    panels. Its Shots row already excluded own goals via the _shot mask; its
+    Goals row read is_goal directly, so the card printed GOALS 2 beside SHOTS 5
+    for the same player in the same match.
+    """
+    from match_insights import player_observations
+
+    out = match_dir("Chelsea_vs_Brighton_4-3")
+    if not (out / "players.csv").exists():
+        pytest.skip("Chelsea_vs_Brighton_4-3 has not been rendered")
+    events = pd.read_csv(out / "events.csv")
+    own = events[events["is_own_goal"].fillna(False) == True]
+    if own.empty:
+        pytest.skip("fixture carries no own goal")
+
+    scorer = str(own.iloc[0]["player"])
+    observed = player_observations(events, pd.read_csv(out / "players.csv"))
+    row = observed[observed.player.eq(scorer)]
+    assert not row.empty, f"{scorer} is missing from the observations"
+
+    rows = events[events["player"].astype(str) == scorer]
+    real = int(((rows["is_goal"].fillna(False) == True)
+                & ~(rows["is_own_goal"].fillna(False) == True)).sum())
+    assert int(row.iloc[0].goals) == real

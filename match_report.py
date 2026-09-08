@@ -672,27 +672,63 @@ def _truthy_flag(value: Any) -> bool:
     return bool(value)
 
 
-def _event_type_text(row: pd.Series) -> str:
-    parts = []
-    for key in ("event_type", "type", "type_display", "displayName", "outcome"):
-        val = row.get(key)
-        if val is not None:
-            parts.append(str(val))
-    parts.extend(_goal_qualifiers(row))
-    return " ".join(parts).lower()
+# A throw-in is a restart, but it is not a dead ball in the sense this report
+# means: nobody rehearses a throw on a Thursday, the defence is not set, and no
+# analyst counts a goal three passes after a throw as a set-piece goal.
+#
+# The feed makes that easy to get wrong. WhoScored tags a shot ThrowinSetPiece
+# when the *possession* began with a throw, which is a possession-origin flag
+# rather than a delivery. Reading it as a set piece turned Cole Palmer's strike
+# from outside the box into a dead-ball goal, and with three of Chelsea's four
+# goals mislabelled the article opened on "CHELSEA WON IT FROM DEAD BALLS" over
+# a match whose third goal was a FastBreak.
+#
+# Matching is on whole qualifier tokens rather than substrings for the same
+# reason: "throw" also appears inside ThrowinSetPiece, and "foul" appears on
+# every event that merely happened to follow one.
+# Ordered most specific first, so a corner that followed a free kick is named
+# by its delivery. The bare ``SetPiece`` marker is last because it says a dead
+# ball produced the goal without saying which: a header from a free-kick cross
+# carries ``SetPiece`` on the goal and ``FreekickTaken`` two events earlier, so
+# the lookback below usually replaces this label with the real one.
+#
+# ``throwinsetpiece`` is deliberately absent and is a different token from
+# ``setpiece``, so widening this table cannot let throws back in.
+_SET_PIECE_TOKENS = (
+    ("Corner", ("cornertaken", "fromcorner")),
+    ("Direct Free Kick", ("directfreekick",)),
+    ("Free Kick", ("freekicktaken", "fromfreekick")),
+    ("Set Piece", ("setpiece",)),
+)
+
+
+def _event_tokens(row: pd.Series) -> set[str]:
+    tokens = {
+        str(q).strip().lower().replace(" ", "").replace("_", "")
+        for q in _goal_qualifiers(row)
+        if str(q).strip()
+    }
+    for key in ("event_type", "type", "type_display", "displayName"):
+        value = row.get(key)
+        if value is not None and str(value).strip():
+            tokens.add(str(value).strip().lower().replace(" ", "").replace("_", ""))
+    return tokens
+
+
+def _subtype_from_tokens(tokens: set[str]) -> str | None:
+    for label, markers in _SET_PIECE_TOKENS:
+        if tokens.intersection(markers):
+            return label
+    return None
 
 
 def _set_piece_subtype_from_event(row: pd.Series) -> str | None:
-    text = _event_type_text(row)
-    if "corner" in text:
-        return "Corner"
-    if "throw" in text:
-        return "Throw-In"
-    if "directfreekick" in text or "direct free" in text:
-        return "Direct Free Kick"
-    if "freekick" in text or "free kick" in text or "foul" in text:
-        return "Free Kick"
-    return None
+    return _subtype_from_tokens(_event_tokens(row))
+
+
+# Matching match_metrics.SET_PIECE_LOOKBACK_EVENTS: the delivery, the flick and
+# the finish is three events, and a wider window starts crossing possessions.
+SET_PIECE_LOOKBACK = 3
 
 
 def _previous_restart_subtype(
@@ -725,13 +761,23 @@ def _previous_restart_subtype(
     if same_team.empty:
         same_team = prior
 
-    for _, prev in same_team.tail(4).iloc[::-1].iterrows():
+    # The delivery is rarely the last touch before the goal. A free kick is
+    # swung in, a teammate heads it down, someone finishes: the FreekickTaken
+    # token sits three events back, and stopping at the first prior action
+    # found only the cross — which carries the bare SetPiece marker and not the
+    # restart that produced it. Two genuine free-kick goals were published as
+    # open play that way.
+    #
+    # Three events is the window match_metrics.shot_origin already uses, so the
+    # two classifiers now read the same evidence. The most specific label in
+    # the window wins, which is why the search does not stop at the first hit:
+    # a bare SetPiece on the cross must not beat the FreekickTaken behind it.
+    best = None
+    for _, prev in same_team.tail(SET_PIECE_LOOKBACK).iloc[::-1].iterrows():
         subtype = _set_piece_subtype_from_event(prev)
-        if subtype:
-            return subtype
-        # Stop after the immediately preceding non-empty action by the scoring side.
-        return None
-    return None
+        if subtype and (best is None or best == "Set Piece"):
+            best = subtype
+    return best
 
 
 def goal_body_part_label(row: pd.Series) -> str:

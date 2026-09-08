@@ -29,6 +29,11 @@ def player_observations(events, players):
     live["_prog"] = progressive_pass_mask(live)
     live["_box"] = box_entry_mask(live)
     live["_shot"] = flags(live, "is_shot") & ~flags(live,'is_own_goal')
+    # Same exclusion, stated once. An own goal carries is_goal as well as
+    # is_shot, and reading is_goal on its own credited João Pedro with two
+    # goals — one for Chelsea, one past his own keeper — on a card whose Shots
+    # row, built from _shot, already had it right.
+    live["_goal"] = flags(live, "is_goal") & ~flags(live,'is_own_goal')
     live["_good"] = successful(live)
     live["_xt"] = numeric(live, "xT", np.nan).where(live["_good"] & live["type"].isin(["Pass", "Carry"])).clip(lower=0)
     # Carries are included only when explicitly supplied, never reconstructed as tracking.
@@ -66,7 +71,7 @@ def player_observations(events, players):
             interceptions=int(g["type"].eq("Interception").sum()),
             tackles_won=int((g["type"].eq("Tackle") & g["_good"]).sum()),
             clearances=int(g["type"].eq("Clearance").sum()),
-            goals=int(flags(g, "is_goal").sum()),
+            goals=int(g["_goal"].sum()),
             saves=int(g["type"].eq("Save").sum()), claims=int(g["type"].eq("Claim").sum()),
             sweeps=int(g["type"].eq("KeeperSweeper").sum())))
     result=pd.DataFrame(rows)
@@ -93,7 +98,9 @@ def possession_observations(events):
         clock = numeric(g, "_clock_seconds")
         reach_at = clock[reach].min() if reach.any() else np.nan
         box_at = clock[box & (clock >= reach_at)].min() if box.any() and reach.any() else np.nan
-        shot = flags(g, "is_shot") & (clock >= box_at)
+        # An own goal is not this possession reaching a shot; without the
+        # exclusion a side that forced one was credited with the attempt.
+        shot = flags(g, "is_shot") & ~flags(g, "is_own_goal") & (clock >= box_at)
         first_shot = clock[shot].min() if shot.any() else np.nan
         from match_metrics import blocked_shot_mask
         target = g['type'].isin(["Goal", "SavedShot"]) & shot & ~blocked_shot_mask(g)
