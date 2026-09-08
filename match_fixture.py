@@ -71,6 +71,36 @@ class Fixture:
         return tuple(found)
 
 
+def normalise_round(text: str) -> str:
+    """One spelling for a matchweek, with the number padded to two digits.
+
+    A season's rounds are read as a list, and a list sorts as text, so
+    ``Matchweek 4`` files between ``Matchweek 39`` and ``Matchweek 5``. Three
+    spellings had already reached the shelf -- ``Matchweek_01`` from the
+    tidy-up script, ``Matchweek_4`` typed by hand, and ``Week_of_2026-08-17``
+    from the date fallback -- and the first two are the same round written two
+    ways.
+
+    Only the matchweek forms are touched. A cup tie is called what it is
+    called, and the dated fallback stays dated, because neither has a round
+    number to pad.
+    """
+    raw = str(text or "").strip()
+    # A bare number is a matchweek. Anything else that is only digits has no
+    # other reading here, and leaving it alone shelved a round under a folder
+    # literally named "1".
+    match = re.fullmatch(r"(?:(?:matchweek|match week|week|round|gameweek|gw|md)"
+                         r"[\s._-]*)?(\d{1,2})", raw, flags=re.IGNORECASE)
+    if match:
+        return f"Matchweek {int(match.group(1)):02d}"
+    # Arabic is the other language this project's own comments are written in,
+    # so "الجولة 3" is a spelling a user of it will reasonably type.
+    arabic = re.fullmatch(r"(?:الجوله|الجولة)[\s._-]*(\d{1,2})", raw)
+    if arabic:
+        return f"Matchweek {int(arabic.group(1)):02d}"
+    return raw
+
+
 def _folder(text: str) -> str:
     """A name a filesystem will take, on every platform."""
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(text).strip())
@@ -161,7 +191,7 @@ def shelf(url: str | None, round_name: str = "",
     enough to be useful.
     """
     fixture = from_url(url)
-    name = str(round_name or "").strip() or round_from_date(played_on)
+    name = normalise_round(round_name) or round_from_date(played_on)
     if name:
         fixture = Fixture(fixture.region, fixture.competition,
                           fixture.season, name)

@@ -1,0 +1,12 @@
+# England Premier League 2026-2027 - Matchweek 1  (21-24 Aug 2026)
+# Run with:  python run_round.py --round 1 --urls rounds/premier-league-2026-2027-mw01.txt
+https://www.whoscored.com/matches/1983546/live/england-premier-league-2026-2027-arsenal-coventry
+https://www.whoscored.com/matches/1983547/live/england-premier-league-2026-2027-newcastle-liverpool
+https://www.whoscored.com/matches/1983548/live/england-premier-league-2026-2027-hull-manchester-united
+https://www.whoscored.com/matches/1983549/live/england-premier-league-2026-2027-everton-crystal-palace
+https://www.whoscored.com/matches/1983550/live/england-premier-league-2026-2027-fulham-chelsea
+https://www.whoscored.com/matches/1983551/live/england-premier-league-2026-2027-ipswich-sunderland
+https://www.whoscored.com/matches/1983552/live/england-premier-league-2026-2027-nottingham-forest-leeds
+https://www.whoscored.com/matches/1983553/live/england-premier-league-2026-2027-brentford-tottenham
+https://www.whoscored.com/matches/1983554/live/england-premier-league-2026-2027-brighton-aston-villa
+https://www.whoscored.com/matches/1983555/live/england-premier-league-2026-2027-manchester-city-bournemouth

@@ -169,11 +169,14 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1993942/live/spain-laliga-2026-2027-deportivo-alaves-osasuna",
+    "https://www.whoscored.com/matches/1983546/live/england-premier-league-2026-2027-arsenal-coventry",
 ).strip()
-# اكتب رقم الجولة هنا، مثل: "Matchweek 3" أو "الجولة 3".
+# رقم الجولة. الأفضل تمريره مع الرابط بدل تعديل الملف:
+#     $env:MATCH_ANALYSIS_ROUND = "Matchweek 1"
+# يقبل "Matchweek 3" أو "الجولة 3" أو "3"، ويحفظها كلها تحت Matchweek_03
+# حتى تترتب الجولات ترتيبًا صحيحًا حتى بعد الجولة التاسعة.
 # اتركه فارغًا ليستخدم البرنامج أسبوع التاريخ تلقائيًا.
-MATCH_ROUND = ""
+MATCH_ROUND = os.environ.get("MATCH_ANALYSIS_ROUND", "1").strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isabs(SAVE_DIR):
