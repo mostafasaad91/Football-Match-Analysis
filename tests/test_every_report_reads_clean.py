@@ -174,9 +174,16 @@ def test_the_closing_does_not_reverse_the_opening(out):
     article, _frames, _info = _article(out)
     if "chase" not in article.title.lower():
         return
+    # The v1 article closed on "What to take from it"; publication_v2 renamed
+    # that section "What to take into the video review". Both are accepted so
+    # the guard follows the closing section rather than one engine's wording.
+    # This test sat dormant while every fixture was titled "<X> #-# <Y> - Match
+    # study", because no such title contains "chase" and the check above
+    # returned first.
     closing = next((s for s in article.sections
-                    if s.heading == "What to take from it"), None)
-    assert closing is not None
+                    if s.heading in ("What to take from it",
+                                     "What to take into the video review")), None)
+    assert closing is not None, [s.heading for s in article.sections]
     text = " ".join(closing.paragraphs)
     loser = article.title.split("'")[0]
     assert f"it belongs to {loser}" not in text, (

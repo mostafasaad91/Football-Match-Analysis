@@ -979,7 +979,8 @@ def _finding_player(m: _Match) -> Finding | None:
 
     opening = (
         f"{name} was involved in more of the valuable attacking play than anyone on the "
-        f"pitch: {xt:.2f} sequence expected threat from {sequences} possessions, and "
+        f"pitch: {xt:.2f} sequence expected threat from "
+        f"{sequences} {_plural(sequences, 'possession')}, and "
         f"{chain:.2f} xGChain.{comparison}"
     )
     second = (

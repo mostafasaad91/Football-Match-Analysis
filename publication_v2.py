@@ -93,8 +93,8 @@ def build_article(events, xg, team_metrics, player_metrics, match_info, out_dir,
     sections.append(Section('Complete visual guide',[
         'The following pages explain every exported visual in the match package. Read each title with its subtitle and footer: the subtitle defines the denominator or time window, while the footer states the main limitation.'],appendix,gallery=True))
     strap=' · '.join(str(v) for v in [match_info.get('competition',''),match_info.get('date',''),'MATCH STUDY'] if v)
-    match_title=f"{c['home']} {c['home_goals']}–{c['away_goals']} {c['away']} — Match study"
-    article=Article(match_title,result_read(c),strap,sections,None,c['home'],c['away'],c)
+    match_title,standfirst=match_headline(events,xg,team_metrics,player_metrics,match_info,out_dir)
+    article=Article(match_title,standfirst or result_read(c),strap,sections,None,c['home'],c['away'],c)
     return article
 
 
@@ -108,12 +108,33 @@ def write_markdown(article,out):
     (out/'match_article.md').write_text('\n\n'.join(lines),encoding='utf-8')
 
 
-def cover_headline(events,xg,team_metrics,player_metrics,info):
-    from tactical_pdf_report import build_context
+def match_headline(events,xg,team_metrics,player_metrics,info,out_dir='.'):
+    """The fixture's own headline and standfirst, from the findings engine.
+
+    This module replaced the v1 article, and in doing so it replaced the
+    headline with ``f"{home} {score} {away} — Match study"``. That reads as a
+    filename rather than a finding, and because ``match_article`` re-exports
+    this module's names from its last line, the thirteen ``_finding_*``
+    builders and the ranked ``_title_candidates`` behind them stopped being
+    reachable from anywhere. Fifty-five rendered fixtures then shipped one
+    sentence between them:
+
+        AssertionError: 55 fixtures share only 1 sentences: X #–# X — Match study
+
+    The section assembly below is still v2's. Only the title comes from the
+    older engine, which is the part v2 never replaced.
+
+    Both this and the article go through here so the cover and the Word file
+    cannot open on different sentences about the same match.
+    """
     if events is None or xg is None or not info.get('home_name') or not info.get('away_name'):
-        return ''
-    c=build_context(events,xg,team_metrics,player_metrics,info)
-    return f"{c['home']} {c['home_goals']}–{c['away_goals']} {c['away']} — Match study"
+        return '',''
+    from match_article import _Match, _title
+    return _title(_Match(events,xg,team_metrics,player_metrics,info,out_dir))
+
+
+def cover_headline(events,xg,team_metrics,player_metrics,info):
+    return match_headline(events,xg,team_metrics,player_metrics,info)[0]
 
 
 def pdf_verdict(self):
