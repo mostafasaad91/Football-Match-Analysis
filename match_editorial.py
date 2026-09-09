@@ -126,6 +126,14 @@ RULES=[
 
 def reading(path,c):
     path=Path(path);s=path.stem.lower()
+    # What this board says about this match comes first. Everything below is a
+    # recital of the figures already printed on the picture, followed by a
+    # methodology note that did not change from fixture to fixture -- true, and
+    # not analysis. The tactical writer is consulted first and the old text is
+    # kept for the boards it does not cover.
+    from match_prose import visual_reading
+    argued=visual_reading(path,c)
+    if argued:return argued
     contract=c.get('chart_contracts',{}).get(path.name)
     if contract:return (contract.get('reading',contract.get('takeaway',''))+' '+contract.get('interpretation','')).replace(' | ','; ')
     if 'player_radars' in path.parts or 'player_profiles' in path.parts:

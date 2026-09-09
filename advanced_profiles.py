@@ -55,32 +55,31 @@ def wedge_label(key):
 
 
 def _role_pizza(fig, rect, labels, values, colour, *, role_average=None):
-    """Segmented, role-aware pizza profile; each slice is independently readable."""
-    from insight_visuals import FG
-    from visualization_components import (
-        BG_DARK, IS_LIGHT_THEME, label_outline, text_on_fill,
-    )
+    """Segmented, role-aware pizza profile; each slice is independently readable.
+
+    The percentile is printed **outside** the ring, beside its own label, on
+    the page background. Inside the wedge it sat on whatever the bar happened
+    to reach -- a saturated kit colour, a dark track, or the boundary between
+    them -- and no single text colour is readable on all three. Chris Wood's
+    "100" was white on Forest red at about four to one. Moving the number off
+    the coloured fill removes the whole problem rather than tuning around it:
+    one background, one text colour, every card, both themes.
+    """
+    from insight_visuals import FG, MUTED
+    from visualization_components import BG_DARK, IS_LIGHT_THEME
     shades = _PIZZA[bool(IS_LIGHT_THEME)]
     ax = fig.add_axes(rect)
     ax.set_aspect('equal')
     ax.axis('off')
-    # Wider than tall on purpose: eight labels sit out to the left and right of
-    # the ring and nothing sits above or below it, so the room they need is
-    # horizontal. At the old symmetric +/-1.35 the long ones ran into each other.
-    ax.set_xlim(-1.72, 1.72)
-    ax.set_ylim(-1.34, 1.34)
+    # Wider than tall on purpose: the labels and their numbers sit out to the
+    # left and right of the ring and nothing sits above or below it, so the
+    # room they need is horizontal.
+    ax.set_xlim(-1.95, 1.95)
+    ax.set_ylim(-1.30, 1.30)
     n = len(labels)
     gap = 2.5
     outer = 1.0
     inner = .16
-    # The digit sits at a fixed radius, so what lies under it depends on how
-    # far the bar reached. Solved against the wedge colour alone it came out
-    # dark -- correct on a gold bar, and all but invisible on the dark track
-    # behind a short one. Two colours, chosen per wedge by what is actually
-    # beneath the text.
-    on_bar = (text_on_fill(colour), label_outline(colour))
-    on_track = (text_on_fill(shades["track"]), label_outline(shades["track"]))
-    digit_radius = .86
     for i, (caption, value) in enumerate(zip(labels, values)):
         start = 90 - i * 360 / n - 360 / n + gap / 2
         end = 90 - i * 360 / n - gap / 2
@@ -91,35 +90,118 @@ def _role_pizza(fig, rect, labels, values, colour, *, role_average=None):
             radius = inner + (outer - inner) * float(np.clip(value, 0, 100)) / 100
             ax.add_patch(Wedge((0, 0), radius, start, end, facecolor=colour,
                                alpha=.9, edgecolor=BG_DARK, lw=1.2))
-            digit_colour, digit_outline = on_bar if radius >= digit_radius else on_track
-            ax.text(digit_radius * np.cos(mid), digit_radius * np.sin(mid), f'{value:.0f}',
-                    color=digit_colour, ha='center', va='center', fontsize=7,
-                    weight='bold', path_effects=digit_outline)
-        else:
-            # A metric with no reading is not a metric read as zero. An empty
-            # wedge says so; a bar at the hub would have said he was worst.
-            ax.text(digit_radius * np.cos(mid), digit_radius * np.sin(mid), 'n/a',
-                    color=on_track[0], ha='center', va='center', fontsize=5.5,
-                    style='italic', alpha=.7)
         if role_average is not None and np.isfinite(role_average[i]):
             avg = inner + (outer - inner) * float(np.clip(role_average[i], 0, 100)) / 100
             ax.add_patch(Wedge((0, 0), avg, start, end, facecolor='none',
                                edgecolor=shades["avg"], lw=1.1))
-        # Anchor each label on the side it sits on, so a long one grows away
-        # from the ring instead of across the wedge beside it.
-        across = np.cos(mid)
+
+        # Anchor the block on the side it sits on, so a long label grows away
+        # from the ring instead of across the wedge beside it. The number is
+        # the anchor and the label stacks above it, which keeps the numbers on
+        # a predictable ring however many lines a label runs to.
+        across, up = np.cos(mid), np.sin(mid)
         if across > .2:
-            align, reach = 'left', 1.06
+            align, reach = 'left', 1.07
         elif across < -.2:
-            align, reach = 'right', 1.06
+            align, reach = 'right', 1.07
         else:
-            align, reach = 'center', 1.18
-        ax.text(reach * across, reach * np.sin(mid), str(caption).upper(),
-                color=FG, ha=align, va='center', fontsize=6.2, weight='bold',
-                linespacing=1.25)
+            align, reach = 'center', 1.14
+        x, y = reach * across, reach * up
+        ax.text(x, y - .015, f'{value:.0f}' if np.isfinite(value) else 'n/a',
+                color=FG if np.isfinite(value) else MUTED, ha=align, va='top',
+                fontsize=10.5 if np.isfinite(value) else 7,
+                weight='bold' if np.isfinite(value) else 'normal',
+                style='normal' if np.isfinite(value) else 'italic')
+        ax.text(x, y + .045, str(caption).upper(), color=MUTED, ha=align,
+                va='bottom', fontsize=6.2, weight='bold', linespacing=1.25)
     ax.add_patch(Circle((0, 0), inner, facecolor=BG_DARK,
                         edgecolor=shades["rim"], lw=.7))
     return ax
+
+
+# Three columns of rows the role actually generates, instead of one grid of
+# twenty-six columns-worth for everybody. Nothing here is already a wedge on
+# that role's ring: a reader who has seen a measure as a percentile does not
+# need it again as a raw number two inches below.
+_TABLE = {
+    'Defender': [
+        ('ON THE BALL', [('Touches', 'touches'), ('Passes', 'passes'),
+                         ('Completed', 'completed_passes'),
+                         ('Progressive passes', 'progressive_passes'),
+                         ('Line-breaking passes', 'line_breaking_passes')]),
+        ('DEFENDING', [('Recoveries', 'recoveries'),
+                       ('Interceptions', 'interceptions'),
+                       ('Tackles won', 'tackles_won'),
+                       ('Clearances', 'clearances'),
+                       ('Aerials', 'aerials')]),
+        ('THREAT', [('Shots', 'shots'), ('xG', 'xG'), ('Inferred xA', 'xA'),
+                    ('Positive xT', 'positive_xT'),
+                    ('xGBuildup', 'xGBuildup')]),
+    ],
+    'Midfielder': [
+        ('ON THE BALL', [('Touches', 'touches'), ('Passes', 'passes'),
+                         ('Completed', 'completed_passes'),
+                         ('Progressive passes', 'progressive_passes'),
+                         ('Take-ons won', 'takeons_won')]),
+        ('CREATION', [('Shots', 'shots'), ('xG', 'xG'),
+                      ('Box entries', 'box_entries'),
+                      ('Final-third receptions', 'final_third_receptions'),
+                      ('Positive xT', 'positive_xT')]),
+        ('WITHOUT THE BALL', [('Recoveries', 'recoveries'),
+                              ('Interceptions', 'interceptions'),
+                              ('Tackles won', 'tackles_won'),
+                              ('Aerials won', 'aerials_won'),
+                              ('Dispossessed', 'dispossessed')]),
+    ],
+    'Forward': [
+        ('FINISHING', [('Goals', 'goals'), ('Shots', 'shots'),
+                       ('xG / shot', 'xG_per_shot'), ('xG + xA', 'xG_xA'),
+                       ('Positive xT', 'positive_xT')]),
+        ('INVOLVEMENT', [('Touches', 'touches'),
+                         ('Completed passes', 'completed_passes'),
+                         ('Progressive passes', 'progressive_passes'),
+                         ('Take-ons', 'takeons'),
+                         ('Take-ons won', 'takeons_won')]),
+        ('THE WORK', [('Aerials won', 'aerials_won'),
+                      ('Dispossessed', 'dispossessed'),
+                      ('Recoveries', 'recoveries'),
+                      ('pAdj def. actions', 'padj_defensive_actions'),
+                      ('Progression metres', 'progression_metres')]),
+    ],
+    'Goalkeeper': [
+        ('THE GOAL', [('Saves', 'saves'), ('Claims', 'claims'),
+                      ('Sweeps', 'sweeps'), ('Recoveries', 'recoveries'),
+                      ('Clearances', 'clearances')]),
+        ('DISTRIBUTION', [('Passes', 'passes'),
+                          ('Completed', 'completed_passes'),
+                          ('Completion %', 'pass_pct'),
+                          ('Progressive passes', 'progressive_passes'),
+                          ('Line-breaking passes', 'line_breaking_passes')]),
+        ('WHAT IT WAS WORTH', [('Positive xT', 'positive_xT'),
+                               ('xT / 100 touches', 'xT_per_100_touches'),
+                               ('Touches', 'touches'),
+                               ('xGBuildup', 'xGBuildup'),
+                               ('Progression metres', 'progression_metres')]),
+    ],
+}
+# A player the feed never gave a position gets the midfielder's set: it is the
+# only one of the four that asks about every phase.
+_TABLE['Unknown'] = _TABLE['Midfielder']
+
+
+def _verdict(labels, values, minutes):
+    """The three things this player did best, for the strip under his name.
+
+    A card of forty-odd numbers at one size says nothing about which of them
+    mattered. These three are the top of his own ring, so the strip is a
+    summary of the card rather than a fifth opinion on it.
+    """
+    import numpy as np
+
+    ranked = sorted(
+        ((v, l) for l, v in zip(labels, values) if np.isfinite(v)),
+        reverse=True)
+    return ranked[:3]
 
 
 def compact_profiles(charts, players, events):
@@ -174,7 +256,7 @@ def compact_profiles(charts, players, events):
         # only checked for fewer than two. One basis is chosen here and both
         # the ring and the caption below it are told which one it was.
         basis=pool if compare else people[people.minutes>=30]
-        fig,axes=charts.figure(p.player,f'{charts.names[p.team_id]} · {p.role_group} · Minutes {p.minutes:.1f} · Touches {p.touches:.0f} · Shots {p.shots:.0f}',columns=2,height=12)
+        fig,axes=charts.figure(p.player,f'{charts.names[p.team_id]} · {p.role_group} · Touches {p.touches:.0f} · Shots {p.shots:.0f}',columns=2,height=12)
         fig.subplots_adjust(left=.07,right=.95,top=.74,bottom=.29,wspace=.20)
         # A compact, role-aware radar restores the visual player identity while
         # keeping the raw values and the action map on the same card.
@@ -202,12 +284,34 @@ def compact_profiles(charts, players, events):
                 float(100*((eligible<eligible.mean()).sum())/len(eligible))
                 if len(eligible)>=2 else np.nan)
         fig.delaxes(ax)
-        _role_pizza(fig,[.085,.485,.36,.33],[wedge_label(k) for k in radar_keys],vals,charts.colors[p.team_id],role_average=role_avg)
+        _role_pizza(fig,[.065,.435,.35,.30],[wedge_label(k) for k in radar_keys],vals,charts.colors[p.team_id],role_average=role_avg)
+        # Three numbers at 26pt under the name, so the card leads with a
+        # judgement instead of opening on forty numbers at one size and leaving
+        # the reader to find the ones that mattered.
+        strip=_verdict([wedge_label(k).replace(chr(10),' ') for k in radar_keys],vals,p.minutes)
+
+        def _tile(x,number,name,under,colour):
+            # A 26pt number is about .014 of the page per digit, so a fixed
+            # label offset put "MINUTES" through the middle of "98".
+            fig.text(x,.812,number,color=colour,size=26,weight='bold',
+                     ha='left',va='baseline')
+            gap=x+.020+.0155*len(number)
+            fig.text(gap,.818,name,color=FG,size=7.5,weight='bold',ha='left',va='baseline')
+            fig.text(gap,.803,under,color=MUTED,size=6.8,ha='left',va='baseline')
+
+        for column,(score,name) in enumerate(strip):
+            _tile(.068+column*.155,f'{score:.0f}',name.upper(),'percentile',
+                  charts.colors[p.team_id])
+        if strip:
+            _tile(.545,f'{p.minutes:.0f}','MINUTES',
+                  'played' if p.minutes>=89 else 'of the match',MUTED)
+            fig.text(.068,.782,'His three strongest measures on the ring below.',
+                     color=MUTED,size=7.5,ha='left',va='baseline')
         caption=(f'Role percentiles · same-role pool: {len(pool)} players (30+ min)'
                  if compare else
                  f'Match percentiles · only {len(pool)} in this role · compared with all {len(basis)} players over 30 min')
-        fig.text(.265,.452,caption+' · grey ring = pool average',ha='center',color=MUTED,size=8)
-        ax=axes[1];ax.set_position([.56,.52,.30,.24]);ax.set_xlim(0,105);ax.set_ylim(0,68);ax.set_aspect('equal');ax.set_xticks([]);ax.set_yticks([])
+        fig.text(.24,.408,caption+' · grey ring = pool average',ha='center',color=MUTED,size=8)
+        ax=axes[1];ax.set_position([.545,.455,.33,.29]);ax.set_xlim(0,105);ax.set_ylim(0,68);ax.set_aspect('equal');ax.set_xticks([]);ax.set_yticks([])
         ax.add_patch(Rectangle((0,0),105,68,fill=False,ec=MUTED));ax.axvline(52.5,color=MUTED,lw=.6)
         ax.add_patch(Rectangle((88.5,13.84),16.5,40.32,fill=False,ec=MUTED))
         g=events[events.player.eq(p.player)&events.team_id.eq(p.team_id)]
@@ -227,7 +331,7 @@ def compact_profiles(charts, players, events):
         # Two lines fit inside the map's own column.
         average=(f'{avg_x:.0f}, {avg_y:.0f}' if np.isfinite(avg_x) and np.isfinite(avg_y)
                  else 'n/a')
-        fig.text(.56,.492,
+        fig.text(.545,.427,
                  f'TACTICAL SNAPSHOT   Touch zones D/M/A {thirds}  ·  Final-third touches {final_touch}\n'
                  f'Defensive actions {defensive_actions}  ·  Line-breaking passes {int(p.line_breaking_passes)}  ·  Avg touch {average}',
                  color=MUTED,size=7.5,ha='left',va='top',linespacing=1.6)
@@ -290,30 +394,37 @@ def compact_profiles(charts, players, events):
         if len(handles)>1:
             ax.legend(handles=handles,loc='upper left',bbox_to_anchor=(1.02,.99),fontsize=5.5,
                       frameon=True,facecolor=BG,labelcolor=FG,edgecolor=MUTED,ncol=2,handletextpad=.3,columnspacing=.5)
-        # Four independent columns reserve space for every label and value.
-        sections=[
+        # Four fixed columns held the same twenty-six rows whatever the player
+        # did for a living. Measured across a match, an average card spent 9.9
+        # of those rows saying nought -- a centre-back was given three lines of
+        # take-on statistics and a goalkeeper thirteen empty rows out of
+        # twenty-six. Three columns of role-appropriate rows say more in less
+        # space, and anything already drawn on the ring is left off so a reader
+        # does not meet the same measure twice in two forms.
+        sections=_TABLE[p.role_group if p.role_group in _TABLE else 'Unknown']
+        legacy=[
             ('ATTACK', [('Goals','goals'),('Shots','shots'),('xG','xG'),('xG / shot','xG_per_shot'),('Inferred xA','xA'),('xG + xA','xG_xA')]),
             ('PASSING', [('Attempts','passes'),('Completed','completed_passes'),('Completion %','pass_pct'),('Progressive passes','progressive_passes'),('Line-breaking passes','line_breaking_passes'),('Progressive share %','progressive_pass_pct'),('xA / 100 passes','xA_per_100_passes')]),
             ('PROGRESSION', [('Touches','touches'),('Progressive carries','progressive_carries'),('Box entries','box_entries'),('Positive xT','positive_xT'),('xT / 100 touches','xT_per_100_touches'),('xGChain','xGChain'),('xGBuildup','xGBuildup')]),
             ('DEFENDING / DUELS', [('Recoveries','recoveries'),('Interceptions','interceptions'),('Tackles won','tackles_won'),('Clearances','clearances'),('Take-ons attempted','takeons'),('Take-ons won','takeons_won'),('Take-on success %','takeon_success_pct')])]
-        if p.role_group=='Goalkeeper':
-            sections[0]=('GOALKEEPING',[('Saves','saves'),('Claims','claims'),('Sweeps','sweeps'),('Recoveries','recoveries'),('Clearances','clearances')])
         for i,(heading,metrics) in enumerate(sections):
-            panel=fig.add_axes([.05+i*.232,.175,.208,.235],facecolor=BG)
+            panel=fig.add_axes([.065+i*.30,.185,.255,.20],facecolor=BG)
             panel.set_xlim(0,1);panel.set_ylim(0,1);panel.axis('off')
             panel.text(0,1,heading,color=FG,size=9,weight='bold',va='top')
             for j,(caption,key) in enumerate(metrics):
-                y=.83-j*.115
+                y=.82-j*.155
                 value=p.get(key,np.nan)
                 panel.text(0,y,caption,color=MUTED,size=8,va='center')
                 panel.text(1,y,('N/A' if pd.isna(value) else format_value(value,digits=2 if key in {'xG','xG_per_shot','xA','xG_xA','positive_xT','xT_per_100_touches','xGChain','xGBuildup','xA_per_100_passes','pass_pct','progressive_pass_pct','takeon_success_pct'} else 0)),color=FG,size=9,weight='bold',ha='right',va='center')
                 panel.plot([0,1],[y-.052,y-.052],color=MUTED,lw=.35,alpha=.25)
         definitions=('Raw match totals; unavailable values shown as N/A. The ring compares a player with others in his role when four or more played 30+ minutes, and with every 30+ minute player otherwise; the caption above says which.\n'
                      'pAdj defensive actions: tackles, interceptions, recoveries, clearances, challenges and blocked passes per 100 opponent touches. Defensive height: mean distance upfield of those actions, blank below three of them.\n'
-                     'Progression metres: ground gained toward goal by completed passes and carries. Line-breaking passes: completed forward passes of 20 m or more.\n'
-                     'xGChain: possession chance credit; xGBuildup excludes shooter and key-pass provider. Credits overlap across teammates.\n'
-                     'Positive xT: threat added by successful movements. Progressive share uses completed passes; xT / 100 uses touches.')
-        fig.text(.055,.132,definitions,color=MUTED,size=7.2,linespacing=1.5,va='top')
+                     'Progression metres: ground gained toward goal by completed passes and carries. Line-breaking passes: completed forward passes of 20 m or more. Positive xT: threat added by successful movements.\n'
+                     'xGChain: possession chance credit; xGBuildup excludes shooter and key-pass provider, and the credit overlaps across teammates. Progressive share uses completed passes; xT / 100 uses touches.')
+        # The method footer is drawn at y=.055 and grows upward, so this block
+        # has to finish above it. At .132 and five lines it did not, and the
+        # two ran through each other.
+        fig.text(.055,.152,definitions,color=MUTED,size=6.9,linespacing=1.45,va='top')
         method='Role and minutes govern comparisons; these are match observations, not a season ability rating. Nominal pitch 105 × 68 m.'
         filename='player_profiles/'+re.sub(r'[^\w.-]+','_',charts.names[p.team_id])+'/'+re.sub(r'[^\w.-]+','_',p.player)+'.png'
         reading=f'{p.player}: {p.minutes:.1f} minutes; shots {p.shots:.0f}; progressive passes {p.progressive_passes:.0f}; xGChain {p.xGChain:.2f}; xGBuildup {p.xGBuildup:.2f}. '

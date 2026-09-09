@@ -113,11 +113,41 @@ class Charts:
         if y=='xG_per_shot':method+=' xG per shot = total shot xG / attempts; higher means better average pre-shot chance quality.'
         if y=='seconds_to_third':method+=' Time runs from regain to first final-third presence; regains without arrival remain in the source table.'
         med=data.groupby('team_id')[[x,y]].median()
-        reading='؛ '.join(f'{self.names[tid]} يميل إلى {xlabel.lower()} {row[x]:.2f} و{ylabel.lower()} {row[y]:.2f}' for tid,row in med.iterrows())+'. '
+        # This paragraph is what the article and the PDF print under the figure.
+        # It was written in Arabic inside an otherwise English document, and
+        # what it said was two medians: "Tottenham يميل إلى progressive passes
+        # 1.00 وinferred xa 0.00". A scatter's argument is which quadrant the
+        # points fall in and whether the two axes agree, so that is what it
+        # argues now.
+        parts=[]
         if len(med)>=2:
-            reading += ('التفوق في المؤشرين معًا يربط المشاركة بالقيمة.' if med[x].idxmax()==med[y].idxmax()
-                        else 'التفوق في الحجم لا يطابق التفوق في القيمة؛ المشاركة وحدها لا تشرح التأثير.')+' '
-        reading += 'هذه قراءة تكتيكية للمباراة؛ الدقائق والدور يغيران مقارنة اللاعبين.' if player else 'تتبع التسلسل الذي أنتج النقطة قبل إسناد سبب تكتيكي.'
+            lead_x=self.names[med[x].idxmax()];lead_y=self.names[med[y].idxmax()]
+            if lead_x==lead_y:
+                parts.append(f'{lead_x} led on both axes: its typical player did more of the '
+                             f'{xlabel.lower()} and got more out of it. Volume and value agreeing '
+                             f'is the simple case, and it puts the difference between the sides in '
+                             f'the players rather than in the route they were given.')
+            else:
+                parts.append(f'{lead_x} led {xlabel.lower()} and {lead_y} led {ylabel.lower()}, so the '
+                             f'side doing more of it was not the side getting more from it. Doing a '
+                             f'thing often and doing it profitably are separate claims, and only the '
+                             f'second one is on the vertical axis.')
+        if player and len(data):
+            both=data[(data[x]>data[x].median())&(data[y]>data[y].median())]
+            if len(both):
+                picked=both.sort_values([y,x],ascending=False).head(3)
+                names=', '.join(str(row.player) for row in picked.itertuples())
+                parts.append(f'Above both medians: {names}. Those are the players the two measures '
+                             f'agree on. Anyone high on one axis alone was doing half of what the '
+                             f'chart asks about, which is the half worth checking on video.')
+            else:
+                parts.append('Nobody cleared both medians, so no player on either side combined the '
+                             'volume with the value. The chart is describing a match in which the '
+                             'work and the return sat with different people.')
+        parts.append('Minutes and role move a player across this chart on their own, so read a '
+                     'position through both.' if player else
+                     'Follow the sequence behind a point before reading a tactical cause into it.')
+        reading=' '.join(parts)
         return self.save(fig, filename, title, reading, method, len(data))
 
 

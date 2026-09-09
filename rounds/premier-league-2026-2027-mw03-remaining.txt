@@ -1,0 +1,11 @@
+# England Premier League 2026-2027 - Matchweek 3, the seven not yet rebuilt.
+# Arsenal-Chelsea, Brentford-Sunderland and Brighton-Leeds already carry the
+# new radar and prose; this list resumes the round without redoing them.
+# Run with:  python run_round.py --round 3 --urls rounds/premier-league-2026-2027-mw03-remaining.txt
+https://www.whoscored.com/matches/1983574/live/england-premier-league-2026-2027-everton-manchester-united
+https://www.whoscored.com/matches/1983576/live/england-premier-league-2026-2027-fulham-crystal-palace
+https://www.whoscored.com/matches/1983577/live/england-premier-league-2026-2027-hull-aston-villa
+https://www.whoscored.com/matches/1983580/live/england-premier-league-2026-2027-ipswich-liverpool
+https://www.whoscored.com/matches/1983582/live/england-premier-league-2026-2027-manchester-city-coventry
+https://www.whoscored.com/matches/1983584/live/england-premier-league-2026-2027-newcastle-bournemouth
+https://www.whoscored.com/matches/1983586/live/england-premier-league-2026-2027-nottingham-forest-tottenham
