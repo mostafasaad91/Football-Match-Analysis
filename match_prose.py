@@ -184,7 +184,23 @@ def pressing_reading(context):
         f"{presser} pressed at {hard:.1f} passes per defensive action against "
         f"{soft:.1f}, and won the ball high {presser_regains:.0f} times. "
     )
-    if presser_rate < sitter_rate:
+    # Both conversion rates are a handful of shots over a dozen or two regains,
+    # so a gap of a point or two is one shot either way. Arsenal 5.9% against
+    # Chelsea 5.3% was written as "the recoveries did not become chances" -- a
+    # finding drawn from 1.1 shots against 0.6. Below a gap that survives one
+    # shot moving, the honest sentence is that neither side got anything out of
+    # them.
+    presser_shots = presser_regains * presser_rate / 100.0
+    sitter_regains = regain_away if presser == home else regain_home
+    sitter_shots = sitter_regains * sitter_rate / 100.0
+    if abs(presser_shots - sitter_shots) < 1.0:
+        line += (
+            f"Neither side turned them into much: {presser_rate:.1f}% reached a shot "
+            f"against {sitter_rate:.1f}% for {sitter}, which on these counts is about "
+            f"{presser_shots:.1f} shots against {sitter_shots:.1f}. The ball was being "
+            f"won high by both and used by neither."
+        )
+    elif presser_rate < sitter_rate:
         line += (
             f"The recoveries did not become chances: {presser_rate:.1f}% of them reached a "
             f"shot, against {sitter_rate:.1f}% for {sitter}. A press that wins the ball and "
@@ -197,8 +213,8 @@ def pressing_reading(context):
             f"{sitter_rate:.1f}%, so the pressure was converted rather than merely applied."
         )
     line += (
-        f" The bill is in the rest defence — {presser_exposed:.0f} advanced losses left "
-        f"{sitter} running at a defence that had committed men forward."
+        f" {presser} lost the ball {presser_exposed:.0f} times in advanced positions, "
+        f"which is what a side accepts when it commits men in front of the ball."
     )
     return line
 

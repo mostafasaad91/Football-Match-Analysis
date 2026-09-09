@@ -57,8 +57,14 @@ def transactional_package(function):
             bound.arguments['output_dir']=stage
             bound.arguments['events'].to_csv(stage/'events.csv',index=False,encoding='utf-8-sig')
             result=function(*bound.args,**bound.kwargs)
-            if not result.get('article') or not Path(result['pdf']).is_file():
-                raise RuntimeError('Publication incomplete: original package preserved; inspect '+str(stage))
+            # The article and the report are no longer produced -- see the note
+            # above build_pdf in visual_redesign_full -- so their absence is
+            # the expected state and cannot be the completeness test. What a
+            # package must have is its boards: a staging tree with no visuals
+            # in it is a failed render whatever else it wrote.
+            if not list(stage.glob('[0-9]*.png')):
+                raise RuntimeError('Publication incomplete: no visuals were rendered; '
+                                   'original package preserved; inspect '+str(stage))
             write_manifest(stage,bound.arguments['match_info'])
             backup=original.with_name('.'+original.name+'.previous-'+uuid.uuid4().hex[:8])
             published_in_place=False

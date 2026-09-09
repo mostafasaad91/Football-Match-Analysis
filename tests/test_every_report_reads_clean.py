@@ -40,11 +40,21 @@ OUTPUT = ROOT / "output"
 
 
 def _fixtures():
-    """Every rendered match on disk, dark-theme package only."""
+    """Every published match on disk, dark-theme package only.
+
+    Dot-prefixed folders are transactional_package's staging and rollback
+    trees. A render running while the suite collects leaves one on disk for a
+    few minutes, and it was collected as a fixture: eleven tests then died on
+    FileNotFoundError when the staging tree was renamed into place underneath
+    them. The same rule is written out at length in
+    test_published_files_read_clean._published, which had it and this did not.
+    """
     found = []
     for info in sorted(OUTPUT.rglob("match_info.json")):
         out = info.parent
         if out.name == "light":
+            continue
+        if any(part.startswith(".") for part in out.relative_to(OUTPUT).parts):
             continue
         if all((out / name).exists() for name in
                ("events.csv", "xg.csv", "team_advanced_metrics.csv",

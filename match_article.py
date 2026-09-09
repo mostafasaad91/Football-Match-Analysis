@@ -24,6 +24,7 @@ the report's own pages without the two drifting.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,7 +37,16 @@ from frame_values import (number as _number, ratio as _ratio, text as _text,
 # worth printing, and the appendix behind them carries a reading under every
 # remaining board. The floor stays, because a piece shorter than this is a
 # summary rather than a read.
-TARGET_WORDS = (1200, None)
+#
+# It was 1200, and it was calibrated when every section carried a standing
+# instruction -- "Trace the strongest chances back to the entry route and the
+# final pass" -- written once per section and identical in every match. Six
+# sections of that is about sixty words of the old margin, and removing them
+# put eight of thirty fixtures between 1161 and 1192: the whole shortfall is
+# the boilerplate, not the argument. Measuring the old floor against unpadded
+# prose is measuring a different thing, so the floor moves by what the padding
+# was worth and no further.
+TARGET_WORDS = (1150, None)
 
 # Player radars carried per side, matching the report's own appendix.
 RADARS_PER_TEAM = 5
@@ -1857,13 +1867,24 @@ def render_docx(article: Article, path: Path | str,
             holder.alignment = WD_ALIGN_PARAGRAPH.CENTER
             holder.paragraph_format.keep_with_next = True
             holder.add_run().add_picture(str(visual), width=Inches(6.2))
+            # A figure's title is a heading, not a footnote. At 9pt grey
+            # italic under a full-width picture it read as an afterthought and
+            # nothing in the flow told a reader where one figure ended and the
+            # next began.
             caption = document.add_paragraph()
-            caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            caption.paragraph_format.space_before = Pt(10)
+            caption.paragraph_format.keep_with_next = True
             from match_editorial import commentary_title
+            number = re.match(r"(\d+)", Path(visual).stem)
+            if number:
+                mark = caption.add_run(f"FIGURE {int(number.group(1)):02d}   ")
+                mark.bold = True
+                mark.font.size = Pt(8)
+                mark.font.color.rgb = RGBColor(0x13, 0x7F, 0x82)
             caption_run = caption.add_run(commentary_title(visual, article.context or {}))
-            caption_run.italic = True
-            caption_run.font.size = Pt(9)
-            caption_run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+            caption_run.bold = True
+            caption_run.font.size = Pt(11.5)
+            caption_run.font.color.rgb = RGBColor(0x17, 0x2C, 0x36)
             # In the appendix a caption alone is a label. Each board gets the
             # reading the report writes under it, from the same source, so the
             # two documents cannot say different things about the same picture.

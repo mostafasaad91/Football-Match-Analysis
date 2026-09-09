@@ -110,6 +110,13 @@ def match_dir(name: str) -> _Path:
             # second match: its frames live one level up.
             if candidate.parent.name == "light":
                 continue
+            # Dot-prefixed folders are transactional_package's staging and
+            # rollback trees. A render running while the suite collects leaves
+            # one on disk, and pointing a test at it means reading a package
+            # that is being written or is about to be renamed away.
+            if any(part.startswith(".")
+                   for part in candidate.parent.relative_to(_OUTPUT).parts):
+                continue
             found = candidate.parent
             break
 

@@ -3735,6 +3735,27 @@ def generate_match_package(
     if os.environ.get("MATCH_ANALYSIS_LIGHT_COPY", "1").strip().lower() not in {
         "0", "false", "no", "off"
     }:
+        # Release the dark render before the light one starts.
+        #
+        # The light copy is a second full render in a child process, and it was
+        # being launched while this process still held every figure it had just
+        # drawn -- fifty-one boards, four posters and a profile card per player.
+        # On a machine without several spare gigabytes the child could not
+        # allocate its first canvas and died inside matplotlib's Agg backend:
+        #
+        #     MemoryError: bad allocation
+        #       backend_agg.py, in __init__
+        #       self._renderer = _RendererAgg(int(width), int(height), dpi)
+        #
+        # The package was already written by then, so the failure looked like
+        # "the light copy does not generate" rather than like running out of
+        # memory. Nothing below needs the figures, so they are dropped first.
+        # gc and plt are module-level imports. Importing them again here made
+        # both names local to the whole function, and the plt.close/gc.collect
+        # pair a hundred lines above -- which had been running on the module
+        # ones -- died on UnboundLocalError before the boards were drawn.
+        plt.close("all")
+        gc.collect()
         try:
             from render_light import render_light_package
 

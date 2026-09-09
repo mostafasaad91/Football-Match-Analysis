@@ -24,8 +24,6 @@ def refresh_publication(events,players,xg,team_metrics,player_metrics,match_info
     """
     import shutil
     from insight_visuals import build_insight_visuals
-    from tactical_pdf_report import build_tactical_pdf
-    from match_article import build_match_article
     from visual_redesign_full import configure_match, build_catalog
     out=Path(output_dir)
     saved={p.name for p in Path(source).glob('[0-9]*.png')}
@@ -62,6 +60,8 @@ def refresh_publication(events,players,xg,team_metrics,player_metrics,match_info
             + ', '.join(sorted(missing))
             + '. Rebuild the whole package instead (drop --publication-only).')
     build_catalog([p.resolve() for p in paths])
+    from tactical_pdf_report import build_tactical_pdf
+    from match_article import build_match_article
     pdf=build_tactical_pdf(paths,out/'full_visual_redesign_real_data.pdf',events,xg,team_metrics,player_metrics,match_info)
     article=build_match_article(events,xg,team_metrics,player_metrics,match_info,out,players)
     from poster_dashboard import build_match_posters

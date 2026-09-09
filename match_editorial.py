@@ -124,43 +124,95 @@ RULES=[
      'This score-and-time heuristic is not a calibrated forecast. Probability estimates before full time should not be used as betting or performance claims.'),
 ]
 
+
+# One MatchFacts per package, not one per board: reading fifty-one boards would
+# otherwise parse the same five CSVs fifty-one times.
+_FACTS={}
+
+
+def _package_root(path):
+    """The package a chart belongs to.
+
+    A numbered board sits in the package; a player's card sits two levels down
+    in player_profiles/<club>/. Taking the parent for both put the profile hook
+    behind a match_info.json that was never going to be there.
+    """
+    directory = Path(path).parent
+    for candidate in (directory, directory.parent, directory.parent.parent):
+        if (candidate / 'match_info.json').exists():
+            return candidate
+    return None
+
+
+def _narrated(path,c):
+    """The narrative paragraph for one board, or "" when it cannot be written."""
+    root=_package_root(path)
+    if root is None:
+        return ""
+    if 'player_profiles' in Path(path).parts:
+        # Not one of the numbered boards, so report_narrative has no writer for
+        # it. Recomputing the caption here means the wording is the current one
+        # rather than whatever was current the day the card was drawn.
+        try:
+            import json
+
+            import pandas as pd
+
+            from advanced_profiles import profile_caption
+            info=json.loads((root/'match_info.json').read_text(encoding='utf-8-sig'))
+            written=profile_caption(pd.read_csv(root/'events.csv'),
+                                    pd.read_csv(root/'players.csv'),
+                                    info, Path(path).stem.replace('_',' '))
+            if written:
+                return written
+        except Exception:
+            return ""
+        return ""
+    try:
+        from match_facts import load_match
+        from report_narrative import resolve, paragraphs_for
+    except Exception:
+        return ""
+    key=str(root.resolve())
+    if key not in _FACTS:
+        try:
+            _FACTS[key]=(load_match(root),sorted(root.glob('[0-9]*.png')))
+        except Exception:
+            _FACTS[key]=None
+    loaded=_FACTS.get(key)
+    if not loaded:
+        return ""
+    facts,boards=loaded
+    try:
+        names=[b.name for b in boards]
+        position=names.index(Path(path).name) if Path(path).name in names else None
+        following=resolve(boards[position+1],facts) if (
+            position is not None and position+1<len(boards)) else None
+        written=paragraphs_for(resolve(Path(path),facts),facts,following)
+    except Exception:
+        return ""
+    return ' '.join(t.strip() for t in written if t and t.strip()).strip()
+
+
 def reading(path,c):
     path=Path(path);s=path.stem.lower()
-    # What this board says about this match comes first. Everything below is a
-    # recital of the figures already printed on the picture, followed by a
-    # methodology note that did not change from fixture to fixture -- true, and
-    # not analysis. The tactical writer is consulted first and the old text is
-    # kept for the boards it does not cover.
-    from match_prose import visual_reading
-    argued=visual_reading(path,c)
-    if argued:return argued
+    # report_narrative is the only writer. It covers all fifty-one boards,
+    # computes its numbers from the package the chart was drawn from, names the
+    # players and the minutes, and closes each paragraph on the figure that
+    # follows. Where a board has no dedicated writer it falls back inside
+    # paragraphs_for to that chart's own stored reading, so this always
+    # returns something and the old templated recital below is unreachable.
+    #
+    # What is below it is kept only because two callers still import the RULES
+    # table for its titles. As prose it is a list of the figures already
+    # printed on the picture followed by a methodology note identical in every
+    # match, which is what this replaced.
+    described=_narrated(path,c)
+    if described:return described
     contract=c.get('chart_contracts',{}).get(path.name)
     if contract:return (contract.get('reading',contract.get('takeaway',''))+' '+contract.get('interpretation','')).replace(' | ','; ')
-    if 'player_radars' in path.parts or 'player_profiles' in path.parts:
-        name=path.stem.replace('_',' ')
-        p=c.get('player_profiles',{}).get(name.lower(),{})
-        if p:
-            return (f"{name}: shots {p.get('shots',0):.0f}; key passes {p.get('key_passes',0):.0f}; "
-                    f"possession involvement {p.get('xGChain',0):.2f} xGChain. "
-                    "Sequence credit overlaps with other players and is not additive. Interpret the profile within its stated role pool and minutes.")
-        return f"{name}'s profile shows match contribution within the stated comparison pool. Missing measurements and small samples must not be interpreted as poor performance."
-    if 'game_state' in s:return state_read(c)+' Compare exposure time as well as totals. A short level phase cannot establish whether a side would have created more over a full match.'
-    if 'goal_origins' in s or 'goals_breakdown' in s:
-        goals=c.get('goal_rows',[])
-        from match_clock import event_label
-        return ('Recorded goals: '+ '; '.join(f"{g['team']} through {g.get('player') or 'an unnamed scorer'} at {event_label(g)}" for g in goals)+'. ' if goals else 'No goals were recorded. ')+ 'Times are elapsed mm:ss. Read the possession chain to locate the actions before the finish; its starting location alone cannot prove pressing or defensive disorganisation.'
-    if 'momentum' in s:return comparison(c,'xG',2)+' Five-minute shot-xG differences locate bursts of chance creation. They do not capture all pressure or imply that post-goal attacks are less repeatable.'
-    if 'dashboard' in s:return result_read(c)+' '+comparison(c,'field_tilt',1,'%')+' Review access and transition outcomes alongside the score-state split.'
-    for token,metrics,title,question in RULES:
-        if token in s:
-            if token=='pitch_control':
-                shares=c.get('influence',{})
-                return (f"Modeled influence: {c['home']} {shares.get('home',0):.1f}%, {c['away']} {shares.get('away',0):.1f}%, contested {shares.get('contested',0):.1f}%. "+question)
-            numbers=' '.join(label(k)+': '+comparison(c,k,d,u) for k,d,u in metrics)
-            half='first half' if s.endswith('1h') else 'second half' if s.endswith('2h') else None
-            if half:numbers=f"This figure covers the {half}. Full-match context: "+numbers
-            return numbers+' '+question
-    return result_read(c)+' This figure provides supporting evidence; it does not independently establish a tactical cause.'
+    return result_read(c)
+
 
 def commentary_title(path,c):
     contract=c.get('chart_contracts',{}).get(Path(path).name)

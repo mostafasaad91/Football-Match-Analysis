@@ -204,6 +204,165 @@ def _verdict(labels, values, minutes):
     return ranked[:3]
 
 
+
+
+# Eight wedges: four that belong to the role, four every outfielder is asked
+# the same question on. Module level because the caption writer needs the same
+# sets the ring is drawn from, and a copy in two places is a copy that drifts.
+ROLE_WEDGES = {
+    'Defender': ['padj_defensive_actions', 'aerials_won', 'defensive_height',
+                 'progression_metres'],
+    'Midfielder': ['padj_defensive_actions', 'progression_metres',
+                   'line_breaking_passes', 'xA'],
+    'Forward': ['xG', 'xA', 'box_entries', 'final_third_receptions'],
+    'Goalkeeper': ['saves', 'claims', 'sweeps', 'completed_passes'],
+    'Unknown': ['xG', 'xA', 'completed_passes', 'padj_defensive_actions'],
+}
+SHARED_WEDGES = ['xGChain', 'xT_per_100_touches', 'pass_pct', 'progressive_pass_pct']
+
+
+ROLE_POOL_MINIMUM = 4
+
+
+_PEOPLE_CACHE = {}
+
+
+def _people_for(events, players, info):
+    """The enriched player frame for one fixture, computed once.
+
+    profile_caption is called for every card in the package, and rebuilding the
+    insights and the advanced metrics inside each call turned a forty-second
+    document build into one that ran past ten minutes. The frame depends only
+    on the fixture, so it is built once and kept.
+    """
+    from insight_visuals import role_group
+    from match_insights import build_insights
+    from player_advanced import enrich
+
+    key = (str(info.get("match_id") or info.get("url") or ""),
+           len(events), len(players))
+    if key not in _PEOPLE_CACHE:
+        people = build_insights(events, players, info)["players"].copy()
+        people["role_group"] = people.role.map(role_group)
+        _PEOPLE_CACHE[key] = enrich(people, events, players)
+    return _PEOPLE_CACHE[key]
+
+
+def profile_caption(events, players, info, player_name):
+    """The paragraph for one player's card, computed without drawing it.
+
+    The card writes this into the package manifest when it is rendered; the
+    report reads it back when it is built. Recomputing it here means a wording
+    change reaches every existing package for the cost of rebuilding two
+    documents, instead of re-rendering thirty-one cards per package first.
+    """
+    import numpy as np
+    import pandas as pd
+
+    people = _people_for(events, players, info)
+    match = people[people.player.astype(str) == str(player_name)]
+    if match.empty:
+        return ""
+    row = match.iloc[0]
+    keys, scores, pool, basis, compare = profile_percentiles(people, row)
+    ranked = sorted(((v, wedge_label(k).replace(chr(10), " "))
+                     for k, v in zip(keys, scores) if np.isfinite(v)), reverse=True)
+
+    own = events[events.player.astype(str) == str(player_name)]
+    x = pd.to_numeric(own.get("x"), errors="coerce").dropna()
+    thirds = " / ".join(str(int(((x >= lo) & (x < hi)).sum()))
+                        for lo, hi in ((0, 35), (35, 70), (70, 105))) if len(x) else ""
+    defensive = int(own["type"].isin(
+        {"Tackle", "Interception", "BallRecovery", "Clearance", "BlockedShot",
+         "Aerial", "Challenge", "Foul"}).sum()) if "type" in own else 0
+    final_third = int((x >= 66.7).sum()) if len(x) else 0
+    team = str(info.get("home_name") if row.team_id == info.get("home_id")
+               else info.get("away_name"))
+    return _profile_reading(row, team, ranked[:3], keys, scores, pool, compare,
+                            basis, defensive, final_third, thirds)
+
+
+def profile_percentiles(people, row):
+    """(radar keys, percentiles, pool, comparison basis, whether it is by role).
+
+    The same maths the ring is drawn from, without drawing anything, so the
+    paragraph that describes a card can be written without rendering it. The
+    caption lives in the package manifest and is read when the report is built,
+    which is minutes of work rather than the hours re-rendering every card in
+    every package would cost.
+    """
+    import numpy as np
+    import pandas as pd
+
+    pool = people[(people.role_group == row.role_group) & (people.minutes >= 30)]
+    compare = (row.minutes >= 30 and len(pool) >= ROLE_POOL_MINIMUM
+               and row.role_group not in ('Goalkeeper', 'Unknown'))
+    basis = pool if compare else people[people.minutes >= 30]
+    keys = list(dict.fromkeys(
+        ROLE_WEDGES.get(row.role_group, ROLE_WEDGES['Unknown']) + SHARED_WEDGES))
+    scores = []
+    for key in keys:
+        value = pd.to_numeric(pd.Series([row.get(key, np.nan)]), errors='coerce').iloc[0]
+        eligible = pd.to_numeric(basis.get(key, pd.Series(dtype=float)),
+                                 errors='coerce').dropna()
+        if len(eligible) < 2:
+            eligible = pd.to_numeric(people.get(key, pd.Series(dtype=float)),
+                                     errors='coerce').dropna()
+        if len(eligible) >= 2 and pd.notna(value):
+            scores.append(float(np.clip(
+                100 * ((eligible < value).sum() + .5 * (eligible == value).sum())
+                / len(eligible), 0, 100)))
+        else:
+            scores.append(0.0 if pd.notna(value) and len(eligible) >= 2 else np.nan)
+    return keys, scores, pool, basis, compare
+
+
+def _profile_reading(p, team, strip, radar_keys, vals, pool, compare, basis,
+                     defensive_actions, final_touch, thirds):
+    """What this card says about this player.
+
+    It used to list five numbers already printed on the card -- "95.2 minutes;
+    shots 2; progressive passes 7; xGChain 0.75; xGBuildup 0.29" -- and close
+    on a sentence identical under every player in the package. A reader looking
+    at the card has the numbers. What the card cannot say on its own is which
+    of them is unusual for the job he was doing, and that is the whole point of
+    ranking him inside his own line.
+    """
+    import numpy as np
+
+    role = str(getattr(p, 'role_group', '') or 'player').lower()
+    against = (f"the {len(pool)} other {role}s who played 30+ minutes" if compare
+               else f"all {len(basis)} players over 30 minutes, too few {role}s to compare within")
+    parts = [f"{p.player} played {p.minutes:.0f} minutes for {team}, ranked against {against}."]
+
+    if strip:
+        best = ", ".join(f"{name.lower()} {score:.0f}" for score, name in strip)
+        parts.append(f"His strongest measures were {best} out of 100.")
+        weakest = sorted(((v, wedge_label(k).replace(chr(10), ' '))
+                          for k, v in zip(radar_keys, vals) if np.isfinite(v)))
+        if weakest and weakest[0][0] <= 30 and weakest[0][0] < strip[-1][0] - 25:
+            parts.append(
+                f"The ring's short wedge is {weakest[0][1].lower()} at {weakest[0][0]:.0f}, "
+                f"which is where this performance differed most from the rest of his line.")
+
+    zones = str(thirds).split(' / ')
+    if len(zones) == 3 and any(z.strip().isdigit() for z in zones):
+        defensive, middle, attacking = (int(z) for z in zones)
+        total = defensive + middle + attacking
+        if total >= 15:
+            if attacking >= total * 0.4:
+                where = "spent most of his touches in the final third"
+            elif defensive >= total * 0.5:
+                where = "took most of his touches in his own third"
+            else:
+                where = "worked mainly between the two boxes"
+            parts.append(
+                f"The map shows where that happened: he {where}, with "
+                f"{final_touch} touches in the final third and {defensive_actions} "
+                f"defensive actions.")
+    return " ".join(parts)
+
+
 def compact_profiles(charts, players, events):
     from insight_visuals import role_group, FG, BG, MUTED
     people=players.copy();people['role_group']=people.role.map(role_group)
@@ -232,21 +391,15 @@ def compact_profiles(charts, players, events):
     # now, with the questions the counts could not answer -- how high he won it,
     # how much ground he actually gained, whether he won the ball in the air --
     # taking the other three.
-    roles={
-        'Defender':['padj_defensive_actions','aerials_won','defensive_height','progression_metres'],
-        'Midfielder':['padj_defensive_actions','progression_metres','line_breaking_passes','xA'],
-        'Forward':['xG','xA','box_entries','final_third_receptions'],
-        'Goalkeeper':['saves','claims','sweeps','completed_passes'],
-        'Unknown':['xG','xA','completed_passes','padj_defensive_actions']}
+    roles=ROLE_WEDGES
     # xGBuildup is xGChain minus the shooter and the key-pass provider, and on
     # a player who was neither it is the same number twice. Vuskovic's ring
     # read 93 and 93. It stays in the table, where the pair can be compared;
     # two wedges moving together said nothing the first one had not.
-    advanced=['xGChain','xT_per_100_touches','pass_pct','progressive_pass_pct']
+    advanced=SHARED_WEDGES
     # Below this many players in a role the percentile is a ranking against
     # two or three people, which is a position in a queue rather than a rate.
     # Same floor the article's own ranking uses.
-    ROLE_POOL_MINIMUM=4
     for _,p in people[people.minutes>0].sort_values(['team_id','player']).iterrows():
         pool=people[(people.role_group==p.role_group)&(people.minutes>=30)]
         compare=(p.minutes>=30 and len(pool)>=ROLE_POOL_MINIMUM
@@ -427,5 +580,6 @@ def compact_profiles(charts, players, events):
         fig.text(.055,.152,definitions,color=MUTED,size=6.9,linespacing=1.45,va='top')
         method='Role and minutes govern comparisons; these are match observations, not a season ability rating. Nominal pitch 105 × 68 m.'
         filename='player_profiles/'+re.sub(r'[^\w.-]+','_',charts.names[p.team_id])+'/'+re.sub(r'[^\w.-]+','_',p.player)+'.png'
-        reading=f'{p.player}: {p.minutes:.1f} minutes; shots {p.shots:.0f}; progressive passes {p.progressive_passes:.0f}; xGChain {p.xGChain:.2f}; xGBuildup {p.xGBuildup:.2f}. '
-        charts.save(fig,filename,p.player+' — advanced role profile',reading+method,method,len(pool))
+        reading=_profile_reading(p,charts.names[p.team_id],strip,radar_keys,vals,
+                                 pool,compare,basis,defensive_actions,final_touch,thirds)
+        charts.save(fig,filename,p.player+' — advanced role profile',reading+' '+method,method,len(pool))

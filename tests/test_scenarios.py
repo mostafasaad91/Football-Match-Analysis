@@ -408,8 +408,11 @@ def test_the_whole_package_builds_for_a_hostile_fixture(shape, tmp_path):
         generate_match_package(events, players, xg, team_metrics, player_metrics,
                                info, target)
         assert len(list(target.glob("*.png"))) > 40, shape
-        assert (target / "full_visual_redesign_real_data.pdf").exists(), shape
-        assert (target / "match_article.docx").exists(), shape
+        # The report and the article are not produced any more -- their prose
+        # was invented -- so their absence is the package being correct rather
+        # than the render having failed. The boards are what a package is.
+        assert not list(target.glob("*.pdf")), shape
+        assert not list(target.glob("*.docx")), shape
     finally:
         shutil.rmtree(target, ignore_errors=True)
 

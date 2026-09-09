@@ -76,7 +76,12 @@ def build_article(events, xg, team_metrics, player_metrics, match_info, out_dir,
             paragraphs.append(reading)
         else:
             paragraphs.append(observed_contrast(c,group))
-        paragraphs.append(copies[group]['implication'])
+        # copies[group]['implication'] used to go here. It is a standing
+        # instruction -- "Trace the strongest chances back to the entry route
+        # and the final pass" -- written once per section and identical in
+        # every match. The boards below the heading now each close on the
+        # figure that follows them, which is the same job done with this
+        # match's own evidence.
         if group=='Player Impact Appendix':
             from match_insights import player_observations
             if players is None:
@@ -137,7 +142,15 @@ def build_article(events, xg, team_metrics, player_metrics, match_info, out_dir,
         'The following pages explain every exported visual in the match package. Read each title with its subtitle and footer: the subtitle defines the denominator or time window, while the footer states the main limitation.'],appendix,gallery=True))
     strap=' · '.join(str(v) for v in [match_info.get('competition',''),match_info.get('date',''),'MATCH STUDY'] if v)
     match_title,standfirst=match_headline(events,xg,team_metrics,player_metrics,match_info,out_dir)
-    article=Article(match_title,standfirst or result_read(c),strap,sections,None,c['home'],c['away'],c)
+    # match_article._cover_image renders page one of the finished report, which
+    # is the comparison card: competition, both crests, the score and the eight
+    # rows. It was written for exactly this and nothing ever called it, so the
+    # article opened on its headline while the report opened on a cover.
+    # Rendering the report's own first page makes the two identical by
+    # construction rather than by two layouts agreeing.
+    from match_article import _cover_image
+    article=Article(match_title,standfirst or result_read(c),strap,sections,
+                    _cover_image(out),c['home'],c['away'],c)
     return article
 
 

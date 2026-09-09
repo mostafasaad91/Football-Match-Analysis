@@ -203,6 +203,16 @@ TYPE_COVER_FIGURE, TYPE_COVER_MARK = 21, 27
 # the labels grew without the card having to.
 TYPE_COVER_LABEL, TYPE_COVER_META = 11.5, 10.0
 
+# The rebuilt cover: the fixture line, a figure and its trailing partner, the
+# deck under the title, and the goal list. Named rather than written into the
+# drawing code, because a bare number in a setFont call is a size nothing else
+# can find and nothing can hold to the scale.
+TYPE_COVER_FIXTURE = 44      # "Arsenal 2 — 1 Chelsea"
+TYPE_COVER_LEAD = 19         # the leading side's figure on a row
+TYPE_COVER_TRAIL = 15        # the other side's, quieter but still readable
+TYPE_COVER_DECK = 13.5       # the sentence under the fixture
+TYPE_COVER_ENTRY = 10.5      # a scorer's name in the goal list
+
 # The cover's frame and the card inside it. The two rules are fixed to the
 # sheet; everything between them is centred, so the air above the crests and
 # the air under the last figure come out equal whatever COVER_ROWS holds.
@@ -474,6 +484,16 @@ def build_context(
             key = f'game_state_{state}_xG'
             if key in team_metrics.columns:
                 context[f'{side}_{key}'] = _metric(team_metrics, side, key)
+    # The caption writer describes each board, and a board can only be
+    # described by whatever it was drawn from. Team totals are not enough --
+    # they cannot say which two players combined most, which flank the box was
+    # entered from, or how far out the shots were taken. The frames travel with
+    # the context so a sentence about a picture is computed from the picture's
+    # own data rather than guessed at.
+    context['_events'] = events
+    context['_xg'] = xg
+    context['home_id'] = home_id
+    context['away_id'] = away_id
     return context
 
 
@@ -994,92 +1014,188 @@ class TacticalPDF:
     )
 
     def cover(self):
-        """The match in eight numbers, in the two clubs' colours.
+        """The match on one page: the figures, its shape, and who decided it.
 
-        The cover was the pitch-control artwork with one sentence under it. It
-        looked like the front of a document and told a reader nothing they
-        could act on, and the sentence — being a single claim — was the part of
-        the report most likely to be wrong.
+        The old cover was a comparison card floating in the middle of a sheet
+        with a coloured bar down each edge, and it left the bottom third empty.
+        The bars were the two clubs' colours, so the page furniture wore the
+        kit -- on a fixture between two red teams the whole sheet went red.
 
-        A comparison card is the opposite. Every row is two figures and a bar
-        drawn from them, so it cannot assert anything the data does not, and
-        the shape of the match arrives in one look.
+        What is here instead: neutral chrome, one accent that belongs to the
+        report rather than to either side, and kit colour only inside a bar or
+        beside a figure that is a side's own. The blocks sit on stated
+        coordinates so the page fills to the footer instead of stopping.
         """
         self._start("cover", "Cover")
         c = self.canvas
-        centre = PAGE_W / 2
+        left = COVER_MARGIN
+        right = PAGE_W - COVER_MARGIN
+        column = right - left
+        gutter = 64
+        half = (column - gutter) / 2
 
-        # Carry the report identity onto the cover itself. The old cover only
-        # exposed team colours at the bottom, so it looked identical to the
-        # previous edition until the reader reached an inner section.
-        c.setFillColor(BRAND)
-        c.rect(0, 0, 12, PAGE_H, stroke=0, fill=1)
-        c.setFillColor(VALUE)
-        c.rect(PAGE_W - 12, 0, 12, PAGE_H, stroke=0, fill=1)
-        c.setFillColor(BRAND)
-        c.roundRect(COVER_MARGIN, PAGE_H - 112, 118, 18, 8, stroke=0, fill=1)
-        c.setFillColor(BG)
-        c.setFont(COVER_TEXT, 7.5)
-        c.drawCentredString(COVER_MARGIN + 59, PAGE_H - 106, "TACTICAL MATCH REPORT")
-
-        top = PAGE_H - 54
         c.setFillColor(COVER_LABEL)
-        c.setFont(COVER_TEXT, TYPE_COVER_LABEL)
-        competition = self._cover_competition().upper()
-        c.drawString(COVER_MARGIN, top, _spaced_out(competition or "MATCH ANALYSIS"))
-        if competition:
-            c.setFillColor(COVER_META)
-            c.setFont(COVER_TEXT, TYPE_COVER_META)
-            # The article's own headline, not "MATCH ANALYSIS". The report had
-            # no tactical line anywhere on its front — the card says what the
-            # totals were and nothing said what the match was — while the
-            # article next to it opened on a sentence derived from these same
-            # frames. One finding, both documents, or they drift.
-            self._paragraph(escape(self._cover_headline()), COVER_MARGIN, top-12,
-                            PAGE_W-2*COVER_MARGIN-90, 35,
-                            ParagraphStyle('cover_thesis', fontName=COVER_TEXT, fontSize=TYPE_COVER_META, leading=13, textColor=COVER_META))
-        else:
-            self._paragraph(escape(self._cover_headline()), COVER_MARGIN, top-12,
-                            PAGE_W-2*COVER_MARGIN-90, 35,
-                            ParagraphStyle('cover_thesis', fontName=COVER_TEXT, fontSize=TYPE_COVER_META, leading=13, textColor=COVER_META))
-        self._cover_logo(PAGE_W - 92, PAGE_H - 22, 64)
-
-        head_rule = PAGE_H - COVER_HEAD_DROP
-        foot_rule = COVER_FOOT_LIFT
-        c.setStrokeColor(GRID)
-        c.setLineWidth(0.8)
-        c.line(COVER_MARGIN, head_rule, PAGE_W - COVER_MARGIN, head_rule)
-        c.line(COVER_MARGIN, foot_rule, PAGE_W - COVER_MARGIN, foot_rule)
-
-        # Both rules are fixed to the sheet and the card is centred between
-        # them. Hanging the card from the header and letting the footer float
-        # under the last row put all the slack in one place: 129pt of air
-        # above the crests and 40 below the final figure, on a card that is
-        # meant to read as one block. It also meant the footer's position was
-        # a function of how many rows COVER_ROWS happened to hold.
-        rows = self._cover_rows()
-        body = (COVER_CREST_RISE + COVER_ROW_GAP
-                + (len(rows) - 1) * COVER_ROW_STEP + COVER_ROW_SINK)
-        badge_y = (head_rule + foot_rule + body) / 2 - COVER_CREST_RISE
-        self._cover_badges(centre, badge_y)
-
-        first = badge_y - COVER_ROW_GAP
-        for index, row in enumerate(rows):
-            self._cover_row(centre, first - index * COVER_ROW_STEP, *row)
-
+        c.setFont(COVER_TEXT, TYPE_COVER_META)
+        c.drawString(left, PAGE_H - 54, _spaced_out(
+            (self._cover_competition() or "Match analysis").upper()))
         c.setFillColor(COVER_META)
         c.setFont(COVER_TEXT, TYPE_COVER_META)
-        byline = str(self.context.get("byline") or "MOSTAFA SAAD").upper()
-        c.drawString(COVER_MARGIN, foot_rule - 23, _spaced_out(byline))
-        c.drawRightString(PAGE_W - COVER_MARGIN, foot_rule - 23,
-                          _spaced_out("WHOSCORED / OPTA EVENT DATA"))
+        c.drawRightString(right, PAGE_H - 54, str(self.context.get("date") or ""))
+        c.setStrokeColor(FOCUS); c.setLineWidth(2)
+        c.line(left, PAGE_H - 66, left + 46, PAGE_H - 66)
+        c.setStrokeColor(GRID); c.setLineWidth(0.5)
+        c.line(left + 52, PAGE_H - 66, right, PAGE_H - 66)
 
-        # The two-colour rule every visual and poster closes on.
-        c.setFillColor(self.home_color)
-        c.rect(0, 0, PAGE_W / 2, 5, stroke=0, fill=1)
-        c.setFillColor(self.away_color)
-        c.rect(PAGE_W / 2, 0, PAGE_W / 2, 5, stroke=0, fill=1)
+        home, away = str(self.context["home"]), str(self.context["away"])
+        score = str(self.context.get("score") or "").replace("-", "—")
+        title_y = PAGE_H - 128
+        c.setFillColor(TEXT); c.setFont(COVER_DISPLAY, TYPE_COVER_FIXTURE)
+        c.drawString(left, title_y, f"{home}  {score}  {away}")
+        headline = self._cover_headline()
+        if headline:
+            c.setFillColor(MUTED); c.setFont(COVER_TEXT, TYPE_COVER_DECK)
+            c.drawString(left, title_y - 30, headline)
+
+        rows = self._cover_rows()
+        per_column = (len(rows) + 1) // 2
+        top, step = title_y - 86, 72
+        for index, (label, home_text, away_text, share) in enumerate(rows):
+            side = index // per_column
+            x = left if side == 0 else left + half + gutter
+            y = top - step * (index % per_column)
+            c.setFillColor(COVER_LABEL); c.setFont(COVER_TEXT, TYPE_MICRO + 0.7)
+            c.drawString(x, y, _spaced_out(label.upper()))
+            # The figure above its bar, not beside it: side by side, a long
+            # label ran into the number it belonged to.
+            c.setFillColor(TEXT); c.setFont(COVER_DISPLAY, TYPE_COVER_LEAD)
+            c.drawString(x, y - 26, home_text)
+            c.setFillColor(COVER_FIGURE_DIM); c.setFont(COVER_DISPLAY, TYPE_COVER_TRAIL)
+            c.drawRightString(x + half, y - 26, away_text)
+            c.setFillColor(self.home_color)
+            c.rect(x, y - 38, half * share, 5, stroke=0, fill=1)
+            c.setFillColor(self.away_color)
+            c.rect(x + half * share, y - 38, half * (1 - share), 5, stroke=0, fill=1)
+
+        rule = top - step * (per_column - 1) - 54
+        c.setStrokeColor(GRID); c.setLineWidth(0.5)
+        c.line(left, rule, right, rule)
+
+        c.setFillColor(FOCUS); c.setFont(COVER_TEXT, TYPE_MICRO + 0.7)
+        c.drawString(left, rule - 20, _spaced_out("CUMULATIVE EXPECTED GOALS"))
+        chart_h = 150
+        chart_y = rule - 42 - chart_h
+        self._cover_curve(left + 26, chart_y, column - 26, chart_h)
+
+        band = chart_y - 34
+        c.line(left, band, right, band)
+        head = band - 22
+        self._cover_goals(left, head)
+        self._cover_verdict(left + half + gutter, head, right - (left + half + gutter))
         self._finish()
+
+    def _cover_curve(self, x, y, width, height):
+        """Cumulative expected goals across the match, in both kit colours."""
+        c = self.canvas
+        home, away = self._cumulative_xg()
+        if len(home) < 2 or len(away) < 2:
+            # Two points is a straight line between nought and the total, which
+            # is not the shape of anything. Better to draw nothing.
+            return
+        top = max(max(home), max(away)) or 1.0
+        c.setStrokeColor(GRID); c.setLineWidth(0.4)
+        for share in (0.5, 1.0):
+            gy = y + height * share
+            c.line(x, gy, x + width, gy)
+            c.setFillColor(NEUTRAL); c.setFont(COVER_TEXT, TYPE_MICRO)
+            c.drawRightString(x - 8, gy - 2, f"{top * share:.1f}")
+        for curve, colour in ((home, self.home_color), (away, self.away_color)):
+            steps = len(curve) - 1
+            c.setStrokeColor(colour); c.setLineWidth(2.4)
+            path = c.beginPath()
+            for index, value in enumerate(curve):
+                px, py = x + width * index / steps, y + height * value / top
+                path.moveTo(px, py) if index == 0 else path.lineTo(px, py)
+            c.drawPath(path)
+        c.setStrokeColor(GRID); c.setLineWidth(0.5)
+        c.line(x, y, x + width, y)
+        for share, label in ((0.0, "0'"), (0.5, "HT"), (1.0, "90'")):
+            c.setFillColor(NEUTRAL); c.setFont(COVER_TEXT, TYPE_MICRO)
+            c.drawCentredString(x + width * share, y - 13, label)
+
+    def _cumulative_xg(self, steps: int = 18):
+        """Each side's expected goals accumulated across the match.
+
+        Read off the shots rather than stored, because the context carries
+        totals and a total cannot be plotted against time.
+        """
+        events = self.context.get("_events")
+        if events is None or "minute" not in getattr(events, "columns", []):
+            return [], []
+        import pandas as pd
+
+        shots = events[events.get("is_shot").astype(str).str.lower().isin(
+            {"true", "1", "1.0"})] if "is_shot" in events else events.iloc[0:0]
+        if shots.empty or "xG" not in shots:
+            return [], []
+        minute = pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
+        value = pd.to_numeric(shots["xG"], errors="coerce").fillna(0)
+        last = max(float(minute.max()), 90.0)
+        curves = []
+        for side in ("home", "away"):
+            team_id = self.context.get(f"{side}_id")
+            mask = shots["team_id"].eq(team_id)
+            running, total = [0.0], 0.0
+            for index in range(1, steps + 1):
+                edge = last * index / steps
+                total = float(value[mask & (minute <= edge)].sum())
+                running.append(total)
+            curves.append(running)
+        return curves[0], curves[1]
+
+    def _cover_goals(self, x, y):
+        c = self.canvas
+        c.setFillColor(FOCUS); c.setFont(COVER_TEXT, TYPE_MICRO + 0.7)
+        c.drawString(x, y, _spaced_out("GOALS"))
+        rows = self.context.get("goal_rows") or []
+        if not rows:
+            c.setFillColor(MUTED); c.setFont(COVER_TEXT, TYPE_BODY)
+            c.drawString(x, y - 24, "None.")
+            return
+        from match_clock import event_label
+        gy = y - 24
+        for goal in rows[:5]:
+            colour = (self.home_color if str(goal.get("team")) == str(self.context["home"])
+                      else self.away_color)
+            c.setFillColor(colour); c.circle(x + 4, gy + 3, 3, stroke=0, fill=1)
+            name = str(goal.get("player") or "Unnamed")
+            c.setFillColor(TEXT); c.setFont(COVER_TEXT, TYPE_COVER_ENTRY)
+            c.drawString(x + 16, gy, name)
+            c.setFillColor(MUTED); c.setFont(COVER_TEXT, TYPE_BODY)
+            c.drawString(x + 16 + c.stringWidth(name, COVER_TEXT, TYPE_COVER_ENTRY) + 10,
+                         gy, event_label(goal))
+            gy -= 22
+
+    def _cover_verdict(self, x, y, width):
+        """The reading, with no label over it: a paragraph is not a field."""
+        # context["verdict"] is a dataclass. str() on it printed
+        # "Verdict(home=SideVerdict(team='Arsenal', xg=2.48, ..." across the
+        # cover -- a repr where a paragraph belongs.
+        from match_editorial import result_read
+
+        text = ""
+        try:
+            from publication_v2 import pdf_verdict
+
+            written = pdf_verdict(self.context)
+            if isinstance(written, str):
+                text = written.strip()
+            elif isinstance(written, (list, tuple)):
+                text = " ".join(str(part).strip() for part in written if part).strip()
+        except Exception:
+            text = ""
+        if not text or text.startswith(("Verdict(", "SideVerdict(")):
+            text = result_read(self.context)
+        self._paragraph(escape(text), x, y + 4, width, 120, self.commentary_body)
 
     def _cover_headline(self) -> str:
         """The tactical line, read from the article's own candidates.
@@ -1653,7 +1769,17 @@ class TacticalPDF:
         # Two columns. The page is 14 inches wide, so a single measure ran to
         # roughly 830pt at 9pt type — far past the length an eye can track back
         # from. Splitting at a sentence boundary halves the measure.
-        narrative = self.article_readings.get(path.name) or visual_narrative(path, self.context)
+        # The board's own paragraph first. article_readings holds the section
+        # prose, which the article repeats above a group of charts -- printing
+        # it again under one of them meant the ten figures the article selects
+        # carried a section summary while the other forty-one carried a reading
+        # of themselves. Both documents now put the same per-board narrative
+        # under the same picture, which is the alignment this was reaching for.
+        # The board's own paragraph, and only that. article_readings held the
+        # section prose the article already prints above the group, so the ten
+        # figures the article selects were carrying a section summary while the
+        # other forty-one carried a reading of themselves.
+        narrative = visual_narrative(path, self.context)
         left_text, right_text = _split_for_columns(narrative)
         gutter = 34
         column_w = (PAGE_W - 84 - gutter) / 2
