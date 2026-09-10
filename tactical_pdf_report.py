@@ -836,6 +836,13 @@ class TacticalPDF:
         c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_BODY); c.drawString(PAGE_W - 190, PAGE_H - 50, self.context["away"].upper())
 
     def _paragraph(self, text: str, x: float, top: float, width: float, max_height: float, style: ParagraphStyle | None = None) -> float:
+        # Every sentence in the report goes through here, which makes it the one
+        # place a fault common to a dozen writers can be stopped. See
+        # prose_hygiene: a count of one printed as a plural is repaired, and
+        # nothing else about the text is touched.
+        from prose_hygiene import clean
+
+        text = clean(text) or text
         import copy
         fitted = copy.copy(style or self.body)
         paragraph = Paragraph(text, fitted)

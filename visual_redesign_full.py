@@ -22,7 +22,7 @@ import matplotlib.patheffects as path_effects
 from matplotlib import colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
-from matplotlib.patches import Arc, Circle, Patch, Rectangle, Wedge
+from matplotlib.patches import Arc, Circle, Patch, Polygon, Rectangle, Wedge
 import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter
@@ -1904,6 +1904,243 @@ def dominating_zones(events):
     return save(fig, "24_dominating_zones.png")
 
 
+# The lateral thirds, in the provider's width units. This feed numbers the
+# width from the RIGHT touchline: a right back's touches average y≈19 and a
+# left back's y≈81, which is the opposite of the reading the axis name
+# suggests. Every corridor decision below goes through these two bounds rather
+# than restating the convention, so there is one place to be wrong.
+_RIGHT_CORRIDOR_MAX = 100.0 / 3.0
+_LEFT_CORRIDOR_MIN = 200.0 / 3.0
+
+
+def _attacking_corridors(events, team_id):
+    """How one side's final-third entries split across the three corridors.
+
+    An entry is the unit rather than a touch. Touches count the same posession
+    many times over and reward a side that circulates in front of the block;
+    an entry is one arrival in the final third, which is the thing a corridor
+    share is meant to describe.
+
+    The corridor is read off where the entry LANDED (``end_y``), not where it
+    started. A switch that begins on the right and arrives on the left is an
+    attack down the left, and the receiving end is the side the opponent had
+    to defend.
+    """
+    frame = events[final_third_entry_mask(events) & events["team_id"].eq(team_id)]
+    frame = frame.dropna(subset=["end_y"])
+    landing = pd.to_numeric(frame["end_y"], errors="coerce").dropna()
+    counts = (
+        int((landing >= _LEFT_CORRIDOR_MIN).sum()),
+        int(((landing > _RIGHT_CORRIDOR_MAX) & (landing < _LEFT_CORRIDOR_MIN)).sum()),
+        int((landing <= _RIGHT_CORRIDOR_MAX).sum()),
+    )
+    total = sum(counts)
+    shares = tuple(100.0 * c / total for c in counts) if total else (0.0, 0.0, 0.0)
+    return counts, shares, total
+
+
+def _corridor_arrow(ax, x_tail, x_head, y, half_height, colour):
+    """One chevron, filled with a gradient that brightens towards the goal.
+
+    A flat fill would say the same thing at both ends. The ramp runs dim at the
+    halfway line to full colour at the head, so the direction of play is in the
+    shape itself and the arrow does not need a second mark to carry it.
+
+    Matplotlib fills a polygon with one colour, so the gradient is an image
+    clipped to the chevron rather than a property of the patch.
+    """
+    pointing_left = x_head < x_tail
+    depth = abs(x_tail - x_head) * 0.16
+    direction = -1.0 if pointing_left else 1.0
+    # Head tip, its two shoulders, the two tail corners, and the notch pulled
+    # in from the tail edge towards the head -- the same chevron either way up.
+    outline = [
+        (x_head, y),
+        (x_head - direction * depth, y + half_height),
+        (x_tail, y + half_height),
+        (x_tail + direction * depth, y),
+        (x_tail, y - half_height),
+        (x_head - direction * depth, y - half_height),
+    ]
+    # A hairline in the team colour around the whole shape. The fill fades
+    # towards the page at the tail, and on the light page that end reached the
+    # background before the chevron ended: the arrow lost its own outline.
+    chevron = Polygon(outline, closed=True, facecolor="none",
+                      edgecolor=colour, linewidth=0.9, zorder=4)
+    ax.add_patch(chevron)
+    dim = mcolors.to_hex(_mix(colour, BG, 0.55 if IS_LIGHT_THEME else 0.72))
+    ramp = LinearSegmentedColormap.from_list("corridor", [dim, colour])
+    gradient = np.linspace(0.0, 1.0, 256).reshape(1, -1)
+    if pointing_left:
+        gradient = gradient[:, ::-1]
+    left, right = min(x_head, x_tail), max(x_head, x_tail)
+    image = ax.imshow(
+        gradient, extent=[left, right, y - half_height, y + half_height],
+        cmap=ramp, vmin=0.0, vmax=1.0, aspect="auto", zorder=3,
+        interpolation="bilinear",
+    )
+    image.set_clip_path(chevron)
+    return chevron
+
+
+def _mix(colour, other, weight):
+    """``weight`` of ``other`` mixed into ``colour``."""
+    a = np.array(mcolors.to_rgb(colour))
+    b = np.array(mcolors.to_rgb(other))
+    return tuple(a * (1.0 - weight) + b * weight)
+
+
+def match_statistics(events, match_info):
+    """The whole match as two columns of counted actions, plus the press.
+
+    The package opens on the xG flow, which is the story of the chances and
+    nothing else. A reader who wants the ordinary totals -- shots, passes,
+    duels, clearances -- had to assemble them from a dozen later pages or from
+    the PDF's tables.
+
+    The page already existed: match_report draws it, and the full pipeline
+    saved it, but generate_match_package never did, so the redesign package
+    shipped without it. This is the same figure, captured and saved with the
+    package's own chrome rather than redrawn.
+    """
+    from tactical_visualizations import make_match_stats_v2
+
+    fig = make_match_stats_v2(events, match_info, compute_ppda_both(match_info, events))
+    # The captured figure arrives wearing match_report's own chrome: an eyebrow
+    # and title at the top, a score and report tag at the foot. Both are
+    # replaced here by the package's, so the page carries the same identity as
+    # the fifty either side of it and states the score once.
+    #
+    # save() can strip a header it did not draw, but it does so by reading the
+    # figure's own text: it takes the largest type above 0.84 as the title and
+    # the next text it finds as the subtitle. Here that next text is the
+    # eyebrow's bullet, and the fixture name in the title made it pick a team
+    # to highlight on a page that belongs to both. The header is set here
+    # instead, and the flag tells save() the work is done.
+    def _chrome_y(item):
+        """Where a figure-level artist sits, in figure fractions, or None.
+
+        The chrome is not all text: the eyebrow's bullet is a Circle and the
+        footer rule a Rectangle, both added to fig.artists in figure
+        coordinates. Hiding only the text left the bullet floating over the
+        page with nothing beside it.
+        """
+        for read in (lambda: item.get_position()[1],
+                     lambda: item.center[1],
+                     lambda: item.get_xy()[1]):
+            try:
+                return float(read())
+            except Exception:
+                continue
+        return None
+
+    for item in list(fig.texts) + list(fig.artists):
+        y = _chrome_y(item)
+        if y is not None and (y >= 0.84 or y < 0.06):
+            item.set_visible(False)
+    base.amoled_header(
+        fig, "Match Statistics",
+        "Attack, passing, pressing and defensive actions · every figure counted from the event stream",
+    )
+    return save(fig, "01b_match_statistics.png")
+
+
+def attacking_zones(events):
+    """Which corridor each side attacked through, both sides on one pitch.
+
+    The package already located attacks -- box entries, final-third entries,
+    the xT map -- but each of those answers where the ball went with a cloud of
+    marks the reader has to average by eye. The one question a coach asks first
+    of an opponent is which side they come down, and no page answered it as a
+    number.
+
+    Each side is drawn attacking its own way, so the corridors sit where the
+    players stood: a team attacking towards the left of the page has its own
+    left along the bottom touchline. Arrow length carries the share, and every
+    arrow is named as well, because a reader should not have to derive which
+    touchline was whose left from the direction of the chevrons.
+    """
+    fig = plt.figure(figsize=(13.0, 8.6), facecolor=BG)
+    base.amoled_header(
+        fig, "Attacking Zones",
+        "Share of each side's final-third entries by corridor · corridor read where the entry landed",
+    )
+    ax = fig.add_axes([0.055, 0.105, 0.89, 0.68])
+    base.draw_pitch(ax)
+    # Room under the touchline for the two team names.
+    ax.set_ylim(-11, 100)
+
+    rows = (78.0, 50.0, 22.0)
+    # Attacking towards the left of the page, a side's own left hand is the
+    # bottom touchline; attacking towards the right it is the top one. The
+    # corridor names are drawn either way, so the geometry only has to be right
+    # rather than also obvious.
+    layouts = (
+        (HOME_ID, HOME_NAME, -1.0, 48.0, 4.0, ("Right", "Centre", "Left")),
+        (AWAY_ID, AWAY_NAME, 1.0, 52.0, 96.0, ("Left", "Centre", "Right")),
+    )
+    summary = {}
+    for team_id, team_name, direction, x_tail, x_limit, row_names in layouts:
+        counts, shares, total = _attacking_corridors(events, team_id)
+        by_name = dict(zip(("Left", "Centre", "Right"), zip(shares, counts)))
+        summary[team_id] = (counts, shares, total)
+        colour = _team_mark_color(team_id)
+        span = abs(x_limit - x_tail)
+        for row_y, name in zip(rows, row_names):
+            share, count = by_name[name]
+            # A corridor that carried nothing still gets its row, so the three
+            # always read as one split. It gets a rule rather than an arrow,
+            # because a zero-length chevron is a smudge.
+            reach = span * (0.30 + 0.70 * (share / 100.0)) if total else 0.0
+            if total and reach > 1.0:
+                x_head = x_tail + direction * reach
+                _corridor_arrow(ax, x_tail, x_head, row_y, 7.4, colour)
+            else:
+                ax.plot([x_tail, x_tail + direction * span * 0.22], [row_y, row_y],
+                        color=GRID, lw=1.2, zorder=3)
+            label = f"{share:.0f}%" if total else "—"
+            ax.text(
+                x_tail + direction * 3.0, row_y, label,
+                ha="left" if direction > 0 else "right", va="center",
+                color=text_on_fill(colour), fontsize=13, fontweight="bold", zorder=6,
+                bbox=dict(boxstyle="round,pad=0.42", facecolor=colour, edgecolor="none"),
+            )
+            ax.text(
+                x_tail + direction * (span * 0.30), row_y + 10.4,
+                f"{name.upper()}  ·  {count} {'entry' if count == 1 else 'entries'}",
+                ha="center", va="center", color=MUTED, fontsize=8.5,
+                fontweight="bold", zorder=6,
+            )
+        # Under the touchline rather than inside it: at the foot of its own
+        # half the name landed on the penalty-area lines.
+        ax.text(
+            (x_tail + x_limit) / 2.0, -5.5, team_name.upper(),
+            ha="center", va="center",
+            color=colour, fontsize=11.5, fontweight="bold", zorder=6,
+        )
+        ax.annotate(
+            "", xy=(x_limit - direction * 2.0, 95.0),
+            xytext=(x_limit - direction * 14.0, 95.0),
+            arrowprops=dict(arrowstyle="-|>", color=colour, lw=1.4), zorder=6,
+        )
+        ax.text(
+            x_limit - direction * 15.5, 95.0, "ATTACKS",
+            ha="right" if direction > 0 else "left", va="center",
+            color=MUTED, fontsize=8, fontweight="bold", zorder=6,
+        )
+
+    home_total = summary[HOME_ID][2]
+    away_total = summary[AWAY_ID][2]
+    fig.text(
+        0.055, 0.045,
+        f"Denominator · {HOME_NAME} {home_total} final-third "
+        f"{'entry' if home_total == 1 else 'entries'}, {AWAY_NAME} {away_total}. "
+        "A share of a small count moves a long way on one entry.",
+        color=MUTED, fontsize=9,
+    )
+    return save(fig, "24b_attacking_zones.png")
+
+
 def box_entries(events, team_id, number):
     frame = events[box_entry_mask(events) & events["team_id"].eq(team_id)].copy().dropna(subset=["x", "y", "end_x", "end_y"])
     fig, pitch, side = pitch_axes(f"Box Entries · {TEAM_NAME[team_id]}", "Completed actions entering the penalty area · entry method encoded by shape")
@@ -2055,107 +2292,284 @@ def ppda(events):
 
     This was two semicircular gauges. A dial is the wrong mark for a
     comparison: the reader has to turn two needle angles into two numbers and
-    then difference them, and the ink spent on bands, ticks and hubs was
-    larger than the two figures it carried. Each dial also had its own face,
-    so the one thing the page never showed was the one thing being asked --
-    which side pressed harder, and by how much.
+    then difference them, and the ink spent on bands, ticks and hubs was larger
+    than the two figures it carried.
 
-    Both sides now sit on one axis, so the gap between them is a length. The
-    second panel splits the same ratio by scoreline, which is where the
-    finding usually is.
+    What replaced the dials had its own faults, and this is the second pass.
+    The board carried two charts on two axes even though both plotted PPDA, so
+    a length in one could not be carried to the other. The axis ran to 21 while
+    the data stopped at 12, spending two fifths of the plot on nothing. The
+    value sat in a bubble at the end of its own bar and the bubble overlapped
+    the bar, so the figure was struck through by the line that produced it. The
+    zone names were column headers over empty plot rather than ground behind
+    the data, and a score state with too little exposure to rate still spent a
+    labelled row saying so.
+
+    One axis for everything now, ending just past the largest value; the zones
+    shaded behind the bars; the figure outside the end of its own bar; and a
+    state with nothing to report says so in one grey line instead of a row.
     """
-    info = {"home_id": HOME_ID, "away_id": AWAY_ID, "home_name": HOME_NAME, "away_name": AWAY_NAME}
+    from match_report import compute_ppda_both
+
+    info = {"home_id": HOME_ID, "away_id": AWAY_ID}
     data = compute_ppda_both(info, events)
     hp = float(data["home"]["ppda"] or 0)
     ap = float(data["away"]["ppda"] or 0)
 
+    by_state = _ppda_by_state(events, info)
+    rows = [("Full match", hp or None, 0.0, ap or None, 0.0)]
+    for state in ("level", "leading", "trailing"):
+        home = by_state.get(("home", state))
+        away = by_state.get(("away", state))
+        if not home and not away:
+            continue
+        rows.append((state.capitalize(),
+                     home[0] if home else None, home[1] if home else 0.0,
+                     away[0] if away else None, away[1] if away else 0.0))
+
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
-    fig.text(0.055, 0.95, "Pressing Intensity", fontsize=23, fontweight="bold", color=TEXT)
-    fig.text(0.055, 0.91,
-             "Opponent passes allowed per defensive action in the pressing zone · "
-             "a lower figure is a harder press",
-             fontsize=10.5, color=MUTED)
-    fig.add_artist(Line2D([0.055, 0.945], [0.875, 0.875], transform=fig.transFigure, color=GRID, lw=1))
+    fig.text(0.055, 0.95, "Pressing Intensity", fontsize=23, fontweight="bold",
+             color=TEXT)
+    gap = abs(hp - ap)
+    lead = HOME_NAME if hp < ap else AWAY_NAME
+    fig.text(0.055, 0.905,
+             f"{lead} pressed harder over the match, by {gap:.1f} PPDA"
+             if gap >= 0.2 and hp and ap else
+             "Neither side pressed measurably harder over the match",
+             fontsize=13, fontweight="bold", color=TEXT)
 
-    ceiling = max(hp, ap, 20.0) * 1.12
+    every = [v for row in rows for v in (row[1], row[3]) if v]
+    ceiling = (max(every) if every else 20.0) * 1.26
 
-    ax = fig.add_axes([0.075, 0.60, 0.86, 0.20])
+    ax = fig.add_axes([0.135, 0.225, 0.60, 0.585])
     base.clean_ax(ax)
     ax.set_xlim(0, ceiling)
-    ax.set_ylim(-0.9, 1.6)
+    ax.set_ylim(-0.6, len(rows) - 0.22)
     ax.set_yticks([])
-    for low, high, label in [(0, 8, "Elite press"), (8, 11, "High press"),
-                             (11, 14, "Mid block"), (14, ceiling, "Low block")]:
+
+    # The zones as ground: they interpret the number, so they sit behind it. As
+    # headers they were labelling stretches of empty plot.
+    for index, (low, high, label) in enumerate(
+            [(0, 8, "Elite press"), (8, 11, "High press"),
+             (11, 14, "Mid block"), (14, ceiling, "Low block")]):
         if low >= ceiling:
             continue
         high = min(high, ceiling)
-        ax.axvspan(low, high, color=PANEL_2, alpha=0.9 if label == "Elite press" else 0.5, lw=0)
-        ax.axvline(high, color=GRID, lw=0.7)
-        ax.text((low + high) / 2, 1.44, label.upper(), color=MUTED, fontsize=8,
-                fontweight="bold", ha="center", va="center")
-    for row, (name, value, colour, detail) in enumerate(
-            [(HOME_NAME, hp, HOME, data["home"]), (AWAY_NAME, ap, AWAY, data["away"])]):
-        y = 0.80 - row * 0.80
-        ax.plot([0, value], [y, y], color=colour, lw=5, solid_capstyle="round", alpha=0.55, zorder=3)
-        ax.scatter([value], [y], s=330, color=colour, edgecolor=TEXT, linewidth=1.4, zorder=5)
-        ax.text(value, y, f"{value:.1f}", color=text_on_fill(colour),
-                fontsize=9, fontweight="bold", ha="center", va="center", zorder=6)
-        ax.text(0, y + 0.24, name.upper(), color=colour, fontsize=13, fontweight="bold", va="bottom")
-        ax.text(ceiling, y + 0.24,
-                f"{detail['passes_allowed']} opponent passes · "
-                f"{detail['defensive_actions']} defensive actions",
-                color=MUTED, fontsize=8.5, ha="right", va="bottom")
-    ax.set_xlabel("PPDA — lower is a harder press", fontsize=9, color=MUTED)
-    ax.tick_params(labelsize=8.5)
+        ax.axvspan(low, high, color=PANEL_2 if index % 2 else PANEL,
+                   alpha=0.9, lw=0, zorder=0)
+        ax.text((low + high) / 2, len(rows) - 0.33, label.upper(), color=MUTED,
+                fontsize=8, fontweight="bold", ha="center", va="bottom", zorder=2)
 
-    leader = HOME_NAME if hp < ap else AWAY_NAME
-    leader_color = HOME if hp < ap else AWAY
-    fig.text(0.055, 0.545, f"{leader} pressed harder by {abs(hp - ap):.1f} PPDA",
-             color=leader_color, fontsize=13, fontweight="bold")
-
-    by_state = _ppda_by_state(events, dict(info))
-    ax2 = fig.add_axes([0.075, 0.155, 0.86, 0.235])
-    base.clean_ax(ax2)
-    states = ["level", "leading", "trailing"]
-    labels = {"level": "Level", "leading": "Leading", "trailing": "Trailing"}
-    positions = np.arange(len(states))
-    drawn = False
-    for offset, (side, colour) in enumerate([("home", HOME), ("away", AWAY)]):
-        for index, state in enumerate(states):
-            entry = by_state.get((side, state))
-            y = positions[index] + (0.19 if offset == 0 else -0.19)
-            name = HOME_NAME if side == "home" else AWAY_NAME
-            if entry is None:
-                ax2.text(ceiling * 0.012, y, f"{name} — not enough exposure to rate",
-                         color=NEUTRAL, fontsize=8.5, va="center", style="italic")
+    height = 0.30
+    for row, (label, home, home_min, away, away_min) in enumerate(rows):
+        y = len(rows) - 1 - row
+        for value, minutes, colour, name, offset in (
+                (home, home_min, HOME, HOME_NAME, +height / 1.85),
+                (away, away_min, AWAY, AWAY_NAME, -height / 1.85)):
+            if not value:
+                ax.text(ceiling * 0.012, y + offset,
+                        f"{name} — under 30 opponent passes in this state",
+                        va="center", ha="left", fontsize=8.5, color=NEUTRAL,
+                        style="italic", zorder=3)
                 continue
-            value, minutes = entry
-            drawn = True
-            ax2.barh(y, value, height=0.30, color=colour, alpha=0.9)
-            ax2.text(value + ceiling * 0.012, y,
-                     f"{name} · {value:.1f} · {minutes:.0f} min",
-                     color=TEXT, fontsize=9, va="center", fontweight="bold")
-    ax2.set_yticks(positions, [labels[state] for state in states], color=TEXT, fontsize=10)
-    # Half a row of air at each end so the first and last labels are not cut by
-    # the axes frame.
-    ax2.set_ylim(len(states) - 0.45, -0.55)
-    ax2.set_xlim(0, ceiling)
-    ax2.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
-    ax2.set_xlabel("PPDA within that state", fontsize=9, color=MUTED)
-    ax2.tick_params(labelsize=8.5)
-    fig.text(0.055, 0.475, "The same press, under the scoreline it was applied in",
-             color=TEXT, fontsize=13, fontweight="bold")
-    fig.text(0.055, 0.450,
-             "A state needs 30 opponent passes before it gets a ratio; below that one tackle moves it."
-             if drawn else
-             "No score state carried enough opponent passes for a separate ratio.",
-             color=MUTED, fontsize=9)
+            ax.barh(y + offset, value, height=height, color=colour, zorder=3)
+            # Outside the end of its own bar. In a bubble at the end it was
+            # overlapped by the bar that produced it.
+            ax.text(value + ceiling * 0.014, y + offset, f"{value:.1f}",
+                    va="center", ha="left", fontsize=11.5, fontweight="bold",
+                    color=TEXT, zorder=4)
+            ax.text(value + ceiling * 0.075, y + offset,
+                    f"{name} · {minutes:.0f} min" if minutes else name,
+                    va="center", ha="left", fontsize=8.5, color=MUTED, zorder=4)
+        ax.text(-ceiling * 0.014, y, label, va="center", ha="right",
+                fontsize=10.5, fontweight="bold" if row == 0 else "normal",
+                color=TEXT)
+        if row == 0 and len(rows) > 1:
+            ax.axhline(y - 0.5, color=GRID, lw=0.8, zorder=2)
 
-    fig.text(0.945, 0.035,
-             "METHOD: OPPONENT PASSES ÷ TACKLES + INTERCEPTIONS + FOULS + CHALLENGES + RECOVERIES, "
-             "IN THE OPPONENT 60% OF THE PITCH",
-             ha="right", fontsize=7.5, color=NEUTRAL)
+    ax.tick_params(axis="x", colors=MUTED, labelsize=8.5, length=0)
+    ax.set_xlabel(
+        "PPDA  —  opponent passes allowed per defensive action, lower is a harder press",
+        color=MUTED, fontsize=9, labelpad=10)
+
+    # The denominators, beside the plot. Floating inside it they read as data.
+    fig.text(0.775, 0.755, "WHAT EACH RATIO DIVIDES", color=MUTED, fontsize=7.5,
+             fontweight="bold")
+    top = 0.715
+    for name, colour, side in ((HOME_NAME, HOME, "home"), (AWAY_NAME, AWAY, "away")):
+        entry = data[side]
+        fig.text(0.775, top, name.upper(), color=colour, fontsize=10,
+                 fontweight="bold")
+        for step, (figure, caption) in enumerate((
+                (entry.get("passes_allowed", 0), "opponent\npasses"),
+                (entry.get("defensive_actions", 0), "defensive\nactions"))):
+            row_y = top - 0.042 - step * 0.054
+            fig.text(0.775, row_y, f"{float(figure or 0):.0f}", color=TEXT,
+                     fontsize=15, fontweight="bold")
+            fig.text(0.832, row_y + 0.006, caption, color=MUTED, fontsize=7.5,
+                     linespacing=1.3)
+        top -= 0.170
+
+    fig.text(0.135, 0.105,
+             "Opponent passes ÷ tackles + interceptions + fouls + challenges + recoveries, "
+             "in the opponent 60% of the pitch. A state under 30 opponent passes is left "
+             "unrated: one tackle would move it.",
+             color=NEUTRAL, fontsize=8.5)
     return save(fig, "31_ppda_pressing.png")
+
+
+def press_profile(events, xg=None, team_metrics=None):
+    """The whole press as one shape, beside the board that measures its rate.
+
+    PPDA is one number, and the board before this one plots it four times --
+    the match and three score states. That is one measure under four
+    conditions, so a radar of it encloses an area meaning nothing, and because
+    a lower PPDA is a harder press the smaller shape would be the better side.
+
+    Six different questions do make a shape worth reading: how early the ball
+    is contested, how often it is won in the last third, how often that becomes
+    a shot, how often it is won straight back, how far up the side plays at
+    all, and how much of the risk it takes is punished. The two that are better
+    when low are inverted, so on every axis further out is better -- the one
+    rule a radar has to obey to be read at a glance.
+
+    Every axis is scaled between a floor and a ceiling fixed here rather than
+    against the two sides on the day: a radar normalised to its own match makes
+    the better side touch the rim whatever it did, and two matches cannot then
+    be compared.
+    """
+    from match_report import compute_ppda_both
+
+    info = {"home_id": HOME_ID, "away_id": AWAY_ID}
+    ppda_data = compute_ppda_both(info, events)
+
+    def metric(side, key, default=0.0):
+        frame = team_metrics
+        if frame is None or key not in getattr(frame, "columns", []):
+            return default
+        team_id = HOME_ID if side == "home" else AWAY_ID
+        rows = frame[frame.get("team_id").eq(team_id)] if "team_id" in frame else frame
+        if rows.empty:
+            return default
+        try:
+            return float(pd.to_numeric(rows[key], errors="coerce").iloc[0])
+        except Exception:
+            return default
+
+    def counted(team_id, kinds, high_only=False):
+        own = events[events["team_id"].eq(team_id)]
+        if "type" in own:
+            own = own[own["type"].isin(kinds)]
+        if high_only:
+            x = pd.to_numeric(own.get("x"), errors="coerce")
+            own = own[x >= 66.7]
+        return int(len(own))
+
+    axes = []
+    for label, floor, ceiling, lower_better, digits, home, away in (
+            ("Press\nintensity", 6.0, 20.0, True, 1,
+             ppda_data["home"]["ppda"], ppda_data["away"]["ppda"]),
+            # high_regains is the pipeline own count, used by every other
+            # board. Counting final-third recoveries again here produced a
+            # second, quieter definition of the same thing.
+            ("High\nrecoveries", 0.0, 22.0, False, 0,
+             metric("home", "high_regains"), metric("away", "high_regains")),
+            ("Regain\nconversion", 0.0, 20.0, False, 1,
+             metric("home", "regain_to_shot_rate"), metric("away", "regain_to_shot_rate")),
+            ("Counter\npress", 0.0, 25.0, False, 1,
+             metric("home", "counterpress_success_rate"),
+             metric("away", "counterpress_success_rate")),
+            ("Territory", 0.0, 100.0, False, 1,
+             metric("home", "field_tilt"), metric("away", "field_tilt")),
+            ("Rest\ndefence", 0.0, 30.0, True, 1,
+             _punished_share(metric("home", "rest_defence_dangerous_counters"),
+                             metric("home", "rest_defence_exposures")),
+             _punished_share(metric("away", "rest_defence_dangerous_counters"),
+                             metric("away", "rest_defence_exposures")))):
+        axes.append((label, float(home or 0), float(away or 0), floor, ceiling,
+                     lower_better, digits))
+
+    fig = plt.figure(figsize=(14, 9), facecolor=BG)
+    fig.text(0.055, 0.95, "Pressing Profile", fontsize=23, fontweight="bold", color=TEXT)
+    fig.text(0.055, 0.905,
+             "Six questions about the same press · further from the centre is better on every axis",
+             fontsize=11, color=MUTED)
+
+    ax = fig.add_axes([0.345, 0.245, 0.295, 0.455], projection="polar")
+    ax.set_facecolor(BG)
+    angles = np.linspace(np.pi / 2, np.pi / 2 + 2 * np.pi, len(axes), endpoint=False)
+
+    for ring in (0.25, 0.5, 0.75, 1.0):
+        ax.plot(np.linspace(0, 2 * np.pi, 200), [ring] * 200, color=GRID, lw=0.7, zorder=1)
+    for angle in angles:
+        ax.plot([angle, angle], [0, 1], color=GRID, lw=0.7, zorder=1)
+
+    for colour, index in ((HOME, 1), (AWAY, 2)):
+        values = []
+        for row in axes:
+            share = (row[index] - row[3]) / (row[4] - row[3]) if row[4] != row[3] else 0.0
+            share = min(max(share, 0.0), 1.0)
+            values.append(1.0 - share if row[5] else share)
+        loop = list(angles) + [angles[0]]
+        ax.plot(loop, values + values[:1], color=colour, lw=2.4, zorder=4)
+        ax.fill(loop, values + values[:1], color=colour, alpha=0.16, zorder=3)
+        ax.scatter(angles, values, color=colour, s=34, zorder=5,
+                   edgecolors=BG, linewidths=1.2)
+
+    for angle, row in zip(angles, axes):
+        ax.text(angle, 1.19, row[0].upper(), ha="center", va="center", color=TEXT,
+                fontsize=8, fontweight="bold", linespacing=1.25)
+        # One figure per line, each in its own side's colour. Side by side at an
+        # angular offset they overlapped at the top and bottom of the ring,
+        # where a small rotation is almost no horizontal distance.
+        for radius, value, colour in ((1.36, row[1], HOME), (1.50, row[2], AWAY)):
+            ax.text(angle, radius, f"{value:.{row[6]}f}", ha="center", va="center",
+                    color=colour, fontsize=8.5, fontweight="bold")
+
+    ax.set_ylim(0, 1)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines["polar"].set_visible(False)
+
+    top = 0.72
+    for name, colour, side in ((HOME_NAME, HOME, "home"), (AWAY_NAME, AWAY, "away")):
+        fig.text(0.055, top, name.upper(), color=colour, fontsize=11, fontweight="bold")
+        # A club name on its own is a key, not a reading. Two figures under it
+        # say what its shape is made of.
+        fig.text(0.055, top - 0.052,
+                 f"{metric(side, 'field_tilt'):.0f}% of the territory"
+                 + chr(10)
+                 + f"{metric(side, 'high_regains'):.0f} high recoveries",
+                 color=MUTED, fontsize=8.5, linespacing=1.5)
+        top -= 0.14
+
+    fig.text(0.055, 0.46, "HOW TO READ IT", color=MUTED, fontsize=7.5, fontweight="bold")
+    fig.text(0.055, 0.30,
+             "Press intensity is PPDA inverted and rest\n"
+             "defence is the share of advanced losses\n"
+             "punished, also inverted, so that further\n"
+             "out is better on all six.\n\n"
+             "The two figures on each axis are the raw\n"
+             "values, each in its own side's colour.",
+             color=MUTED, fontsize=8.5, linespacing=1.6)
+
+    fig.text(0.135, 0.062,
+             "A shape that reaches on intensity and recoveries but not on conversion is a side "
+             "winning the ball back without threatening from it. Axis floors and ceilings are "
+             "fixed, not scaled to this fixture, so two matches can be compared.",
+             color=NEUTRAL, fontsize=8.5)
+    return save(fig, "31b_press_profile.png")
+
+
+def _punished_share(dangerous, exposures):
+    """The share of a side's advanced losses that became a dangerous counter."""
+    try:
+        exposures = float(exposures or 0)
+        return 100.0 * float(dangerous or 0) / exposures if exposures else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def transition_outcomes(events):
     annotated, possessions = build_possessions(events)
     team_data = {}
@@ -2444,48 +2858,238 @@ def player_sequence(player_metrics):
     return save(fig, "34_player_sequence_leaders.png")
 
 
+def _momentum_rolling(events, column, mask, window=8.0, step=0.25):
+    """A triangular-weighted rolling total per side of whatever ``column`` measures.
+
+    The board this replaced binned into fixed five-minute blocks. Two shots
+    forty seconds apart landed in different bars whenever a block boundary fell
+    between them, and every event inside a block counted the same wherever it
+    sat, which is what made the page a row of plateaus rather than a shape.
+
+    The window slides instead, and the weight falls off towards its edges, so
+    every point is the same length of football measured from where it actually
+    happened.
+    """
+    frame = events[mask].copy()
+    frame["minute"] = pd.to_numeric(frame.get("minute"), errors="coerce")
+    frame[column] = pd.to_numeric(frame.get(column), errors="coerce").fillna(0.0)
+    frame = frame.dropna(subset=["minute"])
+    last = float(pd.to_numeric(events.get("minute"), errors="coerce").max() or 90.0)
+    grid = np.arange(0.0, last + step, step)
+    series = {}
+    for team_id in (HOME_ID, AWAY_ID):
+        side = frame[frame["team_id"].eq(team_id)]
+        totals = np.zeros_like(grid)
+        for minute, value in zip(side["minute"].to_numpy(), side[column].to_numpy()):
+            totals += np.clip(1.0 - np.abs(grid - minute) / (window / 2.0), 0, None) * float(value)
+        series[team_id] = totals
+    return grid, series[HOME_ID], series[AWAY_ID], last
+
+
+def _momentum_spells(grid, signal, last, floor=8.0):
+    """The passages the match divided into, as ``[start, end, sign]``.
+
+    Two mistakes are worth recording, because both produced something that
+    looked plausible.
+
+    Folding every run shorter than ``floor`` into the one before it, in a
+    single left-to-right pass, collapses the whole match: the run after the one
+    just absorbed now matches its neighbour's sign, so it merges too, and the
+    cascade reaches the end. The output was one block covering the fixture. The
+    shortest run is absorbed first here, into whichever neighbour is longer,
+    and same-sign neighbours are coalesced after each step.
+
+    Segmenting on the sign of the lead is the other one. One side's threat sat
+    above the other's for ninety-eight per cent of the fixture this was built
+    on, which is true and tells a reader nothing. The caller passes the share
+    measured against its own match average instead, so the boundaries fall
+    where the balance turned rather than where the lead did.
+    """
+    sign = np.sign(np.where(np.abs(signal) < 1e-4, 0, signal))
+    runs, start, current = [], 0, sign[0]
+    for i in range(1, len(sign)):
+        if sign[i] != current:
+            runs.append([grid[start], grid[i], current])
+            start, current = i, sign[i]
+    runs.append([grid[start], last, current])
+
+    def coalesce(items):
+        out = []
+        for run in items:
+            if out and out[-1][2] == run[2]:
+                out[-1][1] = run[1]
+            else:
+                out.append(list(run))
+        return out
+
+    runs = coalesce(runs)
+    while len(runs) > 1:
+        lengths = [hi - lo for lo, hi, _ in runs]
+        shortest = int(np.argmin(lengths))
+        if lengths[shortest] >= floor:
+            break
+        before = lengths[shortest - 1] if shortest > 0 else -1.0
+        after = lengths[shortest + 1] if shortest + 1 < len(runs) else -1.0
+        into = shortest - 1 if before >= after else shortest + 1
+        runs[into][0] = min(runs[into][0], runs[shortest][0])
+        runs[into][1] = max(runs[into][1], runs[shortest][1])
+        runs.pop(shortest)
+        runs = coalesce(runs)
+    return runs
+
+
 def momentum(events):
-    """Windowed xG differential — who was actually on top, and when."""
-    frame = xg_momentum(events, HOME_ID, AWAY_ID, window=5)
-    fig, ax = base.page(
-        "Match Momentum",
-        "Expected-goal difference per five-minute window \u00b7 the xG flow shows who finished ahead, this shows when",
-    )
-    base.clean_ax(ax)
-    if frame.empty:
-        ax.text(0.5, 0.5, "No shots recorded", color=MUTED, ha="center", va="center")
+    """Who was on top, minute to minute, and the spells the match divided into.
+
+    Three changes from the board this replaces, and the last two matter more
+    than the first.
+
+    The window slides rather than binning, so the page is a shape rather than a
+    row of blocks whose edges were decided by the clock.
+
+    It reads threat rather than shots. A side can pin the other in its own box
+    for ten minutes and not get a shot away; the old page drew that spell as an
+    empty bar, because a shot was the only thing it counted.
+
+    Each side keeps its own area rather than being differenced away. Ten
+    minutes in which nothing happened and ten in which both sides traded
+    chances both come out near zero once you subtract one from the other, and
+    the old page drew them identically.
+
+    The band underneath names the passages and prices them in chances. Each
+    block is split by the share of threat inside it, so a fixture one side
+    controlled throughout does not print the same sentence four times, and a
+    close match -- which a solid fill could not tell from a rout -- reads as
+    slivers either side of the middle.
+    """
+    threat = pd.to_numeric(events.get("xT"), errors="coerce").fillna(0.0)
+    grid, home, away, last = _momentum_rolling(events, "xT", threat > 0)
+    if not len(grid) or float(np.max(home) + np.max(away)) <= 0:
+        fig, ax = base.page("Match Momentum", "No recorded movement to measure")
+        base.clean_ax(ax)
+        ax.text(0.5, 0.5, "No recorded movement", color=MUTED, ha="center", va="center")
         return save(fig, "35_match_momentum.png")
 
-    starts = frame["window_start"].to_numpy()
-    diff = frame["differential"].to_numpy()
-    colors = [HOME if value >= 0 else AWAY for value in diff]
-    ax.bar(starts + 2.5, diff, width=4.4, color=colors, alpha=0.9, edgecolor=BG, linewidth=0.8)
-    ax.axhline(0, color=PITCH_LINE, lw=1.0, alpha=0.55)
-    ax.axvline(45, color=GRID, lw=0.9, ls=(0, (3, 4)))
-    ax.text(45, ax.get_ylim()[1], " HT", color=MUTED, fontsize=7, va="top")
+    # The spells come off a wider window than the area above them: the area is
+    # meant to move with play, and a lead that flips every ninety seconds is
+    # not a passage of play.
+    _, slow_home, slow_away, _ = _momentum_rolling(events, "xT", threat > 0, window=16.0)
+    pair = slow_home + slow_away
+    share = np.divide(slow_home, pair, out=np.full_like(slow_home, 0.5), where=pair > 0)
+    runs = _momentum_spells(grid, share - float(share.mean()), last)
 
-    ax.set_xlabel("Match minute", fontsize=9, color=MUTED)
-    ax.set_ylabel("xG difference in window", fontsize=9, color=MUTED)
-    ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.7)
+    is_shot = events.get("is_shot", pd.Series(False, index=events.index))
+    shots = events[is_shot.astype(str).str.lower().isin(("true", "1"))].copy()
+    shots["minute"] = pd.to_numeric(shots.get("minute"), errors="coerce")
+    shots["xG"] = pd.to_numeric(shots.get("xG"), errors="coerce").fillna(0.0)
+
+    is_goal = events.get("is_goal", pd.Series(False, index=events.index))
+    goals = events[is_goal.astype(str).str.lower().isin(("true", "1"))].copy()
+    goals["minute"] = pd.to_numeric(goals.get("minute"), errors="coerce")
+    goals = goals.dropna(subset=["minute"])
+
+    home_colour = _team_mark_color(HOME_ID)
+    away_colour = _team_mark_color(AWAY_ID)
+
+    fig = plt.figure(figsize=(14, 8.6), facecolor=BG)
+    base.amoled_header(
+        fig, "Match Momentum",
+        "Threat built in a rolling eight minutes, and the spells the match divided into",
+    )
+    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
+             ha="right", fontsize=8, color=NEUTRAL)
+
+    ax = fig.add_axes([0.075, 0.335, 0.875, 0.435])
+    band = fig.add_axes([0.075, 0.150, 0.875, 0.075])
+    for panel in (ax, band):
+        base.clean_ax(panel)
+        panel.set_xlim(0, last)
+        panel.patch.set_alpha(0)
+
+    top = max(float(home.max()), float(away.max()), 0.05) * 1.18
+    ax.set_ylim(-top, top)
+    ax.fill_between(grid, 0, home, color=home_colour, alpha=0.85, lw=0, zorder=3)
+    ax.fill_between(grid, 0, -away, color=away_colour, alpha=0.85, lw=0, zorder=3)
+    ax.plot(grid, home, color=home_colour, lw=1.2, zorder=4)
+    ax.plot(grid, -away, color=away_colour, lw=1.2, zorder=4)
+    ax.axhline(0, color=TEXT, lw=1.2, alpha=0.75, zorder=5)
+    ax.axvline(45, color=MUTED, lw=0.9, ls=(0, (3, 4)), zorder=2)
+    ax.text(45.5, top * 0.95, "HT", color=MUTED, fontsize=7.5, va="top")
+    ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.55, zorder=0)
+    marks = np.linspace(-top, top, 5)
+    ax.set_yticks(marks)
+    ax.set_yticklabels([f"{abs(v):.1f}" for v in marks])
+    ax.set_xticks([])
     ax.tick_params(labelsize=8)
+    ax.set_ylabel("threat built in the window", fontsize=8.5, color=MUTED)
+    ax.text(0.004, 0.97, HOME_NAME.upper(), transform=ax.transAxes, color=home_colour,
+            fontsize=9.5, fontweight="bold", va="top")
+    ax.text(0.004, 0.03, AWAY_NAME.upper(), transform=ax.transAxes, color=away_colour,
+            fontsize=9.5, fontweight="bold", va="bottom")
 
-    limit = max(float(np.abs(diff).max()), 0.05) * 1.35
-    ax.set_ylim(-limit, limit)
-    ax.text(0.005, 0.97, HOME_NAME.upper(), transform=ax.transAxes, color=HOME,
-            fontsize=9, fontweight="bold", va="top")
-    ax.text(0.005, 0.03, AWAY_NAME.upper(), transform=ax.transAxes, color=AWAY,
-            fontsize=9, fontweight="bold", va="bottom")
+    for row in goals.itertuples():
+        colour = home_colour if row.team_id == HOME_ID else away_colour
+        y = float(np.interp(row.minute, grid, home if row.team_id == HOME_ID else -away))
+        ax.scatter([row.minute], [y], s=95, marker="o", color=colour,
+                   edgecolor=BG, lw=1.8, zorder=7)
+        ax.annotate(f"{_surname(str(row.player))} {int(row.minute)}'", (row.minute, y),
+                    textcoords="offset points", xytext=(0, 15 if y >= 0 else -21),
+                    ha="center", color=TEXT, fontsize=8.5, fontweight="bold", zorder=9)
 
-    best_home = frame.loc[frame["differential"].idxmax()]
-    best_away = frame.loc[frame["differential"].idxmin()]
-    fig.text(0.08, 0.815,
-             f"Strongest spell \u00b7 {HOME_NAME}: {int(best_home['window_start'])}\u2013{int(best_home['window_start']) + 5}'  "
-             f"({best_home['differential']:+.2f})     "
-             f"{AWAY_NAME}: {int(best_away['window_start'])}\u2013{int(best_away['window_start']) + 5}'  "
-             f"({best_away['differential']:+.2f})",
-             color=MUTED, fontsize=8.5)
+    band.set_ylim(0, 1)
+    band.set_yticks([])
+    narrow_side = 1
+    for lo, hi, _sign in runs:
+        window = (grid >= lo) & (grid < hi)
+        home_threat = float(slow_home[window].sum()) if window.any() else 0.0
+        away_threat = float(slow_away[window].sum()) if window.any() else 0.0
+        both = home_threat + away_threat
+        held = home_threat / both if both else 0.5
+        segment = shots[(shots["minute"] >= lo) & (shots["minute"] < hi)]
+        home_xg = float(segment.loc[segment["team_id"].eq(HOME_ID), "xG"].sum())
+        away_xg = float(segment.loc[segment["team_id"].eq(AWAY_ID), "xG"].sum())
+
+        band.add_patch(Rectangle((lo, 0.0), hi - lo, 1.0, facecolor=away_colour,
+                                 alpha=0.88, lw=0, zorder=3))
+        band.add_patch(Rectangle((lo, 0.0), (hi - lo) * held, 1.0, facecolor=home_colour,
+                                 alpha=0.88, lw=0, zorder=4))
+        band.plot([hi, hi], [0, 1], color=BG, lw=1.4, zorder=6)
+
+        span = f"{int(round(lo))}–{int(round(hi))}'"
+        split = f"{100 * held:.0f} / {100 * (1 - held):.0f}"
+        figures = f"{home_xg:.2f} – {away_xg:.2f} xG"
+        if (hi - lo) >= 11.0:
+            # On the wider of the two slices, so the boundary between them
+            # never runs through the middle of the label.
+            anchor = lo + (hi - lo) * (held / 2 if held >= 0.5 else (1 + held) / 2)
+            fill = home_colour if held >= 0.5 else away_colour
+            band.text(anchor, 0.66, f"{span}   {split}", ha="center", va="center",
+                      color=text_on_fill(fill), fontsize=9, fontweight="bold", zorder=7)
+            band.text(anchor, 0.30, figures, ha="center", va="center",
+                      color=text_on_fill(fill), fontsize=8, zorder=7)
+        else:
+            # Too narrow for two lines. It goes under the band on alternating
+            # rows, so two short spells side by side cannot collide.
+            narrow_side *= -1
+            y = -0.55 if narrow_side < 0 else -1.35
+            mid = (lo + hi) / 2.0
+            band.plot([mid, mid], [-0.08, y + 0.30], color=MUTED, lw=0.9,
+                      alpha=0.8, clip_on=False, zorder=4)
+            band.text(mid, y, f"{span}  {split}\n{figures}", ha="center", va="top",
+                      color=MUTED, fontsize=7.6, linespacing=1.5,
+                      clip_on=False, zorder=6)
+
+    band.text(0.0, 1.42, "SPELLS", transform=band.transAxes, color=MUTED,
+              fontsize=7.5, fontweight="bold", va="center")
+    band.text(1.0, 1.42,
+              "each block is split by the share of threat inside it · the pair beneath is the xG it produced",
+              transform=band.transAxes, color=MUTED, fontsize=7.5, va="center", ha="right")
+    ticks = [t for t in (0, 15, 30, 45, 60, 75, 90) if t <= last]
+    band.set_xticks(ticks)
+    band.set_xticklabels([str(t) for t in ticks], fontsize=8)
+    band.tick_params(colors=MUTED, labelsize=8, pad=44)
+    band.set_xlabel("Match minute", fontsize=9, color=MUTED, labelpad=16)
     return save(fig, "35_match_momentum.png")
-
 
 def finishing_quality(events):
     """Chance quality, striking quality and what actually went in.
@@ -3631,6 +4235,7 @@ def generate_match_package(
     gc.collect()
     paths = [
         generated["01_xg_flow.png"],
+        match_statistics(events, match_info),
         shot_map(events, xg, HOME_ID, 2),
         shot_map(events, xg, AWAY_ID, 3),
         pass_network(events, players, HOME_ID, 5, 1),
@@ -3653,6 +4258,7 @@ def generate_match_package(
         defensive_activity(events, HOME_ID, 20),
         defensive_activity(events, AWAY_ID, 21),
         dominating_zones(events),
+        attacking_zones(events),
         box_entries(events, HOME_ID, 25),
         box_entries(events, AWAY_ID, 26),
         high_regains(events, HOME_ID, 27),
@@ -3660,6 +4266,7 @@ def generate_match_package(
         pass_targets(events, HOME_ID, 29),
         pass_targets(events, AWAY_ID, 30),
         ppda(events),
+        press_profile(events, xg, team_metrics),
         transition_outcomes(events),
         game_state(events, team_metrics),
         player_sequence(player_metrics),

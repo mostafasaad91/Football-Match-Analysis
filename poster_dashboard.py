@@ -382,6 +382,72 @@ class Poster:
             from scatter_labels import label_players
             label_players(ax,g,x,y,color=TEXT_MAIN,background=BG_DARK,fontsize=8)
 
+    def press_radar(self, i, rows):
+        """The whole press as one shape: six questions, both sides.
+
+        A poster carried the pressing rate as one row of paired bars, which
+        answers how hard but not what kind. Six axes -- how early the ball is
+        contested, how often it is won high, how often that becomes a shot, how
+        often it is won straight back, how far up the side plays, and how much
+        of the risk is punished -- carry the shape of a press rather than its
+        rate.
+
+        ``rows`` is (label, home, away, floor, ceiling, lower_is_better,
+        digits). The two that are better when low are inverted here, so on
+        every axis further from the centre is better. That is the one rule that
+        makes a radar readable at a glance, and it is why the pressing rate
+        alone could never be one.
+        """
+        import numpy as np
+
+        ax = self.panel(i, 'Pressing profile',
+                        'Six measures of the same press | further from the centre is better on every axis')
+        left, top = self.slots[i]
+        span = self.width(i)
+        big = self.layout == 'thread'
+        ax.remove()
+        ax = self.fig.add_axes([left + span * .22, top - (.215 if big else .180),
+                                span * .56, (.160 if big else .126)], projection='polar')
+        ax.set_facecolor(BG_DARK)
+        angles = np.linspace(np.pi / 2, np.pi / 2 + 2 * np.pi, len(rows), endpoint=False)
+        for ring in (.25, .5, .75, 1.0):
+            ax.plot(np.linspace(0, 2 * np.pi, 180), [ring] * 180,
+                    color=self.rule, lw=.6, zorder=1)
+        for angle in angles:
+            ax.plot([angle, angle], [0, 1], color=self.rule, lw=.6, zorder=1)
+        sides = [self.info['home_id'], self.info['away_id']]
+        for index, tid in enumerate(sides):
+            values = []
+            for row in rows:
+                low, high = row[3], row[4]
+                share = (row[1 + index] - low) / (high - low) if high != low else 0.0
+                share = min(max(share, 0.0), 1.0)
+                values.append(1.0 - share if row[5] else share)
+            loop = list(angles) + [angles[0]]
+            colour = self.colors[tid]
+            ax.plot(loop, values + values[:1], color=colour, lw=2.2, zorder=4)
+            ax.fill(loop, values + values[:1], color=colour, alpha=.16, zorder=3)
+            ax.scatter(angles, values, color=colour, s=22, zorder=5,
+                       edgecolors=BG_DARK, linewidths=1.0)
+        for angle, row in zip(angles, rows):
+            ax.text(angle, 1.20, row[0].upper(), ha='center', va='center',
+                    color=TEXT_MAIN, size=9 if big else 7.5, weight='bold',
+                    linespacing=1.2)
+            # One figure a line, each in its own side's colour: side by side
+            # they overlap at the top and bottom of the ring, where a small
+            # rotation is almost no horizontal distance.
+            for radius, value, tid in ((1.40, row[1], sides[0]),
+                                       (1.56, row[2], sides[1])):
+                ax.text(angle, radius, f'{value:.{row[6]}f}', ha='center',
+                        va='center', color=self.colors[tid],
+                        size=9 if big else 7.5, weight='bold')
+        ax.set_ylim(0, 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.spines['polar'].set_visible(False)
+        return ax
+
+
     def sonar(self, i, events, tid, name, reach=None):
         """Direction, distance and completion of one side's passing.
 
@@ -655,7 +721,42 @@ def build_match_posters(events, xg, team_metrics, player_metrics, players, *, ou
                 b.axes[4].text(.98, row + (-.15 if j == 0 else .15), names[j] + ': <5 min',
                                transform=b.axes[4].get_yaxis_transform(), ha='right',
                                color=b.colors[tids[j]], size=9)
-    b.state_durations(5, minutes)
+    # The press as a shape, beside the rate. The paired-bar row above answers
+    # how hard; six axes answer what kind.
+    def axis_value(side, key, default=0.0):
+        """The raw figure for one side, straight off the metric frames.
+
+        metric() formats for display -- it rounds, appends a unit and turns a
+        missing value into an em dash -- so a radius has to come from the frame
+        rather than from the string the panel would print.
+        """
+        rows = team_metrics[team_metrics.side.eq(side)]
+        if rows.empty or key not in rows:
+            return default
+        try:
+            value = pd.to_numeric(rows.iloc[0].get(key), errors="coerce")
+            return default if pd.isna(value) else float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def punished(side):
+        exposures = axis_value(side, 'rest_defence_exposures')
+        return (100.0 * axis_value(side, 'rest_defence_dangerous_counters') / exposures
+                if exposures else 0.0)
+
+    b.press_radar(5, [
+        ("Press\nintensity", float(ppda["home"].get("ppda") or 0),
+         float(ppda["away"].get("ppda") or 0), 6.0, 20.0, True, 1),
+        ("High\nrecoveries", axis_value("home", "high_regains"),
+         axis_value("away", "high_regains"), 0.0, 22.0, False, 0),
+        ("Regain\nconversion", axis_value("home", "regain_to_shot_rate"),
+         axis_value("away", "regain_to_shot_rate"), 0.0, 20.0, False, 1),
+        ("Counter\npress", axis_value("home", "counterpress_success_rate"),
+         axis_value("away", "counterpress_success_rate"), 0.0, 25.0, False, 1),
+        ("Territory", axis_value("home", "field_tilt"),
+         axis_value("away", "field_tilt"), 0.0, 100.0, False, 1),
+        ("Rest\ndefence", punished("home"), punished("away"), 0.0, 30.0, True, 1),
+    ])
     finish(b, 3)
 
     # 4 - who decided it

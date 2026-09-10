@@ -28,6 +28,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from prose_hygiene import clean as _clean
+
 import pandas as pd
 
 from frame_values import (number as _number, ratio as _ratio, text as _text,
@@ -1798,6 +1800,22 @@ def _gallery(m: _Match, used: set[str]) -> Section | None:
 # Word output
 # --------------------------------------------------------------------------
 
+def _written(paragraph, text, *, bold=False, italic=False, size=None, colour=None):
+    """Add one run, cleaned.
+
+    Every sentence in the article is placed by this, which makes it the one
+    place a fault common to a dozen writers can be stopped. See prose_hygiene.
+    """
+    run = paragraph.add_run(_clean(text))
+    run.bold = bold
+    run.italic = italic
+    if size is not None:
+        run.font.size = size
+    if colour is not None:
+        run.font.color.rgb = colour
+    return run
+
+
 def render_docx(article: Article, path: Path | str,
                 home: str = "", away: str = "") -> Path:
     """Write the article as a .docx built for pasting straight into Substack.
@@ -1839,7 +1857,7 @@ def render_docx(article: Article, path: Path | str,
         cover.add_run().add_picture(str(article.cover), width=Inches(6.4))
 
     strap = document.add_paragraph()
-    run = strap.add_run(article.strap)
+    run = strap.add_run(_clean(article.strap))
     run.font.size = Pt(9)
     run.bold = True
     run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
@@ -1847,7 +1865,7 @@ def render_docx(article: Article, path: Path | str,
     document.add_paragraph(article.title, style='Title')
 
     stand = document.add_paragraph()
-    stand_run = stand.add_run(article.standfirst)
+    stand_run = stand.add_run(_clean(article.standfirst))
     stand_run.italic = True
     stand_run.font.size = Pt(13.5)
     stand_run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
@@ -1855,11 +1873,12 @@ def render_docx(article: Article, path: Path | str,
     for section in article.sections:
         document.add_heading(section.heading, level=2)
         for paragraph in section.paragraphs:
-            document.add_paragraph(paragraph)
+            from prose_hygiene import clean
+            document.add_paragraph(clean(paragraph))
         if section.pull_quote:
             quote = document.add_paragraph()
             quote.paragraph_format.left_indent = Inches(0.35)
-            quote_run = quote.add_run(section.pull_quote)
+            quote_run = quote.add_run(_clean(section.pull_quote))
             quote_run.bold = True
             quote_run.font.size = Pt(13)
         for visual in section.visuals:
@@ -1881,7 +1900,7 @@ def render_docx(article: Article, path: Path | str,
                 mark.bold = True
                 mark.font.size = Pt(8)
                 mark.font.color.rgb = RGBColor(0x13, 0x7F, 0x82)
-            caption_run = caption.add_run(commentary_title(visual, article.context or {}))
+            caption_run = caption.add_run(_clean(commentary_title(visual, article.context or {})))
             caption_run.bold = True
             caption_run.font.size = Pt(11.5)
             caption_run.font.color.rgb = RGBColor(0x17, 0x2C, 0x36)
@@ -1891,14 +1910,14 @@ def render_docx(article: Article, path: Path | str,
             note = _analysis(visual, article.context)
             if note:
                 body = document.add_paragraph()
-                body_run = body.add_run(note)
+                body_run = body.add_run(_clean(note))
                 body_run.font.size = Pt(10.5)
                 body_run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
 
     footer = document.add_paragraph()
-    footer_run = footer.add_run(
+    footer_run = footer.add_run(_clean(
         "All figures derived from WhoScored/Opta event data. Visuals generated with "
-        "an open-source pipeline.")
+        "an open-source pipeline."))
     footer_run.italic = True
     footer_run.font.size = Pt(9)
     footer_run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)

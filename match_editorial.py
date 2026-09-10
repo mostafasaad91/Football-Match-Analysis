@@ -67,8 +67,8 @@ def visual_section(path):
     groups=[('Pressing and Rest Defence',['press','regain','loss','defensive','turnover']),
             ('Transitions and Efficiency',['transition','sequence_types','possession_speed','regain_speed']),
             ('Chance Creation',['shot','goalkeeper','zone14','cross','box_entries','funnel','entry_routes','set_piece']),
-            ('Possession and Progression',['pass','progress','average_positions','xt_map','dominating','pitch_control','unlocking','playing_through','reception','player_involvement']),
-            ('Match Story',['xg_flow','goal','momentum','game_state','win_probability','dashboard','history','substitution','sequence_story'])]
+            ('Possession and Progression',['pass','progress','average_positions','xt_map','dominating','attacking_zones','pitch_control','unlocking','playing_through','reception','player_involvement']),
+            ('Match Story',['xg_flow','match_statistic','goal','momentum','game_state','win_probability','dashboard','history','substitution','sequence_story'])]
     for section,tokens in groups:
         if any(t in s for t in tokens):return section
     return 'Player Impact Appendix' if 'player_' in s else 'Match Story'

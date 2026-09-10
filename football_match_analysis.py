@@ -169,7 +169,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1983546/live/england-premier-league-2026-2027-arsenal-coventry",
+    "https://www.whoscored.com/matches/2029184/live/europe-champions-league-2026-2027-napoli-arsenal",
 ).strip()
 # رقم الجولة. الأفضل تمريره مع الرابط بدل تعديل الملف:
 #     $env:MATCH_ANALYSIS_ROUND = "Matchweek 1"
@@ -1078,27 +1078,6 @@ def get_team_color(team_name: str, fallback: str) -> str:
 
 
 # ── Colour contrast helpers ─────────────────────────────────────────
-def _hex_to_rgb01(color: str):
-    """Return RGB in 0..1 for a hex colour; defaults to black on bad input."""
-    try:
-        c = str(color or "").strip()
-        if c.startswith("#"):
-            c = c[1:]
-        if len(c) == 3:
-            c = "".join(ch * 2 for ch in c)
-        return int(c[0:2], 16) / 255.0, int(c[2:4], 16) / 255.0, int(c[4:6], 16) / 255.0
-    except Exception:
-        return 0.0, 0.0, 0.0
-
-
-def _relative_luminance(color: str) -> float:
-    def lin(v):
-        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
-
-    r, g, b = _hex_to_rgb01(color)
-    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-
-
 def _is_light_color(color: str) -> bool:
     """Return True for colours light enough to need dark text on top of them."""
     lum = _relative_luminance(color)
@@ -1766,22 +1745,39 @@ ACCENT_TEXT = readable_text_color(C_GOLD, BG_MID, fallback=TEXT_BRIGHT)
 
 # Global AMOLED defaults: every legacy figure/axis starts from a near-black
 # surface and high-contrast text, even if an individual visual forgets to set it.
+#
+# These are Matplotlib's globals, so this reaches every figure any module draws
+# afterwards, not only this one's. This module's own palette is fixed dark, and
+# writing it into the globals from a light-theme process turned the page black
+# under fifty visuals that had already chosen their colours correctly -- an
+# import of this module anywhere in the chain was enough to do it.
+#
+# The values come from the shared palette now, which reads the theme. This
+# module still draws its own figures in its own colours; what it no longer does
+# is decide the page for everybody else.
 def _apply_amoled_matplotlib_defaults() -> None:
+    try:
+        from visualization_components import (
+            BG_DARK as _PAGE, BG_PANEL as _PANEL, TEXT_MAIN as _TEXT,
+            TEXT_DIM as _DIM, GRID_COL as _GRID,
+        )
+    except Exception:
+        _PAGE, _PANEL, _TEXT, _DIM, _GRID = BG_DARK, BG_MID, TEXT_MAIN, TEXT_DIM, GRID_COL
     try:
         plt.rcParams.update(
             {
-                "figure.facecolor": BG_DARK,
-                "axes.facecolor": BG_MID,
-                "savefig.facecolor": BG_DARK,
-                "savefig.edgecolor": BG_DARK,
-                "text.color": TEXT_MAIN,
-                "axes.labelcolor": TEXT_DIM,
-                "xtick.color": TEXT_DIM,
-                "ytick.color": TEXT_DIM,
-                "axes.edgecolor": GRID_COL,
-                "grid.color": GRID_COL,
-                "legend.facecolor": BG_MID,
-                "legend.edgecolor": GRID_COL,
+                "figure.facecolor": _PAGE,
+                "axes.facecolor": _PANEL,
+                "savefig.facecolor": _PAGE,
+                "savefig.edgecolor": _PAGE,
+                "text.color": _TEXT,
+                "axes.labelcolor": _DIM,
+                "xtick.color": _DIM,
+                "ytick.color": _DIM,
+                "axes.edgecolor": _GRID,
+                "grid.color": _GRID,
+                "legend.facecolor": _PANEL,
+                "legend.edgecolor": _GRID,
                 "patch.force_edgecolor": False,
             }
         )
@@ -10762,147 +10758,6 @@ def build_visual_category_boards(figs, info, events, xg_data, ts, figs_filenames
     return saved_paths
 
 
-def _shared_section_summary(info, stats, events):
-    hn, an = info["home_name"], info["away_name"]
-    h, a = stats["home"], stats["away"]
-    hg, ag = _parse_scoreline(
-        info,
-        {hn: {"goals": h["goals"]}, an: {"goals": a["goals"]}},
-        events=events,
-    )
-    hxt = _fmt_num(_xt_total(events, info["home_id"]), 2)
-    axt = _fmt_num(_xt_total(events, info["away_id"]), 2)
-
-    if str(hg) == str(ag):
-        opening = (
-            f"{hn} and {an} drew {hg}-{ag}, but the metrics reveal a clear "
-            "difference in performance."
-        )
-    else:
-        try:
-            winner = hn if int(float(hg or 0)) > int(float(ag or 0)) else an
-        except Exception:
-            winner = hn
-        opening = f"{winner} won {hg}-{ag}, and the metrics explain the result."
-
-    leader_xg = _leader_name(h["xG"], a["xG"], hn, an)
-    leader_prog = _leader_name(h["prog_passes"], a["prog_passes"], hn, an)
-    try:
-        leader_xt = _leader_name(float(hxt), float(axt), hn, an)
-    except Exception:
-        leader_xt = hn
-
-    line1 = (
-        f"Shots {h['shots']}-{a['shots']} | xG {h['xG']}-{a['xG']} | "
-        f"On target {h['on_target']}-{a['on_target']} | "
-        f"Progressive passes {h['prog_passes']}-{a['prog_passes']} | "
-        f"xT {hxt}-{axt}"
-    )
-
-    return (
-        f"{opening}\n\n"
-        f"{line1}\n\n"
-        f"{leader_xg}'s xG advantage reflects better chances, not merely more attempts.\n"
-        f"{leader_prog}'s progressive-pass lead shows who controlled the buildup.\n"
-        f"{leader_xt}'s total xT lead indicates sustained access to dangerous areas.\n"
-        "The following pages show where the threat originated and how the opponent responded."
-    )
-
-
-def _team_section_summary(side, info, stats, events):
-    team = stats[side]
-    other_side = "away" if side == "home" else "home"
-    opp = stats[other_side]
-    team_name = info[f"{side}_name"]
-    opp_name = info[f"{other_side}_name"]
-    xt_total = _xt_total(events, info[f"{side}_id"])
-    opp_xt = _xt_total(events, info[f"{other_side}_id"])
-
-    pass_acc = team.get("pass_pct", 0)
-    shots_n = team.get("shots", 0)
-    xg_v = team.get("xG", 0)
-    avg_xg = round(xg_v / max(shots_n, 1), 2) if shots_n else 0.0
-    box_e = team.get("box_entries", 0)
-    prog = team.get("prog_passes", 0)
-    kp = team.get("key_passes", 0)
-    def_acts = team.get("defensive_acts", 0)
-
-    line1 = (
-        f"Shots {shots_n} | On target {team['on_target']} | Goals {team['goals']} | "
-        f"xG {xg_v} ({avg_xg:.2f}/shot) | xT {_fmt_num(xt_total, 2)} | "
-        f"Progressive passes {prog} | Box entries {box_e}"
-    )
-
-    xg_compare = "led" if xg_v > opp.get("xG", 0) else "trailed"
-    xt_compare = "led" if xt_total > opp_xt else "trailed"
-
-    return (
-        f"Analysis of {team_name} against {opp_name}.\n\n"
-        f"{line1}\n\n"
-        f"{team_name} {xg_compare} in xG ({xg_v} versus {opp.get('xG', 0)}), "
-        "an indicator of chance quality.\n"
-        f"The team {xt_compare} in total xT ({_fmt_num(xt_total, 2)} versus "
-        f"{_fmt_num(opp_xt, 2)}), showing how effectively it advanced into danger.\n"
-        f"Key passes ({kp}) and box entries ({box_e}) measure how efficiently "
-        "buildup became chances.\n"
-        f"Defensive actions ({def_acts}) show whether recoveries were proactive "
-        "and organized or reactive."
-    )
-
-
-def _visual_tactical_note(meta, info, events, xg_data, stats, next_meta=None):
-    """Return concise English tactical commentary for each PDF visual."""
-    hn, an = info["home_name"], info["away_name"]
-    h, a = stats["home"], stats["away"]
-    kind = meta.get("kind", "")
-
-    shared_map = {
-        "shared_match_stats": (
-            f"Score {h['goals']}-{a['goals']} | xG {h['xG']}-{a['xG']} | Shots {h['shots']}-{a['shots']}",
-            "This overview compares scoreline, shot volume, and chance quality to distinguish territorial control from true attacking efficiency.",
-        ),
-        "shared_xg_flow": (
-            f"xG {h['xG']}-{a['xG']} | On Target {h['on_target']}-{a['on_target']}",
-            "Sharp xG spikes indicate high-value chances, while flatter periods reflect sterile possession or low-quality shooting.",
-        ),
-        "shared_shot_breakdown": (
-            f"Shots {h['shots']}-{a['shots']} | OT {h['on_target']}-{a['on_target']} | Blocked {h.get('blocked',0)}-{a.get('blocked',0)}",
-            "Shot volume should be interpreted alongside accuracy and blocking rate to assess whether attacks reached dangerous zones.",
-        ),
-        "shared_territorial": (
-            f"Final Third Touches {h['touch_att_pct']}%-{a['touch_att_pct']}% | Passes {h['passes']}-{a['passes']}",
-            "Final-third presence highlights which side imposed field tilt and sustained territorial pressure.",
-        ),
-        "shared_xt_per_minute": (
-            f"xT {h.get('xT',0):.2f}-{a.get('xT',0):.2f} | Progressive Passes {h['prog_passes']}-{a['prog_passes']}",
-            "Expected Threat captures ball progression before the shot and helps identify the side generating more dangerous possession.",
-        ),
-    }
-
-    if kind in shared_map:
-        return shared_map[kind]
-
-    team_name = (
-        hn if meta.get("team") == "home" else an if meta.get("team") == "away" else hn
-    )
-    opp_name = an if team_name == hn else hn
-    team = h if team_name == hn else a
-    opp = a if team_name == hn else h
-
-    statline = (
-        f"{team_name}: xG {team['xG']} | Shots {team['shots']} | "
-        f"On Target {team['on_target']} | Box Entries {team.get('box_entries',0)}"
-    )
-
-    note = (
-        f"{team_name}'s attacking profile in this visual should be read relative to {opp_name}: "
-        f"use spacing, density, and location of actions to identify creation zones, progression routes, "
-        f"and whether possession translated into efficient final-third penetration."
-    )
-
-    return statline, note
-
-
 def _safe_stat(d, key, default=0):
     try:
         return (d or {}).get(key, default)
@@ -11300,111 +11155,6 @@ def _draw_pdf_footer(fig, page_num, total_pages, center_text=""):
     )
 
 
-def _render_cover_page(pdf, info, stats, events, total_pages):
-    hn, an = info["home_name"], info["away_name"]
-    h, a = stats["home"], stats["away"]
-    h_sc, a_sc = _parse_scoreline(
-        info,
-        {hn: {"goals": h["goals"]}, an: {"goals": a["goals"]}},
-        events=events,
-    )
-
-    PDF_BG = "#000000"
-    cover = plt.figure(figsize=(16, 9), facecolor=PDF_BG)
-    cover.patch.set_facecolor(PDF_BG)
-
-    bg_ax = cover.add_axes([0, 0, 1, 1], zorder=0)
-    bg_ax.set_xlim(0, 1)
-    bg_ax.set_ylim(0, 1)
-    bg_ax.axis("off")
-    bg_ax.set_facecolor(PDF_BG)
-
-    txt_ax = cover.add_axes([0, 0, 1, 1], zorder=2)
-    txt_ax.set_xlim(0, 1)
-    txt_ax.set_ylim(0, 1)
-    txt_ax.axis("off")
-
-    txt_ax.text(
-        0.25,
-        0.60,
-        hn,
-        ha="center",
-        va="center",
-        color=C_RED,
-        fontsize=28,
-        fontweight="bold",
-        path_effects=[pe.withStroke(linewidth=5, foreground="#000")],
-    )
-
-    txt_ax.text(
-        0.50,
-        0.60,
-        f"{h_sc}  –  {a_sc}",
-        ha="center",
-        va="center",
-        color="#FFD700",
-        fontsize=52,
-        fontweight="bold",
-        path_effects=[pe.withStroke(linewidth=6, foreground="#000")],
-    )
-
-    txt_ax.text(
-        0.75,
-        0.60,
-        an,
-        ha="center",
-        va="center",
-        color=C_BLUE,
-        fontsize=28,
-        fontweight="bold",
-        path_effects=[pe.withStroke(linewidth=5, foreground="#000")],
-    )
-
-    txt_ax.text(
-        0.50,
-        0.44,
-        "Statistical Tactical Analysis",
-        ha="center",
-        va="center",
-        color="white",
-        fontsize=18,
-        fontweight="bold",
-    )
-
-    txt_ax.text(
-        0.50,
-        0.34,
-        "By Mostafa Saad",
-        ha="center",
-        va="center",
-        color="white",
-        fontsize=20,
-        fontweight="bold",
-    )
-
-    cover.text(
-        0.97,
-        0.018,
-        f"1/{total_pages}",
-        ha="right",
-        va="bottom",
-        color="white",
-        fontsize=10,
-        fontweight="bold",
-        transform=cover.transFigure,
-    )
-
-    pdf.savefig(
-        cover,
-        dpi=PDF_EXPORT_DPI,
-        bbox_inches="tight",
-        facecolor=PDF_BG,
-        edgecolor="none",
-        pad_inches=0.1,
-    )
-    plt.close(cover)
-
-
 def _render_section_page(pdf, info, section, summary, page_num, total_pages):
     color = _section_color(section)
     title = _section_title(section, info)
@@ -11496,147 +11246,6 @@ def _render_section_page(pdf, info, section, summary, page_num, total_pages):
         pad_inches=0.1,
     )
     plt.close(page)
-
-
-def _render_visual_page(
-    pdf, src_fig, info, meta, statline, commentary, page_num, total_pages, events=None
-):
-    PDF_BG = "#000000"  # AMOLED black
-
-    page = plt.figure(figsize=(16, 9), facecolor=PDF_BG)
-    section_title = _section_title(meta["section"], info)
-    _draw_pdf_header(page, info, meta["title"], section_title, page_num, total_pages)
-
-    img = _figure_to_rgba(src_fig)
-    img_ax = page.add_axes([0.03, 0.08, 0.62, 0.82])
-    img_ax.set_facecolor("#111827")  # the figure itself stays dark
-    img_ax.imshow(img, interpolation="lanczos", aspect="equal")
-    img_ax.axis("off")
-    for spine in img_ax.spines.values():
-        spine.set_visible(False)
-
-    # ── Right panel: light card ─────────────────────────────────────
-    panel_ax = page.add_axes([0.68, 0.08, 0.29, 0.82])
-    panel_ax.set_xlim(0, 1)
-    panel_ax.set_ylim(0, 1)
-    panel_ax.axis("off")
-    panel_ax.add_patch(
-        mpatches.FancyBboxPatch(
-            (0, 0),
-            1,
-            1,
-            boxstyle="round,pad=0.02,rounding_size=0.02",
-            facecolor="#0a0a0a",
-            edgecolor="#1f2937",
-            lw=1.2,
-            alpha=0.97,
-        )
-    )
-    color = _section_color(meta["section"])
-    panel_ax.text(
-        0.06,
-        0.95,
-        "Tactical note",
-        ha="left",
-        va="top",
-        color=color,
-        fontsize=11,
-        fontweight="bold",
-    )
-    panel_ax.text(
-        0.06, 0.89, statline, ha="left", va="top", color="#9ca3af", fontsize=9.3
-    )
-    panel_ax.plot([0.06, 0.94], [0.84, 0.84], color="#1f2937", lw=1.0)
-    panel_ax.text(
-        0.06,
-        0.81,
-        _wrap_panel_text(commentary, width=44),
-        ha="left",
-        va="top",
-        color="#ffffff",
-        fontsize=10.2,
-    )
-
-    _draw_pdf_footer(page, page_num, total_pages)
-    pdf.savefig(
-        page,
-        dpi=PDF_EXPORT_DPI,
-        bbox_inches="tight",
-        facecolor=PDF_BG,
-        edgecolor="none",
-        pad_inches=0.1,
-    )
-    plt.close(page)
-
-
-def build_tactical_pdf(figs, info, events, xg_data, ts):
-    """Assemble the final tactical PDF with shared visuals first, then home, then away."""
-
-    matplotlib.rcParams["figure.dpi"] = 300
-    matplotlib.rcParams["savefig.dpi"] = OUTPUT_IMAGE_DPI
-
-    hn, an = info["home_name"], info["away_name"]
-    stats = _ensure_match_stats_defaults(_collect_match_stats(info, events, xg_data))
-
-    safe_hn = hn.replace(" ", "_").replace("/", "_")
-    safe_an = an.replace(" ", "_").replace("/", "_")
-    pdf_path = f"{SAVE_DIR}/tactical_report_{safe_hn}_vs_{safe_an}_{ts}.pdf"
-
-    console.print("\n[bold cyan]  Writing tactical PDF report...[/bold cyan]")
-    console.print(f"[bold cyan]  Building PDF: {pdf_path}[/bold cyan]")
-
-    catalog = [m for m in _build_visual_catalog(info) if m["idx"] <= len(figs)]
-    section_rank = {"shared": 0, "home": 1, "away": 2}
-    ordered_catalog = sorted(
-        catalog, key=lambda item: (section_rank[item["section"]], item["idx"])
-    )
-
-    section_pages = [
-        ("shared", _shared_section_summary(info, stats, events)),
-        ("home", _team_section_summary("home", info, stats, events)),
-        ("away", _team_section_summary("away", info, stats, events)),
-    ]
-
-    total_pages = 1 + len(section_pages) + len(ordered_catalog)
-    page_num = 1
-
-    with PdfPages(pdf_path) as pdf:
-        _render_cover_page(pdf, info, stats, events, total_pages)
-        page_num += 1
-
-        for section, summary in section_pages:
-            _render_section_page(pdf, info, section, summary, page_num, total_pages)
-            page_num += 1
-
-            for meta in [m for m in ordered_catalog if m["section"] == section]:
-                statline, commentary = _visual_tactical_note(
-                    meta, info, events, xg_data, stats
-                )
-                _render_visual_page(
-                    pdf,
-                    figs[meta["idx"] - 1],
-                    info,
-                    meta,
-                    statline,
-                    commentary,
-                    page_num,
-                    total_pages,
-                )
-                page_num += 1
-
-        # TACTICAL SUMMARY PAGE — deleted per user request
-        d = pdf.infodict()
-        _h_sc, _a_sc = _parse_scoreline(info, xg_data, events=events)
-        d["Title"] = f"Tactical Report: {hn} {_h_sc}-{_a_sc} {an}"
-        d["Author"] = "Mostafa Saad"
-        d["Subject"] = f"{info.get('competition', '')} - {info.get('date', '')}"
-        d["Keywords"] = "football tactical report, match analysis, PDF"
-
-    console.print(
-        f"\n[bold green]  Tactical PDF saved -> {pdf_path}[/bold green]\n"
-        f"  [dim]{len(ordered_catalog)} visual pages grouped into shared, home and away sections[/dim]"
-    )
-    return pdf_path
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -12520,198 +12129,6 @@ def _render_visual_page(
         total_pages,
         events=events,
     )
-
-
-def build_tactical_pdf(figs, info, events, xg_data, ts):
-    """Assemble the final tactical PDF in Dark Mode with Cairo font and 300 DPI."""
-
-    from matplotlib import font_manager as fm
-
-    def _ensure_cairo_font():
-        """
-        Ensure that the Cairo font is available by searching common system
-        paths, downloading it from Google Fonts when necessary, and registering
-        it with matplotlib.font_manager. Return True on success and False when
-        downloading fails, allowing the caller to use a fallback font.
-        """
-
-        system_paths = [
-            r"C:\Windows\Fonts\Cairo-Regular.ttf",
-            r"C:\Windows\Fonts\Cairo-Bold.ttf",
-            r"C:\Windows\Fonts\Cairo-SemiBold.ttf",
-            os.path.expanduser(
-                "~/AppData/Local/Microsoft/Windows/Fonts/Cairo-Regular.ttf"
-            ),
-            os.path.expanduser(
-                "~/AppData/Local/Microsoft/Windows/Fonts/Cairo-Bold.ttf"
-            ),
-            "/usr/share/fonts/truetype/cairo/Cairo-Regular.ttf",
-            "/usr/share/fonts/truetype/cairo/Cairo-Bold.ttf",
-            os.path.expanduser("~/Library/Fonts/Cairo-Regular.ttf"),
-        ]
-        found_any = False
-        for p in system_paths:
-            if os.path.exists(p):
-                try:
-                    fm.fontManager.addfont(p)
-                    found_any = True
-                except Exception:
-                    pass
-        if found_any:
-            return True
-
-        try:
-            local_fonts_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "fonts"
-            )
-        except NameError:
-            local_fonts_dir = os.path.join(os.getcwd(), "fonts")
-        os.makedirs(local_fonts_dir, exist_ok=True)
-
-        cairo_sources = {
-            "Cairo-Regular.ttf": [
-                "https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-arabic-400-normal.ttf",
-                "https://unpkg.com/@fontsource/cairo@5.0.13/files/cairo-arabic-400-normal.ttf",
-                "https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-latin-400-normal.ttf",
-            ],
-            "Cairo-Bold.ttf": [
-                "https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-arabic-700-normal.ttf",
-                "https://unpkg.com/@fontsource/cairo@5.0.13/files/cairo-arabic-700-normal.ttf",
-                "https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-latin-700-normal.ttf",
-            ],
-        }
-
-        downloaded = False
-        for fname, urls in cairo_sources.items():
-            local_path = os.path.join(local_fonts_dir, fname)
-            if os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
-
-                try:
-                    fm.fontManager.addfont(local_path)
-                    found_any = True
-                except Exception:
-                    pass
-                continue
-
-            for url in urls:
-                try:
-                    import urllib.request
-
-                    console.print(f"[dim]  Downloading Cairo font: {fname}[/dim]")
-                    req = urllib.request.Request(
-                        url, headers={"User-Agent": "Mozilla/5.0"}
-                    )
-                    with urllib.request.urlopen(req, timeout=15) as resp:
-                        data = resp.read()
-                        if len(data) < 1000:
-                            continue
-                        with open(local_path, "wb") as f:
-                            f.write(data)
-                        downloaded = True
-                        break
-                except Exception:
-                    continue
-
-            if os.path.exists(local_path):
-                try:
-                    fm.fontManager.addfont(local_path)
-                    found_any = True
-                except Exception:
-                    pass
-
-        if downloaded:
-
-            try:
-                fm._load_fontmanager(try_read_cache=False)
-            except Exception:
-                pass
-
-        return found_any
-
-    cairo_available = _ensure_cairo_font()
-    if cairo_available:
-        primary_font = "Cairo"
-        console.print("[dim]  ✓ Cairo font registered[/dim]")
-    else:
-        primary_font = "DejaVu Sans"
-        console.print(
-            "[yellow]  ⚠ Cairo font not available — using DejaVu Sans fallback.[/yellow]\n"
-            "[dim]    To install Cairo: download from https://fonts.google.com/specimen/Cairo[/dim]"
-        )
-
-    matplotlib.rcParams.update(
-        {
-            "figure.facecolor": PDF_BG,
-            "axes.facecolor": PDF_SURFACE,
-            "axes.edgecolor": PDF_BORDER,
-            "axes.labelcolor": PDF_TEXT,
-            "axes.titlecolor": PDF_TEXT,
-            "xtick.color": PDF_TEXT_DIM,
-            "ytick.color": PDF_TEXT_DIM,
-            "text.color": PDF_TEXT,
-            "grid.color": PDF_BORDER,
-            "grid.alpha": 0.5,
-            "savefig.facecolor": PDF_BG,
-            "savefig.edgecolor": "none",
-            "savefig.dpi": OUTPUT_IMAGE_DPI,
-            "figure.dpi": 300,
-            "font.family": [primary_font, "DejaVu Sans", "sans-serif"],
-            "axes.unicode_minus": False,
-        }
-    )
-
-    hn, an = info["home_name"], info["away_name"]
-    stats = _ensure_match_stats_defaults(_collect_match_stats(info, events, xg_data))
-
-    safe_hn = hn.replace(" ", "_").replace("/", "_")
-    safe_an = an.replace(" ", "_").replace("/", "_")
-    pdf_path = f"{SAVE_DIR}/match_analysis_report_{safe_hn}_vs_{safe_an}_{ts}.pdf"
-
-    console.print(
-        "\n[bold cyan]  Writing Dark Mode match analysis PDF report...[/bold cyan]"
-    )
-    console.print(f"[bold cyan]  Building PDF: {pdf_path}[/bold cyan]")
-
-    ordered_catalog = [m for m in _report_catalog_order(info) if m["idx"] <= len(figs)]
-    total_pages = 2 + len(ordered_catalog)
-    page_num = 1
-
-    with PdfPages(pdf_path) as pdf:
-        _render_cover_page(pdf, info, stats, events, total_pages)
-        page_num += 1
-        _render_executive_summary_page(
-            pdf, info, stats, events, xg_data, page_num, total_pages
-        )
-        page_num += 1
-
-        for meta in ordered_catalog:
-            statline, commentary = _visual_tactical_note(
-                meta, info, events, xg_data, stats
-            )
-            _render_visual_page(
-                pdf,
-                figs[meta["idx"] - 1],
-                info,
-                meta,
-                statline,
-                commentary,
-                page_num,
-                total_pages,
-                events=events,
-            )
-            page_num += 1
-
-        d = pdf.infodict()
-        _h_sc, _a_sc = _parse_scoreline(info, xg_data, events=events)
-        d["Title"] = f"Match Analysis Report: {hn} {_h_sc}-{_a_sc} {an}"
-        d["Author"] = "Mostafa Saad"
-        d["Subject"] = f"{info.get('competition', '')} - {info.get('date', '')}"
-        d["Keywords"] = "football match analysis, tactical report, WhoScored, xG, xT"
-
-    console.print(
-        f"\n[bold green]  Match analysis PDF saved -> {pdf_path}[/bold green]\n"
-    )
-    return pdf_path
 
 
 # ══════════════════════════════════════════════════════

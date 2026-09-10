@@ -162,12 +162,20 @@ def _team_label_color(col: str | None, bg: str | None = None) -> str:
 from visualization_components import (  # noqa: E402
     C_AWAY,
     C_HOME,
+    IS_LIGHT_THEME as _IS_LIGHT,
     USE_REAL_TEAM_KIT_COLORS,
+    C_GOLD,
 )
-C_GOLD = "#FFC23C"
-C_GREEN = "#22c55e"
-C_PURPLE = "#a855f7"
-OG_COLOR = "#ff00ff"
+
+# These four were written as literals, and the literals were the AMOLED ones.
+# configure_theme() above had already chosen a light C_GOLD and this line
+# overwrote it, so the accent used by fifty-one call sites in this module was
+# amber on the white panel -- a contrast ratio of 1.61, which is a colour the
+# reader cannot see. C_GOLD is imported now; the other three, which the shared
+# palette does not name, carry a light value of their own.
+C_GREEN = "#15803D" if _IS_LIGHT else "#22c55e"
+C_PURPLE = "#86198F" if _IS_LIGHT else "#a855f7"
+OG_COLOR = "#B3129B" if _IS_LIGHT else "#ff00ff"
 
 
 def _fixture_colors(info: dict) -> tuple[str, str]:

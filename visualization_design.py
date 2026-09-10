@@ -19,144 +19,66 @@ from typing import Any
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
-import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 
 # ═════════════════════════════════════════════════════════════════════════════
-# PALETTE — unified across every visual
+# PALETTE — one source, shared with visualization_components
 # ═════════════════════════════════════════════════════════════════════════════
-BG_DARK = "#000000"
-BG_MID = "#0a0a0a"
-BG_PANEL = "#0a0a0a"
-BG_HEADER = "#101010"
-BG_PITCH = "#000000"  # pitch surface is the page itself: pure black
-GRID_COL = "#1c1c1c"
-GRID_SOFT = "#141414"
+# This module used to carry its own copy of the palette and of the readability
+# helpers. The copy was written before the light theme existed and never learnt
+# about it: BG_DARK was the literal "#000000" and TEXT_BRIGHT the literal
+# "#FFFFFF", so apply_unified_frame painted a black page in the middle of a
+# light package and readable_team_text answered "#FFFFFF" for every kit --
+# white type on the white panel, a contrast ratio of 1.0.
+#
+# The values are imported now rather than restated. visualization_components
+# reads MATCH_ANALYSIS_THEME once at import and is the only place that decides
+# what a colour is, so the frame helpers below follow the theme without knowing
+# it exists. TEXT_BRIGHT and TEXT_FADED are kept as the names this module's own
+# code and its callers use, aliased to the canonical ones.
+from visualization_components import (  # noqa: E402
+    BG_DARK,
+    BG_MID,
+    BG_PANEL,
+    BG_HEADER,
+    BG_PITCH,
+    GRID_COL,
+    GRID_SOFT,
+    PITCH_LINE,
+    PITCH_LINE_ALPHA,
+    PITCH_LINE_WIDTH,
+    TEXT_MAIN,
+    TEXT_DIM,
+    TEXT_BR as TEXT_BRIGHT,
+    TEXT_FAD as TEXT_FADED,
+    C_HOME,
+    C_AWAY,
+    C_GOLD,
+    C_MAGENTA,
+    C_ACCENT,
+    C_LIME,
+    FONT_SANS,
+    FONT_MONO,
+    ACCENT_TEXT,
+    IS_LIGHT_THEME,
+    contrast_ratio,
+    readable_on,
+    readable_team_text,
+    apply_amoled_defaults,
+    _relative_luminance,
+)
 
-# Pitch markings: white at a controlled alpha, matching visualization_components.
-PITCH_LINE = "#FFFFFF"
-PITCH_LINE_ALPHA = 0.68
-PITCH_LINE_WIDTH = 1.25
+# Accent colours this module uses that the shared palette does not name.
+C_GREEN = "#15803D" if IS_LIGHT_THEME else "#3DDC84"
+C_PURPLE = "#86198F" if IS_LIGHT_THEME else "#a855f7"
+C_TEAL = C_GREEN
+C_ORANGE = "#B45309" if IS_LIGHT_THEME else "#f97316"
+OG_COLOR = "#B3129B" if IS_LIGHT_THEME else "#ff00ff"
 
-TEXT_MAIN = "#FFFFFF"
-TEXT_BRIGHT = "#FFFFFF"
-TEXT_DIM = "#9A9A9A"
-TEXT_FADED = "#5A5A5A"
-
-C_HOME = "#2F5BFF"
-C_AWAY = "#FFD400"
-C_GOLD = "#FFC23C"
-C_MAGENTA = "#E879F9"
-C_ACCENT = "#38BDF8"
-C_LIME = "#22C55E"
-C_GREEN = "#3DDC84"
-C_PURPLE = "#a855f7"
-C_TEAL = "#3DDC84"
-C_ORANGE = "#f97316"
-OG_COLOR = "#ff00ff"
-
-FONT_SANS = "Inter Variable"
-FONT_MONO = "JetBrains Mono"
-
-
-def _register_fonts() -> None:
-    import os
-    import matplotlib.font_manager as _fm
-
-    candidate_dirs = [
-        os.path.expanduser("~/.fonts"),
-        "/usr/share/fonts",
-        "/usr/local/share/fonts",
-    ]
-    for d in candidate_dirs:
-        if not os.path.isdir(d):
-            continue
-        for root, _dirs, files in os.walk(d):
-            for fn in files:
-                if fn.lower().endswith((".ttf", ".otf")):
-                    try:
-                        _fm.fontManager.addfont(os.path.join(root, fn))
-                    except Exception:
-                        pass
-    available = {f.name for f in _fm.fontManager.ttflist}
-    global FONT_SANS, FONT_MONO
-    if FONT_SANS not in available:
-        FONT_SANS = "DejaVu Sans"
-    if FONT_MONO not in available:
-        FONT_MONO = "DejaVu Sans Mono"
-
-
-_register_fonts()
-
-
-# ── Readability helpers ─────────────────────────────────────────────────
-def _relative_luminance(color: str) -> float:
-    try:
-        r, g, b = mcolors.to_rgb(color)
-    except Exception:
-        r, g, b = mcolors.to_rgb(TEXT_BRIGHT)
-    vals = []
-    for c in (r, g, b):
-        vals.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
-    return 0.2126 * vals[0] + 0.7152 * vals[1] + 0.0722 * vals[2]
-
-
-def contrast_ratio(fg: str, bg: str = BG_PANEL) -> float:
-    l1, l2 = _relative_luminance(fg), _relative_luminance(bg)
-    hi, lo = max(l1, l2), min(l1, l2)
-    return (hi + 0.05) / (lo + 0.05)
-
-
-def readable_on(
-    color: str,
-    bg: str = BG_PANEL,
-    *,
-    min_ratio: float = 5.0,
-    fallback: str | None = None,
-) -> str:
-    fallback = fallback or TEXT_BRIGHT
-    try:
-        return color if contrast_ratio(color, bg) >= min_ratio else fallback
-    except Exception:
-        return fallback
-
-
-def readable_team_text(team_color: str, bg: str = BG_PANEL) -> str:
-    return readable_on(team_color, bg, min_ratio=5.0, fallback=TEXT_BRIGHT)
-
-
-ACCENT_TEXT = readable_on(C_GOLD, BG_PANEL, min_ratio=5.0, fallback=TEXT_BRIGHT)
-
-
-# Make Matplotlib defaults match the AMOLED design system. This protects legacy
-# axes/titles/ticks/legends that are created outside the helper components.
-def apply_amoled_defaults() -> None:
-    try:
-        plt.rcParams.update(
-            {
-                "figure.facecolor": BG_DARK,
-                "axes.facecolor": BG_PANEL,
-                "savefig.facecolor": BG_DARK,
-                "savefig.edgecolor": BG_DARK,
-                "text.color": TEXT_MAIN,
-                "axes.labelcolor": TEXT_DIM,
-                "xtick.color": TEXT_DIM,
-                "ytick.color": TEXT_DIM,
-                "axes.edgecolor": GRID_COL,
-                "grid.color": GRID_COL,
-                "legend.facecolor": BG_PANEL,
-                "legend.edgecolor": GRID_COL,
-            }
-        )
-    except Exception:
-        pass
-
-
-apply_amoled_defaults()
-
-
-TEXT_SHADOW = [pe.withStroke(linewidth=2.6, foreground="#000000")]
-TEXT_SHADOW_STRONG = [pe.withStroke(linewidth=3.4, foreground="#000000")]
+# The stroke behind text drawn over busy imagery is the page it sits on, not a
+# fixed black: on the light page a black halo is the thing the reader sees.
+TEXT_SHADOW = [pe.withStroke(linewidth=2.6, foreground=BG_DARK)]
+TEXT_SHADOW_STRONG = [pe.withStroke(linewidth=3.4, foreground=BG_DARK)]
 
 
 # ═════════════════════════════════════════════════════════════════════════════

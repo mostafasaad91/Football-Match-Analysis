@@ -536,9 +536,13 @@ def _high_regains(v: Visual, f: MatchFacts) -> list[str]:
 def _pass_targets(v: Visual, f: MatchFacts) -> list[str]:
     s = v.side
     receivers = sorted(s.players, key=lambda p: p["touches"], reverse=True)[:3]
+    # A side with no player above the touch floor left "Most-used targets:."
+    # on the page -- a label, a colon and nothing between it and the full stop.
+    named = listed([f"{p['name']} ({p['touches']} touches)" for p in receivers])
+    lead = f"Most-used targets: {named}. " if named else ""
     out = [
-        "Most-used targets: " + listed([f"{p['name']} ({p['touches']} touches)" for p in receivers])
-        + f". {s.name} attempted {s.crosses} crosses and completed {s.completed_crosses} "
+        lead
+        + f"{s.name} attempted {s.crosses} crosses and completed {s.completed_crosses} "
           f"({ratio(s.completed_crosses, s.crosses)})."
     ]
     if receivers and receivers[0]["role"] in ("DC", "DR", "DL", "GK", "DMC", "MC"):
@@ -610,6 +614,13 @@ def _game_state(v: Visual, f: MatchFacts) -> list[str]:
                 f"{n0(bucket.get('spell_shots', 0))} shots, "
                 f"{n2(bucket.get('spell_xG', 0.0))} xG, "
                 f"{n0(bucket.get('spell_box_entries', 0))} box entries")
+    if not lines:
+        # No spell long enough to split. The lead-in shipped on its own as
+        # "Output held against the scoreline at the time:" -- a colon with
+        # nothing after it.
+        return ["No score state lasted long enough to hold output against it, so "
+                "this board has nothing to separate: the match was played at one "
+                "scoreline for effectively all of it."]
     out = ["Output held against the scoreline at the time:"] + [f"• {line}" for line in lines]
     best = None
     for s in f.sides:
@@ -1053,30 +1064,31 @@ def _substitution_windows(v: Visual, f: MatchFacts) -> list[str]:
 # "entries" and "recoveries" lose "ies" for "y", "crosses" and "losses" lose
 # "es", everything else loses its "s". A qualifier after the noun -- "1 tackles
 # won" -- is left alone because only the noun is wrong.
-_ONE_THEN_PLURAL = re.compile(
-    r"(?<![\d.])\b1\s+([a-z]+(?:ies|sses|ches|shes|xes|s))\b")
-
-# Words that end in "s" and are not plurals of anything.
-_NOT_PLURAL = {"across", "less", "press", "possess", "loss", "success", "this",
-               "its", "was", "has", "is", "as", "gas", "plus", "minus", "versus"}
-
-
-def _singular(noun: str) -> str:
-    if noun in _NOT_PLURAL:
-        return noun
-    if noun.endswith("ies") and len(noun) > 4:
-        return noun[:-3] + "y"
-    for ending in ("sses", "ches", "shes", "xes"):
-        if noun.endswith(ending):
-            return noun[:-2]
-    if noun.endswith("s") and not noun.endswith("ss"):
-        return noun[:-1]
-    return noun
+# The rule lives in prose_hygiene, which applies it to every document rather
+# than to this module's paragraphs alone. It was copied here first and the two
+# copies then drifted: the list of words that end in "s" without being plurals
+# grew there and not here, so this copy still wrote "1 bonu", "1 focu" and
+# "1 statu". Importing it means the exception list has one home.
+from prose_hygiene import one_reads_singular  # noqa: E402,F401
 
 
-def one_reads_singular(text: str) -> str:
-    """"1 shots" -> "1 shot", leaving every other count alone."""
-    return _ONE_THEN_PLURAL.sub(lambda m: "1 " + _singular(m.group(1)), text)
+# A label whose list came back empty
+# ----------------------------------------------------------------------
+#
+# Five writers build a sentence as `"Label: " + listed(items) + "."`, and
+# listed([]) is the empty string, so a fixture with nothing to list shipped
+# "Arsenal:. Coventry:." and "Most-used targets:." and "Highest positive
+# expected threat on the pitch:." -- a label, a colon and a full stop with the
+# sentence missing from between them.
+#
+# Fixing each writer means five places to get right and a sixth every time one
+# is added. A paragraph that is nothing but its own label carries no
+# information whoever wrote it, so it is dropped here instead.
+_LABEL_ONLY = re.compile(r"^[^:]{1,80}:\s*[.;,]?\s*$")
+
+
+def _carries_nothing(text: str) -> bool:
+    return bool(_LABEL_ONLY.match(text.strip()))
 
 
 DEFAULT_HANDOFF = "That leads into {next}."
@@ -1096,7 +1108,8 @@ def paragraphs_for(visual: Visual, facts: MatchFacts, next_visual: Visual | None
             f"subtitle and footer, which state the denominator and the limitation."]
         if method:
             body.append(f"Method: {method}")
-    body = [one_reads_singular(text) for text in body if text]
+    body = [one_reads_singular(text) for text in body
+            if text and not _carries_nothing(str(text))]
     if next_visual is not None:
         template = HANDOFFS.get(visual.slug, DEFAULT_HANDOFF)
         label = f"figure {next_visual.number}, {next_visual.title.lower()}" if next_visual.number \
