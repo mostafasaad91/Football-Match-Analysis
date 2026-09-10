@@ -1,7 +1,7 @@
 """Reader-facing metric purpose for every production chart family."""
 GUIDES = [
  ('xg_flow','Each step adds the xG of a shot; flat sections contain no new shot xG. Compare the timing and quality of chances with the score.'),
- ('match_statistic','One page of counted actions for both sides, plus the pressing rate. Every figure is a count from the event stream over the whole match: bars are scaled to the higher of the two, so a long bar is the leader in that row and not a share of anything.'),
+ ('match_statistic','One page of counted actions for both sides, plus the pressing rate. Every figure is a count from the event stream over the whole match: each pair of bars splits the row between the two sides, so the gap between them is how one-sided that row was.'),
  ('shot_map','Location shows where attempts were taken; symbol size encodes xG. Use this to separate shot volume from the quality and location of chances.'),
  ('pass_network','Nodes are touch-based average player locations within the named half; links represent inferred completed passes. Link weight indicates volume, not off-ball positioning.'),
  ('xt_map','Positive xT is the increase in local zone threat from successful passes or explicit carries. Both teams share one colour scale; it is not a probability of scoring.'),

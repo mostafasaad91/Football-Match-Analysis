@@ -4268,6 +4268,31 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         # centre label chip so long labels never sit on top of the bars.
         top, bot = 0.83, 0.05
         spacing = (top - bot) / n
+
+        # One anchor and one size for the whole panel, taken from the longest
+        # value in it.
+        #
+        # They were decided per row: a value of more than three characters got
+        # a smaller font and an anchor inset by another 0.025, so "2.48" ended
+        # at a different x from "2" and printed three points smaller. Down a
+        # column of ten rows that is a ragged edge and two type sizes, and the
+        # rows a reader most wants to line up -- the counts against each other
+        # -- were the ones that moved. The inset exists because "13/29" would
+        # otherwise overrun the panel; measuring the panel once gives every row
+        # in it the same treatment, and a panel of short values keeps the
+        # larger type.
+        def _shown(value):
+            return value[1] if isinstance(value, (tuple, list)) else _na(value)
+
+        widest = max(
+            (max(len(str(_shown(hv))), len(str(_shown(av)))) for _, hv, av in rows_list),
+            default=1,
+        )
+        _long = widest > 3
+        _vfs = 8.5 if _long else 11.5
+        _hx = 0.085 if _long else 0.06
+        _ax = 0.915 if _long else 0.94
+
         for i, (label, hv, av) in enumerate(rows_list):
             cy = top - (i + 0.5) * spacing
             # A value may be a (bar_number, display_string) tuple — used by duel
@@ -4278,8 +4303,27 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             av_num = av[0] if isinstance(av, (tuple, list)) else av
             try:
                 hh, aa = float(hv_num), float(av_num)
-                mx = max(hh, aa, 1)
-                h_ratio, a_ratio = hh / mx, aa / mx
+                # Each bar is the side's share of the row, not its size against
+                # the leader.
+                #
+                # Dividing by the larger of the two gave the leader a full bar
+                # in every row it led. On a panel one side leads outright --
+                # Arsenal took all ten attacking rows in the fixture this was
+                # found on -- that is a column of ten identical full bars, and
+                # a mark that is the same length whatever the number beside it
+                # carries nothing. Worse, it read as a scale: two goals to one
+                # and four hundred and ninety-one passes to four hundred and
+                # thirteen drew the same pair of bars.
+                #
+                # As shares the pair always fills the row between them, so the
+                # bars show how close it was: 2-1 splits two thirds to one, and
+                # 491-413 splits almost evenly. A row won outright still shows
+                # one full bar and one empty, which is the true reading of it.
+                total = abs(hh) + abs(aa)
+                if total > 0:
+                    h_ratio, a_ratio = abs(hh) / total, abs(aa) / total
+                else:
+                    h_ratio = a_ratio = 0
             except (TypeError, ValueError):
                 h_ratio = a_ratio = 0
                 hh = aa = None
@@ -4321,12 +4365,6 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             # Values remain white; bar fill and team labels carry identity.
             leader_home_col = TEXT_BRIGHT
             leader_away_col = TEXT_BRIGHT
-            # Long "won/total" values need a smaller font and a slightly inset
-            # anchor, or a 5-char string overruns the panel's left/right edge.
-            _long = max(len(str(h_disp)), len(str(a_disp))) > 3
-            _vfs = 8.5 if _long else 11.5
-            _hx = 0.085 if _long else 0.06
-            _ax = 0.915 if _long else 0.94
             ax.text(
                 _hx,
                 cy,
