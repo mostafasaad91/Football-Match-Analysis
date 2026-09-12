@@ -61,6 +61,33 @@ def read_urls(args) -> list[str]:
     return ordered
 
 
+
+def _light_missing(url: str, environment: dict) -> Path | None:
+    """The package this fixture just wrote, when its light copy did not arrive.
+
+    The renderer names the folder from the teams and the score, none of which
+    this process parsed, so the fixture is found by the one thing that is
+    certain: it is the newest package under the round it was shelved in.
+    """
+    from match_fixture import shelf
+
+    where = ROOT / "output"
+    for part in shelf(url, environment.get("MATCH_ANALYSIS_ROUND", "")):
+        where = where / part
+    if not where.is_dir():
+        return None
+    packages = [p for p in where.iterdir()
+                if p.is_dir() and not p.name.startswith(".")
+                and (p / "match_info.json").exists()]
+    if not packages:
+        return None
+    newest = max(packages, key=lambda p: p.stat().st_mtime)
+    light = newest / "light"
+    if light.is_dir() and list(light.glob("*.png")):
+        return None
+    return newest
+
+
 def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
     environment = dict(os.environ)
     environment["MATCH_ANALYSIS_URL"] = url
@@ -85,6 +112,26 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
                               text=True, encoding="utf-8", errors="replace")
     took = f"{(time.time() - started) / 60:.1f} min"
     if finished.returncode == 0:
+        # The light copy is a second full render, launched by the fixture's own
+        # process while it still holds every figure it drew. CPython does not
+        # give those pages back, so on a machine without several spare gigabytes
+        # matplotlib dies allocating the child's first canvas and the package
+        # ships with a dark half and no light one -- which looks finished from
+        # the outside. This process holds nothing, so a retry from here gets the
+        # clean allocation the first attempt could not. Nothing happens when the
+        # light copy is already there, which is the usual case.
+        missing = None if dark_only else _light_missing(url, environment)
+        if missing is not None:
+            retry = subprocess.run(
+                [sys.executable, "render_light.py", str(missing), "--child"],
+                cwd=ROOT, env={**environment, "MATCH_ANALYSIS_THEME": "light",
+                               "MATCH_ANALYSIS_LIGHT_COPY": "0"},
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if retry.returncode != 0:
+                tail = (retry.stderr or retry.stdout or "").strip().splitlines()[-2:]
+                return True, took + " :: light copy still missing :: " + " | ".join(
+                    line.strip() for line in tail)
+            took += " (+light retried)"
         return True, took
     # The last few lines carry the reason; the whole log is rarely the point.
     tail = (finished.stderr or finished.stdout or "").strip().splitlines()[-3:]
