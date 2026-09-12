@@ -943,9 +943,19 @@ def _creation_credits(events: pd.DataFrame) -> dict:
         t = team.iloc[i]
         shooter = ev["player"].iloc[i]
         creator = None
+        # Events outside any possession - the whistle, a card, a formation
+        # change - carry no possession id, and the column is nullable, so
+        # comparing one to the shot's own id yields NA rather than True or
+        # False. A card shown seconds before a shot used to end the run here
+        # with "boolean value of NA is ambiguous". An event with no possession
+        # is not in the shot's possession, which is the same answer the walk
+        # back wants: stop looking.
+        shot_possession = ev['possession_id'].iloc[i]
         j = i - 1
         while j >= 0 and (i - j) <= 6 and 0 <= ev['_clock_seconds'].iloc[i] - ev['_clock_seconds'].iloc[j] <= 15:
-            if ev['possession_id'].iloc[j] != ev['possession_id'].iloc[i]:
+            step_possession = ev['possession_id'].iloc[j]
+            if (pd.isna(step_possession) or pd.isna(shot_possession)
+                    or step_possession != shot_possession):
                 break
             if (
                 is_kp.iloc[j]
