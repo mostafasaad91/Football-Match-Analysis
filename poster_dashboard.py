@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Circle
 from matplotlib.lines import Line2D
 from match_insights import build_insights, flags, numeric, stage_counts, successful
-from visualization_components import BG_DARK, TEXT_MAIN, TEXT_DIM, IS_LIGHT_THEME
+from visualization_components import (BG_DARK, TEXT_MAIN, TEXT_DIM, IS_LIGHT_THEME,
+                                      slope_label_offsets)
 from metric_registry import format_value
 
 POSTERS = ('match_poster_1_match_story.png','match_poster_2_progression.png',
@@ -528,18 +529,23 @@ class Poster:
         priced['_psxg'] = pd.to_numeric(post_shot_xg(events), errors='coerce').reindex(priced.index).fillna(0.0)
         framed = priced.shot_whoscored_type.astype(str).isin(['Goal', 'SavedShot'])
         big = self.layout == 'thread'
-        ceiling = 0.0
-        for offset, tid in enumerate(self.names):
+        series = []
+        for tid in self.names:
             own = priced[priced.team_id.eq(tid)]
             hit = own.loc[framed.reindex(own.index, fill_value=False)]
-            values = [float(numeric(own, 'xG').sum()), float(numeric(hit, 'xG').sum()),
-                      float(hit._psxg.sum()), float(flags(own, 'is_goal').sum())]
-            ceiling = max(ceiling, *values)
+            series.append([float(numeric(own, 'xG').sum()), float(numeric(hit, 'xG').sum()),
+                           float(hit._psxg.sum()), float(flags(own, 'is_goal').sum())])
+        ceiling = max(max(values) for values in series)
+        # Outside the pair, not by team: alternating above/below only separates
+        # the two figures where the markers are level, and pushed them together
+        # everywhere else.
+        offsets = slope_label_offsets(series, ceiling * 1.30, above=11.0, below=-18.0)
+        for tid, values, label_dy in zip(self.names, series, offsets):
             ax.plot(range(4), values, color=self.colors[tid], lw=3.0, marker='o',
                     markersize=10, markeredgecolor=BG_DARK, markeredgewidth=1.2, zorder=4)
             for index, value in enumerate(values):
                 ax.annotate(f'{value:.2f}' if index < 3 else f'{value:.0f}',
-                            (index, value), xytext=(0, 11 if offset == 0 else -18),
+                            (index, value), xytext=(0, label_dy[index]),
                             textcoords='offset points', color=self.colors[tid],
                             size=11 if big else 9, weight='bold', ha='center')
         ax.set_xticks(range(4), ['Created', 'On frame', 'Struck', 'Scored'],

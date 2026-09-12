@@ -810,3 +810,44 @@ def save_figure(fig, path, *, dpi=155, **kwargs):
 
             gc.collect()
     raise last
+
+
+def slope_label_offsets(series, ceiling, above=13.0, below=-20.0, step=15.0,
+                        room=0.13):
+    """Which side of its marker every point label sits on, one list per series.
+
+    Two lines drawn over the same stages carry a figure on each point, and the
+    labels were placed by alternating series -- the first above its marker, the
+    second below. That separates them only where the two markers are level.
+    Where one line runs above the other it pushes the upper line's label down
+    and the lower line's label up, straight into each other: Crystal Palace
+    2-3 Ipswich printed "1.52" over "0.85" at the first stage.
+
+    So the label goes on the outside of the pair, the lowest marker's beneath
+    it and the rest above. That needs somewhere to put it: a line running along
+    the floor of the axes has no room underneath, and Napoli 0-1 Arsenal then
+    printed "0.17" through the x tick labels. Where the lowest marker is inside
+    ``room`` of the bottom, every label goes above instead and they are stacked
+    ``step`` apart in rank order, which separates them whatever the gap between
+    the markers.
+
+    ``ceiling`` is the axis top in data units, not the largest value, because
+    what matters is the distance to the edge the label would cross.
+
+    Returns offsets parallel to ``series``: ``series[i][j]`` is labelled at
+    ``offsets[i][j]`` points from its marker.
+    """
+    rows = [list(values) for values in series]
+    if not rows:
+        return []
+    span = float(ceiling) or 1.0
+    offsets = [[above] * len(row) for row in rows]
+    for column in range(len(rows[0])):
+        order = sorted(range(len(rows)), key=lambda index: rows[index][column])
+        grounded = rows[order[0]][column] / span < room
+        for rank, index in enumerate(order):
+            if grounded:
+                offsets[index][column] = above + rank * step
+            else:
+                offsets[index][column] = below if rank == 0 else above + (rank - 1) * step
+    return offsets

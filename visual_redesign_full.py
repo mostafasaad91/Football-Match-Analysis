@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 from visualization_components import (
+    slope_label_offsets,
     C_AWAY,
     C_HOME,
     EVENT_FAILURE,
@@ -3091,6 +3092,9 @@ def momentum(events):
     band.set_xlabel("Match minute", fontsize=9, color=MUTED, labelpad=16)
     return save(fig, "35_match_momentum.png")
 
+NOTE_STRUCK_AS_DESERVED = "struck as well as" + chr(10) + "the chance was worth"
+
+
 def finishing_quality(events):
     """Chance quality, striking quality and what actually went in.
 
@@ -3143,25 +3147,28 @@ def finishing_quality(events):
     # and what the goalkeeper did with it.
     stages = ["Created\n(all attempts)", "Reached the\nframe (xG)",
               "Struck\n(post-shot xG)", "Scored"]
-    ceiling = 0.0
-    for offset, (team_id, colour) in enumerate([(HOME_ID, HOME), (AWAY_ID, AWAY)]):
+    sides = [(HOME_ID, HOME), (AWAY_ID, AWAY)]
+    series = []
+    for team_id, _colour in sides:
         own = shots[shots["team_id"].eq(team_id)]
         framed_rows = own.loc[on_target.reindex(own.index, fill_value=False)]
-        values = [
+        series.append([
             float(own["xG"].sum()),
             float(framed_rows["xG"].sum()),
             float(framed_rows["_psxg"].sum()),
             float(as_bool(own.get("is_goal", pd.Series(False, index=own.index))).sum()),
-        ]
-        ceiling = max(ceiling, *values)
+        ])
+    ceiling = max(max(values) for values in series)
+    # The label goes on the outside of the pair rather than by team, so the
+    # upper line's figure is never pushed down onto the lower line's.
+    offsets = slope_label_offsets(series, ceiling * 1.28)
+    for (team_id, colour), values, label_dy in zip(sides, series, offsets):
         ax.plot(range(4), values, color=colour, lw=2.8, marker="o", markersize=11,
                 markeredgecolor=BG, markeredgewidth=1.4, zorder=4, label=TEAM_NAME[team_id])
         for index, value in enumerate(values):
-            # Both sides can land on the same figure at the middle stages, so
-            # the two labels take turns above and below their marker.
-            dy = 13 if offset == 0 else -20
             ax.annotate(f"{value:.2f}" if index < 3 else f"{value:.0f}",
-                        (index, value), xytext=(0, dy), textcoords="offset points",
+                        (index, value), xytext=(0, label_dy[index]),
+                        textcoords="offset points",
                         color=colour, fontsize=10, fontweight="bold", ha="center")
     ax.set_xticks(range(4), stages, color=TEXT, fontsize=8.5)
     ax.set_xlim(-0.4, 3.4)
@@ -3178,8 +3185,25 @@ def finishing_quality(events):
     limit = max(float(framed["xG"].max() if not framed.empty else 0),
                 float(framed["_psxg"].max() if not framed.empty else 0), 0.4) * 1.15
     ax2.plot([0, limit], [0, limit], color=NEUTRAL, lw=0.9, ls=(0, (3, 3)), zorder=2)
-    ax2.text(limit * 0.97, limit * 0.90, "struck as well as\nthe chance was worth",
-             color=NEUTRAL, fontsize=7.5, ha="right", va="top")
+    # The note labels the dashed line, and it sat on the line's top end --
+    # which is exactly where a big chance struck well lands. Crystal Palace
+    # 2-3 Ipswich printed it through the goal star at 0.42/0.47. Put it in
+    # whichever corner the shots left empty: the top-left needs a small chance
+    # placed perfectly and the bottom-right a big one placed badly, and one of
+    # the two is free in every match seen so far. The boxes are generous, so a
+    # near miss moves the note rather than shaving past a marker.
+    placements = (
+        (0.02, 0.98, "left", "top", (0.00, 0.34, 0.82, 1.00)),
+        (0.98, 0.02, "right", "bottom", (0.64, 1.00, 0.00, 0.18)),
+    )
+    marks = list(zip(pd.to_numeric(framed["xG"], errors="coerce").fillna(0.0),
+                     pd.to_numeric(framed["_psxg"], errors="coerce").fillna(0.0)))
+    for note_x, note_y, note_ha, note_va, (x0, x1, y0, y1) in placements:
+        if not any(x0 * limit <= mx <= x1 * limit and y0 * limit <= my <= y1 * limit
+                   for mx, my in marks):
+            break
+    ax2.text(limit * note_x, limit * note_y, NOTE_STRUCK_AS_DESERVED,
+             color=NEUTRAL, fontsize=7.5, ha=note_ha, va=note_va)
     for team_id, colour in [(HOME_ID, HOME), (AWAY_ID, AWAY)]:
         own = framed[framed["team_id"].eq(team_id)]
         if own.empty:
