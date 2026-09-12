@@ -1,0 +1,16 @@
+# Spain LaLiga 2026-2027 - Matchweek 1  (15-27 Aug 2026)
+# Four fixtures were postponed out of the opening weekend, so this round is not
+# a date range: Atletico-Malaga went to 19 Aug, Valencia-Betis to 25 Aug,
+# Real Madrid-Real Sociedad to 26 Aug, Barcelona-Athletic to 27 Aug.
+# Confirmed against the WhoScored stage fixture list, not inferred from dates.
+# Run with:  python run_round.py --round 1 --urls rounds/spain-laliga-2026-2027-mw01.txt
+https://www.whoscored.com/matches/1993897/live/spain-laliga-2026-2027-deportivo-alaves-getafe
+https://www.whoscored.com/matches/1993905/live/spain-laliga-2026-2027-sevilla-rayo-vallecano
+https://www.whoscored.com/matches/1993903/live/spain-laliga-2026-2027-racing-santander-villarreal
+https://www.whoscored.com/matches/1993901/live/spain-laliga-2026-2027-espanyol-levante
+https://www.whoscored.com/matches/1993899/live/spain-laliga-2026-2027-celta-vigo-osasuna
+https://www.whoscored.com/matches/1993900/live/spain-laliga-2026-2027-deportivo-de-a-coruna-elche
+https://www.whoscored.com/matches/1993898/live/spain-laliga-2026-2027-atletico-madrid-malaga
+https://www.whoscored.com/matches/1993906/live/spain-laliga-2026-2027-valencia-real-betis
+https://www.whoscored.com/matches/1993904/live/spain-laliga-2026-2027-real-madrid-real-sociedad
+https://www.whoscored.com/matches/1993902/live/spain-laliga-2026-2027-barcelona-athletic-club
