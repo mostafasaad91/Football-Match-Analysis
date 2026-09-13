@@ -461,7 +461,10 @@ TOP5_2025_26_TEAM_PALETTES = {
     "Casa Pia AC": ["#000000", "#FFFFFF", "#D6001C"],  # Home: Black and white
 
     # Premier League 2025/26
-    "Arsenal": ["#EF0107", "#FFFFFF", "#063672"],  # Home: Red | Away: Navy Blue
+    # White is the sleeve, not a kit, and the near-white filter drops it — which
+    # left the navy third as the alternate and put Arsenal out in blue against
+    # every red home side. The away shirt is yellow.
+    "Arsenal": ["#EF0107", "#FBE122", "#063672"],  # Home: Red | Away: Yellow | Third: Navy
     "Aston Villa": ["#7A003C", "#95BFE5", "#FEE505"],  # Home: Claret | Away: Light Blue
     "Bournemouth": ["#DA291C", "#000000", "#F7C600"],  # Home: Red | Away: Black
     "Brentford": ["#E30613", "#FFFFFF", "#111111"],  # Home: Red | Away: Black
