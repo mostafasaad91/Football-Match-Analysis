@@ -1,0 +1,12 @@
+# Italy Serie A 2026-2027 - Matchweek 2  (28-31 Aug 2026)
+# Run with:  python run_round.py --round 2 --urls rounds/italy-serie-a-2026-2027-mw02.txt
+https://www.whoscored.com/matches/1980881/live/italy-serie-a-2026-2027-ac-milan-venezia
+https://www.whoscored.com/matches/1980903/live/italy-serie-a-2026-2027-monza-udinese
+https://www.whoscored.com/matches/1980884/live/italy-serie-a-2026-2027-sassuolo-torino
+https://www.whoscored.com/matches/1980893/live/italy-serie-a-2026-2027-fiorentina-frosinone
+https://www.whoscored.com/matches/1980896/live/italy-serie-a-2026-2027-juventus-parma-calcio-1913
+https://www.whoscored.com/matches/1980880/live/italy-serie-a-2026-2027-napoli-como
+https://www.whoscored.com/matches/1980889/live/italy-serie-a-2026-2027-cagliari-inter
+https://www.whoscored.com/matches/1980899/live/italy-serie-a-2026-2027-lazio-genoa
+https://www.whoscored.com/matches/1980902/live/italy-serie-a-2026-2027-lecce-roma
+https://www.whoscored.com/matches/1980885/live/italy-serie-a-2026-2027-atalanta-bologna
