@@ -1,0 +1,21 @@
+{
+  "method": "outcome_fitted_big_chance_v1",
+  "shots": 2050,
+  "goals": 208,
+  "matches": 78,
+  "terms": [
+    "const",
+    "big_chance",
+    "from_corner"
+  ],
+  "log_loss_before": 0.2878118469391471,
+  "log_loss_after": 0.2805637469980965,
+  "xg_before": 224.2529,
+  "xg_after": 207.65971493157568,
+  "weights": {
+    "const": -0.3579516041472825,
+    "big_chance": 0.7844564645105148,
+    "from_corner": -0.6378388215305587,
+    "logit": 1.0
+  }
+}

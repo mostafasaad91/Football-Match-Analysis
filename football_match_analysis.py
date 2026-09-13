@@ -288,7 +288,22 @@ XG_USE_OFFICIAL_TEAM_TOTAL_CALIBRATION = (
     False  # do NOT calibrate to WhoScored/Opta/provider team xG totals
 )
 XG_USE_INTERNAL_TEAM_STAT_CALIBRATION = False
+# The stored alignment moves the engine onto the provider scale after the
+# distance calibration, so the name has to say both or the archive cannot tell
+# two different numbers apart. Falls back to the calibrated-only name when no
+# alignment is fitted, which is what a fresh clone renders.
 XG_LOCAL_MODEL_VERSION = "xg_v5_submodel_distance_calibrated_2026"
+
+
+def _xg_source_name() -> str:
+    try:
+        import xg_alignment
+
+        if xg_alignment.load():
+            return f"{XG_LOCAL_MODEL_VERSION}+{xg_alignment.METHOD}"
+    except Exception:
+        pass
+    return XG_LOCAL_MODEL_VERSION
 XG_SINGLE_SHOT_CAP = 0.95
 XG_PENALTY_VALUE = 0.79
 
@@ -3016,8 +3031,40 @@ def _opta_like_local_xg_from_row(row) -> float:
     # holdouts. Provider xG and penalties return above and are never recalibrated.
     xg = _apply_xg_calibration(xg, f["distance"])
 
+    # And then onto the provider's scale, where a stored fit says how the two
+    # differ. The distance calibration above answers "how often does a chance
+    # like this go in"; this answers "what would the model everyone else quotes
+    # have called it", which is a different question and needs the parts of the
+    # event the submodels never read -- how far a blocked shot travelled before
+    # the block, the shot zone, the body part. Identity without the fit.
+    xg = _apply_xg_alignment(xg, f, ctx, row)
+
     # Simple bounds — no complex rule-based caps needed
     return round(float(_clamp(xg, 0.001, XG_SINGLE_SHOT_CAP)), 4)
+
+
+_XG_ALIGNMENT: object = "unread"
+
+
+def _apply_xg_alignment(value: float, geometry: dict, context: dict, row) -> float:
+    """Move one engine value onto the provider scale; identity when unfitted."""
+    global _XG_ALIGNMENT
+    if _XG_ALIGNMENT == "unread":
+        try:
+            import xg_alignment
+
+            _XG_ALIGNMENT = xg_alignment.load()
+        except Exception:
+            _XG_ALIGNMENT = None
+    if not _XG_ALIGNMENT:
+        return float(value)
+    try:
+        import xg_alignment
+
+        return float(xg_alignment.align(float(value), geometry, context, row,
+                                        stored=_XG_ALIGNMENT))
+    except Exception:
+        return float(value)
 
 
 _XG_CALIBRATION: object = "unread"
@@ -3075,7 +3122,7 @@ def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
         out.loc[local_mask, "xG"] = out.loc[local_mask].apply(
             _opta_like_local_xg_from_row, axis=1
         )
-        out.loc[local_mask, "xg_source"] = XG_LOCAL_MODEL_VERSION
+        out.loc[local_mask, "xg_source"] = _xg_source_name()
 
     XG_MODEL_USED = XG_LOCAL_MODEL_VERSION
     return out
