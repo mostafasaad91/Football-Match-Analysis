@@ -23,6 +23,9 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+# Four times a normal fixture, so a slow provider or a big match is never cut
+# off, and a hung scrape costs half an hour instead of the rest of the round.
+FIXTURE_TIMEOUT_S = 30 * 60
 MATCH_URL = re.compile(r"https?://(?:www\.)?whoscored\.com/matches/\d+/(?:live|show)/\S*",
                        re.IGNORECASE)
 
@@ -107,9 +110,18 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
     # a missing log.
     environment["PYTHONIOENCODING"] = "utf-8"
     started = time.time()
-    finished = subprocess.run([sys.executable, "football_match_analysis.py"],
-                              cwd=ROOT, env=environment, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
+    # A fixture renders in about seven minutes. One Serie A fixture sat for
+    # three hours on six seconds of CPU, waiting on the provider mid-scrape,
+    # and with no limit here the whole round waited behind it. Past the limit
+    # the child is killed and reported, and the round moves on.
+    try:
+        finished = subprocess.run([sys.executable, "football_match_analysis.py"],
+                                  cwd=ROOT, env=environment, capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace",
+                                  timeout=FIXTURE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        took = f"{(time.time() - started) / 60:.1f} min"
+        return False, f"{took} :: no result after {FIXTURE_TIMEOUT_S // 60} min, stopped"
     took = f"{(time.time() - started) / 60:.1f} min"
     if finished.returncode == 0:
         # The light copy is a second full render, launched by the fixture's own
