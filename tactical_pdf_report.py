@@ -305,6 +305,12 @@ def _goal_summary(events: pd.DataFrame, team_names: dict[int, str]) -> tuple[lis
                 "team": team_names.get(team_id, str(team_id)),
                 "player": scorer,
                 "score": dict(running),
+                # The cover's goal list names the provider and says how the
+                # goal came. An own goal is logged against the scorer's own
+                # side, so the flag is what lets a reader credit the right one.
+                "assist": _text(goal.get("assist_player")),
+                "penalty": bool(_bool(pd.Series([goal.get("is_penalty")])).iloc[0]),
+                "own_goal": bool(_bool(pd.Series([goal.get("is_own_goal")])).iloc[0]),
             }
         )
     timeline = " | ".join(
@@ -476,6 +482,11 @@ def build_context(
     context['influence'] = pitch_control(events, home_id, away_id)[1]
     context['date'] = match_info.get('date', '')
     context['competition'] = match_info.get('competition', '')
+    # Carried for the cover's fixture card; each is optional and read with a
+    # default there, because older callers pass none of them.
+    for key in ('venue', 'managers', 'formations', 'round_name', 'home_form',
+                'away_form', 'home_kit', 'away_kit'):
+        context[key] = match_info.get(key)
     context['url'] = match_info.get('url', '')
     context['match_id'] = match_info.get('match_id', '')
     context['chart_contracts'] = events.attrs.get('chart_contracts', {})
@@ -1009,211 +1020,16 @@ class TacticalPDF:
     # match is usually argued: who had the ball, what the chances were worth,
     # how often they tried, how good the looks were, how far they got, how far
     # inside, who held the ground, and what the possessions were worth.
+    # Six rows in two named groups: three about the chances, three about the
+    # territory. COVER_GROUPS slices this tuple, so there is one list of rows.
     COVER_ROWS = (
-        ("POSSESSION",          "possession_share",    "{:.1f}%"),
         ("EXPECTED GOALS",      "xG",                  "{:.2f}"),
         ("SHOTS  (ON TARGET)",  "shots",               ""),
         ("BIG CHANCES",         "big_chances",         "{:.0f}"),
-        ("FINAL THIRD ENTRIES", "final_third_entries", "{:.0f}"),
+        ("POSSESSION",          "possession_share",    "{:.0f}%"),
         ("BOX ENTRIES",         "box_entries",         "{:.0f}"),
         ("FIELD TILT",          "field_tilt",          "{:.0f}%"),
-        ("SEQUENCE THREAT  xT", "sequence_xT",         "{:.2f}"),
     )
-
-    def cover(self):
-        """The match on one page: the figures, its shape, and who decided it.
-
-        The old cover was a comparison card floating in the middle of a sheet
-        with a coloured bar down each edge, and it left the bottom third empty.
-        The bars were the two clubs' colours, so the page furniture wore the
-        kit -- on a fixture between two red teams the whole sheet went red.
-
-        What is here instead: neutral chrome, one accent that belongs to the
-        report rather than to either side, and kit colour only inside a bar or
-        beside a figure that is a side's own. The blocks sit on stated
-        coordinates so the page fills to the footer instead of stopping.
-        """
-        self._start("cover", "Cover")
-        c = self.canvas
-        left = COVER_MARGIN
-        right = PAGE_W - COVER_MARGIN
-        column = right - left
-        gutter = 64
-        half = (column - gutter) / 2
-
-        c.setFillColor(COVER_LABEL)
-        c.setFont(COVER_TEXT, TYPE_COVER_META)
-        c.drawString(left, PAGE_H - 54, _spaced_out(
-            (self._cover_competition() or "Match analysis").upper()))
-        c.setFillColor(COVER_META)
-        c.setFont(COVER_TEXT, TYPE_COVER_META)
-        c.drawRightString(right, PAGE_H - 54, str(self.context.get("date") or ""))
-        c.setStrokeColor(FOCUS); c.setLineWidth(2)
-        c.line(left, PAGE_H - 66, left + 46, PAGE_H - 66)
-        c.setStrokeColor(GRID); c.setLineWidth(0.5)
-        c.line(left + 52, PAGE_H - 66, right, PAGE_H - 66)
-
-        home, away = str(self.context["home"]), str(self.context["away"])
-        score = str(self.context.get("score") or "").replace("-", "—")
-        title_y = PAGE_H - 128
-        c.setFillColor(TEXT); c.setFont(COVER_DISPLAY, TYPE_COVER_FIXTURE)
-        c.drawString(left, title_y, f"{home}  {score}  {away}")
-        headline = self._cover_headline()
-        if headline:
-            c.setFillColor(MUTED); c.setFont(COVER_TEXT, TYPE_COVER_DECK)
-            c.drawString(left, title_y - 30, headline)
-
-        rows = self._cover_rows()
-        per_column = (len(rows) + 1) // 2
-        top, step = title_y - 86, 72
-        for index, (label, home_text, away_text, share) in enumerate(rows):
-            side = index // per_column
-            x = left if side == 0 else left + half + gutter
-            y = top - step * (index % per_column)
-            c.setFillColor(COVER_LABEL); c.setFont(COVER_TEXT, TYPE_MICRO + 0.7)
-            c.drawString(x, y, _spaced_out(label.upper()))
-            # The figure above its bar, not beside it: side by side, a long
-            # label ran into the number it belonged to.
-            c.setFillColor(TEXT); c.setFont(COVER_DISPLAY, TYPE_COVER_LEAD)
-            c.drawString(x, y - 26, home_text)
-            c.setFillColor(COVER_FIGURE_DIM); c.setFont(COVER_DISPLAY, TYPE_COVER_TRAIL)
-            c.drawRightString(x + half, y - 26, away_text)
-            c.setFillColor(self.home_color)
-            c.rect(x, y - 38, half * share, 5, stroke=0, fill=1)
-            c.setFillColor(self.away_color)
-            c.rect(x + half * share, y - 38, half * (1 - share), 5, stroke=0, fill=1)
-
-        rule = top - step * (per_column - 1) - 54
-        c.setStrokeColor(GRID); c.setLineWidth(0.5)
-        c.line(left, rule, right, rule)
-
-        c.setFillColor(FOCUS); c.setFont(COVER_TEXT, TYPE_MICRO + 0.7)
-        c.drawString(left, rule - 20, _spaced_out("CUMULATIVE EXPECTED GOALS"))
-        chart_h = 150
-        chart_y = rule - 42 - chart_h
-        self._cover_curve(left + 26, chart_y, column - 26, chart_h)
-
-        band = chart_y - 34
-        c.line(left, band, right, band)
-        head = band - 22
-        self._cover_goals(left, head)
-        self._cover_verdict(left + half + gutter, head, right - (left + half + gutter))
-        self._finish()
-
-    def _cover_curve(self, x, y, width, height):
-        """Cumulative expected goals across the match, in both kit colours."""
-        c = self.canvas
-        home, away = self._cumulative_xg()
-        if len(home) < 2 or len(away) < 2:
-            # Two points is a straight line between nought and the total, which
-            # is not the shape of anything. Better to draw nothing.
-            return
-        top = max(max(home), max(away)) or 1.0
-        c.setStrokeColor(GRID); c.setLineWidth(0.4)
-        for share in (0.5, 1.0):
-            gy = y + height * share
-            c.line(x, gy, x + width, gy)
-            c.setFillColor(NEUTRAL); c.setFont(COVER_TEXT, TYPE_MICRO)
-            c.drawRightString(x - 8, gy - 2, f"{top * share:.1f}")
-        for curve, colour in ((home, self.home_color), (away, self.away_color)):
-            steps = len(curve) - 1
-            c.setStrokeColor(colour); c.setLineWidth(2.4)
-            path = c.beginPath()
-            for index, value in enumerate(curve):
-                px, py = x + width * index / steps, y + height * value / top
-                path.moveTo(px, py) if index == 0 else path.lineTo(px, py)
-            c.drawPath(path)
-        c.setStrokeColor(GRID); c.setLineWidth(0.5)
-        c.line(x, y, x + width, y)
-        for share, label in ((0.0, "0'"), (0.5, "HT"), (1.0, "90'")):
-            c.setFillColor(NEUTRAL); c.setFont(COVER_TEXT, TYPE_MICRO)
-            c.drawCentredString(x + width * share, y - 13, label)
-
-    def _cumulative_xg(self, steps: int = 18):
-        """Each side's expected goals accumulated across the match.
-
-        Read off the shots rather than stored, because the context carries
-        totals and a total cannot be plotted against time.
-        """
-        events = self.context.get("_events")
-        if events is None or "minute" not in getattr(events, "columns", []):
-            return [], []
-        import pandas as pd
-
-        shots = events[events.get("is_shot").astype(str).str.lower().isin(
-            {"true", "1", "1.0"})] if "is_shot" in events else events.iloc[0:0]
-        if shots.empty or "xG" not in shots:
-            return [], []
-        minute = pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
-        value = pd.to_numeric(shots["xG"], errors="coerce").fillna(0)
-        last = max(float(minute.max()), 90.0)
-        curves = []
-        for side in ("home", "away"):
-            team_id = self.context.get(f"{side}_id")
-            mask = shots["team_id"].eq(team_id)
-            running, total = [0.0], 0.0
-            for index in range(1, steps + 1):
-                edge = last * index / steps
-                total = float(value[mask & (minute <= edge)].sum())
-                running.append(total)
-            curves.append(running)
-        return curves[0], curves[1]
-
-    def _cover_goals(self, x, y):
-        c = self.canvas
-        c.setFillColor(FOCUS); c.setFont(COVER_TEXT, TYPE_MICRO + 0.7)
-        c.drawString(x, y, _spaced_out("GOALS"))
-        rows = self.context.get("goal_rows") or []
-        if not rows:
-            c.setFillColor(MUTED); c.setFont(COVER_TEXT, TYPE_BODY)
-            c.drawString(x, y - 24, "None.")
-            return
-        from match_clock import event_label
-        gy = y - 24
-        for goal in rows[:5]:
-            colour = (self.home_color if str(goal.get("team")) == str(self.context["home"])
-                      else self.away_color)
-            c.setFillColor(colour); c.circle(x + 4, gy + 3, 3, stroke=0, fill=1)
-            name = str(goal.get("player") or "Unnamed")
-            c.setFillColor(TEXT); c.setFont(COVER_TEXT, TYPE_COVER_ENTRY)
-            c.drawString(x + 16, gy, name)
-            c.setFillColor(MUTED); c.setFont(COVER_TEXT, TYPE_BODY)
-            c.drawString(x + 16 + c.stringWidth(name, COVER_TEXT, TYPE_COVER_ENTRY) + 10,
-                         gy, event_label(goal))
-            gy -= 22
-
-    def _cover_verdict(self, x, y, width):
-        """The reading, with no label over it: a paragraph is not a field."""
-        # context["verdict"] is a dataclass. str() on it printed
-        # "Verdict(home=SideVerdict(team='Arsenal', xg=2.48, ..." across the
-        # cover -- a repr where a paragraph belongs.
-        from match_editorial import result_read
-
-        text = ""
-        try:
-            from publication_v2 import pdf_verdict
-
-            written = pdf_verdict(self.context)
-            if isinstance(written, str):
-                text = written.strip()
-            elif isinstance(written, (list, tuple)):
-                text = " ".join(str(part).strip() for part in written if part).strip()
-        except Exception:
-            text = ""
-        if not text or text.startswith(("Verdict(", "SideVerdict(")):
-            text = result_read(self.context)
-        self._paragraph(escape(text), x, y + 4, width, 120, self.commentary_body)
-
-    def _cover_headline(self) -> str:
-        """The tactical line, read from the article's own candidates.
-
-        Built from the same frames the card is, so the two documents cannot
-        disagree about what the match was. Falls back to the old wording rather
-        than raising: a report with a generic subtitle is a better outcome than
-        no report.
-        """
-        line = str(self.context.get("headline") or "").strip()
-        return line.upper() if line else "MATCH ANALYSIS"
 
     def _cover_competition(self) -> str:
         """The competition line, read from the fixture rather than typed."""
@@ -1287,6 +1103,372 @@ class TacticalPDF:
         c.setFillColor(TEXT)
         c.setFont(COVER_DISPLAY, TYPE_COVER_SCORE)
         c.drawCentredString(centre, y - 15, str(self.context["score"]))
+
+    # ── the cover ─────────────────────────────────────────────────────────
+    COVER_GROUPS = (("CHANCES", COVER_ROWS[:3]), ("TERRITORY", COVER_ROWS[3:]))
+
+    def cover(self):
+        """Fixture, six figures, how the chances came, and who scored.
+
+        A card carries both crests, the score, and each side's manager and
+        shape; the line under it says what the document is instead of asserting
+        a reading of the match. The figures sit in two named groups, each bar
+        split on its own row's total, so 12 against 11 looks close and 43
+        against 57 does not. The expected-goals race steps at the minute of
+        every shot and marks the goals on it, and the goal list names who made
+        each one.
+
+        The whole block is centred between the two rules the page has always
+        kept. Its height is constant: the race gives up the lines the goal list
+        needs, so a seven-goal match does not push the card off its centre.
+        """
+        self._start("cover", "Cover")
+        c = self.canvas
+        left, right = COVER_MARGIN, PAGE_W - COVER_MARGIN
+
+        c.setFillColor(COVER_LABEL); c.setFont(COVER_TEXT, TYPE_COVER_META)
+        c.drawString(left, PAGE_H - 54, self._cv2_meta(left_side=True))
+        c.setFillColor(COVER_META)
+        c.drawRightString(right, PAGE_H - 54, self._cv2_meta(left_side=False))
+        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.line(left, PAGE_H - 66, right, PAGE_H - 66)
+
+        home_goals, away_goals = self._cv2_goal_lists()
+        lines = max(1, min(4, max(len(home_goals), len(away_goals))))
+        race = 176.0 - 18.0 * (lines - 1)
+        # 490 + race + 18 per extra goal line, which the race has just paid for.
+        block = 490.0 + race + 18.0 * (lines - 1)
+        band_top, band_bottom = PAGE_H - COVER_HEAD_DROP, COVER_FOOT_LIFT
+        top = band_top - max((band_top - band_bottom) - block, 0.0) / 2
+
+        self._cv2_hero(left, right, top)
+        title = top - 132 - 36
+        self._cv2_title(left, right, title)
+        group = title - 40
+        last_bar = self._cv2_groups(left, right, group)
+        race_title = last_bar - 34
+        race_bottom = self._cv2_race(left, right, race_title, race)
+        self._cv2_goal_block(left, right, race_bottom - 34, home_goals, away_goals, lines)
+        self._finish()
+
+    # -- pieces ---------------------------------------------------------------
+
+    def _cv2_kit(self, side: str):
+        """The colour the club wears, falling back to the page-lifted one."""
+        fallback = self.home_color if side == "home" else self.away_color
+        return _as_pdf_color(self.context.get(f"{side}_kit"), fallback)
+
+    def _cv2_meta(self, left_side: bool) -> str:
+        context = self.context
+        if left_side:
+            parts = [self._cover_competition()]
+            round_name = str(context.get("round_name") or "").strip()
+            digits = "".join(ch for ch in round_name if ch.isdigit())
+            # The parse stores "4" for one league and "Matchweek 04" for
+            # another; the cover printed both. One spelling, unpadded.
+            if digits and (round_name.isdigit()
+                           or round_name.lower().startswith(("matchweek", "round", "week"))):
+                parts.append(f"MATCHWEEK {int(digits)}")
+            elif round_name:
+                parts.append(round_name)
+        else:
+            parts = [self._cv2_date(), str(context.get("venue") or "").strip()]
+        return "  ·  ".join(p for p in parts if p).upper()
+
+    def _cv2_date(self) -> str:
+        from datetime import datetime
+
+        raw = str(self.context.get("date") or "").strip()
+        try:
+            return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%d %b %Y")
+        except ValueError:
+            return raw
+
+    def _cv2_shape(self, side: str) -> str:
+        """A side's starting shape as it is written, 4-2-3-1 rather than 4231."""
+        context = self.context
+        shape = ""
+        for spell in context.get("formations") or []:
+            if isinstance(spell, dict) and spell.get("side") == side:
+                shape = str(spell.get("formation") or "")
+                break
+        shape = shape or str(context.get(f"{side}_form") or "")
+        return "-".join(shape) if shape.isdigit() else shape
+
+    def _cv2_fit(self, text: str, face: str, size: float, measure: float) -> float:
+        """The largest size up to ``size`` at which ``text`` fits ``measure``."""
+        width = self.canvas.stringWidth(text, face, size)
+        return size if width <= measure else max(size * measure / width, size * 0.6)
+
+    def _cv2_hero(self, left: float, right: float, top: float):
+        c = self.canvas
+        centre = PAGE_W / 2
+        c.setFillColor(PANEL); c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.roundRect(left, top - 132, right - left, 132, 10, stroke=1, fill=1)
+        mid = top - 62
+        crest = 60
+        managers = self.context.get("managers") or {}
+        for side, x_crest, anchor in (("home", left + 62, "left"), ("away", right - 62, "right")):
+            name = str(self.context[side])
+            badge = self._crest_reader(self.context.get(f"{side}_id"))
+            if badge is not None:
+                c.drawImage(badge, x_crest - crest / 2, mid - crest / 2, crest, crest,
+                            mask="auto", preserveAspectRatio=True, anchor="c")
+            else:
+                c.setFillColor(self._cv2_kit(side))
+                c.circle(x_crest, mid, crest / 2, stroke=0, fill=1)
+                c.setFillColor(colors.white); c.setFont(COVER_DISPLAY, 20)
+                c.drawCentredString(x_crest, mid - 7, _club_initials(name))
+            measure = centre - 95 - (left + 110)
+            size = self._cv2_fit(name, COVER_TEXT, 22, measure)
+            manager = str(managers.get(side) or "").strip() if isinstance(managers, dict) else ""
+            sub = "  ·  ".join(p for p in (manager, self._cv2_shape(side)) if p)
+            c.setFillColor(TEXT); c.setFont(COVER_TEXT, size)
+            c.setFillColor(TEXT)
+            if anchor == "left":
+                c.drawString(left + 110, mid + 4, name)
+            else:
+                c.drawRightString(right - 110, mid + 4, name)
+            if sub:
+                # A long manager's name ran toward the score; it shrinks to the
+                # same measure the club name keeps to.
+                c.setFillColor(MUTED)
+                c.setFont(COVER_DISPLAY, self._cv2_fit(sub, COVER_DISPLAY, 12, measure))
+                if anchor == "left":
+                    c.drawString(left + 110, mid - 18, sub)
+                else:
+                    c.drawRightString(right - 110, mid - 18, sub)
+        score = f"{int(_number(self.context.get('home_goals')))}  –  {int(_number(self.context.get('away_goals')))}"
+        c.setFillColor(TEXT); c.setFont(COVER_DISPLAY, 58)
+        c.drawCentredString(centre, mid - 20, score)
+        c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 9.5)
+        c.drawCentredString(centre, top - 118, "FULL TIME")
+
+    def _cv2_title(self, left: float, right: float, baseline: float):
+        c = self.canvas
+        text = f"Match Analysis  |  {self.context['home']} vs {self.context['away']}"
+        size = self._cv2_fit(text, COVER_TEXT, 16, right - left)
+        c.setFillColor(TEXT); c.setFont(COVER_TEXT, size)
+        c.drawCentredString(PAGE_W / 2, baseline, text)
+
+    def _cv2_groups(self, left: float, right: float, baseline: float) -> float:
+        """Both groups of three rows; returns the bottom of the last bar."""
+        c = self.canvas
+        column = (right - left - 64) / 2
+        lowest = baseline
+        for index, (heading, rows) in enumerate(self.COVER_GROUPS):
+            x0 = left if index == 0 else right - column
+            c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 10)
+            c.drawString(x0, baseline, heading)
+            c.setStrokeColor(GRID); c.setLineWidth(0.6)
+            c.line(x0, baseline - 8, x0 + column, baseline - 8)
+            for row, (label, key, shape) in enumerate(rows):
+                home, away, home_text, away_text = self._cover_pair(key, shape)
+                row_base = baseline - 36 - 54 * row
+                self._cv2_split_row(x0, column, row_base, label, home, away,
+                                    home_text, away_text)
+                lowest = min(lowest, row_base - 24)
+        return lowest
+
+    def _cv2_split_row(self, x0: float, column: float, baseline: float, label: str,
+                       home: float, away: float, home_text: str, away_text: str):
+        """Two figures, the metric between them, and a bar split on their total."""
+        c = self.canvas
+        total = abs(home) + abs(away)
+        share = 0.5 if not total else abs(home) / total
+        home_leads, away_leads = home >= away, away >= home
+        c.setFont(COVER_DISPLAY, 19)
+        c.setFillColor(TEXT if home_leads else COVER_FIGURE_DIM)
+        c.drawString(x0, baseline, home_text)
+        c.setFillColor(TEXT if away_leads else COVER_FIGURE_DIM)
+        c.drawRightString(x0 + column, baseline, away_text)
+        c.setFillColor(COVER_LABEL); c.setFont(COVER_TEXT, 9.5)
+        c.drawCentredString(x0 + column / 2, baseline + 2, label)
+
+        split = x0 + column * share
+        bar_y, bar_h = baseline - 24, 7
+        for start, end, side in ((x0, split - 1.5, "home"), (split + 1.5, x0 + column, "away")):
+            if end - start <= 0:
+                continue
+            c.setFillColor(self._cv2_kit(side))
+            if IS_LIGHT_THEME:
+                # A thin dark edge, so a pale kit still reads on the light page.
+                c.saveState(); c.setStrokeColor(TEXT); c.setStrokeAlpha(0.3); c.setLineWidth(0.5)
+                c.rect(start, bar_y, end - start, bar_h, stroke=1, fill=1)
+                c.restoreState()
+            else:
+                c.rect(start, bar_y, end - start, bar_h, stroke=0, fill=1)
+
+    def _cv2_race(self, left: float, right: float, title_base: float, height: float) -> float:
+        """Cumulative xG stepped at each shot, with the goals marked on it.
+
+        Returns the plot's bottom edge.
+        """
+        import pandas as pd
+
+        c = self.canvas
+        c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 10)
+        c.drawString(left, title_base, "HOW THE CHANCES ACCUMULATED")
+        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.line(left, title_base - 8, right, title_base - 8)
+        px, pw = left + 30, (right - left) - 30
+        top = title_base - 22
+        bottom = top - height
+
+        events = self.context.get("_events")
+        if events is None or "is_shot" not in getattr(events, "columns", []):
+            return bottom
+        shots = events[_bool(events["is_shot"])].copy()
+        if "is_penalty_shootout" in shots:
+            shots = shots[~_bool(shots["is_penalty_shootout"])]
+        if "is_own_goal" in shots:
+            shots = shots[~_bool(shots["is_own_goal"])]
+        shots["_t"] = (pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
+                       + pd.to_numeric(shots.get("second", 0), errors="coerce").fillna(0) / 60)
+        shots["_xg"] = pd.to_numeric(shots.get("xG", 0), errors="coerce").fillna(0)
+        end = max(95.0, float(shots["_t"].max()) + 1.0) if not shots.empty else 95.0
+
+        curves = {}
+        peak = 0.0
+        for side in ("home", "away"):
+            own = shots[shots["team_id"].eq(self.context.get(f"{side}_id"))].sort_values("_t")
+            times = [0.0] + own["_t"].tolist() + [end]
+            values = [0.0] + own["_xg"].cumsum().tolist()
+            values.append(values[-1])
+            curves[side] = (times, values)
+            peak = max(peak, values[-1])
+        ymax = max(peak * 1.25, 0.5)
+        step = 0.5 if ymax <= 3 else 1.0
+
+        def X(t):
+            return px + pw * min(max(t, 0.0), end) / end
+
+        def Y(v):
+            return bottom + height * v / ymax
+
+        c.setLineWidth(0.4)
+        level = 0.0
+        while level <= ymax + 1e-9:
+            c.setStrokeColor(GRID); c.line(px, Y(level), px + pw, Y(level))
+            c.setFillColor(COVER_FIGURE_DIM); c.setFont(COVER_DISPLAY, 8.5)
+            c.drawRightString(px - 6, Y(level) - 3, f"{level:.1f}")
+            level += step
+        for minute in (0, 15, 30, 45, 60, 75, 90):
+            c.drawCentredString(X(minute), bottom - 13, f"{minute}'")
+        c.saveState(); c.setStrokeColor(COVER_FIGURE_DIM); c.setDash(3, 3); c.setLineWidth(0.6)
+        c.line(X(45), bottom, X(45), top)
+        c.restoreState()
+
+        for side in ("home", "away"):
+            times, values = curves[side]
+            kit = self._cv2_kit(side)
+            path = c.beginPath()
+            path.moveTo(X(times[0]), Y(values[0]))
+            for i in range(1, len(times)):
+                path.lineTo(X(times[i]), Y(values[i - 1]))
+                path.lineTo(X(times[i]), Y(values[i]))
+            if IS_LIGHT_THEME:
+                c.saveState(); c.setStrokeColor(TEXT); c.setStrokeAlpha(0.25); c.setLineWidth(3.4)
+                c.drawPath(path, stroke=1, fill=0); c.restoreState()
+            c.setStrokeColor(kit); c.setLineWidth(2.4)
+            c.drawPath(path, stroke=1, fill=0)
+
+        # Legend, top left inside the plot.
+        ly = top - 10
+        for side in ("home", "away"):
+            times, values = curves[side]
+            c.setStrokeColor(self._cv2_kit(side)); c.setLineWidth(2.4)
+            c.line(px + 10, ly + 3, px + 30, ly + 3)
+            c.setFillColor(TEXT); c.setFont(COVER_TEXT, 9.5)
+            c.drawString(px + 36, ly, f"{self.context[side]}  {values[-1]:.2f} xG")
+            ly -= 15
+
+        for goal in self.context.get("goal_rows") or []:
+            side = self._cv2_goal_side(goal)
+            times, values = curves.get(side, ([0.0], [0.0]))
+            when = float(_number(goal.get("minute"))) + float(_number(goal.get("second"))) / 60
+            reached = 0.0
+            for t, v in zip(times[1:-1], values[1:]):
+                if t <= when + 1e-6:
+                    reached = v
+            gx, gy = X(when), Y(reached)
+            kit = self._cv2_kit(side)
+            c.setFillColor(kit); c.setStrokeColor(TEXT); c.setLineWidth(1.1)
+            c.circle(gx, gy, 4.5, stroke=1, fill=1)
+            tag = f"{int(_number(goal.get('minute')))}'  {str(goal.get('player') or '').split()[-1] if goal.get('player') else '?'}"
+            if goal.get("penalty"):
+                tag += "  (pen)"
+            elif goal.get("own_goal"):
+                tag += "  (og)"
+            c.setFont(COVER_TEXT, 8.5)
+            tw = c.stringWidth(tag, COVER_TEXT, 8.5)
+            bx = gx - 12 - tw - 8
+            if bx < px + 4:
+                bx = gx + 12
+            by = max(gy - 22, bottom + 4)
+            c.setFillColor(PANEL); c.setStrokeColor(kit); c.setLineWidth(0.8)
+            c.roundRect(bx, by, tw + 8, 14, 3, stroke=1, fill=1)
+            c.setFillColor(TEXT)
+            c.drawString(bx + 4, by + 4, tag)
+        return bottom
+
+    def _cv2_goal_side(self, goal: dict) -> str:
+        """The side a goal counts for, which for an own goal is the other one."""
+        scored_for_home = goal.get("team_id") == self.context.get("home_id")
+        if goal.get("own_goal"):
+            scored_for_home = not scored_for_home
+        return "home" if scored_for_home else "away"
+
+    def _cv2_goal_lists(self):
+        home, away = [], []
+        for goal in self.context.get("goal_rows") or []:
+            (home if self._cv2_goal_side(goal) == "home" else away).append(goal)
+        return home, away
+
+    def _cv2_goal_block(self, left: float, right: float, rule_y: float,
+                        home_goals: list, away_goals: list, lines: int):
+        c = self.canvas
+        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.line(left, rule_y, right, rule_y)
+        c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 10)
+        c.drawString(left, rule_y - 20, "GOALS")
+        if not home_goals and not away_goals:
+            c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 11)
+            c.drawString(left + 70, rule_y - 20, "No goals")
+            return
+        half = (right - left) / 2
+        for side, goals, x in (("home", home_goals, left + 70), ("away", away_goals, left + half + 20)):
+            kit = self._cv2_kit(side)
+            if not goals:
+                # An empty column under the other side's goals read as a gap in
+                # the page rather than as a side that did not score.
+                c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 10.5)
+                c.drawString(x + 12, rule_y - 20, f"{self.context[side]}: no goals")
+                continue
+            shown = goals[:lines]
+            hidden = len(goals) - len(shown)
+            for index, goal in enumerate(shown):
+                y = rule_y - 20 - 18 * index
+                if hidden and index == lines - 1:
+                    c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 10.5)
+                    c.drawString(x + 12, y, f"+ {hidden + 1} more")
+                    break
+                c.setFillColor(kit); c.setStrokeColor(TEXT); c.setLineWidth(0.8)
+                c.circle(x + 3, y + 3.5, 3.5, stroke=1, fill=1)
+                main = f"{int(_number(goal.get('minute')))}'  {goal.get('player') or 'Unnamed'}"
+                c.setFillColor(TEXT); c.setFont(COVER_TEXT, 10.5)
+                c.drawString(x + 12, y, main)
+                if goal.get("penalty"):
+                    detail = "penalty"
+                elif goal.get("own_goal"):
+                    detail = "own goal"
+                elif goal.get("assist"):
+                    detail = f"assist {goal.get('assist')}"
+                else:
+                    detail = ""
+                if detail:
+                    c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 10.5)
+                    c.drawString(x + 12 + c.stringWidth(main, COVER_TEXT, 10.5) + 8, y, detail)
 
     def _cover_rows(self):
         """(label, home text, away text, home share) for every row."""

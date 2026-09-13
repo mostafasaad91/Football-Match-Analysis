@@ -103,8 +103,13 @@ MACHINE = re.compile(r"\b(nan|NaN|inf)\b|\{\w+\}|\s\|\s")
 # section pages read "MATCH STORY  |  PAGE 05" and the plates between them read
 # "PAGE 23  |  REAL MATCH EVENTS". Both are upper case, both are one line, and
 # nothing in the prose is either.
+#
+# The cover's title is the third: "Match Analysis  |  Parma vs Cagliari", set as
+# a heading the way the footer is set, on a line of its own that no sentence
+# begins.
 CHROME = re.compile(
-    r"^\s*(?:PAGE \d+\s*\|\s*[A-Z ]+|[A-Z][A-Z ]+\|\s*PAGE \d+)\s*$",
+    r"^\s*(?:PAGE \d+\s*\|\s*[A-Z ]+|[A-Z][A-Z ]+\|\s*PAGE \d+"
+    r"|Match Analysis\s+\|\s+.+\svs\s.+)\s*$",
     re.MULTILINE)
 
 

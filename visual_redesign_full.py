@@ -316,7 +316,15 @@ def configure_match(match_info: dict, output_dir: Path | str) -> None:
     # lifting only there left arrows, bars and heatmap ramps on the raw kit
     # value — PSG's navy measured 1.99:1 against the black page and Aston
     # Villa's claret 1.89:1, against a readable minimum of 3.
-    HOME, AWAY = (lift_to_floor(colour) for colour in _resolve_fixture_colors(match_info))
+    raw_home, raw_away = _resolve_fixture_colors(match_info)
+    HOME, AWAY = (lift_to_floor(colour) for colour in (raw_home, raw_away))
+    # The report cover draws kit colour inside its bars, where the colour the
+    # club wears is the point, rather than the one lifted for text on the page.
+    # It also names the venue, the managers and the shape, which only the parse
+    # knows; build_pdf passes both on.
+    global _MATCH_INFO, _KIT_COLORS
+    _MATCH_INFO = dict(match_info or {})
+    _KIT_COLORS = (raw_home, raw_away)
     MATCH_SCORE = _display_score(match_info.get("score"))
     OUT = Path(output_dir).resolve()
     MATCH_KEY = OUT.name
@@ -4065,6 +4073,13 @@ def build_pdf(
             "away_color": AWAY,
             "score": MATCH_SCORE,
             "date": events.attrs.get('match_date', ''),
+            # What the cover names beyond the scoreline. Read with defaults, so
+            # a renderer configured before these existed still builds a report.
+            **{key: globals().get("_MATCH_INFO", {}).get(key)
+               for key in ("venue", "managers", "formations", "round_name",
+                           "home_form", "away_form")},
+            "home_kit": (globals().get("_KIT_COLORS") or (None, None))[0],
+            "away_kit": (globals().get("_KIT_COLORS") or (None, None))[1],
         },
     )
 
