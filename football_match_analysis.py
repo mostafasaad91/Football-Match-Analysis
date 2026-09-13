@@ -2740,6 +2740,52 @@ def _key_looks_like_xg(key: str) -> bool:
     )
 
 
+def _events_by_team_and_id(events) -> dict:
+    """Every event keyed the way another event points at it.
+
+    ``relatedEventId`` is the provider's per-team event counter, not the global
+    ``id``, so the lookup has to carry the team as well.
+    """
+    return {(e.get("teamId"), e.get("eventId")): e for e in events or []
+            if isinstance(e, dict)}
+
+
+def assist_provider(event: dict, by_event: dict) -> tuple[int | None, str | None]:
+    """Who set up a shot, and with what kind of ball.
+
+    The parse read the provider from the value of an ``IntentionalAssist``
+    qualifier. That qualifier carries no value: it is a flag, and the player
+    who supplied the ball sits on the shot itself as ``relatedPlayerId``, with
+    ``relatedEventId`` pointing at the pass. So every goal on disk -- 246 of
+    them -- was published without an assist, and the report printed N/A beside
+    Declan Rice's pass for Guimaraes at Sunderland.
+
+    Across 341 goals in the raw snapshots the provider id appears on every shot
+    flagged ``Assisted`` and on none that is not, so the flag decides whether
+    there was an assist and the id says whose it was. The kind is read off the
+    pass, where the provider records it, rather than off the shot.
+    """
+    quals = event.get("qualifiers") or []
+    names = {(q.get("type") or {}).get("displayName") for q in quals
+             if isinstance(q, dict)}
+    if "OwnGoal" in names or not names & {"Assisted", "IntentionalAssist"}:
+        return None, None
+    provider = event.get("relatedPlayerId")
+    if provider is None:
+        return None, None
+    related = by_event.get((event.get("teamId"), event.get("relatedEventId")))
+    kind = None
+    if isinstance(related, dict):
+        passed = [(q.get("type") or {}).get("displayName")
+                  for q in related.get("qualifiers") or [] if isinstance(q, dict)]
+        kind = next((k for k in ("Cross", "ThroughBall", "Chipped", "LayOff", "KeyPass")
+                     if k in passed), None)
+    try:
+        return int(provider), kind
+    except (TypeError, ValueError):
+        return None, None
+
+
 def _extract_provider_shot_xg(row_or_event) -> float | None:
     """
     Use provider/Opta shot xG if WhoScored ever exposes it in the event payload.
@@ -4690,6 +4736,7 @@ def parse_all(md: dict):
     pnames = {int(k): v for k, v in md.get("playerIdNameDictionary", {}).items()}
     rows = []
     sub_in, sub_out, red_cards = set(), set(), set()
+    by_event = _events_by_team_and_id(md.get("events", []))
 
     for e in md.get("events", []):
         quals = e.get("qualifiers", [])
@@ -4720,14 +4767,8 @@ def parse_all(md: dict):
             shot_raw_type = etype if is_shot and etype in SHOT_TYPES else None
         shot_cat = get_shot_family(shot_raw_type) if is_shot else None
         xg_val = _extract_provider_shot_xg(e) if is_shot else None
-        assist_id = next(
-            (
-                int(q["value"])
-                for q in quals
-                if q.get("type", {}).get("displayName") == "IntentionalAssist"
-                and q.get("value") is not None
-            ),
-            None,
+        assist_id, assist_kind = (
+            assist_provider(e, by_event) if is_shot else (None, None)
         )
         pid = e.get("playerId")
         event_team = e.get("teamId")
@@ -4814,7 +4855,7 @@ def parse_all(md: dict):
                         "is_direct_fk": False,
                     }
                 ),
-                "assist_type": next(
+                "assist_type": assist_kind or next(
                     (
                         q.get("type", {}).get("displayName")
                         for q in quals
