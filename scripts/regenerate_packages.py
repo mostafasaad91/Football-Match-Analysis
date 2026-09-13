@@ -105,7 +105,16 @@ def main() -> int:
         rebuild(Path(sys.argv[sys.argv.index("--child") + 1]).resolve())
         return 0
 
+    # A long list of names on the command line is at the mercy of whatever
+    # shell expands it: thirty-nine arrived as one argument once and the run
+    # rebuilt a single package and reported success. --list takes them from a
+    # file, one per line, where nothing can word-split them.
     patterns = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if "--list" in sys.argv:
+        listed = Path(sys.argv[sys.argv.index("--list") + 1])
+        patterns = [line.strip() for line in
+                    listed.read_text(encoding="utf-8").splitlines() if line.strip()]
+        patterns = [p for p in patterns if p not in {str(listed)}]
     targets = fixtures(patterns)
     if not targets:
         print("No rendered fixtures matched.")
