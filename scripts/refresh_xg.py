@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -87,6 +88,15 @@ def refresh(folder: Path, write: bool) -> tuple[float, float]:
                       encoding="utf-8-sig")
     sequence_frame.to_csv(folder / "player_sequence_metrics.csv", index=False,
                           encoding="utf-8-sig")
+    # The light copy keeps frames of its own, written by the render that drew
+    # it. Left alone, the two copies of one match would carry two xG figures
+    # until the match is redrawn, so they are brought level here.
+    light = folder / "light"
+    if light.is_dir():
+        for name in ("events.csv", "xg.csv", "team_advanced_metrics.csv",
+                     "player_sequence_metrics.csv"):
+            if (light / name).exists():
+                shutil.copy2(folder / name, light / name)
     return before, after
 
 
