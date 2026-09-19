@@ -162,6 +162,8 @@ def main() -> int:
                         help="Skip the light copy (it is built by default)")
     parser.add_argument("--dry-run", action="store_true",
                         help="List what would run, and where it would be shelved")
+    parser.add_argument("--no-refit", action="store_true",
+                        help="Skip refitting the xG layer after the round")
     args = parser.parse_args()
 
     from match_fixture import normalise_round, shelf
@@ -198,7 +200,34 @@ def main() -> int:
         print("Re-run these:")
         for url, detail in failures:
             print(f"  {url}\n      {detail}")
+    if len(failures) < len(urls) and not args.no_refit:
+        refit_xg()
     return 1 if failures else 0
+
+
+def refit_xg() -> None:
+    """Refit the engine's xG layer on every Opta shot map stored so far.
+
+    Each fixture rendered keeps its shot map, so the archive the layer learns
+    from grows by a round at a time, and refitting here is what makes the
+    engine -- the fallback whenever FotMob has no map -- improve over the
+    season rather than stay where it was fitted. The script writes nothing
+    unless the new fit beats the engine and holds up against what ships.
+    """
+    print("\nRefitting the xG layer on the stored Opta shot maps ...", flush=True)
+    try:
+        done = subprocess.run([sys.executable, "scripts/fit_xg_reference.py"], cwd=ROOT,
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=FIXTURE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        print("  refit took too long, stopped; the previous fit stays")
+        return
+    lines = (done.stdout or done.stderr or "").strip().splitlines()
+    for line in lines:
+        if line.lstrip().startswith(("shots paired", "Opta-fitted", "what ships", "written",
+                                     "nothing written", "The fit")) or "shots paired" in line:
+            print("  " + line.strip())
 
 
 if __name__ == "__main__":

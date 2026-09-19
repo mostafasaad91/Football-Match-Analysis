@@ -38,6 +38,10 @@ from pathlib import Path
 
 ALIGNMENT_FILE = "xg_alignment.json"
 METHOD = "outcome_fitted_big_chance_v1"
+# The same layer fitted to Opta's value for each shot rather than to goals, by
+# scripts/fit_xg_reference.py. The reader is identical; only the target moved.
+REFERENCE_METHOD = "opta_reference_fitted_v1"
+METHODS = (METHOD, REFERENCE_METHOD)
 
 # Every term the fit may use, in one place, so the stored file and the reader
 # cannot disagree about which name means what.
@@ -52,7 +56,16 @@ TERMS = (
     # fit that targets goals leaves them at zero; only a fit that targets
     # another model's published numbers may use them.
     "block_dist", "block_dist2", "block_known", "blocked",
+    # A flat lift for "big chance" is what both fits kept getting wrong: Opta
+    # spreads flagged chances from 0.03 to 0.99 on what it sees, and a flagged
+    # chance from the byline is not a flagged chance from the spot. These let
+    # the flag be priced by where the chance was and how it was struck.
+    "bc_log_angle", "bc_dist", "bc_header", "bc_one_on_one", "header_corner",
 )
+
+# Products of a flag and a place. The goal fit never sees them: two hundred
+# goals cannot price an interaction, and they carry geometry it is kept off.
+INTERACTIONS = {"bc_log_angle", "bc_dist", "bc_header", "bc_one_on_one", "header_corner"}
 
 # Anything the outcome fit is allowed to weigh. A shot cannot be priced on what
 # happened to it after it left the boot.
@@ -68,7 +81,8 @@ PRE_SHOT = tuple(t for t in TERMS
 # is allowed the level and the flags and nothing geometric.
 GEOMETRIC = {"dist", "dist2", "inv_dist", "angle", "log_angle", "central", "dy",
              "six_yard", "box_centre", "box_wide", "out_of_box"}
-LEVEL_TERMS = tuple(t for t in PRE_SHOT if t not in GEOMETRIC and t != "logit")
+LEVEL_TERMS = tuple(t for t in PRE_SHOT
+                    if t not in GEOMETRIC and t not in INTERACTIONS and t != "logit")
 
 _LOADED: object = "unread"
 
@@ -138,7 +152,15 @@ def features(value: float, geometry: dict, context: dict, row) -> dict:
     block = min(block, 15.0)
     body = str(row.get("body_part") or "")
     shot_type = str(row.get("shot_whoscored_type") or "")
+    big = 1.0 if is_big_chance(row, context) else 0.0
+    header = 1.0 if body == "Head" or context.get("is_header") else 0.0
+    log_angle = math.log(max(float(geometry["angle"]), 1e-3))
     return {
+        "bc_log_angle": big * log_angle,
+        "bc_dist": big * distance / 40.0,
+        "bc_header": big * header,
+        "bc_one_on_one": big * (1.0 if context.get("is_one_on_one") else 0.0),
+        "header_corner": header * (1.0 if "FromCorner" in names else 0.0),
         "const": 1.0,
         "logit": math.log(probability / (1 - probability)),
         "big_chance": 1.0 if is_big_chance(row, context) else 0.0,
@@ -186,7 +208,7 @@ def load(root=None):
         stored = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
-    if stored.get("method") != METHOD:
+    if stored.get("method") not in METHODS:
         return None
     if not isinstance(stored.get("weights"), dict):
         return None

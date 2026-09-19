@@ -1,21 +1,30 @@
 {
-  "method": "outcome_fitted_big_chance_v1",
-  "shots": 2050,
-  "goals": 208,
-  "matches": 78,
+  "method": "opta_reference_fitted_v1",
+  "reference": "Opta via FotMob shot maps",
+  "fitted_utc": "2026-09-19T18:11:00+00:00",
+  "shots": 6332,
+  "matches": 228,
   "terms": [
     "const",
+    "logit",
     "big_chance",
-    "from_corner"
+    "log_angle",
+    "from_corner",
+    "header",
+    "first_touch",
+    "block_known",
+    "bc_dist"
   ],
-  "log_loss_before": 0.2878118469391471,
-  "log_loss_after": 0.2805637469980965,
-  "xg_before": 224.2529,
-  "xg_after": 207.65971493157568,
+  "rmse_vs_reference": 0.07592731714883169,
   "weights": {
-    "const": -0.3579516041472825,
-    "big_chance": 0.7844564645105148,
-    "from_corner": -0.6378388215305587,
-    "logit": 1.0
+    "const": -0.2405359898674182,
+    "logit": 0.3589140689717703,
+    "big_chance": 0.47232992226108805,
+    "log_angle": 1.310052026955835,
+    "from_corner": -0.5301392319671904,
+    "header": -0.40845070344136913,
+    "first_touch": -0.23597943099514443,
+    "block_known": -0.2485532535955428,
+    "bc_dist": 0.9578582360801982
   }
 }
