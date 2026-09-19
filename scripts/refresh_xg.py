@@ -67,6 +67,11 @@ def refresh(folder: Path, write: bool) -> tuple[float, float]:
     # is asked again rather than handed its own previous answer.
     events = events.drop(columns=["xG", "xg_source"], errors="ignore")
     events = F.apply_best_open_source_xg(events, info)
+    # The same Opta values a fresh render would take, from the stored shot map
+    # when there is one, so a re-price does not undo them.
+    from reference_xg import apply_reference_xg
+
+    events, _ = apply_reference_xg(events, info, package=str(folder.relative_to(OUTPUT)))
     after = float(pd.to_numeric(events.loc[shots, "xG"], errors="coerce").fillna(0).sum()) \
         if shots is not None else 0.0
 

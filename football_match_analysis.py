@@ -299,8 +299,9 @@ def _xg_source_name() -> str:
     try:
         import xg_alignment
 
-        if xg_alignment.load():
-            return f"{XG_LOCAL_MODEL_VERSION}+{xg_alignment.METHOD}"
+        stored = xg_alignment.load()
+        if stored:
+            return f"{XG_LOCAL_MODEL_VERSION}+{stored['method']}"
     except Exception:
         pass
     return XG_LOCAL_MODEL_VERSION
@@ -12385,6 +12386,19 @@ def main():
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.environ["MATCH_ANALYSIS_OUTPUT_DIR"] = SAVE_DIR
     console.print(f"[cyan]  Output folder -> {SAVE_DIR}[/cyan]")
+
+    # Opta's own value for every shot FotMob lists, before anything is totalled,
+    # so the frames, the visuals and the PDF all carry one number per shot. A
+    # shot it does not list keeps the engine's value; a failure costs nothing.
+    try:
+        from reference_xg import apply_reference_xg
+
+        events, _xg_note = apply_reference_xg(
+            events, info,
+            package=os.path.relpath(SAVE_DIR, os.path.join(SCRIPT_DIR, "output")).replace("\\", "/"))
+        console.print(f"[cyan]  xG: {_xg_note}[/cyan]")
+    except Exception as _xg_error:  # pragma: no cover - never block the report
+        console.print(f"[yellow]  Reference xG not applied: {_xg_error}[/yellow]")
 
     global HOME_COLOR, AWAY_COLOR, C_RED, C_BLUE
     home_col, away_col = choose_matchup_colors(

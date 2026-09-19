@@ -1902,7 +1902,7 @@ class TacticalPDF:
         self._header("Methodology and Caveats", "Definitions and limits needed to interpret a single-match report", "TRUST LAYER")
         left = [
             ("xG", "Expected-goal value estimates chance quality before the shot outcome."),
-            ("Local post-shot estimate", "Placement-weighted pre-shot xG. Uncalibrated; no shot velocity or actual goalkeeper position. Do not treat it as measured goals prevented."),
+            ("Post-shot xG (xGOT)", "Opta's value via FotMob where published: placement, pace and keeper position. Otherwise a local placement-weighted estimate."),
             ("xT", "Expected threat values ball progression by the change in scoring potential between locations."),
             ("PPDA", "Opponent passes per defensive action in the pressing zone. Lower means more frequent actions relative to passes, not necessarily a better press."),
         ]

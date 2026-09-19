@@ -1358,6 +1358,13 @@ def post_shot_xg(events: pd.DataFrame) -> pd.Series:
     Heuristic, not a fitted model. The multiplier runs from 0.55 for a shot
     straight at the keeper to 2.45 in a corner, and the result is capped at
     0.97 because no placement is a certain goal.
+
+    Where the render paired a shot with Opta's own post-shot value
+    (``xgot_reference``, from ``reference_xg``) that value is used instead.
+    The heuristic sees placement and nothing else -- no pace, no keeper
+    position -- and at Brighton 3-0 Arsenal it put Brighton's five efforts on
+    target at 0.86 where Opta has 1.86: a header Opta prices at 0.94 came out
+    at 0.47. It is the fallback, for shots Opta's map does not carry.
     """
     if events is None or events.empty:
         return pd.Series(dtype=float)
@@ -1365,9 +1372,13 @@ def post_shot_xg(events: pd.DataFrame) -> pd.Series:
     base = _numeric_series(events, "xG", 0.0).fillna(0.0).clip(lower=0.0)
     shot_type = events.get("shot_whoscored_type", pd.Series("", index=events.index)).astype(str)
     on_target = shot_type.isin(ON_TARGET_SHOT_TYPES)
+    reference = _numeric_series(events, "xgot_reference", np.nan)
 
     values = pd.Series(0.0, index=events.index, dtype=float)
     for idx in events.index[on_target]:
+        if pd.notna(reference.at[idx]):
+            values.at[idx] = float(reference.at[idx])
+            continue
         point = shot_placement(events.loc[idx])
         if point is None:
             # On target but no placement recorded: fall back to the base chance.

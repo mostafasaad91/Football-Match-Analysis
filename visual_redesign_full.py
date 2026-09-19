@@ -3183,7 +3183,11 @@ def finishing_quality(events):
     ax.set_ylim(0, ceiling * 1.28)
     ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.7)
     ax.tick_params(labelsize=8.5)
-    ax.legend(loc="upper right", frameon=False, labelcolor=TEXT, fontsize=8.5, ncol=2)
+    # Above the plot, not in it. Inside, the top-right corner is exactly where
+    # the higher side's goal count is written: Brighton 3-0 Arsenal printed the
+    # "3" through the Arsenal key.
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.01), frameon=False,
+              labelcolor=TEXT, fontsize=8.5, ncol=2, borderaxespad=0.0)
     fig.text(0.075, 0.795, "From chance to goal", color=TEXT, fontsize=13, fontweight="bold")
 
     # -- every shot that reached the frame ------------------------------------
@@ -3221,7 +3225,10 @@ def finishing_quality(events):
                     alpha=0.55, edgecolors=TEXT, linewidths=0.5, zorder=4)
         ax2.scatter(own.loc[scored, "xG"], own.loc[scored, "_psxg"], s=190, color=colour,
                     marker="*", edgecolors=TEXT, linewidths=0.6, zorder=5)
-    ax2.set_xlim(0, limit); ax2.set_ylim(0, limit)
+    # A little room below zero: a goal Opta prices near nothing after the strike
+    # (Groß at Brighton, 0.01) otherwise sits on the axis with half its star cut.
+    pad = limit * 0.03
+    ax2.set_xlim(-pad, limit); ax2.set_ylim(-pad, limit)
     ax2.set_xlabel("Pre-shot xG", fontsize=9, color=MUTED)
     ax2.set_ylabel("Post-shot xG", fontsize=9, color=MUTED)
     ax2.grid(color=GRID, lw=0.7, alpha=0.6)
@@ -3250,10 +3257,22 @@ def finishing_quality(events):
             f"frame, worth {post:.2f} once struck, {goals} scored - {verdict}.")
     fig.text(0.075, 0.345, lines[0], color=HOME, fontsize=10)
     fig.text(0.075, 0.315, lines[1], color=AWAY, fontsize=10)
-    fig.text(0.075, 0.265,
-             "Post-shot xG is a local placement estimate. It has no shot velocity and no goalkeeper "
-             "position, so it prices where the ball went, not how hard it was to stop.",
-             color=NEUTRAL, fontsize=8.5)
+    # Say where the middle figure came from. Opta's post-shot value knows the
+    # pace of the shot and where the keeper stood; the local estimate knows the
+    # placement only, and reads well below it on the chances that matter.
+    framed_all = shots[on_target.reindex(shots.index, fill_value=False)]
+    from_opta = (pd.to_numeric(framed_all.get("xgot_reference"), errors="coerce").notna().sum()
+                 if "xgot_reference" in framed_all else 0)
+    if len(framed_all) and from_opta == len(framed_all):
+        source_note = ("Post-shot xG is Opta's (via FotMob): where the ball crossed the line, how hard "
+                       "it was struck and where the goalkeeper stood.")
+    elif from_opta:
+        source_note = (f"Post-shot xG is Opta's (via FotMob) for {from_opta} of {len(framed_all)} attempts "
+                       "on target; the rest are a local placement estimate without pace or keeper position.")
+    else:
+        source_note = ("Post-shot xG is a local placement estimate. It has no shot velocity and no goalkeeper "
+                       "position, so it prices where the ball went, not how hard it was to stop.")
+    fig.text(0.075, 0.265, source_note, color=NEUTRAL, fontsize=8.5)
 
     fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
              ha="right", fontsize=8, color=NEUTRAL)
