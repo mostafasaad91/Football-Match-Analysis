@@ -1229,8 +1229,7 @@ def _draw_closing_page(pdf, info, events=None, ppda=None):
     fig.text(
         0.5,
         0.30,
-        "Data: WhoScored / Opta   ·   Built with Python & Matplotlib   ·   "
-        "Analysis by Mostafa Saad",
+        "Built with Python & Matplotlib   ·   Analysis by Mostafa Saad",
         ha="center",
         color=TEXT_FADED,
         fontsize=8.5,

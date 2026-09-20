@@ -3264,11 +3264,12 @@ def finishing_quality(events):
     from_opta = (pd.to_numeric(framed_all.get("xgot_reference"), errors="coerce").notna().sum()
                  if "xgot_reference" in framed_all else 0)
     if len(framed_all) and from_opta == len(framed_all):
-        source_note = ("Post-shot xG is Opta's (via FotMob): where the ball crossed the line, how hard "
-                       "it was struck and where the goalkeeper stood.")
+        source_note = ("Post-shot xG here is a published reference value: where the ball crossed the "
+                       "line, how hard it was struck and where the goalkeeper stood.")
     elif from_opta:
-        source_note = (f"Post-shot xG is Opta's (via FotMob) for {from_opta} of {len(framed_all)} attempts "
-                       "on target; the rest are a local placement estimate without pace or keeper position.")
+        source_note = (f"Post-shot xG is a published reference value for {from_opta} of {len(framed_all)} "
+                       "attempts on target; the rest are a local placement estimate without pace or "
+                       "keeper position.")
     else:
         source_note = ("Post-shot xG is a local placement estimate. It has no shot velocity and no goalkeeper "
                        "position, so it prices where the ball went, not how hard it was to stop.")

@@ -792,7 +792,9 @@ def _finding_game_state(m: _Match) -> Finding | None:
             "shows."
         )
     return Finding("game_state", 0.35 + spread / 4, Section(
-        "The scoreline changed both teams", [opening, second, third],
+        (f"The scoreline changed both teams {m.first_goal[0]}"
+         if m.first_goal else "The scoreline changed both teams"),
+        [opening, second, third],
         m.visual("33_game_state_splits.png", "35_match_momentum.png"),
     ))
 
@@ -883,7 +885,9 @@ def _finding_transition(m: _Match) -> Finding | None:
             f"were wrong before it lost the ball."
         )
     return Finding("transition", m.gap(home_txg, away_txg) or 0.10, Section(
-        "The open field" if level else "Who used the broken play",
+        (f"The open field, worth {leader_xg:.2f} and {trailer_xg:.2f}" if level else
+         f"{leader} took {leader_xg:.2f} expected goals out of the broken play, "
+         f"{trailer} {trailer_xg:.2f}"),
         [opening, second, third],
         m.visual("32_transition_outcomes.png", "49_press_triggers.png"),
         pull_quote=f"Transition xG: {leader} {leader_xg:.2f}  ·  {trailer} {trailer_xg:.2f}",
@@ -967,8 +971,14 @@ def _finding_press(m: _Match) -> Finding | None:
             f"settled in the pass immediately after the regain — which is a "
             f"rehearsable pattern, not a matter of intent."
         )
+    # A heading is read before the paragraphs and often instead of them, so it
+    # carries the finding rather than the topic: "The press, and what it was
+    # worth" was the same three words above every press section in the archive.
     return Finding("press", (m.gap(home_hr, away_hr) * 0.8) or 0.10, Section(
-        "Two presses, cancelling out" if level else "The press, and what it was worth",
+        (f"Two presses, {int(presser_hr)} high regains against {int(other_hr)}"
+         if level else
+         f"{presser} won it back {int(presser_hr)} times in {other}'s half, "
+         f"and {presser_rate:.0f}% of regains became a shot"),
         [opening, second, third],
         m.visual("31_ppda_pressing.png")
         + m.team_visual("27_high_regains_{slug}.png", presser),
@@ -1611,11 +1621,80 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
               f"one-sided decides what the match looked like; whether it "
               f"decided the result is the rest of this piece.")
 
+    # -- the press, and what it was turned into -----------------------------
+    #
+    # No candidate read a press at all, so a side that won the ball high and
+    # shot from it could be published under a headline belonging to the side it
+    # pressed: Brighton beat Arsenal 3-0 with 23 high regains to 18 and one
+    # recovery in seven becoming a shot against one in twenty-seven, and the
+    # article opened on "Arsenal Had The Ball. Brighton Had The Chances." —
+    # true, and silent about how the chances were won.
+    #
+    # The headline names the mechanism and what it produced, and it can only
+    # claim what the frames carry: goals when the goals came from transitions,
+    # shots otherwise.
+    home_regains, away_regains = _num(m.hm, "high_regains"), _num(m.am, "high_regains")
+    home_regain_rate = _num(m.hm, "regain_to_shot_rate")
+    away_regain_rate = _num(m.am, "regain_to_shot_rate")
+    presser, pressed, press_level = m.lead(home_regains, away_regains, tolerance=3.0)
+    rate_leader, _rate_trailer, rate_level = m.lead(home_regain_rate, away_regain_rate,
+                                                    tolerance=2.0)
+    if not press_level and not rate_level and rate_leader == presser:
+        regains = m.of(presser, home_regains, away_regains)
+        rate = m.of(presser, home_regain_rate, away_regain_rate)
+        other_rate = m.of(pressed, home_regain_rate, away_regain_rate)
+        press_shots = _num(m.of(presser, m.hm, m.am), "transition_shots")
+        press_goals = int(_num(m.of(presser, m.hm, m.am), "transition_goals"))
+        press_xg = _num(m.of(presser, m.hm, m.am), "transition_xG")
+        reading = (
+            f"{result}. {presser} won the ball back {regains:.0f} times in "
+            f"{pressed}'s half and turned {rate:.1f}% of every recovery into a shot, "
+            f"against {other_rate:.1f}%, and the transitions carried "
+            f"{press_xg:.2f} expected goals.")
+        # One transition goal in a four-goal win is not what decided it, and
+        # "Turned Their Build-Up Into One Goal" reads as a small claim about a
+        # big afternoon. Two is where the press is the story.
+        if press_goals >= 2 and presser == m.winner:
+            offer(2.9 + press_goals * 0.2,
+                  f"How {presser}'s Press Turned {pressed}'s Build-Up Into "
+                  f"{_spell(press_goals).title()} "
+                  f"{_plural(press_goals, 'Goal').title()}",
+                  reading)
+        elif press_shots >= 6:
+            offer(2.6 + press_shots / 40,
+                  f"How {presser}'s Press Turned {pressed}'s Build-Up Into "
+                  f"{_spell(int(press_shots)).title()} Shots",
+                  reading)
+        else:
+            offer(1.7,
+                  f"{presser} Pressed High And {pressed} Kept Playing Into It",
+                  reading)
+
+    # -- everything built, and what reached the goalkeeper ------------------
+    #
+    # A side can enter the box all afternoon and never trouble the keeper, and
+    # that gap is the whole match when it happens. Arsenal made seventeen box
+    # entries at Brighton and put two attempts on target.
+    for side, keeper_side in ((m.home, m.away), (m.away, m.home)):
+        entries = m.of(side, _num(m.hm, "box_entries"), _num(m.am, "box_entries"))
+        on_target = m.of(side, _num(m.hx, "on_target"), _num(m.ax, "on_target"))
+        blocked = m.of(side, _num(m.hx, "blocked"), _num(m.ax, "blocked"))
+        attempts = m.of(side, _num(m.hx, "shots"), _num(m.ax, "shots"))
+        if entries >= 12 and attempts >= 6 and on_target <= 3 and blocked >= 3:
+            offer(2.3 + entries / 40,
+                  f"{side} Reached The Box {entries:.0f} Times And The Goalkeeper "
+                  f"{_spell(int(on_target)).title()}",
+                  f"{result}. {side} entered the area {entries:.0f} times and took "
+                  f"{attempts:.0f} attempts, of which {blocked:.0f} were blocked and "
+                  f"{on_target:.0f} reached {keeper_side}'s goalkeeper.")
+
     # -- an early goal that removed the level phase ------------------------
     if m.first_goal and m.first_goal[2] <= 2 and m.winner:
         when, scorer, _minute = m.first_goal
+        # Named for both sides rather than for the winner: the early goal is
+        # often the losing side's, and the frames do not say whose it was.
         offer(1.3,
-              "The Match Was Framed Before It Started",
+              f"{m.home} And {m.away} Never Played A Level Minute",
               f"{result}. The opening goal arrived {when}"
               + (f", through {scorer}" if scorer else "")
               + ", so neither side ever played a level minute.")

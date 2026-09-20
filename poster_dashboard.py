@@ -559,7 +559,6 @@ class Poster:
         self._rule(.045,.955,.057)
         crests.place_logo(self.fig,.061,.034,width=.031,background=BG_DARK)
         self._text(.09,.034,self.info.get('byline','MOSTAFA SAAD').upper(),size=10,weight='bold',va='center',width=.33)
-        self._text(.955,.038,'SOURCE / WHOSCORED · OPTA',size=9,ha='right',color=self.muted)
         self._text(.955,.025,'Local model values are estimates',size=8,ha='right',color=self.muted)
         for left,right,tid in [(.045,.5,self.info['home_id']),(.5,.955,self.info['away_id'])]:
             self.fig.add_artist(Line2D([left,right],[.012,.012],transform=self.fig.transFigure,color=self.colors[tid],lw=3))

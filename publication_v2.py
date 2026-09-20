@@ -37,6 +37,106 @@ def review_method(c,group):
     return methods[group]
 
 
+def _findings(events, xg, team_metrics, player_metrics, match_info, out, *, most=3):
+    """The strongest findings this match supports, as sections.
+
+    Never raises: a finding that cannot be built is one paragraph the reader
+    does not get, not an article that fails to publish.
+    """
+    try:
+        from match_article import BUILDERS, _Match
+
+        m = _Match(events, xg, team_metrics, player_metrics, match_info, out)
+        found = []
+        for build in BUILDERS:
+            try:
+                finding = build(m)
+            except Exception:
+                continue
+            if finding is not None:
+                found.append(finding)
+        found.sort(key=lambda f: f.weight, reverse=True)
+        seen, chosen = set(), []
+        for finding in found:
+            if finding.section.heading in seen:
+                continue
+            seen.add(finding.section.heading)
+            chosen.append(finding.section)
+            if len(chosen) == most:
+                break
+        return chosen
+    except Exception:
+        return []
+
+
+def section_heading(group, c):
+    """The group name carrying this match's finding, not the topic alone.
+
+    "Pressing and Rest Defence" sat above the press section of every article in
+    the archive, so the heading told a reader which subject was coming and
+    nothing about the match -- and two articles could be told apart only by
+    reading the paragraphs. The group is still the key everything else looks
+    the section up by; only what is printed changes. Anything missing from the
+    context falls back to the plain name rather than to a half-written claim.
+    """
+    def pair(key):
+        home, away = c.get('home_' + key), c.get('away_' + key)
+        if home is None or away is None:
+            return None
+        try:
+            home, away = float(home), float(away)
+        except (TypeError, ValueError):
+            return None
+        leader = c['home'] if home >= away else c['away']
+        other = c['away'] if leader == c['home'] else c['home']
+        return leader, other, max(home, away), min(home, away)
+
+    try:
+        if group == 'Chance Creation':
+            found = pair('xG')
+            entries = pair('box_entries')
+            if found and entries:
+                # Whoever led the entries is often not whoever led the chances,
+                # so the second clause names its own side rather than reading
+                # as more of the first one's.
+                shared = (f"the box entries split {entries[2]:.0f} each"
+                          if entries[2] == entries[3] else
+                          f"{entries[0]} led the box entries "
+                          f"{entries[2]:.0f} to {entries[3]:.0f}")
+                return (f"{found[0]} created {found[2]:.2f} expected goals to "
+                        f"{found[3]:.2f}, {shared}")
+        elif group == 'Possession and Progression':
+            found = pair('field_tilt')
+            if found:
+                if found[2] - found[3] < 1:
+                    return "The final-third passing split evenly, half each"
+                return (f"{found[0]} held {found[2]:.0f}% of the final-third passing, "
+                        f"{found[1]} {found[3]:.0f}%")
+        elif group == 'Pressing and Rest Defence':
+            found = pair('high_regains')
+            rate = pair('regain_to_shot_rate')
+            if found and rate:
+                if rate[0] == found[0]:
+                    return (f"{found[0]} won the ball back {found[2]:.0f} times in "
+                            f"{found[1]}'s half and turned {rate[2]:.0f}% of regains "
+                            f"into a shot")
+                return (f"{found[0]} won the ball back {found[2]:.0f} times in "
+                        f"{found[1]}'s half, and {rate[0]} did more with fewer")
+        elif group == 'Transitions and Efficiency':
+            found = pair('transition_xG')
+            if found:
+                return (f"{found[0]} took {found[2]:.2f} expected goals out of the "
+                        f"turnovers, {found[1]} {found[3]:.2f}")
+        elif group == 'Match Story':
+            home_goals, away_goals = c.get('home_goals'), c.get('away_goals')
+            if home_goals is not None and away_goals is not None:
+                return (f"How {c['home']} {int(home_goals)}–{int(away_goals)} "
+                        f"{c['away']} arrived")
+    except (KeyError, TypeError, ValueError):
+        pass
+    return group
+
+
 def build_article(events, xg, team_metrics, player_metrics, match_info, out_dir, *, max_sections=5, players=None):
     from match_article import Article, Section
     from tactical_pdf_report import build_context
@@ -60,12 +160,20 @@ def build_article(events, xg, team_metrics, player_metrics, match_info, out_dir,
     sections=[Section('The result and the chances',
         [result_read(c), finishing_reading(c), handoff('The result and the chances')],
         [p for p in selected if 'xg_flow' in p.stem])]
+    # match_article builds a dozen findings -- the press and what it bought,
+    # the broken play, the dead balls, the side camped in the other's half --
+    # each with the weight of the gap behind it. Nothing read them: the article
+    # went straight from the result to the thematic groups, so the sharpest
+    # thing the package knew about a match was written and never published.
+    # The strongest three run here, above the groups, in the order the match
+    # ranks them.
+    sections.extend(_findings(events, xg, team_metrics, player_metrics, match_info, out))
     copies=section_copy(c)
     groups=['Chance Creation','Possession and Progression','Pressing and Rest Defence',
             'Transitions and Efficiency','Match Story','Player Impact Appendix']
     for group in groups:
         chosen=[p for p in selected if visual_section(p)==group and 'xg_flow' not in p.stem]
-        heading='Player involvement' if group=='Player Impact Appendix' else group
+        heading='Player involvement' if group=='Player Impact Appendix' else section_heading(group,c)
         paragraphs=[]
         reading=section_reading(c,group)
         if reading:

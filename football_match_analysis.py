@@ -5722,7 +5722,7 @@ def draw_breakdown_goals(fig, events, info, xg_data):
 
     ax1.set_facecolor(BG_MID)
     ax1.set_title(
-        "WhoScored Shot Breakdown",
+        "Shot Breakdown",
         color=TEXT_BRIGHT,
         fontsize=13,
         fontweight="bold",
@@ -6787,7 +6787,7 @@ def _lbl(ax, txt, col=TEXT_BRIGHT, size=8.5):
 # ═══════════════════════════════════════════════════════════════════
 
 CREDIT_MAIN = "Created by Mostafa Saad"
-CREDIT_TOOLS = "Data: WhoScored  |  xG: Internal V7 event-context/team-stat model  |  xT: Local 12x8 approximation"
+CREDIT_TOOLS = "xG: internal event-context/team-stat model  |  xT: local 12x8 approximation"
 
 
 def _watermark(fig):
@@ -11709,7 +11709,7 @@ def _render_cover_page(pdf, info, stats, events, total_pages):
     ax.text(
         0.5,
         0.40,
-        "Data: WhoScored | xG: Internal V7 event-context/team-stat model | xT: Local 12x8 approximation",
+        "xG: internal event-context/team-stat model | xT: local 12x8 approximation",
         ha="center",
         va="center",
         color=PDF_TEXT_DIM,
@@ -14104,7 +14104,7 @@ def build_tactical_pdf(figs, info, events, xg_data, ts):
         d["Author"] = "Mostafa Saad"
         d["Subject"] = f"{info.get('competition', '')} - {info.get('date', '')}"
         d["Keywords"] = (
-            "football match analysis, tactical report, WhoScored, xG, xT, English PDF"
+            "football match analysis, tactical report, xG, xT, English PDF"
         )
     console.print(
         f"\n[bold green]  English full-visual PDF saved -> {pdf_path}[/bold green]\n"
