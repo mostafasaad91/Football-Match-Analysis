@@ -1,4 +1,4 @@
-"""Opta's per-shot xG reaches the render, and only where a shot truly pairs.
+"""Opta's shot map teaches the model by default, and publishes only when asked.
 
 Every test supplies its shot map, so nothing here touches the network.
 """
@@ -8,6 +8,19 @@ import pytest
 
 import reference_xg as RX
 import xg_alignment as XA
+
+
+@pytest.fixture(autouse=True)
+def publishing(monkeypatch, request):
+    """Print Opta's values, which is what most of these tests are about.
+
+    The shipped default collects the map and publishes our own model, so a
+    test that wants the other mode says so by asking for this fixture's
+    absence -- see the two that carry the ``collecting`` marker.
+    """
+    if "collecting" not in request.keywords:
+        monkeypatch.setenv("MATCH_ANALYSIS_REFERENCE_XG", "publish")
+
 
 INFO = {"home_id": 211, "away_id": 13, "home_name": "Brighton", "away_name": "Arsenal",
         "date": "2026-09-19", "score": "3 : 0", "competition": "Premier League"}
@@ -110,7 +123,7 @@ def test_a_shot_by_the_other_side_in_the_same_minute_is_not_taken():
     events = pd.DataFrame([_event(1, 211, 78, "Kai Havertz", 86.8, 47.4, 0.2779)])
     out, note = RX.apply_reference_xg(events, dict(INFO), payload=PAYLOAD)
     assert out.loc[0, "xG"] == 0.2779
-    assert "engine values kept" in note
+    assert "values kept" in note
 
 
 def test_switched_off_leaves_everything_alone(monkeypatch):
@@ -120,10 +133,28 @@ def test_switched_off_leaves_everything_alone(monkeypatch):
     assert out is events and "switched off" in note
 
 
+@pytest.mark.collecting
+def test_by_default_the_map_is_collected_and_our_numbers_published(monkeypatch):
+    monkeypatch.delenv("MATCH_ANALYSIS_REFERENCE_XG", raising=False)
+    events = _events()
+    info = dict(INFO)
+    out, note = RX.apply_reference_xg(events, info, payload=PAYLOAD)
+    assert out is events
+    assert "stored for training" in note and "our model's values published" in note
+    assert "xg_reference_source" not in info
+
+
+@pytest.mark.collecting
+def test_collecting_is_also_what_an_unknown_setting_means(monkeypatch):
+    monkeypatch.setenv("MATCH_ANALYSIS_REFERENCE_XG", "learn")
+    out, note = RX.apply_reference_xg(_events(), dict(INFO), payload=PAYLOAD)
+    assert "stored for training" in note
+
+
 def test_a_broken_shot_map_never_raises():
     out, note = RX.apply_reference_xg(_events(), dict(INFO), payload={"teams": None, "shots": [{"min": "x"}]})
     assert out["xG"].tolist()[:3] == [0.2779, 0.4492, 0.0181]
-    assert "engine values kept" in note
+    assert "values kept" in note
 
 
 @pytest.mark.parametrize("ours, theirs", [

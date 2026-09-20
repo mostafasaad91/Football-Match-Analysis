@@ -1,20 +1,31 @@
-"""Opta's xG for every shot, from FotMob, for the fixture being rendered.
+"""Opta's shot map for the fixture being rendered: the model's teacher, or its answer.
 
-The local engine prices a shot from what the event feed carries. Opta prices it
-from that plus where the goalkeeper and the defenders stood, which the feed
-does not publish -- and on big chances that is most of the answer. Fitted as
-closely as the feed allows (``fit_xg_reference.py``), the engine still misses a
-flagged chance by 0.16 on average, and a match turns on three or four of them:
-Brighton 3-0 Arsenal came out 1.75-1.04 locally against Opta's 1.34-1.58, the
-other way round from every source the audience compares against.
+What the report publishes is our own model. It is fitted to Opta's value per
+shot rather than to goals, because a few hundred goals cannot price the rare
+chances, and it is refitted after every round on every shot map collected so
+far -- so the archive teaches it, and it improves as the archive grows. On
+6332 shots it sits 0.074 from Opta per shot and names the same side ahead in
+91% of matches, while predicting the goals that were actually scored slightly
+better than Opta's own numbers do.
 
-So when FotMob publishes a fixture's shot map, each shot is given Opta's own
-value, paired to the event by side, half, minute, player and place. Anything
-left unpaired -- a shot FotMob does not list, a penalty, an own goal, a fixture
-it has no map for -- keeps the engine's value, and the render never waits on
-this: every failure returns the events untouched with a line saying why.
+So the default here is to collect, not to publish: each render stores the
+fixture's shot map for the next fit and leaves every value alone. Set
+MATCH_ANALYSIS_REFERENCE_XG=publish to print Opta's numbers instead, which
+makes a match agree with FotMob and Sofascore shot for shot; =off to skip
+FotMob entirely and stop the archive growing.
 
-Set ``MATCH_ANALYSIS_REFERENCE_XG=0`` to render the engine's numbers alone.
+Where the two disagree is no mystery. Opta prices a shot from what the feed
+carries plus where the goalkeeper and the defenders stood, which the feed does
+not publish, and on a flagged big chance that is most of the answer: our model
+is 0.16 from Opta on those and 0.036 on everything else. Keeper-position and
+pressure proxies built from the events around the shot were tried and bought
+nothing -- the keeper has touched the ball in the twenty seconds before only a
+fifth of big chances, and when he has, he was on his line.
+
+Shots are paired to the map by side, half, running minute, player and place,
+and a penalty, an own goal or a shot FotMob does not list is never paired.
+Nothing here can hold up a render: every failure returns the events untouched
+with a line saying why.
 """
 
 from __future__ import annotations
@@ -308,20 +319,27 @@ def apply_reference_xg(events: pd.DataFrame, info: dict, payload: dict | None = 
     Never raises. Returns the events untouched, and why, when anything is
     missing. ``payload`` skips the lookup (tests, and callers that hold one).
     """
-    if os.environ.get("MATCH_ANALYSIS_REFERENCE_XG", "1").strip().lower() in {"0", "false", "no", "off"}:
-        return events, "reference xG switched off; engine values kept"
+    mode = os.environ.get("MATCH_ANALYSIS_REFERENCE_XG", "learn").strip().lower()
+    if mode in {"0", "false", "no", "off"}:
+        return events, "reference xG switched off; our model's values kept"
+    publish = mode in {"publish", "1", "true", "yes", "on"}
     try:
         how = "supplied shot map"
         if payload is None:
             payload, how = reference_payload(info)
             if payload is None:
-                return events, f"{how}; engine values kept"
+                return events, f"{how}; our model's values kept"
             if how == "fetched from FotMob":
                 save(payload, package)
+        if not publish:
+            # Collected for the next fit; the published numbers stay ours.
+            shots = len(their_shots(payload))
+            return events, (f"Opta shot map stored for training ({shots} shots, {how}); "
+                            "our model's values published")
         ours, theirs = our_shots(events, info), their_shots(payload)
         pairs = pair(ours, theirs)
         if not pairs:
-            return events, "no shot could be paired; engine values kept"
+            return events, "no shot could be paired; our model's values kept"
         out = events.copy()
         if "xg_source" not in out:
             out["xg_source"] = ""
@@ -339,4 +357,4 @@ def apply_reference_xg(events: pd.DataFrame, info: dict, payload: dict | None = 
         return out, (f"Opta xG on {len(pairs)} of {len(ours)} shots ({how}); "
                      f"{len(theirs) - len(pairs)} FotMob shot(s) not in the event feed")
     except Exception as error:  # the render must never wait on this
-        return events, f"reference xG failed ({type(error).__name__}: {error}); engine values kept"
+        return events, f"reference xG failed ({type(error).__name__}: {error}); our model's values kept"
