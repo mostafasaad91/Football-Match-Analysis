@@ -2024,7 +2024,7 @@ def render_docx(article: Article, path: Path | str,
 
     footer = document.add_paragraph()
     footer_run = footer.add_run(_clean(
-        "All figures derived from WhoScored/Opta event data. Visuals generated with "
+        "All figures derived from match event data. Visuals generated with "
         "an open-source pipeline."))
     footer_run.italic = True
     footer_run.font.size = Pt(9)
