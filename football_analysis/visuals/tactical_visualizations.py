@@ -3401,7 +3401,7 @@ def make_shot_breakdown_v2(events, info, xg_data):
         q = str(last.get("qualifier_names") or "")
         if "Cross" in q:
             at = "Cross"
-        elif "ThroughBall" in q:
+        elif "throughball" in q.lower():  # the feed spells it "Throughball"
             at = "ThroughBall"
         elif "Chipped" in q:
             at = "Chipped"

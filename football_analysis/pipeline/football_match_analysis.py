@@ -2696,6 +2696,16 @@ def _key_looks_like_xg(key: str) -> bool:
     )
 
 
+def pass_kind(names, kinds=("Cross", "ThroughBall", "Chipped", "LayOff", "KeyPass")):
+    """The first of ``kinds`` among qualifier names, in our spelling.
+
+    Compared without case: the feed writes "Throughball", and an exact match
+    on "ThroughBall" meant no assist was ever published as a through ball.
+    """
+    lowered = {str(name).lower() for name in names if name}
+    return next((kind for kind in kinds if kind.lower() in lowered), None)
+
+
 def _events_by_team_and_id(events) -> dict:
     """Every event keyed the way another event points at it.
 
@@ -2735,10 +2745,7 @@ def assist_provider(event: dict, by_event: dict) -> tuple[int | None, str | None
             for q in related.get("qualifiers") or []
             if isinstance(q, dict)
         ]
-        kind = next(
-            (k for k in ("Cross", "ThroughBall", "Chipped", "LayOff", "KeyPass") if k in passed),
-            None,
-        )
+        kind = pass_kind(passed)
     try:
         return int(provider), kind
     except (TypeError, ValueError):
@@ -4771,10 +4778,15 @@ def parse_all(md: dict):
                 "assist_type": assist_kind
                 or next(
                     (
-                        q.get("type", {}).get("displayName")
+                        kind
                         for q in quals
-                        if q.get("type", {}).get("displayName")
-                        in ["KeyPass", "ThroughBall", "Cross", "Chipped", "FastBreak"]
+                        for kind in [
+                            pass_kind(
+                                [q.get("type", {}).get("displayName")],
+                                ("KeyPass", "ThroughBall", "Cross", "Chipped", "FastBreak"),
+                            )
+                        ]
+                        if kind
                     ),
                     None,
                 ),

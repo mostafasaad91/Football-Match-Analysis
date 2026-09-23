@@ -55,6 +55,13 @@ def test_the_pass_is_found_under_the_shooting_team():
     assert assist_provider(shot, _events_by_team_and_id(events)) == (7, "LayOff")
 
 
+def test_a_through_ball_is_named_whatever_the_feed_s_spelling():
+    # The feed writes "Throughball"; the kind is published as "ThroughBall".
+    shot = _shot(13, "Assisted", provider=7, related=41)
+    events = [_pass(13, 41, "Throughball"), shot]
+    assert assist_provider(shot, _events_by_team_and_id(events)) == (7, "ThroughBall")
+
+
 def test_a_shot_with_no_assist_flag_has_no_provider():
     # A related player without the flag is a rebound or a deflection, not an assist.
     shot = _shot(13, "RightFoot", provider=7, related=41)
