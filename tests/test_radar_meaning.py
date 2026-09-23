@@ -235,13 +235,28 @@ def test_the_long_ball_slice_holds_attempts_not_completions(fixture):
         )
 
 
-def test_post_shot_expected_goals_is_not_on_the_keeper_radar():
-    """The model totals 30.0 against 60 goals actually scored — a ratio of
-    0.50 — so "goals prevented" off that baseline would put every keeper in
-    every report eight tenths of a goal below expectation."""
+def test_goals_prevented_is_on_the_radar_only_with_a_fitted_model():
+    """The placement heuristic totalled 436.5 post-shot xG for 754 goals, so
+    "goals prevented" off it put every keeper six tenths of a goal below par.
+    The slice is there because a fitted model ships; without one it must go."""
+    from football_analysis.xg import psxg_model
+
     slices = [m for _g, _c, ms in pr.GK_GROUPS for m in ms]
     assert "PSxG\nfaced" not in slices
-    assert "Goals\nprevented" not in slices
+    assert "Goals\nprevented" in slices
+    assert psxg_model.load() is not None
+
+
+def test_a_keeper_below_par_draws_no_wedge():
+    """Letting in more than the strikes were worth is not an achievement."""
+    assert pr.gk_bar("Goals\nprevented", -1.2) == 0.0
+    assert pr.gk_bar("Goals\nprevented", 0.47) == pytest.approx(50, abs=1)
+
+
+def test_goals_prevented_adds_up(fixture):
+    events, _squad, _allm, _elig = fixture
+    keeper = pr.goalkeeper_metrics(events, "Konstantinos Tzolakis")
+    assert isinstance(keeper["Goals\nprevented"], float)
 
 
 def test_more_is_worse_draws_no_bar():

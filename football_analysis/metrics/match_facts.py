@@ -167,6 +167,15 @@ class Side:
     set_piece_xg: float = 0.0
     gk_saves: int = 0
     outfield_blocks: int = 0
+    # This side's goalkeeper, from match_metrics.goalkeeper_shot_stopping.
+    gk_name: str = ""
+    gk_psxg_faced: float = 0.0
+    gk_conceded: int = 0  # non-penalty, own goals excluded
+    gk_prevented: float = 0.0
+    gk_caught: int = 0
+    gk_parried_safe: int = 0
+    gk_parried_danger: int = 0
+    gk_errors_to_shot: int = 0
 
     # Per half
     half: dict[str, dict[str, float]] = field(default_factory=dict)
@@ -544,6 +553,19 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
         side.gk_saves = int(counts.get(keeper, 0)) if keeper else int(counts.iloc[0])
         side.outfield_blocks = int(len(saves) - side.gk_saves)
 
+    from football_analysis.metrics.match_metrics import goalkeeper_shot_stopping
+
+    keeper = _keeper_name(side, events)
+    stopping = goalkeeper_shot_stopping(events, side.team_id, keeper or None)
+    side.gk_name = keeper
+    side.gk_psxg_faced = float(stopping["psxg_faced"])
+    side.gk_conceded = int(stopping["goals_conceded"])
+    side.gk_prevented = float(stopping["goals_prevented"])
+    side.gk_caught = int(stopping["caught"])
+    side.gk_parried_safe = int(stopping["parried_safe"])
+    side.gk_parried_danger = int(stopping["parried_danger"])
+    side.gk_errors_to_shot = int(stopping["errors_to_shot"])
+
     for label, code in (("first", "1h"), ("second", "2h")):
         half = (
             own[own["period_code"].astype(str) == code]
@@ -583,11 +605,9 @@ def _box_entries(frame: pd.DataFrame) -> int:
 
 
 def _keeper_name(side: Side, events: pd.DataFrame) -> str:
-    meta = events[events["team_id"].apply(lambda v: _int(v) == side.team_id)]
-    keepers = meta[meta["type"].astype(str).isin(("KeeperPickup", "Claim", "Smother", "Punch"))]
-    if len(keepers):
-        return str(keepers["player"].astype(str).mode().iloc[0])
-    return ""
+    from football_analysis.metrics.match_metrics import goalkeeper_name
+
+    return goalkeeper_name(events, side.team_id)
 
 
 def _fill_from_possessions(side: Side, frame: pd.DataFrame) -> None:

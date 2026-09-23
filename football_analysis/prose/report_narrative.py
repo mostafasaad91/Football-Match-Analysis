@@ -383,20 +383,31 @@ def _goalkeeper_saves(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for keeper_side in f.sides:
         attacker = f.other(keeper_side)
-        prevented = attacker.xgot - attacker.goals
+        keeper = keeper_side.gk_name or f"{possessive(keeper_side.name)} goalkeeper"
+        # Penalties and own goals are left out: the post-shot model has no fit
+        # for a penalty, and an own goal was never a shot at him.
+        prevented = keeper_side.gk_prevented
         verdict = (
-            "above what the shots were worth"
+            "above what the strikes were worth"
             if prevented > 0.35
-            else "below it"
+            else "below what the strikes were worth"
             if prevented < -0.35
-            else "at roughly what the shots were worth"
+            else "at roughly what the strikes were worth"
         )
+        signed = f"{prevented:+.2f}".replace("-", "−")
         out.append(
-            f"{possessive(keeper_side.name)} goalkeeper made {keeper_side.gk_saves} saves. "
-            f"{attacker.name} put {n2(attacker.xgot)} of on-target value behind them and scored "
-            f"{attacker.goals}, which puts the goalkeeping {verdict} "
-            f"({prevented:+.2f} goals against the post-shot model)."
+            f"{keeper} made {keeper_side.gk_saves} saves. Penalties aside, {attacker.name} put "
+            f"{n2(keeper_side.gk_psxg_faced)} of post-shot value on target and scored "
+            f"{keeper_side.gk_conceded}, which puts the goalkeeping {verdict} "
+            f"({signed} goals prevented)."
         )
+        handled = keeper_side.gk_caught + keeper_side.gk_parried_safe
+        if keeper_side.gk_parried_danger >= 2 or (handled and keeper_side.gk_parried_danger):
+            went_back = keeper_side.gk_parried_danger
+            out.append(
+                f"Where the saves sent the ball: {handled} held or pushed somewhere safe, "
+                f"{went_back} straight back to an attacker."
+            )
     blocker = max(f.sides, key=lambda s: s.outfield_blocks)
     if blocker.outfield_blocks:
         out.append(

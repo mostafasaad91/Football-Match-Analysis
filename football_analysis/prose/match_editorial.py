@@ -145,8 +145,8 @@ RULES = [
     (
         "goalkeeper",
         [("xGoT", 2, ""), ("on_target", 0, "")],
-        "Local post-shot estimate",
-        "The placement model has not been calibrated and does not know shot velocity or the goalkeeper location. Check individual shots before judging shot-stopping.",
+        "Post-shot xG",
+        "Fitted to Opta's post-shot values from where each shot crossed the line; it does not see shot velocity or where the goalkeeper stood. One match of goals prevented is a reading, not a rating.",
     ),
     (
         "shot_map",

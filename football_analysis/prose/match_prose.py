@@ -1437,59 +1437,77 @@ def _win_probability(context, side, team):
     return line
 
 
+# Goals prevented a keeper-match has to reach before a paragraph calls it
+# the goalkeeping. Across 400 keeper-matches the figure has a spread of 0.80,
+# so three quarters of a goal is roughly one match in five either way.
+_KEEPER_MARGIN = 0.75
+
+
+def _keeper_label(context, side):
+    name = str(context.get(f"{side}_gk_name") or "").strip()
+    return name or f"{context[side]}'s goalkeeper"
+
+
+def _signed(value):
+    return f"{value:+.2f}".replace("-", "−")
+
+
 def _goalkeeper(context, side, team):
     if not team:
-        home, away = context["home"], context["away"]
-        hx, ax = _pair(context, "xG")
-        hg, ag = _one(context, "home", "goals"), _one(context, "away", "goals")
-        # Each keeper is judged against what the *other* side created.
-        home_gap, away_gap = ax - ag, hx - hg
-        if abs(home_gap - away_gap) < 0.5:
+        hp = _one(context, "home", "gk_prevented")
+        ap = _one(context, "away", "gk_prevented")
+        home_keeper = _keeper_label(context, "home")
+        away_keeper = _keeper_label(context, "away")
+        if abs(hp - ap) < _KEEPER_MARGIN:
             return (
-                f"Both goals were beaten about as often as the chances said they "
-                f"should be - {home} conceded {ag:.0f} from {ax:.2f} and {away} "
-                f"{hg:.0f} from {hx:.2f} - so neither goalkeeper separates himself "
-                f"here. The saves worth watching are the individual ones."
+                f"Neither goalkeeper separates himself. Against post-shot expected "
+                f"goals, which prices each attempt as it was struck, {home_keeper} "
+                f"finished at {_signed(hp)} and {away_keeper} at {_signed(ap)}; the "
+                f"saves worth watching are the individual ones."
             )
-        better = home if home_gap > away_gap else away
-        gap = max(home_gap, away_gap)
         return (
-            f"{better}'s goal gave up {gap:.2f} fewer than the chances against it "
-            f"were worth. Over one match that is shot-stopping or it is the "
-            f"opposition finishing badly, and only the placement of the individual "
-            f"attempts tells you which. The model behind these figures is "
-            f"uncalibrated and knows neither shot speed nor the keeper's position."
+            f"The goalkeeping was not even. Against the post-shot value of the "
+            f"strikes each faced, {home_keeper} finished at {_signed(hp)} and "
+            f"{away_keeper} at {_signed(ap)}: {abs(hp - ap):.2f} goals between the two "
+            f"ends that neither attack created."
         )
+    keeper = _keeper_label(context, side)
     opponent = context[_other(side)]
-    faced = _one(context, _other(side), "shots")
-    faced_xg = _one(context, _other(side), "xG")
-    conceded = _one(context, _other(side), "goals")
+    psxg = _one(context, side, "gk_psxg")
+    conceded = int(_one(context, side, "gk_conceded"))
+    prevented = _one(context, side, "gk_prevented")
+    scored = "did not score" if conceded == 0 else f"scored {conceded}"
     line = (
-        f"{team}'s goal faced {faced:.0f} attempts worth {faced_xg:.2f} and conceded "
-        f"{conceded:.0f}. "
+        f"Penalties aside, {opponent} put {psxg:.2f} of post-shot expected goals on "
+        f"{team}'s goal and {scored}. "
     )
-    gap = faced_xg - conceded
-    if gap >= 0.7:
+    if prevented >= _KEEPER_MARGIN:
         line += (
-            f"That is {gap:.2f} fewer than the chances were worth, which over one "
-            f"match is shot-stopping or it is {opponent} finishing badly, and only "
-            f"the placement of the individual attempts separates the two."
+            f"That is {prevented:.2f} kept out beyond what the strikes were worth, and "
+            f"because post-shot expected goals prices each attempt where it crossed the "
+            f"line, it is {keeper}'s doing rather than {opponent} finishing badly."
         )
-    elif gap <= -0.7:
+    elif prevented <= -_KEEPER_MARGIN:
         line += (
-            f"That is {abs(gap):.2f} more than the chances were worth. One match "
-            f"cannot tell a goalkeeping error from a well-struck shot; the "
-            f"individual attempts can."
+            f"That is {abs(prevented):.2f} more than the strikes were worth. One match "
+            f"of this is a bad afternoon rather than a verdict on {keeper}, and the "
+            f"goal frame shows which attempts made it."
         )
     else:
         line += (
-            "Chances and goals matched closely enough that this figure says nothing "
-            "about the goalkeeping either way."
+            "Goals and the value of the strikes matched closely enough that the "
+            f"goalkeeping neither won nor lost {team} anything."
         )
-    line += (
-        " The post-shot estimate here is uncalibrated and knows neither shot speed "
-        "nor the keeper's position."
-    )
+    danger = int(_one(context, side, "gk_parried_danger"))
+    if danger >= 2:
+        line += (
+            f" Of the saves, {danger} were pushed back into danger, which is where a "
+            f"save count flatters a goalkeeper."
+        )
+    errors = int(_one(context, side, "gk_errors"))
+    if errors:
+        made = "an error" if errors == 1 else f"{errors} errors"
+        line += f" {keeper} also made {made} that led straight to a shot."
     return line
 
 

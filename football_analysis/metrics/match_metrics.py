@@ -1959,6 +1959,141 @@ def goalkeeper_distribution(
     }
 
 
+# Save qualifiers only a goalkeeper's save carries. The provider logs an
+# outfield block as a Save too, and none of these ever sits on one.
+KEEPER_SAVE_TOKENS = {
+    "collected",
+    "parriedsafe",
+    "parrieddanger",
+    "divingsave",
+    "standingsave",
+    "keepersaveinthebox",
+    "keepersaveobox",
+    "keepersaveinsixyard",
+}
+
+
+def goalkeeper_name(events: pd.DataFrame, team_id: Any) -> str:
+    """The team's goalkeeper, read off the actions only a keeper takes.
+
+    The event feed carries no position, so the name is whoever made most of
+    the team's pickups, claims, smothers and punches; "" when there were none.
+    """
+    if events is None or events.empty or "team_id" not in events.columns:
+        return ""
+    try:
+        team_id = float(team_id)
+    except (TypeError, ValueError):
+        return ""
+    own = events[pd.to_numeric(events["team_id"], errors="coerce").eq(team_id)]
+    keepers = own[own["type"].astype(str).isin(("KeeperPickup", "Claim", "Smother", "Punch"))]
+    if not len(keepers):
+        return ""
+    return str(keepers["player"].astype(str).mode().iloc[0])
+
+
+def goalkeeper_shot_stopping(
+    events: pd.DataFrame, team_id: Any, keeper: str | None = None
+) -> dict[str, Any]:
+    """Return how a team's goalkeeper dealt with the shots he faced.
+
+    ``goals_prevented`` is post-shot xG faced minus goals conceded: above zero,
+    he kept out more than an average keeper would have from those strikes.
+    Penalties and own goals are left out of it -- the post-shot model has no
+    fit for a penalty, and an own goal is not a shot at him -- and penalties
+    are reported on their own.
+
+    Handling reads what happened to the ball after a save: caught, parried
+    somewhere safe, or parried back into danger. ``handling_pct`` is the share
+    of those that did not hand the opponent a second chance, and is None when
+    no save was classified.
+
+    ``keeper`` names the goalkeeper whose saves, claims and errors are counted.
+    Without it, saves are the team's saves that carry a keeper-only qualifier,
+    and claims and errors are left at zero rather than guessed.
+    """
+    empty = {
+        "on_target_faced": 0,
+        "psxg_faced": 0.0,
+        "goals_conceded": 0,
+        "goals_prevented": 0.0,
+        "penalties_faced": 0,
+        "penalties_saved": 0,
+        "saves": 0,
+        "caught": 0,
+        "parried_safe": 0,
+        "parried_danger": 0,
+        "handling_pct": None,
+        "diving_saves": 0,
+        "high_claims": 0,
+        "punches": 0,
+        "errors_to_shot": 0,
+        "errors_to_goal": 0,
+    }
+    if events is None or events.empty or "team_id" not in events.columns:
+        return empty
+
+    # Ids arrive as ints from the parse and as floats or strings from a CSV.
+    team = pd.to_numeric(events["team_id"], errors="coerce")
+    try:
+        team_id = float(team_id)
+    except (TypeError, ValueError):
+        return empty
+    shots = events[
+        _bool_series(events, "is_shot")
+        & team.ne(team_id)
+        & ~_bool_series(events, "is_own_goal")
+        & ~_bool_series(events, "is_penalty_shootout")
+    ]
+    shot_type = shots.get("shot_whoscored_type", pd.Series("", index=shots.index)).astype(str)
+    penalty = _bool_series(shots, "is_penalty")
+    on_target = shots[shot_type.isin(ON_TARGET_SHOT_TYPES) & ~penalty]
+    psxg = float(post_shot_xg(on_target).sum()) if len(on_target) else 0.0
+    conceded = int(shot_type[~penalty].eq("Goal").sum())
+
+    kind = events.get("type", pd.Series("", index=events.index)).astype(str)
+    own = events[team.eq(team_id)]
+    own_kind = kind.loc[own.index]
+    tokens = own.get("qualifier_names", pd.Series("", index=own.index)).map(_qualifier_tokens)
+    if keeper:
+        by_keeper = own.get("player", pd.Series("", index=own.index)).astype(str).eq(str(keeper))
+        saves_mask = own_kind.eq("Save") & by_keeper
+    else:
+        by_keeper = pd.Series(False, index=own.index)
+        saves_mask = own_kind.eq("Save") & tokens.map(lambda t: bool(t & KEEPER_SAVE_TOKENS))
+    save_tokens = tokens[saves_mask]
+
+    def among(frame_tokens, token):
+        return int(frame_tokens.map(lambda t: token in t).sum())
+
+    caught = among(save_tokens, "collected")
+    safe = among(save_tokens, "parriedsafe")
+    danger = among(save_tokens, "parrieddanger")
+    handled = caught + safe + danger
+    errors = tokens[own_kind.eq("Error") & by_keeper]
+    return {
+        "on_target_faced": int(len(on_target)),
+        "psxg_faced": round(psxg, 2),
+        "goals_conceded": conceded,
+        "goals_prevented": round(psxg - conceded, 2),
+        "penalties_faced": int(penalty.sum()),
+        "penalties_saved": int((penalty & shot_type.eq("SavedShot")).sum()),
+        "saves": int(saves_mask.sum()),
+        "caught": caught,
+        "parried_safe": safe,
+        "parried_danger": danger,
+        "handling_pct": round(100 * (caught + safe) / handled, 1) if handled else None,
+        "diving_saves": among(save_tokens, "divingsave"),
+        "high_claims": among(tokens[own_kind.eq("Claim") & by_keeper], "highclaim"),
+        "punches": int((own_kind.eq("Punch") & by_keeper).sum()),
+        # A goal is a shot too, so an error is counted once whichever it led to.
+        "errors_to_shot": int(
+            errors.map(lambda t: bool(t & {"leadingtoattempt", "leadingtogoal"})).sum()
+        ),
+        "errors_to_goal": among(errors, "leadingtogoal"),
+    }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Press resistance
 # ═════════════════════════════════════════════════════════════════════════════

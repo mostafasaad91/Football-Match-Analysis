@@ -27,7 +27,7 @@ GUIDES = [
     ),
     (
         "goalkeeper",
-        "Recorded goalkeeper actions and shot placement describe the attempts faced. Placement alone cannot measure shot-stopping quality or goals prevented.",
+        "Prevented = post-shot xG faced minus goals conceded, penalties and own goals left out; post-shot xG prices each attempt from its chance and where it crossed the line. Handling reads where each save sent the ball.",
     ),
     (
         "zone14",

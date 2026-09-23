@@ -418,13 +418,20 @@ GROUPS = [
 # aerial duels. Twenty-two of his thirty slices were structurally zero and not
 # one of them described his match.
 #
-# Sixteen slices, all of them things a goalkeeper does. Post-shot expected
-# goals is absent on purpose — see goalkeeper_metrics for why.
+# Seventeen slices, all of them things a goalkeeper does. Goals prevented is
+# post-shot xG faced minus goals conceded, from the fitted post-shot model.
 GK_GROUPS = [
     (
         "SHOT STOPPING",
         C_GOLD,
-        ["Saves", "Save %", "Shots\nfaced", "Goals\nconceded", "Penalties\nfaced"],
+        [
+            "Saves",
+            "Save %",
+            "Shots\nfaced",
+            "Goals\nconceded",
+            "Goals\nprevented",
+            "Penalties\nfaced",
+        ],
     ),
     ("BOX COMMAND", C_HOME, ["Claims", "Punches", "Pickups", "Smothers"]),
     ("OFF THE LINE", C_AWAY, ["Sweeps", "Recov\neries", "Clear\nances", "Errors"]),
@@ -441,6 +448,9 @@ GK_FULL_BAR = {
     "Saves": 5,
     "Save %": 100,
     "Shots\nfaced": 8,
+    # Above zero only: a keeper who let in more than the strikes were worth
+    # draws no wedge, and the signed figure beside it says by how much.
+    "Goals\nprevented": 0.94,
     "Claims": 2,
     "Punches": 2,
     "Pickups": 9,
@@ -1396,7 +1406,7 @@ def goalkeeper_metrics(events: pd.DataFrame, player: str) -> dict:
     eight has had an easier afternoon than one who faces three that were going
     in, and the save count cannot tell them apart.
     """
-    from football_analysis.metrics.match_metrics import post_shot_xg
+    from football_analysis.metrics.match_metrics import goalkeeper_shot_stopping, post_shot_xg
 
     ev = events
     mine = ev[ev["player"].astype(str) == str(player)]
@@ -1431,6 +1441,11 @@ def goalkeeper_metrics(events: pd.DataFrame, player: str) -> dict:
 
     saves = count("Save")
     shots_faced = saves + conceded
+    stopping = (
+        goalkeeper_shot_stopping(ev, team_id, player)
+        if team_id is not None
+        else {"goals_prevented": 0.0}
+    )
 
     passes = int((kind.eq("Pass")).sum())
     passes_done = int((kind.eq("Pass") & ok).sum())
@@ -1448,15 +1463,12 @@ def goalkeeper_metrics(events: pd.DataFrame, player: str) -> dict:
         "Goals\nconceded": conceded,
         "Shots\nfaced": shots_faced,
         "Penalties\nfaced": count("PenaltyFaced"),
-        # Kept in the dictionary, kept off the radar. Post-shot expected goals
-        # is the measure a keeper should be judged on, and this project's
-        # implementation is a heuristic rather than a fitted model: across
-        # every rendered fixture it totals 30.0 against 60 goals actually
-        # scored, a ratio of 0.50. "Goals prevented" off that baseline would
-        # put every keeper in every report eight tenths of a goal below
-        # expectation — a statement about the model that reads as one about
-        # the man. It returns to the radar when the model is calibrated.
         "PSxG\nfaced": round(psxg, 2),
+        # Post-shot xG faced minus goals conceded, penalties and own goals left
+        # out. It stayed off the radar while post-shot xG was a placement
+        # heuristic that totalled 436.5 for 754 goals; the fitted model
+        # averages +0.05 a keeper-match across 400 of them.
+        "Goals\nprevented": stopping["goals_prevented"],
         # command of the box
         "Claims": count("Claim", only_successful=True),
         "Punches": count("Punch"),
@@ -1927,6 +1939,9 @@ def make_player_pizza(
                 # than along its own, so the widest string is what decides
                 # whether the ring collides with itself.
                 disps.append(f"{me_m.get(num_k, 0)}/{me_m.get(den_k, 0)}")
+            elif m == "Goals\nprevented":
+                # Signed, because the sign is the finding.
+                disps.append(f"{float(v):+.2f}".replace("-", "\N{MINUS SIGN}"))
             else:
                 disps.append(f"{v}")
             # A rate resting on three passes is printed and not ranked: the

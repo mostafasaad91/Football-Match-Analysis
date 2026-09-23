@@ -281,9 +281,9 @@ _TABLE = {
             "THE GOAL",
             [
                 ("Saves", "saves"),
+                ("Goals prevented", "goals_prevented"),
                 ("Claims", "claims"),
                 ("Sweeps", "sweeps"),
-                ("Recoveries", "recoveries"),
                 ("Clearances", "clearances"),
             ],
         ),
@@ -375,6 +375,7 @@ WEDGE_FORMAT = {
     "saves": lambda v: f"{v:.0f}",
     "claims": lambda v: f"{v:.0f}",
     "sweeps": lambda v: f"{v:.0f}",
+    "goals_prevented": lambda v: f"{v:+.2f}".replace("-", "−"),
 }
 
 
@@ -395,6 +396,11 @@ def _paired(row, key):
             return None
         return None if pd.isna(value) else int(round(float(value)))
 
+    if key == "goals_prevented":
+        # Signed to two places: the sign is the finding, and rounding to a
+        # whole goal printed -1.08 and -0.51 as the same "-1".
+        value = pd.to_numeric(pd.Series([row.get(key, np.nan)]), errors="coerce").iloc[0]
+        return "N/A" if pd.isna(value) else WEDGE_FORMAT[key](float(value))
     if key == "_passes_pct":
         attempted, completed = count("passes"), count("completed_passes")
         if attempted is None:

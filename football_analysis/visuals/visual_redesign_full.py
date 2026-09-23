@@ -58,6 +58,7 @@ from football_analysis.metrics.match_metrics import (
     defensive_line_height,
     duel_map,
     goalkeeper_distribution,
+    goalkeeper_shot_stopping,
     line_breaking_passes,
     network_centrality,
     pass_length_profile,
@@ -1774,15 +1775,17 @@ def gk_saves(events, xg, players):
         on_target = int(shot_type.isin(["Goal", "SavedShot"]).sum())
         conceded = int(shot_type.eq("Goal").sum())
         saves = int(shot_type.eq("SavedShot").sum())
-        # Post-shot xG of the shots this keeper actually faced. The report's
-        # old "xGoT" was the sum of xG over on-target shots, which ignores
-        # placement — a shot rolled at the keeper scored the same as one in the
-        # top corner, so "goals prevented" measured nothing about the keeper.
-        psxg = round(float(post_shot_xg(faced).sum()), 2)
+        # Goals prevented: post-shot xG of the shots this keeper faced, from
+        # the fitted model, minus what went in. Penalties and own goals are
+        # left out, so it is not always the CONCEDED card subtracted from
+        # something -- a penalty conceded does not count against him here.
+        stopping = goalkeeper_shot_stopping(events, keeper_team, _keeper_name(players, keeper_team))
+        prevented = f"{stopping['goals_prevented']:+.2f}".replace("-", "\N{MINUS SIGN}")
         cards = [
             ("On target", f"{on_target}"),
             ("Saves", f"{saves}"),
             ("Conceded", f"{conceded}"),
+            ("Prevented", prevented),
             ("Save rate", f"{100 * saves / max(on_target, 1):.0f}%"),
             (
                 "Claims",
@@ -1846,6 +1849,31 @@ def gk_saves(events, xg, players):
             f"avg {distribution['avg_length_m']:.0f} m  ·  "
             f"{distribution['launch_share']:.0f}% launched  ·  "
             f"{distribution['completion']:.0f}% completed",
+            color=MUTED,
+            fontsize=7.4,
+            fontweight="bold",
+        )
+
+    # What happened to the ball after each save: held, pushed somewhere safe,
+    # or pushed back to an attacker. A save count treats all three alike.
+    for keeper_team, _shooting_team, _keeper_team_name, _shooter_name, x0 in panels:
+        stopping = goalkeeper_shot_stopping(events, keeper_team, _keeper_name(players, keeper_team))
+        handled = stopping["caught"] + stopping["parried_safe"] + stopping["parried_danger"]
+        parts = []
+        if handled:
+            parts.append(
+                f"{stopping['caught']} held  ·  {stopping['parried_safe']} parried safe  ·  "
+                f"{stopping['parried_danger']} into danger"
+            )
+        errors = stopping["errors_to_shot"]
+        if errors:
+            parts.append(f"{errors} error{'s' if errors != 1 else ''} led to a shot")
+        if not parts:
+            continue
+        fig.text(
+            x0,
+            0.236,
+            "HANDLING   " + "  ·  ".join(parts),
             color=MUTED,
             fontsize=7.4,
             fontweight="bold",
@@ -2131,7 +2159,7 @@ def post_match_advanced_dashboard(events, xg, team_metrics):
             False,
         ),
         (
-            "Local post-shot estimate*",
+            "Post-shot xG",
             float(home_xg.get("xGoT", 0)),
             float(away_xg.get("xGoT", 0)),
             "{:.2f}",

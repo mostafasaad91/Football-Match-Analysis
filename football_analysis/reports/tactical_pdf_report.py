@@ -552,7 +552,23 @@ def build_context(
             "rest_defence_vulnerability",
         ]:
             context[f"{side}_{key}"] = _metric(team_metrics, side, key)
-    from football_analysis.metrics.match_metrics import pitch_control
+    from football_analysis.metrics.match_metrics import (
+        goalkeeper_name,
+        goalkeeper_shot_stopping,
+        pitch_control,
+    )
+
+    # Each side's goalkeeper, judged on the post-shot model: shared with the
+    # board and the radar so the three cannot disagree about one man.
+    for side, team_id in (("home", home_id), ("away", away_id)):
+        keeper = goalkeeper_name(events, team_id)
+        stopping = goalkeeper_shot_stopping(events, team_id, keeper or None)
+        context[f"{side}_gk_name"] = keeper
+        context[f"{side}_gk_psxg"] = stopping["psxg_faced"]
+        context[f"{side}_gk_conceded"] = stopping["goals_conceded"]
+        context[f"{side}_gk_prevented"] = stopping["goals_prevented"]
+        context[f"{side}_gk_parried_danger"] = stopping["parried_danger"]
+        context[f"{side}_gk_errors"] = stopping["errors_to_shot"]
 
     context["influence"] = pitch_control(events, home_id, away_id)[1]
     context["date"] = match_info.get("date", "")

@@ -58,10 +58,10 @@ SPECS = [
     ),
     MetricSpec(
         "xGoT",
-        "Local post-shot estimate",
+        "Post-shot xG",
         "goals",
-        "Placement-weighted pre-shot xG; uncalibrated, excludes shot velocity and actual keeper position.",
-        "heuristic",
+        "Chance of an on-target shot beating the keeper, from the pre-shot xG, where it crossed the line and the body part; fitted to Opta's xGOT. Excludes shot velocity and keeper position.",
+        "fitted",
     ),
     MetricSpec(
         "field_tilt",

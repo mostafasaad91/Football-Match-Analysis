@@ -10,6 +10,7 @@ from football_analysis.metrics.match_metrics import (
     build_possessions,
     progressive_pass_mask,
     box_entry_mask,
+    goalkeeper_shot_stopping,
     touch_mask,
     live_event_mask,
     is_restart_event,
@@ -138,6 +139,12 @@ def player_observations(events, players):
                 saves=int(g["type"].eq("Save").sum()),
                 claims=int(g["type"].eq("Claim").sum()),
                 sweeps=int(g["type"].eq("KeeperSweeper").sum()),
+                # Post-shot xG faced minus goals conceded; a keeper's figure only.
+                goals_prevented=(
+                    goalkeeper_shot_stopping(events, tid, name)["goals_prevented"]
+                    if role.upper() in {"GK", "GOALKEEPER"}
+                    else np.nan
+                ),
             )
         )
     result = pd.DataFrame(rows)
