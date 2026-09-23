@@ -22,6 +22,26 @@ def _copy_unlocked(src, dst):
         pass
 
 
+def xg_model_version(events) -> str | None:
+    """Which model produced a package's xG, read off the shots themselves.
+
+    Every shot carries the name of what priced it in ``xg_source``. Taking the
+    version from there rather than from a constant means an offline re-render
+    of an old package is labelled with the model its numbers actually came
+    from, and a package mixing sources says so instead of passing as either.
+    """
+    if events is None or "xg_source" not in events or "is_shot" not in events:
+        return None
+    shot = events["is_shot"]
+    if shot.dtype != bool:
+        shot = shot.astype(str).str.lower().isin({"true", "1", "1.0"})
+    sources = sorted(
+        {str(value) for value in events.loc[shot, "xg_source"].dropna() if str(value).strip()}
+        - {"nan"}
+    )
+    return " | ".join(sources) or None
+
+
 def write_manifest(out, info):
     out = Path(out)
     sources = {}
@@ -48,8 +68,10 @@ def write_manifest(out, info):
         "inputs": sources,
         "definitions": definitions(),
         "models": {
-            "xG": "input snapshot; calibration provenance must be supplied by the collector",
-            "post_shot": "placement heuristic, uncalibrated",
+            "xG": info.get("xg_model_version")
+            or "input snapshot; calibration provenance must be supplied by the collector",
+            "post_shot": "fitted to Opta xGOT from pre-shot xG, placement and body part "
+            "(data/models/psxg_model.json); placement heuristic where no fit is stored",
             "xT": "input grid values, local approximation",
             "influence": "duration-weighted 5-minute touch windows split at substitutions/cards; 105 x 68 m; uncalibrated",
             "win_probability": "uncalibrated score/xG heuristic; completed terminal result is known",
@@ -86,6 +108,13 @@ def transactional_package(function):
             # files open, and every published artifact is regenerated from
             # the supplied snapshot anyway.
             bound.arguments["output_dir"] = stage
+            # Stamped before the render, because the history charts read it
+            # while the package is being drawn: only packages priced by the
+            # same model are compared, and a package without the stamp was
+            # never compared with anything.
+            version = xg_model_version(bound.arguments["events"])
+            if version and isinstance(bound.arguments.get("match_info"), dict):
+                bound.arguments["match_info"]["xg_model_version"] = version
             bound.arguments["events"].to_csv(
                 stage / "events.csv", index=False, encoding="utf-8-sig"
             )
