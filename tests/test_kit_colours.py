@@ -25,9 +25,21 @@ from visualization_components import contrast_ratio
 
 # Clubs the collected fixtures have met that sit outside the top five leagues.
 OUTSIDE_THE_TOP_FIVE = [
-    "Hull", "Coventry", "Leicester", "Southampton", "Watford", "Blackburn",
-    "Bolton", "Middlesbrough", "Preston", "Portsmouth", "QPR", "Notts Co.",
-    "Lincoln City", "Malaga", "Casa Pia AC",
+    "Hull",
+    "Coventry",
+    "Leicester",
+    "Southampton",
+    "Watford",
+    "Blackburn",
+    "Bolton",
+    "Middlesbrough",
+    "Preston",
+    "Portsmouth",
+    "QPR",
+    "Notts Co.",
+    "Lincoln City",
+    "Malaga",
+    "Casa Pia AC",
 ]
 
 
@@ -38,8 +50,7 @@ def _saturation(colour: str) -> float:
 @pytest.mark.parametrize("team", OUTSIDE_THE_TOP_FIVE)
 def test_a_club_outside_the_big_leagues_has_its_own_kit(team):
     palette = fa._team_palette(team, "#888888")
-    assert len(palette) > 1, (
-        f"{team} falls through to a colour picked from a general pool")
+    assert len(palette) > 1, f"{team} falls through to a colour picked from a general pool"
 
 
 def test_hull_is_amber():
@@ -74,8 +85,7 @@ def test_both_near_white_tests_agree():
     """The same rule was written twice and only one copy would have been fixed."""
     for colour in ("#FBEE23", "#FFFFFF", "#FDBE11", "#F5F5F5"):
         kept = fa._visible_on_dark("Anyone", colour, "#B91C1C").upper() == colour.upper()
-        bright_and_plain = (fa._relative_luminance(colour) >= 0.82
-                            and _saturation(colour) < 0.45)
+        bright_and_plain = fa._relative_luminance(colour) >= 0.82 and _saturation(colour) < 0.45
         assert kept != bright_and_plain, colour
 
 
@@ -88,13 +98,15 @@ def test_a_fallback_never_competes_with_a_team_s_own_colours():
     bright, so it usually won: Newcastle's black #2D2D2D became #B91C1C and beat
     their own colours outright.
     """
-    chosen = fa._readable_kit_candidate("Nobody", ["#2D2D2D", "#1D5BA4"],
-                                        "#B91C1C", allow_light=False)
+    chosen = fa._readable_kit_candidate(
+        "Nobody", ["#2D2D2D", "#1D5BA4"], "#B91C1C", allow_light=False
+    )
     assert chosen.upper() == "#1D5BA4", chosen
     # And when nothing in the palette can carry the page, the fallback is still
     # what comes back — the last resort still exists.
-    assert fa._readable_kit_candidate("Nobody", ["#000000", "#050505"],
-                                      "#B91C1C").upper() == "#B91C1C"
+    assert (
+        fa._readable_kit_candidate("Nobody", ["#000000", "#050505"], "#B91C1C").upper() == "#B91C1C"
+    )
 
 
 def test_a_white_entry_is_a_white_shirt_not_an_unusable_colour():
@@ -105,8 +117,9 @@ def test_a_white_entry_is_a_white_shirt_not_an_unusable_colour():
     and took the blue alternate — a real Newcastle colour, and not the one they
     were wearing.
     """
-    chosen = fa._readable_kit_candidate("Nobody", ["#2D2D2D", "#FFFFFF", "#1D5BA4"],
-                                        "#B91C1C", allow_light=False)
+    chosen = fa._readable_kit_candidate(
+        "Nobody", ["#2D2D2D", "#FFFFFF", "#1D5BA4"], "#B91C1C", allow_light=False
+    )
     assert chosen.upper() == WHITE_KIT_SILVER.upper(), chosen
     # A bright kit that is not white still survives: Watford play in yellow.
     assert fa._white_kit_stand_in("#FBEE23") is None
@@ -124,10 +137,8 @@ def test_a_white_side_keeps_its_kit_at_home_and_changes_only_on_a_clash():
         pytest.skip("kit colours are off in this mode")
 
     # No clash: each side wears its own, whichever end it is at.
-    assert fa.choose_matchup_colors("Newcastle", "Bournemouth") == (
-        WHITE_KIT_SILVER, "#DA291C")
-    assert fa.choose_matchup_colors("Bournemouth", "Newcastle") == (
-        "#DA291C", WHITE_KIT_SILVER)
+    assert fa.choose_matchup_colors("Newcastle", "Bournemouth") == (WHITE_KIT_SILVER, "#DA291C")
+    assert fa.choose_matchup_colors("Bournemouth", "Newcastle") == ("#DA291C", WHITE_KIT_SILVER)
 
     # Two white sides: the home team keeps the white and the away team moves to
     # a real alternate of its own, both ways round.

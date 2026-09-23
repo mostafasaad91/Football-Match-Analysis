@@ -42,17 +42,23 @@ def our_packages() -> list[dict]:
         if folder.name == "light" or any(p.startswith(".") for p in folder.parts):
             continue
         info = json.loads(path.read_text(encoding="utf-8-sig"))
-        rows.append({"package": str(folder.relative_to(OUTPUT)).replace("\\", "/"),
-                     "competition": info.get("competition"),
-                     "date": str(info.get("date"))[:10],
-                     "home": info.get("home_name"), "away": info.get("away_name"),
-                     "score": str(info.get("score") or "")})
+        rows.append(
+            {
+                "package": str(folder.relative_to(OUTPUT)).replace("\\", "/"),
+                "competition": info.get("competition"),
+                "date": str(info.get("date"))[:10],
+                "home": info.get("home_name"),
+                "away": info.get("away_name"),
+                "score": str(info.get("score") or ""),
+            }
+        )
     return rows
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--dry-run", action="store_true", help="match fixtures, fetch no shot maps")
     parser.add_argument("--delay", type=float, default=3.0, help="seconds between page loads")
     args = parser.parse_args()
@@ -76,9 +82,16 @@ def main() -> int:
         if fixture is None:
             unmatched.append(package["package"])
             continue
-        rows.append({**package, "fotmob_id": fixture["id"], "fotmob_url": fixture["url"],
-                     "fotmob_home": fixture["home"], "fotmob_away": fixture["away"],
-                     "_fixture": fixture})
+        rows.append(
+            {
+                **package,
+                "fotmob_id": fixture["id"],
+                "fotmob_url": fixture["url"],
+                "fotmob_home": fixture["home"],
+                "fotmob_away": fixture["away"],
+                "_fixture": fixture,
+            }
+        )
 
     fetched = skipped = failed = 0
     for row in rows:
@@ -99,10 +112,12 @@ def main() -> int:
 
     STORE.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([{k: v for k, v in r.items() if k != "_fixture"} for r in rows]).to_csv(
-        STORE / "fixtures.csv", index=False, encoding="utf-8-sig")
-    print(f"\nmatched {len(rows)}/{len(packages)} packages | fetched {fetched} "
-          f"| already had {skipped} | failed {failed}"
-          + (" (dry run)" if args.dry_run else ""))
+        STORE / "fixtures.csv", index=False, encoding="utf-8-sig"
+    )
+    print(
+        f"\nmatched {len(rows)}/{len(packages)} packages | fetched {fetched} "
+        f"| already had {skipped} | failed {failed}" + (" (dry run)" if args.dry_run else "")
+    )
     if unmatched:
         print("unmatched:", *unmatched, sep="\n  ")
     return 0

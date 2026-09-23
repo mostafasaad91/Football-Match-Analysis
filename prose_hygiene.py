@@ -16,6 +16,7 @@ corrected on the way out.
 ``clean`` repairs what can be repaired. ``offences`` reports what cannot, so a
 test can fail on a machine string rather than a reader finding it.
 """
+
 from __future__ import annotations
 
 import re
@@ -26,20 +27,43 @@ import re
 _ONE_THEN_PLURAL = re.compile(r"(?<![\d.,])\b1\s+([a-z]+(?:ies|sses|ches|shes|xes|s))\b")
 
 # Words ending in s that are not plurals of anything.
-_NOT_PLURAL = frozenset({
-    "across", "less", "press", "loss", "success", "this", "its", "was", "has",
-    "is", "as", "gas", "plus", "minus", "versus", "status", "focus", "bonus",
-    "always", "perhaps", "towards", "afterwards", "unless", "whereas",
-})
+_NOT_PLURAL = frozenset(
+    {
+        "across",
+        "less",
+        "press",
+        "loss",
+        "success",
+        "this",
+        "its",
+        "was",
+        "has",
+        "is",
+        "as",
+        "gas",
+        "plus",
+        "minus",
+        "versus",
+        "status",
+        "focus",
+        "bonus",
+        "always",
+        "perhaps",
+        "towards",
+        "afterwards",
+        "unless",
+        "whereas",
+    }
+)
 
 # A repr, a placeholder, or a missing value that reached the text. These cannot
 # be repaired into a sentence -- the number they should have carried is gone --
 # so they are reported rather than patched over.
 _MACHINE = re.compile(
     r"\bnan\b|\bNaN\b|\bNaT\b|\bNone\b|<NA>|\{[a-z_]+\}"
-    r"|\b\w+\((?:[a-z_]+=|')"          # Verdict(home=..., SideVerdict('...
-    r"|\[\s*'"                          # a list of strings printed raw
-    r"|\s\|\s",                         # a pipe-delimited machine line
+    r"|\b\w+\((?:[a-z_]+=|')"  # Verdict(home=..., SideVerdict('...
+    r"|\[\s*'"  # a list of strings printed raw
+    r"|\s\|\s",  # a pipe-delimited machine line
     # Deliberately case-sensitive on None: "scored none of them" is a
     # sentence, and None is a value that never arrived.
 )
@@ -71,7 +95,7 @@ def _singular(noun: str) -> str:
     # No English plural ends in "us", so an adjective caught by the pattern --
     # "1 dangerous counter" -- keeps its ending. Skipping it cannot hide a real
     # plural and it covers the whole -ous family along with focus and status.
-    if noun in _NOT_PLURAL or noun.endswith(('us', 'ss', 'is')):
+    if noun in _NOT_PLURAL or noun.endswith(("us", "ss", "is")):
         return noun
     if noun.endswith("ies") and len(noun) > 4:
         return noun[:-3] + "y"
@@ -84,7 +108,7 @@ def _singular(noun: str) -> str:
 
 
 def one_reads_singular(text: str) -> str:
-    """"1 shots" -> "1 shot", leaving every other count alone."""
+    """ "1 shots" -> "1 shot", leaving every other count alone."""
     return _ONE_THEN_PLURAL.sub(lambda m: "1 " + _singular(m.group(1)), text)
 
 
@@ -136,8 +160,8 @@ def offences(text) -> list[str]:
     # too long to be one, or a pair the rules do not recognise -- and that is
     # still a value the writer meant to print and never had.
     repaired = clean(text)
-    if re.search(r':\s*[.,;]', repaired) or re.search(r'\(\s*\)', repaired):
-        found.append('a value that never arrived')
+    if re.search(r":\s*[.,;]", repaired) or re.search(r"\(\s*\)", repaired):
+        found.append("a value that never arrived")
     for hit in _ONE_THEN_PLURAL.finditer(str(text or "")):
         if _singular(hit.group(1)) != hit.group(1):
             found.append(hit.group(0))

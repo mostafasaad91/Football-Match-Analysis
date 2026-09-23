@@ -227,7 +227,15 @@ def save_match(
                         (match_id, team, opponent, side, goals_for, goals_against, metrics)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (match_id, team, opponent, side or None, for_goals, against_goals, _metric_blob(row)),
+                    (
+                        match_id,
+                        team,
+                        opponent,
+                        side or None,
+                        for_goals,
+                        against_goals,
+                        _metric_blob(row),
+                    ),
                 )
 
         if player_metrics is not None and not player_metrics.empty:
@@ -245,7 +253,6 @@ def save_match(
                 )
         connection.commit()
     return match_id
-
 
 
 def _raw_dir(db_path: Path | str | None = None) -> Path:
@@ -317,7 +324,9 @@ def list_matches(team: str | None = None, db_path: Path | str | None = None) -> 
         return pd.DataFrame([dict(row) for row in cursor.fetchall()])
 
 
-def team_match_log(team: str, limit: int | None = None, db_path: Path | str | None = None) -> pd.DataFrame:
+def team_match_log(
+    team: str, limit: int | None = None, db_path: Path | str | None = None
+) -> pd.DataFrame:
     """Return one row per stored match for a team, newest first."""
     query = """
         SELECT s.*, m.played_on, m.competition, m.season, m.round_name, m.score, m.url
@@ -334,7 +343,9 @@ def team_match_log(team: str, limit: int | None = None, db_path: Path | str | No
     return frame.reset_index(drop=True)
 
 
-def team_totals(team: str, limit: int | None = None, db_path: Path | str | None = None) -> pd.DataFrame:
+def team_totals(
+    team: str, limit: int | None = None, db_path: Path | str | None = None
+) -> pd.DataFrame:
     """Return a team's per-match average and total for every numeric metric.
 
     Rates and percentages are meaningless when summed, so both views are
@@ -346,7 +357,9 @@ def team_totals(team: str, limit: int | None = None, db_path: Path | str | None 
         return pd.DataFrame(columns=["metric", "matches", "total", "per_match"])
 
     numeric = log.select_dtypes(include="number")
-    numeric = numeric.drop(columns=[c for c in ("team_id",) if c in numeric.columns], errors="ignore")
+    numeric = numeric.drop(
+        columns=[c for c in ("team_id",) if c in numeric.columns], errors="ignore"
+    )
     return pd.DataFrame(
         {
             "metric": numeric.columns,
@@ -357,7 +370,9 @@ def team_totals(team: str, limit: int | None = None, db_path: Path | str | None 
     ).reset_index(drop=True)
 
 
-def player_match_log(player: str, limit: int | None = None, db_path: Path | str | None = None) -> pd.DataFrame:
+def player_match_log(
+    player: str, limit: int | None = None, db_path: Path | str | None = None
+) -> pd.DataFrame:
     """Return one row per stored match for a player, newest first."""
     query = """
         SELECT p.*, m.played_on, m.competition, m.season, m.round_name,
@@ -375,8 +390,9 @@ def player_match_log(player: str, limit: int | None = None, db_path: Path | str 
     return frame.reset_index(drop=True)
 
 
-def rolling_summary(frame: pd.DataFrame, *, window: int = 5,
-                    id_columns: tuple[str, ...] = ()) -> pd.DataFrame:
+def rolling_summary(
+    frame: pd.DataFrame, *, window: int = 5, id_columns: tuple[str, ...] = ()
+) -> pd.DataFrame:
     """Learn a compact recent form profile from stored match rows.
 
     Numeric counts are summed, rates and percentages are averaged, and the
@@ -385,31 +401,52 @@ def rolling_summary(frame: pd.DataFrame, *, window: int = 5,
     form, not a black-box prediction claim.
     """
     if frame is None or frame.empty:
-        return pd.DataFrame(columns=["metric", "matches", "recent_average", "previous_average", "trend"])
-    n=max(1,int(window)); recent=frame.head(n)
-    previous=frame.iloc[n:2*n]
-    numeric=recent.select_dtypes(include="number")
-    excluded=set(id_columns)|{"team_id","goals_for","goals_against"}
-    rows=[]
+        return pd.DataFrame(
+            columns=["metric", "matches", "recent_average", "previous_average", "trend"]
+        )
+    n = max(1, int(window))
+    recent = frame.head(n)
+    previous = frame.iloc[n : 2 * n]
+    numeric = recent.select_dtypes(include="number")
+    excluded = set(id_columns) | {"team_id", "goals_for", "goals_against"}
+    rows = []
     for metric in [c for c in numeric.columns if c not in excluded]:
-        values=pd.to_numeric(recent[metric],errors="coerce").dropna()
-        if values.empty: continue
-        old=pd.to_numeric(previous[metric],errors="coerce").dropna() if metric in previous else pd.Series(dtype=float)
-        recent_avg=float(values.mean()); previous_avg=float(old.mean()) if not old.empty else None
-        rows.append({"metric":metric,"matches":int(len(values)),"recent_average":round(recent_avg,3),
-                     "previous_average":None if previous_avg is None else round(previous_avg,3),
-                     "trend":None if previous_avg is None else round(recent_avg-previous_avg,3)})
+        values = pd.to_numeric(recent[metric], errors="coerce").dropna()
+        if values.empty:
+            continue
+        old = (
+            pd.to_numeric(previous[metric], errors="coerce").dropna()
+            if metric in previous
+            else pd.Series(dtype=float)
+        )
+        recent_avg = float(values.mean())
+        previous_avg = float(old.mean()) if not old.empty else None
+        rows.append(
+            {
+                "metric": metric,
+                "matches": int(len(values)),
+                "recent_average": round(recent_avg, 3),
+                "previous_average": None if previous_avg is None else round(previous_avg, 3),
+                "trend": None if previous_avg is None else round(recent_avg - previous_avg, 3),
+            }
+        )
     return pd.DataFrame(rows)
 
 
 def team_form(team: str, window: int = 5, db_path: Path | str | None = None) -> pd.DataFrame:
-    return rolling_summary(team_match_log(team, limit=2*int(window), db_path=db_path), window=window,
-                           id_columns=("match_id","team","opponent","side"))
+    return rolling_summary(
+        team_match_log(team, limit=2 * int(window), db_path=db_path),
+        window=window,
+        id_columns=("match_id", "team", "opponent", "side"),
+    )
 
 
 def player_form(player: str, window: int = 5, db_path: Path | str | None = None) -> pd.DataFrame:
-    return rolling_summary(player_match_log(player, limit=2*int(window), db_path=db_path), window=window,
-                           id_columns=("match_id","player","team"))
+    return rolling_summary(
+        player_match_log(player, limit=2 * int(window), db_path=db_path),
+        window=window,
+        id_columns=("match_id", "player", "team"),
+    )
 
 
 def metric_percentile(

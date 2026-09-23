@@ -79,6 +79,7 @@ def _boards(out: Path) -> list[Path]:
 # the shapes
 # --------------------------------------------------------------------------
 
+
 def _rename(events, xg, team_metrics, player_metrics, info, home, away):
     """Give the two sides different names, keeping every id intact."""
     old_home, old_away = str(info["home_name"]), str(info["away_name"])
@@ -155,9 +156,17 @@ def _lead_changed(events, xg, team_metrics, player_metrics, info):
 
 def _without_optional_columns(events, xg, team_metrics, player_metrics, info):
     """A thinner export: the optional metrics simply are not there."""
-    drop = ["ppda", "rest_defence_dangerous_counters", "counterpress_success_rate",
-            "transition_goals", "deep_completions", "build_up_success_rate"]
-    team_metrics = team_metrics.drop(columns=[c for c in drop if c in team_metrics], errors="ignore")
+    drop = [
+        "ppda",
+        "rest_defence_dangerous_counters",
+        "counterpress_success_rate",
+        "transition_goals",
+        "deep_completions",
+        "build_up_success_rate",
+    ]
+    team_metrics = team_metrics.drop(
+        columns=[c for c in drop if c in team_metrics], errors="ignore"
+    )
     return events, xg, team_metrics, player_metrics, info
 
 
@@ -192,8 +201,12 @@ def _empty_player_metrics(events, xg, team_metrics, player_metrics, info):
 def _blank_cells(events, xg, team_metrics, player_metrics, info):
     """Optional columns present but empty, which is not the same as absent."""
     team_metrics = team_metrics.copy()
-    for column in ("rest_defence_dangerous_counters", "counterpress_success_rate",
-                   "deep_completions", "transition_goals"):
+    for column in (
+        "rest_defence_dangerous_counters",
+        "counterpress_success_rate",
+        "deep_completions",
+        "transition_goals",
+    ):
         if column in team_metrics:
             team_metrics[column] = pd.NA
     return events, xg, team_metrics, player_metrics, info
@@ -233,13 +246,15 @@ SHAPES = {
 def _shaped(name):
     events, xg, team_metrics, player_metrics, info, out = _base()
     events, xg, team_metrics, player_metrics, info = SHAPES[name](
-        events, xg, team_metrics, player_metrics, info)
+        events, xg, team_metrics, player_metrics, info
+    )
     return events, xg, team_metrics, player_metrics, info, out
 
 
 # --------------------------------------------------------------------------
 # what must hold for any of them
 # --------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_the_report_writes_every_board_without_filler_or_leaks(shape):
@@ -320,8 +335,13 @@ def test_a_level_match_is_never_described_as_having_a_leader():
     text = " ".join(write(b, context) for b in _boards(out) for write in WRITERS)
     for section in _section_copy(context).values():
         text += " " + " ".join(t for _, t in section["performance"] + section["data"])
-    for claim in ("shot more often", "The same asymmetry", "And it was paid for",
-                  "stronger field tilt", "'s curve finished above"):
+    for claim in (
+        "shot more often",
+        "The same asymmetry",
+        "And it was paid for",
+        "stronger field tilt",
+        "'s curve finished above",
+    ):
         assert claim not in text, (claim, "claimed in a match where the sides are equal")
 
 
@@ -343,8 +363,7 @@ def test_a_goalless_match_does_not_describe_an_opening_goal():
         # entirely to whichever side was listed at home.
         ("Milan", "Inter Milan", "03_shot_map_inter_milan.png", "Inter Milan"),
         ("Inter Milan", "Milan", "03_shot_map_milan.png", "Milan"),
-        ("United", "Manchester United", "03_shot_map_manchester_united.png",
-         "Manchester United"),
+        ("United", "Manchester United", "03_shot_map_manchester_united.png", "Manchester United"),
         # A name that sits inside the board's own vocabulary. "cross" is a
         # substring of "crosses", so a side called Cross claimed every
         # crossing board in the report.
@@ -405,8 +424,7 @@ def test_the_whole_package_builds_for_a_hostile_fixture(shape, tmp_path):
     target = tmp_path / shape
     target.mkdir(parents=True, exist_ok=True)
     try:
-        generate_match_package(events, players, xg, team_metrics, player_metrics,
-                               info, target)
+        generate_match_package(events, players, xg, team_metrics, player_metrics, info, target)
         assert len(list(target.glob("*.png"))) > 40, shape
         # The report and the article are not produced any more -- their prose
         # was invented -- so their absence is the package being correct rather

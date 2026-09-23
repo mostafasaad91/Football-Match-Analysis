@@ -46,6 +46,7 @@ def fixture():
 # a rate needs a denominator
 # --------------------------------------------------------------------------
 
+
 def test_a_rate_on_too_few_attempts_is_not_ranked():
     """The case this exists for, stated as the numbers that produced it."""
     three_passes = {"Passes": 3, "Pass %": 100}
@@ -60,8 +61,9 @@ def test_a_metric_that_is_not_a_rate_is_always_ranked():
         assert pr.rate_is_measured({}, metric), metric
 
 
-@pytest.mark.parametrize("metric,key,floor", list(
-    (m, k, f) for m, (k, f) in pr.RATE_FLOORS.items()))
+@pytest.mark.parametrize(
+    "metric,key,floor", list((m, k, f) for m, (k, f) in pr.RATE_FLOORS.items())
+)
 def test_every_floor_sits_just_above_its_own_boundary(metric, key, floor):
     assert not pr.rate_is_measured({key: floor - 1}, metric)
     assert pr.rate_is_measured({key: floor}, metric)
@@ -88,6 +90,7 @@ def test_the_substitute_no_longer_outranks_the_playmaker(fixture):
 # --------------------------------------------------------------------------
 # the subtitle says a position
 # --------------------------------------------------------------------------
+
 
 def test_the_position_comes_from_the_squad_not_from_participation(fixture):
     _events, squad, _allm, _elig = fixture
@@ -116,6 +119,7 @@ def test_a_missing_squad_export_does_not_break_the_lookup():
 # --------------------------------------------------------------------------
 # who a bar measures against
 # --------------------------------------------------------------------------
+
 
 def test_a_defender_is_ranked_among_defenders(fixture):
     _events, squad, _allm, elig = fixture
@@ -181,6 +185,7 @@ def test_ranking_within_a_line_changes_what_a_bar_says(fixture, code):
 # the goalkeeper's own radar
 # --------------------------------------------------------------------------
 
+
 def test_the_keeper_gets_goalkeeping_metrics(fixture):
     """None of this existed. He was drawn on the outfield layout — goals,
     dribbles, expected goals, aerial duels — and twenty-two of his thirty
@@ -188,8 +193,16 @@ def test_the_keeper_gets_goalkeeping_metrics(fixture):
     events, _squad, _allm, _elig = fixture
     keeper = pr.goalkeeper_metrics(events, "Konstantinos Tzolakis")
     assert keeper, "no goalkeeping metrics were produced"
-    for metric in ("Saves", "Save %", "Shots\nfaced", "Claims", "Sweeps",
-                   "Pickups", "Passes", "Pass %"):
+    for metric in (
+        "Saves",
+        "Save %",
+        "Shots\nfaced",
+        "Claims",
+        "Sweeps",
+        "Pickups",
+        "Passes",
+        "Pass %",
+    ):
         assert metric in keeper, metric
 
 
@@ -203,7 +216,7 @@ def test_the_keeper_metrics_agree_with_each_other(fixture):
 
 
 def test_a_percentage_is_printed_without_a_decimal_it_does_not_have(fixture):
-    """"47.0" is not a percentage, it is a percentage with a stray digit."""
+    """ "47.0" is not a percentage, it is a percentage with a stray digit."""
     events, _squad, _allm, _elig = fixture
     keeper = pr.goalkeeper_metrics(events, "Konstantinos Tzolakis")
     for metric in ("Save %", "Pass %", "Long ball %"):
@@ -218,7 +231,8 @@ def test_the_long_ball_slice_holds_attempts_not_completions(fixture):
     assert keeper["Long\nballs"] >= keeper["Longballs_comp"]
     if keeper["Long\nballs"]:
         assert keeper["Long ball %"] == round(
-            100 * keeper["Longballs_comp"] / keeper["Long\nballs"])
+            100 * keeper["Longballs_comp"] / keeper["Long\nballs"]
+        )
 
 
 def test_post_shot_expected_goals_is_not_on_the_keeper_radar():
@@ -253,6 +267,7 @@ def test_the_keeper_bar_is_a_share_and_stays_inside_it():
 # no slice says the same thing twice
 # --------------------------------------------------------------------------
 
+
 def test_the_threat_group_no_longer_asks_one_shot_sample_six_ways():
     threat = next(ms for name, _c, ms in pr.GROUPS if name == "THREAT")
     for dropped in ("npxG", "xGOT", "xG/\nShot", "xG\nBuildup"):
@@ -262,8 +277,7 @@ def test_the_threat_group_no_longer_asks_one_shot_sample_six_ways():
 
 def test_no_metric_appears_in_two_groups():
     seen = [m for _g, _c, ms in pr.GROUPS for m in ms]
-    assert len(seen) == len(set(seen)), sorted(
-        m for m in seen if seen.count(m) > 1)
+    assert len(seen) == len(set(seen)), sorted(m for m in seen if seen.count(m) > 1)
     keeper = [m for _g, _c, ms in pr.GK_GROUPS for m in ms]
     assert len(keeper) == len(set(keeper))
 
@@ -276,6 +290,7 @@ def test_the_outfield_radar_lost_the_duplicates_and_kept_the_rest():
 # --------------------------------------------------------------------------
 # an own goal is not a finish
 # --------------------------------------------------------------------------
+
 
 def test_an_own_goal_is_not_credited_to_the_player_who_scored_it():
     """João Pedro's profile read GOALS 2 for one goal and one own goal.
@@ -298,12 +313,18 @@ def test_an_own_goal_is_not_credited_to_the_player_who_scored_it():
     assert scorer in allm, f"{scorer} is missing from the pool"
 
     rows = events[events["player"].astype(str) == scorer]
-    real = int(((rows["is_goal"].fillna(False) == True)
-                & ~(rows["is_own_goal"].fillna(False) == True)).sum())
+    real = int(
+        (
+            (rows["is_goal"].fillna(False) == True) & ~(rows["is_own_goal"].fillna(False) == True)
+        ).sum()
+    )
     assert allm[scorer]["Goals"] == real
     # and the own goal is not counted as an attempt on the opponent either
-    attempts = int(((rows["is_shot"].fillna(False) == True)
-                    & ~(rows["is_own_goal"].fillna(False) == True)).sum())
+    attempts = int(
+        (
+            (rows["is_shot"].fillna(False) == True) & ~(rows["is_own_goal"].fillna(False) == True)
+        ).sum()
+    )
     assert allm[scorer]["Shots"] == attempts
 
 
@@ -331,6 +352,9 @@ def test_the_profile_card_does_not_credit_an_own_goal_either():
     assert not row.empty, f"{scorer} is missing from the observations"
 
     rows = events[events["player"].astype(str) == scorer]
-    real = int(((rows["is_goal"].fillna(False) == True)
-                & ~(rows["is_own_goal"].fillna(False) == True)).sum())
+    real = int(
+        (
+            (rows["is_goal"].fillna(False) == True) & ~(rows["is_own_goal"].fillna(False) == True)
+        ).sum()
+    )
     assert int(row.iloc[0].goals) == real

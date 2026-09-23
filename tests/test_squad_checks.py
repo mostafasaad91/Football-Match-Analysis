@@ -40,8 +40,7 @@ def _with_roster(monkeypatch, tmp_path, roster):
     # Capture the real reader before patching: a lambda that calls the patched
     # name calls itself.
     real = ms._known_squads
-    (tmp_path / ms.SQUADS_FILE).write_text(
-        json.dumps(roster, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / ms.SQUADS_FILE).write_text(json.dumps(roster, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(ms, "_known_squads", lambda root=None: real(tmp_path))
 
 
@@ -61,8 +60,10 @@ def test_a_player_missing_from_your_roster_is_named(monkeypatch, tmp_path):
 def test_a_complete_roster_is_silent(monkeypatch, tmp_path):
     events, players, info = _fixture()
     roster = {
-        str(info[f"{side}_name"]): players[players["team_id"].eq(int(info[f"{side}_id"]))]
-        ["name"].dropna().astype(str).tolist()
+        str(info[f"{side}_name"]): players[players["team_id"].eq(int(info[f"{side}_id"]))]["name"]
+        .dropna()
+        .astype(str)
+        .tolist()
         for side in ("home", "away")
     }
     _with_roster(monkeypatch, tmp_path, roster)
@@ -118,6 +119,7 @@ def test_the_real_fixture_passes_every_check():
 # a row with no player is not a player
 # --------------------------------------------------------------------------
 
+
 def test_a_blank_player_name_is_not_a_stranger():
     """The shape that refused Casa Pia vs Benfica an article.
 
@@ -127,14 +129,18 @@ def test_a_blank_player_name_is_not_a_stranger():
     written: a blank field comes back from CSV as NaN, so the same fixture
     passed when re-read from disk and failed while it was being built.
     """
-    players = pd.DataFrame({
-        "name": ["Ana", "Beto", "Caio", "Dinis"],
-        "team_id": [1, 1, 2, 2],
-    })
-    events = pd.DataFrame({
-        "player": ["Ana", "", "Beto", None, "Caio", "   ", "Dinis"],
-        "team_id": [1, 1, 1, 1, 2, 2, 2],
-    })
+    players = pd.DataFrame(
+        {
+            "name": ["Ana", "Beto", "Caio", "Dinis"],
+            "team_id": [1, 1, 2, 2],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "player": ["Ana", "", "Beto", None, "Caio", "   ", "Dinis"],
+            "team_id": [1, 1, 1, 1, 2, 2, 2],
+        }
+    )
     info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
     assert ms.check_event_players_belong_to_their_team(events, players, info) == []
 
@@ -142,10 +148,12 @@ def test_a_blank_player_name_is_not_a_stranger():
 def test_a_real_stranger_is_still_caught():
     """The blank-name fix must not blind the check to a genuine one."""
     players = pd.DataFrame({"name": ["Ana", "Beto"], "team_id": [1, 2]})
-    events = pd.DataFrame({
-        "player": ["Ana", "", "Someone Else", "Beto"],
-        "team_id": [1, 1, 1, 2],
-    })
+    events = pd.DataFrame(
+        {
+            "player": ["Ana", "", "Someone Else", "Beto"],
+            "team_id": [1, 1, 1, 2],
+        }
+    )
     info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
     problems = ms.check_event_players_belong_to_their_team(events, players, info)
     assert len(problems) == 1
@@ -153,10 +161,12 @@ def test_a_real_stranger_is_still_caught():
 
 
 def test_a_blank_name_does_not_read_as_playing_for_both_sides():
-    players = pd.DataFrame({
-        "name": ["Ana", "", None, "Beto"],
-        "team_id": [1, 1, 2, 2],
-    })
+    players = pd.DataFrame(
+        {
+            "name": ["Ana", "", None, "Beto"],
+            "team_id": [1, 1, 2, 2],
+        }
+    )
     info = {"home_id": 1, "away_id": 2, "home_name": "Home", "away_name": "Away"}
     assert ms.check_no_player_appears_for_both_sides(None, players, info) == []
 
@@ -171,6 +181,7 @@ def test_surrounding_whitespace_is_not_a_different_player():
 # --------------------------------------------------------------------------
 # what the gate is allowed to stop
 # --------------------------------------------------------------------------
+
 
 def test_the_squad_checks_stay_out_of_the_blocking_gate():
     """Both refused a correct fixture before either caught a wrong one.

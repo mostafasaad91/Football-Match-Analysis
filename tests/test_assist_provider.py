@@ -16,13 +16,21 @@ def _q(name, value=None):
 
 
 def _pass(team, event_id, *kinds):
-    return {"teamId": team, "eventId": event_id, "type": {"displayName": "Pass"},
-            "qualifiers": [_q(kind) for kind in kinds]}
+    return {
+        "teamId": team,
+        "eventId": event_id,
+        "type": {"displayName": "Pass"},
+        "qualifiers": [_q(kind) for kind in kinds],
+    }
 
 
 def _shot(team, *flags, provider=None, related=None):
-    shot = {"teamId": team, "eventId": 900, "isShot": True,
-            "qualifiers": [_q(flag) for flag in flags]}
+    shot = {
+        "teamId": team,
+        "eventId": 900,
+        "isShot": True,
+        "qualifiers": [_q(flag) for flag in flags],
+    }
     if provider is not None:
         shot["relatedPlayerId"] = provider
     if related is not None:

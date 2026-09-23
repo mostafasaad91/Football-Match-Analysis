@@ -35,8 +35,15 @@ from match_store import (
 
 # Columns that identify the row rather than describe the performance; shown
 # first in the match log and never treated as a metric to average.
-CONTEXT_COLUMNS = ["played_on", "competition", "opponent", "side", "score",
-                   "goals_for", "goals_against"]
+CONTEXT_COLUMNS = [
+    "played_on",
+    "competition",
+    "opponent",
+    "side",
+    "score",
+    "goals_for",
+    "goals_against",
+]
 
 
 def _print(frame: pd.DataFrame, empty_message: str) -> int:
@@ -51,8 +58,7 @@ def _print(frame: pd.DataFrame, empty_message: str) -> int:
 def cmd_matches(args: argparse.Namespace) -> int:
     frame = list_matches(args.team)
     if not frame.empty:
-        frame = frame[["match_id", "played_on", "competition", "home_team",
-                       "away_team", "score"]]
+        frame = frame[["match_id", "played_on", "competition", "home_team", "away_team", "score"]]
     scope = f" for {args.team}" if args.team else ""
     return _print(frame, f"No matches stored{scope} yet. Analyse a fixture first.")
 
@@ -60,8 +66,10 @@ def cmd_matches(args: argparse.Namespace) -> int:
 def cmd_team(args: argparse.Namespace) -> int:
     log = team_match_log(args.team, limit=args.last)
     if log.empty:
-        print(f"No stored matches for {args.team!r}. Check the spelling against "
-              f"'python team_history.py matches'.")
+        print(
+            f"No stored matches for {args.team!r}. Check the spelling against "
+            f"'python team_history.py matches'."
+        )
         return 1
 
     if args.summary:
@@ -84,8 +92,14 @@ def cmd_team(args: argparse.Namespace) -> int:
     else:
         # Without an explicit selection, show the headline set rather than a
         # forty-column wall.
-        for name in ("possession_share", "field_tilt", "box_entries",
-                     "final_third_entries", "high_regains", "sequence_xT"):
+        for name in (
+            "possession_share",
+            "field_tilt",
+            "box_entries",
+            "final_third_entries",
+            "high_regains",
+            "sequence_xT",
+        ):
             if name in log.columns:
                 columns.append(name)
     return _print(log[columns], "No rows.")
@@ -97,20 +111,24 @@ def cmd_player(args: argparse.Namespace) -> int:
         print(f"No stored matches for {args.player!r}.")
         return 1
     if args.summary:
-        totals=player_form(args.player, window=args.last or 5)
+        totals = player_form(args.player, window=args.last or 5)
         if args.metrics:
-            wanted={name.strip() for name in args.metrics.split(',') if name.strip()}
-            totals=totals[totals.metric.isin(wanted)]
+            wanted = {name.strip() for name in args.metrics.split(",") if name.strip()}
+            totals = totals[totals.metric.isin(wanted)]
         print(f"{args.player} — recent form ({args.last or 5} matches)\n")
         return _print(totals, "No numeric metrics stored.")
-    columns = [c for c in ["played_on", "team", "home_team", "away_team", "score"]
-               if c in log.columns]
+    columns = [
+        c for c in ["played_on", "team", "home_team", "away_team", "score"] if c in log.columns
+    ]
     if args.metrics:
         wanted = [name.strip() for name in args.metrics.split(",") if name.strip()]
         columns += [name for name in wanted if name in log.columns]
     else:
-        columns += [c for c in log.columns if c not in columns
-                    and c not in {"match_id", "player", "metrics"}][:8]
+        columns += [
+            c
+            for c in log.columns
+            if c not in columns and c not in {"match_id", "player", "metrics"}
+        ][:8]
     return _print(log[columns], "No rows.")
 
 
@@ -122,7 +140,6 @@ def cmd_export(args: argparse.Namespace) -> int:
     log.to_csv(args.out, index=False, encoding="utf-8-sig")
     print(f"Wrote {len(log)} match rows to {args.out}")
     return 0
-
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
@@ -150,10 +167,16 @@ def cmd_replay(args: argparse.Namespace) -> int:
         try:
             info, events, _players = fma.parse_all(payload)
             team_frame, player_frame = advanced_metrics_frames(events, info)
-            save_match(info, team_frame, player_frame,
-                       url=f"https://www.whoscored.com/matches/{match_id.removeprefix('ws-')}/live")
-            print(f"{match_id}: recomputed {len(events)} events "
-                  f"({info.get('home_name')} v {info.get('away_name')})")
+            save_match(
+                info,
+                team_frame,
+                player_frame,
+                url=f"https://www.whoscored.com/matches/{match_id.removeprefix('ws-')}/live",
+            )
+            print(
+                f"{match_id}: recomputed {len(events)} events "
+                f"({info.get('home_name')} v {info.get('away_name')})"
+            )
         except Exception as error:
             print(f"{match_id}: failed — {error}")
     return 0
@@ -174,8 +197,9 @@ def build_parser() -> argparse.ArgumentParser:
     team.add_argument("team")
     team.add_argument("--last", type=int, help="only the N most recent matches")
     team.add_argument("--metrics", help="comma-separated metric names")
-    team.add_argument("--summary", action="store_true",
-                      help="aggregate instead of listing each match")
+    team.add_argument(
+        "--summary", action="store_true", help="aggregate instead of listing each match"
+    )
     team.set_defaults(func=cmd_team)
 
     player = sub.add_parser("player", help="one row per match for a player")
@@ -191,9 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--out", default="team_history.csv")
     export.set_defaults(func=cmd_export)
 
-    replay = sub.add_parser(
-        "replay", help="recompute stored matches from their raw snapshots"
-    )
+    replay = sub.add_parser("replay", help="recompute stored matches from their raw snapshots")
     replay.add_argument("--match", help="one match id instead of all")
     replay.set_defaults(func=cmd_replay)
     return parser

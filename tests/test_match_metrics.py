@@ -322,9 +322,7 @@ class MatchMetricTests(unittest.TestCase):
             "game_state_drawing_xG",
         }
         self.assertTrue(expected_team_columns.issubset(team_frame.columns))
-        self.assertTrue(
-            {"xGChain", "xGBuildup", "sequence_xT"}.issubset(player_frame.columns)
-        )
+        self.assertTrue({"xGChain", "xGBuildup", "sequence_xT"}.issubset(player_frame.columns))
 
 
 if __name__ == "__main__":
@@ -337,7 +335,9 @@ def _sample_events():
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    events = pd.read_csv(root / "sample_data" / "France_vs_England_4-6" / "events.csv", encoding="utf-8-sig")
+    events = pd.read_csv(
+        root / "sample_data" / "France_vs_England_4-6" / "events.csv", encoding="utf-8-sig"
+    )
     for column in ("minute", "second", "x", "y", "end_x", "end_y", "xG", "xT", "team_id"):
         if column in events.columns:
             events[column] = pd.to_numeric(events[column], errors="coerce")
@@ -589,7 +589,12 @@ def test_sequence_typology_splits_xg_by_how_it_was_built():
     assert abs(typology["share_of_xG"].sum() - 100.0) < 0.5
     assert typology["xG"].is_monotonic_decreasing
     assert set(typology["type"]) <= {
-        "build_up", "sustained", "direct", "counter", "set_piece", "other"
+        "build_up",
+        "sustained",
+        "direct",
+        "counter",
+        "set_piece",
+        "other",
     }
 
 
@@ -599,7 +604,9 @@ def test_receptions_between_lines_land_in_the_pocket():
     pockets = receptions_between_lines(_sample_events(), 341, 345)
     assert not pockets.empty
     # Every reception sits in the band immediately in front of the line.
-    assert ((pockets["x"] <= pockets["line_height"]) & (pockets["x"] >= pockets["line_height"] - 12.0)).all()
+    assert (
+        (pockets["x"] <= pockets["line_height"]) & (pockets["x"] >= pockets["line_height"] - 12.0)
+    ).all()
 
 
 def test_switches_cross_the_pitch():

@@ -42,6 +42,7 @@ def _frames():
 # crests
 # --------------------------------------------------------------------------
 
+
 def test_crest_url_is_addressed_by_the_provider_team_id():
     """No name matching: the id on the event row is the id on the CDN."""
     assert crests.CREST_URL.format(team_id=304).endswith("/304.png")
@@ -94,6 +95,7 @@ def test_a_failed_download_never_poisons_the_cache(tmp_path, monkeypatch):
 # rendering
 # --------------------------------------------------------------------------
 
+
 def _render(builder, tmp_path):
     import visual_redesign_full as visual
 
@@ -103,11 +105,18 @@ def _render(builder, tmp_path):
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8-sig"))
     visual.configure_match(info, tmp_path)
     return builder(
-        events, xg, team_metrics, player_metrics, players,
+        events,
+        xg,
+        team_metrics,
+        player_metrics,
+        players,
         out_dir=tmp_path,
-        home_id=info["home_id"], away_id=info["away_id"],
-        home_name=info["home_name"], away_name=info["away_name"],
-        home_color=visual.HOME, away_color=visual.AWAY,
+        home_id=info["home_id"],
+        away_id=info["away_id"],
+        home_name=info["home_name"],
+        away_name=info["away_name"],
+        home_color=visual.HOME,
+        away_color=visual.AWAY,
         score=info["score"],
         competition="MATCH ANALYSIS",
         allow_download=False,  # offline: the monogram fallback must carry it

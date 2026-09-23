@@ -12,9 +12,6 @@ def test_interval_substitute_only_appears_in_second_half():
 
 def test_first_half_log_does_not_name_interval_arrival():
     events, players, *_ = visual.load_all()
-    *_, substitutions, _ = visual._half_network_data(
-        events, players, visual.HOME_ID, 1
-    )
+    *_, substitutions, _ = visual._half_network_data(events, players, visual.HOME_ID, 1)
 
     assert all(on_name == "—" for minute, on_name, _ in substitutions if minute == 45)
-

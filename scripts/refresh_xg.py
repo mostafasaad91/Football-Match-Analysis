@@ -61,8 +61,11 @@ def refresh(folder: Path, write: bool) -> tuple[float, float]:
     events = pd.read_csv(folder / "events.csv", low_memory=False)
 
     shots = events["is_shot"].fillna(False).astype(bool) if "is_shot" in events else None
-    before = float(pd.to_numeric(events.loc[shots, "xG"], errors="coerce").fillna(0).sum()) \
-        if shots is not None else 0.0
+    before = (
+        float(pd.to_numeric(events.loc[shots, "xG"], errors="coerce").fillna(0).sum())
+        if shots is not None
+        else 0.0
+    )
 
     # The stored column is what the model said last time; drop it so the model
     # is asked again rather than handed its own previous answer.
@@ -73,54 +76,66 @@ def refresh(folder: Path, write: bool) -> tuple[float, float]:
     from reference_xg import apply_reference_xg
 
     events, _ = apply_reference_xg(events, info, package=str(folder.relative_to(OUTPUT)))
-    after = float(pd.to_numeric(events.loc[shots, "xG"], errors="coerce").fillna(0).sum()) \
-        if shots is not None else 0.0
+    after = (
+        float(pd.to_numeric(events.loc[shots, "xG"], errors="coerce").fillna(0).sum())
+        if shots is not None
+        else 0.0
+    )
 
     if not write:
         return before, after
 
     events.to_csv(folder / "events.csv", index=False, encoding="utf-8-sig")
     xg_data = F.xg_stats(events, info)
-    (pd.DataFrame(xg_data).T.reset_index().rename(columns={"index": "team"})
-       .to_csv(folder / "xg.csv", index=False, encoding="utf-8-sig"))
+    (
+        pd.DataFrame(xg_data)
+        .T.reset_index()
+        .rename(columns={"index": "team"})
+        .to_csv(folder / "xg.csv", index=False, encoding="utf-8-sig")
+    )
     team_frame, sequence_frame = F.advanced_metrics_frames(events, info)
-    team_frame.to_csv(folder / "team_advanced_metrics.csv", index=False,
-                      encoding="utf-8-sig")
-    sequence_frame.to_csv(folder / "player_sequence_metrics.csv", index=False,
-                          encoding="utf-8-sig")
+    team_frame.to_csv(folder / "team_advanced_metrics.csv", index=False, encoding="utf-8-sig")
+    sequence_frame.to_csv(folder / "player_sequence_metrics.csv", index=False, encoding="utf-8-sig")
     # The light copy keeps frames of its own, written by the render that drew
     # it. Left alone, the two copies of one match would carry two xG figures
     # until the match is redrawn, so they are brought level here.
     light = folder / "light"
     if light.is_dir():
-        for name in ("events.csv", "xg.csv", "team_advanced_metrics.csv",
-                     "player_sequence_metrics.csv"):
+        for name in (
+            "events.csv",
+            "xg.csv",
+            "team_advanced_metrics.csv",
+            "player_sequence_metrics.csv",
+        ):
             if (light / name).exists():
                 shutil.copy2(folder / name, light / name)
     return before, after
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("patterns", nargs="*", help="folder-name fragments")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="report what would change, write nothing")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="report what would change, write nothing"
+    )
     parser.add_argument("--list", help="read folder names from a file, one per line")
     args = parser.parse_args()
 
     patterns = list(args.patterns)
     if args.list:
-        patterns = [line.strip() for line
-                    in Path(args.list).read_text(encoding="utf-8").splitlines()
-                    if line.strip()]
+        patterns = [
+            line.strip()
+            for line in Path(args.list).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
 
     targets = packages(patterns)
     if not targets:
         print("No packages matched.")
         return 1
-    print(f"Re-pricing {len(targets)} package(s)"
-          f"{' (dry run)' if args.dry_run else ''}\n")
+    print(f"Re-pricing {len(targets)} package(s){' (dry run)' if args.dry_run else ''}\n")
 
     started = time.time()
     moved = total_before = total_after = 0.0
@@ -128,18 +143,18 @@ def main() -> int:
     for index, folder in enumerate(targets, 1):
         try:
             before, after = refresh(folder, write=not args.dry_run)
-        except Exception as error:                       # noqa: BLE001
+        except Exception as error:  # noqa: BLE001
             failed.append((folder.name, f"{type(error).__name__}: {error}"))
             print(f"[{index}/{len(targets)}] {folder.name}: FAILED {error}")
             continue
         total_before += before
         total_after += after
         moved += abs(after - before)
-        print(f"[{index}/{len(targets)}] {folder.name:<44} "
-              f"{before:6.2f} -> {after:6.2f}")
+        print(f"[{index}/{len(targets)}] {folder.name:<44} {before:6.2f} -> {after:6.2f}")
 
-    print(f"\n{len(targets) - len(failed)}/{len(targets)} in "
-          f"{(time.time() - started) / 60:.1f} min")
+    print(
+        f"\n{len(targets) - len(failed)}/{len(targets)} in {(time.time() - started) / 60:.1f} min"
+    )
     print(f"total xG {total_before:.1f} -> {total_after:.1f}")
     for name, reason in failed:
         print(f"  {name}: {reason}")

@@ -85,9 +85,7 @@ def resolve_team(query: str, rows: list[dict]) -> str:
     if len(matches) == 1:
         return matches[0]
     if not matches:
-        raise LookupError(
-            f"No team matching {query!r}. Try one of: {', '.join(teams[:12])} …"
-        )
+        raise LookupError(f"No team matching {query!r}. Try one of: {', '.join(teams[:12])} …")
     raise LookupError(
         f"{query!r} matches {len(matches)} teams: {', '.join(matches)}. Be more specific."
     )
@@ -128,9 +126,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("team", nargs="?", help="team name, e.g. arsenal or 'aston villa'")
     parser.add_argument("--competition", help="restrict to one competition (EPL, LALIGA, SERIEA)")
     parser.add_argument("--on", help="only fixtures on this date (YYYY-MM-DD)")
-    parser.add_argument("--next", action="store_true", help="only the next fixture still to be played")
-    parser.add_argument("--last", action="store_true", help="only the most recent fixture already played")
-    parser.add_argument("--played", action="store_true", help="only fixtures whose kickoff has passed")
+    parser.add_argument(
+        "--next", action="store_true", help="only the next fixture still to be played"
+    )
+    parser.add_argument(
+        "--last", action="store_true", help="only the most recent fixture already played"
+    )
+    parser.add_argument(
+        "--played", action="store_true", help="only fixtures whose kickoff has passed"
+    )
     parser.add_argument("--url", action="store_true", help="print bare URLs, nothing else")
     args = parser.parse_args(argv)
 

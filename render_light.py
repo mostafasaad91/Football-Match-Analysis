@@ -17,6 +17,7 @@ Run directly on any finished match folder:
 
     python render_light.py output/PSG_vs_Aston_Villa_2-1
 """
+
 from __future__ import annotations
 
 import json

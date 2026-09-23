@@ -12,6 +12,7 @@ from player_radar import GROUPS, display_label
 
 # ── typography ────────────────────────────────────────────────────────────────
 
+
 def test_no_style_is_set_in_times():
     """The commentary was Times while every embedded visual is sans, so a page
     carried two unrelated families."""
@@ -34,6 +35,7 @@ def test_every_named_font_is_one_family():
 
 
 # ── colour ────────────────────────────────────────────────────────────────────
+
 
 def test_the_amber_accent_is_gone():
     """It ran to 1,398 characters against 648 for both kit colours combined."""
@@ -77,8 +79,12 @@ def test_the_page_ground_is_pure_black():
 # ── type scale ────────────────────────────────────────────────────────────────
 
 SCALE_NAMES = (
-    "TYPE_DISPLAY", "TYPE_TITLE", "TYPE_SECTION",
-    "TYPE_BODY", "TYPE_CAPTION", "TYPE_MICRO",
+    "TYPE_DISPLAY",
+    "TYPE_TITLE",
+    "TYPE_SECTION",
+    "TYPE_BODY",
+    "TYPE_CAPTION",
+    "TYPE_MICRO",
 )
 # The cover is the one page allowed its own steps, and each is named so it
 # stays a decision rather than becoming drift. TYPE_LEAD_MINOR/MAJOR set the
@@ -87,17 +93,24 @@ SCALE_NAMES = (
 # report's one-sentence finding from the club names under it, which were the
 # same size until the sentence stopped outranking the scoreline.
 ALLOWED_SIZE_NAMES = set(SCALE_NAMES) | {
-    "TYPE_LEAD_MINOR", "TYPE_LEAD_MAJOR", "minor", "major",
-    "TYPE_THESIS", "TYPE_FIXTURE",
+    "TYPE_LEAD_MINOR",
+    "TYPE_LEAD_MAJOR",
+    "minor",
+    "major",
+    "TYPE_THESIS",
+    "TYPE_FIXTURE",
     # The comparison card on the cover, which is set larger than the body
     # scale because it is read across a room rather than at reading distance.
-    "TYPE_COVER_SCORE", "TYPE_COVER_TEAM",
-    "TYPE_COVER_FIGURE", "TYPE_COVER_MARK",
+    "TYPE_COVER_SCORE",
+    "TYPE_COVER_TEAM",
+    "TYPE_COVER_FIGURE",
+    "TYPE_COVER_MARK",
     # The cover's own small type. It had been borrowed from the body scale,
     # where 6.5pt grey inside a dense column reads as the footnote it is; on a
     # cover the same setting is the only text between the score and the
     # figures, and the row labels are what say what each bar measures.
-    "TYPE_COVER_LABEL", "TYPE_COVER_META",
+    "TYPE_COVER_LABEL",
+    "TYPE_COVER_META",
 }
 
 
@@ -129,6 +142,7 @@ def test_every_size_reference_is_a_scale_name():
 
 # ── shared measure ────────────────────────────────────────────────────────────
 
+
 def test_the_embedded_visual_uses_the_text_margin():
     """Images bled to 4pt while the commentary began at 42pt, so a wide visual
     and its own analysis sat on two different left edges."""
@@ -140,6 +154,7 @@ def test_the_embedded_visual_uses_the_text_margin():
 
 # ── the verdict must agree with the numbers ──────────────────────────────────
 
+
 class _Verdict:
     """Just enough of the report to exercise the sentence logic."""
 
@@ -150,8 +165,14 @@ class _Verdict:
 
 
 def _ctx(home_xg, away_xg, winner, loser):
-    return _Verdict(home="Fulham", away="Bournemouth", winner=winner, loser=loser,
-                    home_xG=home_xg, away_xG=away_xg)
+    return _Verdict(
+        home="Fulham",
+        away="Bournemouth",
+        winner=winner,
+        loser=loser,
+        home_xG=home_xg,
+        away_xG=away_xg,
+    )
 
 
 def test_the_winner_who_also_created_more_wins_the_execution_battle():
@@ -194,6 +215,7 @@ def test_missing_expected_goals_does_not_invent_a_claim():
 
 # ── score glyph ───────────────────────────────────────────────────────────────
 
+
 def test_the_score_uses_the_same_dash_as_the_visuals():
     with open(pdf.__file__, encoding="utf-8") as handle:
         body = handle.read()
@@ -206,10 +228,28 @@ def test_the_score_uses_the_same_dash_as_the_visuals():
 # gluing the two lines back together with no space reproduces one of these —
 # "CLEAR" + "ANCES" does, "TACKLES" + "WON" does not.
 METRIC_WORDS = {
-    "clearances", "recoveries", "interceptions", "intercepts", "tackles",
-    "blocks", "passes", "dribbles", "duels", "aerials", "assists", "shots",
-    "goals", "created", "actions", "buildup", "chain", "completions", "balls",
-    "progressive", "contribution", "won",
+    "clearances",
+    "recoveries",
+    "interceptions",
+    "intercepts",
+    "tackles",
+    "blocks",
+    "passes",
+    "dribbles",
+    "duels",
+    "aerials",
+    "assists",
+    "shots",
+    "goals",
+    "created",
+    "actions",
+    "buildup",
+    "chain",
+    "completions",
+    "balls",
+    "progressive",
+    "contribution",
+    "won",
 }
 
 

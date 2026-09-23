@@ -74,10 +74,13 @@ def surname(name: str) -> str:
 
 
 def packages() -> list[Path]:
-    return [p.parent for p in sorted((ROOT / "output").rglob("match_info.json"))
-            if p.parent.name != "light"
-            and not any(x.startswith(".") for x in p.parent.parts)
-            and (p.parent / "events.csv").exists()]
+    return [
+        p.parent
+        for p in sorted((ROOT / "output").rglob("match_info.json"))
+        if p.parent.name != "light"
+        and not any(x.startswith(".") for x in p.parent.parts)
+        and (p.parent / "events.csv").exists()
+    ]
 
 
 def shots_on_disk(folders: list[Path]) -> pd.DataFrame:
@@ -102,10 +105,15 @@ def shots_on_disk(folders: list[Path]) -> pd.DataFrame:
                 context = F._shot_context_features(shot, geometry)
             except Exception:
                 continue
-            rows.append({"pkg": folder.name, "minute": shot.get("minute"),
-                         "sur": surname(shot.get("player")),
-                         "goal": float(bool(shot.get("is_goal"))),
-                         **XA.features(float(value), geometry, context, shot)})
+            rows.append(
+                {
+                    "pkg": folder.name,
+                    "minute": shot.get("minute"),
+                    "sur": surname(shot.get("player")),
+                    "goal": float(bool(shot.get("is_goal"))),
+                    **XA.features(float(value), geometry, context, shot),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -170,11 +178,13 @@ def choose_terms(frame, outcome, folds) -> tuple[list[str], float]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--dry-run", action="store_true", help="report, write nothing")
-    parser.add_argument("--report", action="store_true",
-                        help="also score against the cached provider pull")
+    parser.add_argument(
+        "--report", action="store_true", help="also score against the cached provider pull"
+    )
     args = parser.parse_args()
 
     folders = packages()
@@ -186,8 +196,9 @@ def main() -> int:
     matches = frame["pkg"].nunique() if len(frame) else 0
     print(f"{len(frame)} shots, {goals} goals, {matches} matches")
     if len(frame) < MIN_SHOTS or goals < MIN_GOALS or matches < MIN_MATCHES:
-        print(f"Too little to fit: need {MIN_SHOTS} shots, {MIN_GOALS} goals, "
-              f"{MIN_MATCHES} matches.")
+        print(
+            f"Too little to fit: need {MIN_SHOTS} shots, {MIN_GOALS} goals, {MIN_MATCHES} matches."
+        )
         return 1
 
     outcome = frame["goal"].to_numpy(dtype=float)
@@ -206,9 +217,19 @@ def main() -> int:
         print("The fit predicts no better than the engine; nothing written.")
         return 1
 
-    weights = dict(zip(terms, (float(w) for w in _fit(
-        frame[terms].to_numpy(dtype=float), outcome,
-        frame["logit"].to_numpy(dtype=float)))))
+    weights = dict(
+        zip(
+            terms,
+            (
+                float(w)
+                for w in _fit(
+                    frame[terms].to_numpy(dtype=float),
+                    outcome,
+                    frame["logit"].to_numpy(dtype=float),
+                )
+            ),
+        )
+    )
     # The reader multiplies every stored name by its feature; the offset is a
     # coefficient of exactly one on the engine's own log odds.
     weights["logit"] = 1.0
@@ -221,11 +242,18 @@ def main() -> int:
             print(f"\nagainst the cached provider pull ({len(pairs)} shots):")
             print(f"   engine rmse {np.sqrt(np.mean((mine - pairs.reference) ** 2)):.4f}")
 
-    payload = {"method": XA.METHOD, "shots": int(len(frame)), "goals": goals,
-               "matches": int(matches), "terms": terms,
-               "log_loss_before": before, "log_loss_after": after,
-               "xg_before": float(engine.sum()), "xg_after": float(fitted.sum()),
-               "weights": weights}
+    payload = {
+        "method": XA.METHOD,
+        "shots": int(len(frame)),
+        "goals": goals,
+        "matches": int(matches),
+        "terms": terms,
+        "log_loss_before": before,
+        "log_loss_after": after,
+        "xg_before": float(engine.sum()),
+        "xg_after": float(fitted.sum()),
+        "weights": weights,
+    }
     if args.dry_run:
         print("\n--dry-run: not written")
         return 0

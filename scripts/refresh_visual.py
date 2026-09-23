@@ -110,25 +110,28 @@ def main() -> int:
             continue
         try:
             result = redraw(package, theme_dir, function, token)
-        except Exception as error:                      # noqa: BLE001
+        except Exception as error:  # noqa: BLE001
             result = f"{type(error).__name__}: {error}"
         if result != "ok":
             problems.append((package.name, result))
         print(f"  [{index}/{len(targets)}] {package.name}: {result}", flush=True)
 
-    print(f"\n{len(targets) - len(problems)}/{len(targets)} refreshed [{theme}] "
-          f"in {(time.time() - started) / 60:.1f} min")
+    print(
+        f"\n{len(targets) - len(problems)}/{len(targets)} refreshed [{theme}] "
+        f"in {(time.time() - started) / 60:.1f} min"
+    )
     for name, reason in problems:
         print(f"  {name}: {reason}")
 
     # The light theme is a property of the interpreter, so it needs its own.
     if not light and os.environ.get("REFRESH_VISUAL_LIGHT", "1") != "0":
         print("\n--- light copies ---", flush=True)
-        child = {**os.environ, "MATCH_ANALYSIS_THEME": "light",
-                 "PYTHONIOENCODING": "utf-8"}
-        done = subprocess.run([sys.executable, str(Path(__file__).resolve()),
-                               function, *patterns],
-                              cwd=ROOT, env=child)
+        child = {**os.environ, "MATCH_ANALYSIS_THEME": "light", "PYTHONIOENCODING": "utf-8"}
+        done = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), function, *patterns],
+            cwd=ROOT,
+            env=child,
+        )
         return done.returncode or (1 if problems else 0)
     return 1 if problems else 0
 

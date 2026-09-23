@@ -120,12 +120,12 @@ if IS_LIGHT_THEME:
     AWAY = colors.HexColor("#E76F51")
     # Cover-only greys. Letter-spaced small caps lose stroke weight, so they
     # are held well above the 4.5:1 floor rather than at it.
-    COVER_LABEL = colors.HexColor("#3A3F47")   # 9.9:1 on the light page
-    COVER_META = colors.HexColor("#4A5058")    # 7.9:1
+    COVER_LABEL = colors.HexColor("#3A3F47")  # 9.9:1 on the light page
+    COVER_META = colors.HexColor("#4A5058")  # 7.9:1
     # The trailing side's figure on each row. Quieter than the leader's, which
     # keeps its kit colour, but still a number a reader has to be able to read:
     # it is half the comparison the row exists to make.
-    COVER_FIGURE_DIM = colors.HexColor("#666D78")   # 5.0:1
+    COVER_FIGURE_DIM = colors.HexColor("#666D78")  # 5.0:1
 else:
     BG = colors.HexColor("#000000")
     PANEL = colors.HexColor("#0A0A0A")
@@ -136,9 +136,9 @@ else:
     NEUTRAL = colors.HexColor("#5A5A5A")
     HOME = colors.HexColor("#2F5BFF")
     AWAY = colors.HexColor("#FFD400")
-    COVER_LABEL = colors.HexColor("#C8C8C8")   # 11.6:1 on the black page
-    COVER_META = colors.HexColor("#A8A8A8")    # 8.0:1
-    COVER_FIGURE_DIM = colors.HexColor("#909090")   # 5.7:1
+    COVER_LABEL = colors.HexColor("#C8C8C8")  # 11.6:1 on the black page
+    COVER_META = colors.HexColor("#A8A8A8")  # 8.0:1
+    COVER_FIGURE_DIM = colors.HexColor("#909090")  # 5.7:1
 
 # Fixture colours fall back to these when the caller supplies none, so the
 # fallback has to follow the page too.
@@ -207,11 +207,11 @@ TYPE_COVER_LABEL, TYPE_COVER_META = 11.5, 10.0
 # deck under the title, and the goal list. Named rather than written into the
 # drawing code, because a bare number in a setFont call is a size nothing else
 # can find and nothing can hold to the scale.
-TYPE_COVER_FIXTURE = 44      # "Arsenal 2 — 1 Chelsea"
-TYPE_COVER_LEAD = 19         # the leading side's figure on a row
-TYPE_COVER_TRAIL = 15        # the other side's, quieter but still readable
-TYPE_COVER_DECK = 13.5       # the sentence under the fixture
-TYPE_COVER_ENTRY = 10.5      # a scorer's name in the goal list
+TYPE_COVER_FIXTURE = 44  # "Arsenal 2 — 1 Chelsea"
+TYPE_COVER_LEAD = 19  # the leading side's figure on a row
+TYPE_COVER_TRAIL = 15  # the other side's, quieter but still readable
+TYPE_COVER_DECK = 13.5  # the sentence under the fixture
+TYPE_COVER_ENTRY = 10.5  # a scorer's name in the goal list
 
 # The cover's frame and the card inside it. The two rules are fixed to the
 # sheet; everything between them is centred, so the air above the crests and
@@ -244,6 +244,8 @@ def _as_pdf_color(value, fallback):
         return colors.HexColor(str(value).strip())
     except (ValueError, AttributeError, TypeError):
         return fallback
+
+
 VALUE = colors.HexColor("#A33B2E") if IS_LIGHT_THEME else colors.HexColor("#FF6B5E")
 
 
@@ -275,10 +277,9 @@ def _name(row: pd.Series, fallback: str) -> str:
 
 
 def _clock(frame: pd.DataFrame) -> pd.Series:
-    return (
-        pd.to_numeric(frame.get("minute", 0), errors="coerce").fillna(0) * 60
-        + pd.to_numeric(frame.get("second", 0), errors="coerce").fillna(0)
-    )
+    return pd.to_numeric(frame.get("minute", 0), errors="coerce").fillna(0) * 60 + pd.to_numeric(
+        frame.get("second", 0), errors="coerce"
+    ).fillna(0)
 
 
 def _goal_summary(events: pd.DataFrame, team_names: dict[int, str]) -> tuple[list[dict], str]:
@@ -320,22 +321,36 @@ def _goal_summary(events: pd.DataFrame, team_names: dict[int, str]) -> tuple[lis
     return rows, timeline
 
 
-def _player_leaders(events: pd.DataFrame, player_metrics: pd.DataFrame, team: str) -> dict[str, str]:
-    team_ids = player_metrics[player_metrics["team"].astype(str).str.lower().eq(team.lower())]["team_id"].dropna()
+def _player_leaders(
+    events: pd.DataFrame, player_metrics: pd.DataFrame, team: str
+) -> dict[str, str]:
+    team_ids = player_metrics[player_metrics["team"].astype(str).str.lower().eq(team.lower())][
+        "team_id"
+    ].dropna()
     team_id = int(team_ids.iloc[0]) if not team_ids.empty else None
-    frame = events[events["team_id"].eq(team_id)].copy() if team_id is not None else events.iloc[0:0].copy()
+    frame = (
+        events[events["team_id"].eq(team_id)].copy()
+        if team_id is not None
+        else events.iloc[0:0].copy()
+    )
     goals = frame[_bool(frame.get("is_goal", pd.Series(False, index=frame.index)))]
     goal_counts = goals.groupby("player").size().sort_values(ascending=False)
     shots = frame[_bool(frame.get("is_shot", pd.Series(False, index=frame.index)))].copy()
     shots["xG"] = pd.to_numeric(shots.get("xG", 0), errors="coerce").fillna(0)
     shot_xg = shots.groupby("player")["xG"].sum().sort_values(ascending=False)
-    passes = frame[frame.get("type", pd.Series("", index=frame.index)).astype(str).eq("Pass")].copy()
+    passes = frame[
+        frame.get("type", pd.Series("", index=frame.index)).astype(str).eq("Pass")
+    ].copy()
     passes["xT"] = pd.to_numeric(passes.get("xT", 0), errors="coerce").fillna(0).clip(lower=0)
     pass_xt = passes.groupby("player")["xT"].sum().sort_values(ascending=False)
     team_pm = player_metrics[player_metrics["team"].astype(str).str.lower().eq(team.lower())]
     chain = team_pm.sort_values("xGChain", ascending=False) if "xGChain" in team_pm else team_pm
-    buildup = team_pm.sort_values("xGBuildup", ascending=False) if "xGBuildup" in team_pm else team_pm
-    sequence = team_pm.sort_values("sequence_xT", ascending=False) if "sequence_xT" in team_pm else team_pm
+    buildup = (
+        team_pm.sort_values("xGBuildup", ascending=False) if "xGBuildup" in team_pm else team_pm
+    )
+    sequence = (
+        team_pm.sort_values("sequence_xT", ascending=False) if "sequence_xT" in team_pm else team_pm
+    )
 
     def leader(series: pd.Series, fmt: str) -> str:
         # "No qualifying player" is a database message, not a sentence. A side
@@ -371,13 +386,24 @@ def _all_player_profiles(events: pd.DataFrame, player_metrics: pd.DataFrame) -> 
     profiles: dict[str, dict] = {}
     pso = _bool(events.get("is_penalty_shootout", pd.Series(False, index=events.index)))
     live = events[~pso].copy()
-    players = sorted(set(live.get("player", pd.Series(dtype=str)).dropna().astype(str)) | set(player_metrics.get("player", pd.Series(dtype=str)).dropna().astype(str)))
+    players = sorted(
+        set(live.get("player", pd.Series(dtype=str)).dropna().astype(str))
+        | set(player_metrics.get("player", pd.Series(dtype=str)).dropna().astype(str))
+    )
     for player in players:
-        frame = live[live.get("player", pd.Series("", index=live.index)).astype(str).eq(player)].copy()
-        pm = player_metrics[player_metrics.get("player", pd.Series("", index=player_metrics.index)).astype(str).eq(player)]
+        frame = live[
+            live.get("player", pd.Series("", index=live.index)).astype(str).eq(player)
+        ].copy()
+        pm = player_metrics[
+            player_metrics.get("player", pd.Series("", index=player_metrics.index))
+            .astype(str)
+            .eq(player)
+        ]
         shots = frame[_bool(frame.get("is_shot", pd.Series(False, index=frame.index)))].copy()
         shots["xG"] = pd.to_numeric(shots.get("xG", 0), errors="coerce").fillna(0)
-        passes = frame[frame.get("type", pd.Series("", index=frame.index)).astype(str).eq("Pass")].copy()
+        passes = frame[
+            frame.get("type", pd.Series("", index=frame.index)).astype(str).eq("Pass")
+        ].copy()
         passes["xT"] = pd.to_numeric(passes.get("xT", 0), errors="coerce").fillna(0).clip(lower=0)
         team = str(pm.iloc[0].get("team", "")) if not pm.empty else ""
         profiles[player.lower()] = {
@@ -386,11 +412,19 @@ def _all_player_profiles(events: pd.DataFrame, player_metrics: pd.DataFrame) -> 
             "goals": int(_bool(frame.get("is_goal", pd.Series(False, index=frame.index))).sum()),
             "shots": int(len(shots)),
             "xG": float(shots["xG"].sum()),
-            "key_passes": int(_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index))).sum()),
+            "key_passes": int(
+                _bool(frame.get("is_key_pass", pd.Series(False, index=frame.index))).sum()
+            ),
             "pass_xT": float(passes["xT"].sum()),
-            "xGChain": float(pd.to_numeric(pm.iloc[0].get("xGChain", 0), errors="coerce")) if not pm.empty else 0.0,
-            "xGBuildup": float(pd.to_numeric(pm.iloc[0].get("xGBuildup", 0), errors="coerce")) if not pm.empty else 0.0,
-            "sequence_xT": float(pd.to_numeric(pm.iloc[0].get("sequence_xT", 0), errors="coerce")) if not pm.empty else 0.0,
+            "xGChain": float(pd.to_numeric(pm.iloc[0].get("xGChain", 0), errors="coerce"))
+            if not pm.empty
+            else 0.0,
+            "xGBuildup": float(pd.to_numeric(pm.iloc[0].get("xGBuildup", 0), errors="coerce"))
+            if not pm.empty
+            else 0.0,
+            "sequence_xT": float(pd.to_numeric(pm.iloc[0].get("sequence_xT", 0), errors="coerce"))
+            if not pm.empty
+            else 0.0,
         }
     return profiles
 
@@ -418,10 +452,22 @@ def build_context(
     away_id = int(match_info["away_id"])
     team_names = {home_id: home_name, away_id: away_name}
     goal_rows, goal_timeline = _goal_summary(events, team_names)
-    home_goals = int(_xg_metric(xg, home_name, "goals", sum(row["team_id"] == home_id for row in goal_rows)))
-    away_goals = int(_xg_metric(xg, away_name, "goals", sum(row["team_id"] == away_id for row in goal_rows)))
-    winner = home_name if home_goals > away_goals else away_name if away_goals > home_goals else "Neither side"
-    loser = away_name if winner == home_name else home_name if winner == away_name else "the opponent"
+    home_goals = int(
+        _xg_metric(xg, home_name, "goals", sum(row["team_id"] == home_id for row in goal_rows))
+    )
+    away_goals = int(
+        _xg_metric(xg, away_name, "goals", sum(row["team_id"] == away_id for row in goal_rows))
+    )
+    winner = (
+        home_name
+        if home_goals > away_goals
+        else away_name
+        if away_goals > home_goals
+        else "Neither side"
+    )
+    loser = (
+        away_name if winner == home_name else home_name if winner == away_name else "the opponent"
+    )
 
     info = {
         "home_id": home_id,
@@ -465,51 +511,87 @@ def build_context(
         for key in ["xG", "xGoT", "xG_per_shot", "shots", "on_target", "big_chances", "xT"]:
             context[f"{side}_{key}"] = _xg_metric(xg, team, key)
         for key in [
-            "possession_share", "pass_share", "field_tilt", "deep_completions",
-            "touches", "touch_def_pct", "touch_mid_pct", "touch_att_pct",
-            "final_third_entries", "final_third_entry_efficiency", "box_entries",
-            "box_entry_to_shot_rate", "build_up_success_rate", "sequence_xT",
-            "build_up_attempts", "build_up_successes", "progressive_passes",
-            "crosses", "completed_crosses", "directness", "high_regains",
-            "regain_to_shot_rate", "regain_xG", "regain_xT",
-            "transitions", "transition_shots", "transition_goals", "transition_xG",
-            "transition_xT", "transition_shot_rate", "avg_transition_progress",
-            "counterpress_regains", "counterpress_attempts", "counterpress_success_rate", "rest_defence_exposures",
-            "rest_defence_dangerous_counters", "rest_defence_vulnerability",
+            "possession_share",
+            "pass_share",
+            "field_tilt",
+            "deep_completions",
+            "touches",
+            "touch_def_pct",
+            "touch_mid_pct",
+            "touch_att_pct",
+            "final_third_entries",
+            "final_third_entry_efficiency",
+            "box_entries",
+            "box_entry_to_shot_rate",
+            "build_up_success_rate",
+            "sequence_xT",
+            "build_up_attempts",
+            "build_up_successes",
+            "progressive_passes",
+            "crosses",
+            "completed_crosses",
+            "directness",
+            "high_regains",
+            "regain_to_shot_rate",
+            "regain_xG",
+            "regain_xT",
+            "transitions",
+            "transition_shots",
+            "transition_goals",
+            "transition_xG",
+            "transition_xT",
+            "transition_shot_rate",
+            "avg_transition_progress",
+            "counterpress_regains",
+            "counterpress_attempts",
+            "counterpress_success_rate",
+            "rest_defence_exposures",
+            "rest_defence_dangerous_counters",
+            "rest_defence_vulnerability",
         ]:
             context[f"{side}_{key}"] = _metric(team_metrics, side, key)
     from match_metrics import pitch_control
-    context['influence'] = pitch_control(events, home_id, away_id)[1]
-    context['date'] = match_info.get('date', '')
-    context['competition'] = match_info.get('competition', '')
+
+    context["influence"] = pitch_control(events, home_id, away_id)[1]
+    context["date"] = match_info.get("date", "")
+    context["competition"] = match_info.get("competition", "")
     # Carried for the cover's fixture card; each is optional and read with a
     # default there, because older callers pass none of them.
-    for key in ('venue', 'managers', 'formations', 'round_name', 'home_form',
-                'away_form', 'home_kit', 'away_kit'):
+    for key in (
+        "venue",
+        "managers",
+        "formations",
+        "round_name",
+        "home_form",
+        "away_form",
+        "home_kit",
+        "away_kit",
+    ):
         context[key] = match_info.get(key)
-    context['url'] = match_info.get('url', '')
-    context['match_id'] = match_info.get('match_id', '')
-    context['chart_contracts'] = events.attrs.get('chart_contracts', {})
-    for side in ('home', 'away'):
-        for state in ('drawing', 'leading', 'trailing'):
-            key = f'game_state_{state}_xG'
+    context["url"] = match_info.get("url", "")
+    context["match_id"] = match_info.get("match_id", "")
+    context["chart_contracts"] = events.attrs.get("chart_contracts", {})
+    for side in ("home", "away"):
+        for state in ("drawing", "leading", "trailing"):
+            key = f"game_state_{state}_xG"
             if key in team_metrics.columns:
-                context[f'{side}_{key}'] = _metric(team_metrics, side, key)
+                context[f"{side}_{key}"] = _metric(team_metrics, side, key)
     # The caption writer describes each board, and a board can only be
     # described by whatever it was drawn from. Team totals are not enough --
     # they cannot say which two players combined most, which flank the box was
     # entered from, or how far out the shots were taken. The frames travel with
     # the context so a sentence about a picture is computed from the picture's
     # own data rather than guessed at.
-    context['_events'] = events
-    context['_xg'] = xg
-    context['home_id'] = home_id
-    context['away_id'] = away_id
+    context["_events"] = events
+    context["_xg"] = xg
+    context["home_id"] = home_id
+    context["away_id"] = away_id
     return context
 
 
-def _lead(home_name: str, away_name: str, home_value, away_value,
-          tolerance: float = 0.0) -> tuple[str, str, bool]:
+def _lead(
+    home_name: str, away_name: str, home_value, away_value, tolerance: float = 0.0
+) -> tuple[str, str, bool]:
     """Return (leader, trailer, level) for one pair of values.
 
     Several readings named a fixed side — "Man City\'s curve finished above
@@ -545,50 +627,157 @@ def _goal_moment(goal: dict) -> str:
     return f"at {minute:02d}:{second:02d} elapsed"
 
 
-
-
 MATCH_STORY = {"01", "04", "14", "15", "18", "23", "43"}
 CHANCE_CREATION = {"02", "03", "11", "12", "13", "16", "17", "26", "27", "34", "35"}
-POSSESSION = {"05a", "05b", "06a", "06b", "07", "08", "09", "10", "20", "21", "22", "24", "25", "31a", "31b", "32a", "32b", "33", "38", "39"}
+POSSESSION = {
+    "05a",
+    "05b",
+    "06a",
+    "06b",
+    "07",
+    "08",
+    "09",
+    "10",
+    "20",
+    "21",
+    "22",
+    "24",
+    "25",
+    "31a",
+    "31b",
+    "32a",
+    "32b",
+    "33",
+    "38",
+    "39",
+}
 PRESSING = {"28", "29", "30", "36", "37", "40"}
 TRANSITIONS = {"41", "42"}
-
-
 
 
 def tactical_lens(path: Path) -> str:
     stem = path.stem.lower()
     rules = [
-        ("xg_flow", "Read score changes against cumulative chance quality; a gap between goals and xG highlights execution and variance."),
-        ("goals_breakdown", "Use the scoring order to understand the game-state pressure behind every later tactical choice."),
-        ("shot_map", "Compare shot location and size before judging finishing; volume alone does not describe chance quality."),
-        ("shot_profile", "Separate volume, accuracy and quality to identify whether the attack failed at access or execution."),
-        ("danger_creation", "Look for repeatable routes into danger, not isolated high-value events."),
-        ("zone14", "Central access in front of the box is most valuable when the next action breaks the final line."),
-        ("box_entries", "Judge box access by entry type, receiver support and whether it produced a shot."),
-        ("crosses", "Cross volume is useful only with box occupation, target quality and second-ball structure."),
-        ("pass_network", "Read connections as team structure: spacing, hubs, width and substitution effects matter more than raw pass totals."),
-        ("average_positions", "Use the half-specific structure to assess width, line height, compactness and role changes."),
-        ("xt_map", "The heatmap shows where passes added threat; test whether hot zones connected to box entries and shots."),
-        ("xt_per_minute", "Threat spikes identify the match periods when progression became penetration."),
-        ("pass_map", "Distinguish circulation from line-breaking actions and note where failed passes exposed transition risk."),
-        ("pass_thirds", "Compare retention and progression through each third to locate the build-up bottleneck."),
-        ("progressive", "Progressive volume matters when receivers can continue forward before the defence resets."),
-        ("pass_targets", "Destination density reveals occupation; combine it with completion and next-action quality."),
-        ("dominating_zones", "Territorial dominance describes location, not outcome; compare it with shot quality and game state."),
-        ("ppda", "Lower PPDA signals more aggressive pressure, but success must be checked against high regains and rest-defence exposure."),
-        ("high_regains", "A high regain becomes valuable when it creates a shot before the opponent reorganises."),
-        ("defensive_activity", "Location and type of defensive actions reveal whether the block defended proactively or close to its own goal."),
-        ("defensive_summary", "Balance ball-winning volume with the quality of protection behind the challenge."),
-        ("transition_outcomes", "Compare transition frequency with shot rate and xG to measure efficiency in moments of disorder."),
-        ("advanced_metrics", "Read volume, efficiency, value and risk separately; a team can lead one layer and lose another."),
-        ("game_state", "Leading and trailing phases change risk appetite, field position and the meaning of possession totals."),
-        ("player_sequence", "Sequence leaders identify involvement in valuable attacks, not just the final pass or shot."),
-        ("goalkeeper", "Separate save volume from post-shot quality to assess intervention rather than workload alone."),
-        ("xg_summary", "Treat finishing above xG as match execution, not automatically as a repeatable attacking advantage."),
-        ("match_stats", "Use the overview to frame the story, then rely on phase-specific pages for tactical explanation."),
-        ("post_match_advanced", "Read attack and defence as one system: territorial ambition only helps when chance quality and protection behind the ball remain connected."),
-        ("ball_touches", "Touch location describes occupation and game state; it does not by itself measure control."),
+        (
+            "xg_flow",
+            "Read score changes against cumulative chance quality; a gap between goals and xG highlights execution and variance.",
+        ),
+        (
+            "goals_breakdown",
+            "Use the scoring order to understand the game-state pressure behind every later tactical choice.",
+        ),
+        (
+            "shot_map",
+            "Compare shot location and size before judging finishing; volume alone does not describe chance quality.",
+        ),
+        (
+            "shot_profile",
+            "Separate volume, accuracy and quality to identify whether the attack failed at access or execution.",
+        ),
+        (
+            "danger_creation",
+            "Look for repeatable routes into danger, not isolated high-value events.",
+        ),
+        (
+            "zone14",
+            "Central access in front of the box is most valuable when the next action breaks the final line.",
+        ),
+        (
+            "box_entries",
+            "Judge box access by entry type, receiver support and whether it produced a shot.",
+        ),
+        (
+            "crosses",
+            "Cross volume is useful only with box occupation, target quality and second-ball structure.",
+        ),
+        (
+            "pass_network",
+            "Read connections as team structure: spacing, hubs, width and substitution effects matter more than raw pass totals.",
+        ),
+        (
+            "average_positions",
+            "Use the half-specific structure to assess width, line height, compactness and role changes.",
+        ),
+        (
+            "xt_map",
+            "The heatmap shows where passes added threat; test whether hot zones connected to box entries and shots.",
+        ),
+        (
+            "xt_per_minute",
+            "Threat spikes identify the match periods when progression became penetration.",
+        ),
+        (
+            "pass_map",
+            "Distinguish circulation from line-breaking actions and note where failed passes exposed transition risk.",
+        ),
+        (
+            "pass_thirds",
+            "Compare retention and progression through each third to locate the build-up bottleneck.",
+        ),
+        (
+            "progressive",
+            "Progressive volume matters when receivers can continue forward before the defence resets.",
+        ),
+        (
+            "pass_targets",
+            "Destination density reveals occupation; combine it with completion and next-action quality.",
+        ),
+        (
+            "dominating_zones",
+            "Territorial dominance describes location, not outcome; compare it with shot quality and game state.",
+        ),
+        (
+            "ppda",
+            "Lower PPDA signals more aggressive pressure, but success must be checked against high regains and rest-defence exposure.",
+        ),
+        (
+            "high_regains",
+            "A high regain becomes valuable when it creates a shot before the opponent reorganises.",
+        ),
+        (
+            "defensive_activity",
+            "Location and type of defensive actions reveal whether the block defended proactively or close to its own goal.",
+        ),
+        (
+            "defensive_summary",
+            "Balance ball-winning volume with the quality of protection behind the challenge.",
+        ),
+        (
+            "transition_outcomes",
+            "Compare transition frequency with shot rate and xG to measure efficiency in moments of disorder.",
+        ),
+        (
+            "advanced_metrics",
+            "Read volume, efficiency, value and risk separately; a team can lead one layer and lose another.",
+        ),
+        (
+            "game_state",
+            "Leading and trailing phases change risk appetite, field position and the meaning of possession totals.",
+        ),
+        (
+            "player_sequence",
+            "Sequence leaders identify involvement in valuable attacks, not just the final pass or shot.",
+        ),
+        (
+            "goalkeeper",
+            "Separate save volume from post-shot quality to assess intervention rather than workload alone.",
+        ),
+        (
+            "xg_summary",
+            "Treat finishing above xG as match execution, not automatically as a repeatable attacking advantage.",
+        ),
+        (
+            "match_stats",
+            "Use the overview to frame the story, then rely on phase-specific pages for tactical explanation.",
+        ),
+        (
+            "post_match_advanced",
+            "Read attack and defence as one system: territorial ambition only helps when chance quality and protection behind the ball remain connected.",
+        ),
+        (
+            "ball_touches",
+            "Touch location describes occupation and game state; it does not by itself measure control.",
+        ),
     ]
     if "player_radars" in path.parts:
         return "Single-match player profile: interpret every segment through minutes, position, role and team game state."
@@ -657,7 +846,8 @@ def _visual_team(path: Path, context: dict) -> tuple[str | None, str | None]:
 
     candidates = sorted(
         (("home", _slugged(str(context["home"]))), ("away", _slugged(str(context["away"])))),
-        key=lambda pair: len(pair[1]), reverse=True,
+        key=lambda pair: len(pair[1]),
+        reverse=True,
     )
     for side, slug in candidates:
         if slug and (identity == slug or identity.endswith("_" + slug)):
@@ -671,15 +861,12 @@ def _visual_title(path: Path) -> str:
     stem = path.stem
     if "_" in stem:
         stem = stem.split("_", 1)[1]
-    return stem.replace("_", " ").replace(" 1h", " - First Half").replace(" 2h", " - Second Half").title()
-
-
-
-
-
-
-
-
+    return (
+        stem.replace("_", " ")
+        .replace(" 1h", " - First Half")
+        .replace(" 2h", " - Second Half")
+        .title()
+    )
 
 
 def _join_sentences(*parts: str) -> str:
@@ -749,12 +936,6 @@ def _split_for_columns(text: str) -> tuple[str, str]:
     return " ".join(sentences[:best_index]).strip(), " ".join(sentences[best_index:]).strip()
 
 
-
-
-
-
-
-
 def next_visual_step(next_path: Path | None) -> str:
     if next_path is None:
         return "This closes the visual appendix. Return to the Final Tactical Verdict to connect the player roles with the team-level coaching priorities."
@@ -767,10 +948,22 @@ class TacticalPDF:
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
         from matplotlib import get_data_path
-        font_root = Path(get_data_path()) / 'fonts' / 'ttf'
-        for name, filename in [('Helvetica','DejaVuSans.ttf'),('Helvetica-Bold','DejaVuSans-Bold.ttf'),('Helvetica-Oblique','DejaVuSans-Oblique.ttf'),('Helvetica-BoldOblique','DejaVuSans-BoldOblique.ttf')]:
+
+        font_root = Path(get_data_path()) / "fonts" / "ttf"
+        for name, filename in [
+            ("Helvetica", "DejaVuSans.ttf"),
+            ("Helvetica-Bold", "DejaVuSans-Bold.ttf"),
+            ("Helvetica-Oblique", "DejaVuSans-Oblique.ttf"),
+            ("Helvetica-BoldOblique", "DejaVuSans-BoldOblique.ttf"),
+        ]:
             pdfmetrics.registerFont(TTFont(name, str(font_root / filename)))
-        pdfmetrics.registerFontFamily('Helvetica', normal='Helvetica', bold='Helvetica-Bold', italic='Helvetica-Oblique', boldItalic='Helvetica-BoldOblique')
+        pdfmetrics.registerFontFamily(
+            "Helvetica",
+            normal="Helvetica",
+            bold="Helvetica-Bold",
+            italic="Helvetica-Oblique",
+            boldItalic="Helvetica-BoldOblique",
+        )
         self.output = output
         self.context = context
         # Filled by build_tactical_pdf from the Word-style article. Each
@@ -778,7 +971,9 @@ class TacticalPDF:
         self.article_readings: dict[str, str] = {}
         self.page = 0
         self.canvas = canvas.Canvas(str(output), pagesize=(PAGE_W, PAGE_H), pageCompression=1)
-        self.canvas.setTitle(f"{context['home']} vs {context['away']} - Detailed Tactical and Data Report")
+        self.canvas.setTitle(
+            f"{context['home']} vs {context['away']} - Detailed Tactical and Data Report"
+        )
         self.canvas.setAuthor("Mostafa Saad")
         self.canvas.setSubject("Football performance analysis and match data report")
         # The chrome carries the fixture's own colours. It used to be a fixed
@@ -786,19 +981,82 @@ class TacticalPDF:
         # real kit colours with a border belonging to neither of them.
         self.home_color = _as_pdf_color(context.get("home_color"), HOME)
         self.away_color = _as_pdf_color(context.get("away_color"), AWAY)
-        self.body = ParagraphStyle("body", fontName="Helvetica", fontSize=TYPE_BODY, leading=13.2, textColor=TEXT, alignment=TA_LEFT)
-        self.small = ParagraphStyle("small", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=10.5, textColor=MUTED, alignment=TA_LEFT)
-        self.card = ParagraphStyle("card", fontName="Helvetica", fontSize=TYPE_BODY, leading=12.3, textColor=TEXT, alignment=TA_LEFT)
-        self.analysis = ParagraphStyle("analysis", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=11.25, textColor=TEXT, alignment=TA_LEFT)
-        self.implication = ParagraphStyle("implication", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=10.7, textColor=TEXT, alignment=TA_LEFT)
-        self.next_step = ParagraphStyle("next_step", fontName="Helvetica", fontSize=TYPE_CAPTION, leading=10.1, textColor=MUTED, alignment=TA_LEFT)
+        self.body = ParagraphStyle(
+            "body",
+            fontName="Helvetica",
+            fontSize=TYPE_BODY,
+            leading=13.2,
+            textColor=TEXT,
+            alignment=TA_LEFT,
+        )
+        self.small = ParagraphStyle(
+            "small",
+            fontName="Helvetica",
+            fontSize=TYPE_CAPTION,
+            leading=10.5,
+            textColor=MUTED,
+            alignment=TA_LEFT,
+        )
+        self.card = ParagraphStyle(
+            "card",
+            fontName="Helvetica",
+            fontSize=TYPE_BODY,
+            leading=12.3,
+            textColor=TEXT,
+            alignment=TA_LEFT,
+        )
+        self.analysis = ParagraphStyle(
+            "analysis",
+            fontName="Helvetica",
+            fontSize=TYPE_CAPTION,
+            leading=11.25,
+            textColor=TEXT,
+            alignment=TA_LEFT,
+        )
+        self.implication = ParagraphStyle(
+            "implication",
+            fontName="Helvetica",
+            fontSize=TYPE_CAPTION,
+            leading=10.7,
+            textColor=TEXT,
+            alignment=TA_LEFT,
+        )
+        self.next_step = ParagraphStyle(
+            "next_step",
+            fontName="Helvetica",
+            fontSize=TYPE_CAPTION,
+            leading=10.1,
+            textColor=MUTED,
+            alignment=TA_LEFT,
+        )
         # The commentary used to be set in Times while every embedded visual is
         # sans, so each page carried two unrelated type families and read as two
         # documents stapled together. One family throughout; the commentary is
         # separated from the chrome by weight and colour instead.
-        self.commentary_title = ParagraphStyle("commentary_title", fontName="Helvetica-Bold", fontSize=TYPE_TITLE, leading=19.5, textColor=TEXT, alignment=TA_LEFT)
-        self.commentary_body = ParagraphStyle("commentary_body", fontName="Helvetica", fontSize=TYPE_BODY, leading=13.2, textColor=TEXT, alignment=TA_LEFT)
-        self.commentary_next = ParagraphStyle("commentary_next", fontName="Helvetica-Oblique", fontSize=TYPE_CAPTION, leading=11.0, textColor=MUTED, alignment=TA_LEFT)
+        self.commentary_title = ParagraphStyle(
+            "commentary_title",
+            fontName="Helvetica-Bold",
+            fontSize=TYPE_TITLE,
+            leading=19.5,
+            textColor=TEXT,
+            alignment=TA_LEFT,
+        )
+        self.commentary_body = ParagraphStyle(
+            "commentary_body",
+            fontName="Helvetica",
+            fontSize=TYPE_BODY,
+            leading=13.2,
+            textColor=TEXT,
+            alignment=TA_LEFT,
+        )
+        self.commentary_next = ParagraphStyle(
+            "commentary_next",
+            fontName="Helvetica-Oblique",
+            fontSize=TYPE_CAPTION,
+            leading=11.0,
+            textColor=MUTED,
+            alignment=TA_LEFT,
+        )
 
     def _start(self, bookmark: str | None = None, outline: str | None = None, level: int = 0):
         self.page += 1
@@ -834,19 +1092,44 @@ class TacticalPDF:
         c.roundRect(24, base, PAGE_W - 48, panel_h, 9, fill=1, stroke=0)
         # New report identity: a teal/coral split ribbon and a neutral spine
         # make every section recognisable even when the embedded visual is dark.
-        c.setFillColor(BRAND); c.roundRect(24, base, 7, panel_h, 3, fill=1, stroke=0)
-        c.setFillColor(VALUE); c.rect(PAGE_W - 31, base, 7, panel_h, fill=1, stroke=0)
-        c.setFillColor(self.home_color); c.rect(28, base + 2, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
-        c.setFillColor(self.away_color); c.rect(PAGE_W / 2, base + 2, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
-        c.setFillColor(BRAND); c.circle(43, top - 21, 3.2, fill=1, stroke=0)
-        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_MICRO); c.drawString(54, top - 24, section.upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE); c.drawString(42, top - 50, title)
-        c.setFillColor(MUTED); c.setFont("Helvetica", TYPE_CAPTION); c.drawString(42, top - 68, subtitle[:125])
-        c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", TYPE_BODY); c.drawRightString(PAGE_W - 300, PAGE_H - 50, self.context["home"].upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE); c.drawCentredString(PAGE_W - 245, PAGE_H - 50, self.context["score"])
-        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_BODY); c.drawString(PAGE_W - 190, PAGE_H - 50, self.context["away"].upper())
+        c.setFillColor(BRAND)
+        c.roundRect(24, base, 7, panel_h, 3, fill=1, stroke=0)
+        c.setFillColor(VALUE)
+        c.rect(PAGE_W - 31, base, 7, panel_h, fill=1, stroke=0)
+        c.setFillColor(self.home_color)
+        c.rect(28, base + 2, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
+        c.setFillColor(self.away_color)
+        c.rect(PAGE_W / 2, base + 2, (PAGE_W - 56) / 2, 3, fill=1, stroke=0)
+        c.setFillColor(BRAND)
+        c.circle(43, top - 21, 3.2, fill=1, stroke=0)
+        c.setFillColor(MUTED)
+        c.setFont("Helvetica-Bold", TYPE_MICRO)
+        c.drawString(54, top - 24, section.upper())
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_TITLE)
+        c.drawString(42, top - 50, title)
+        c.setFillColor(MUTED)
+        c.setFont("Helvetica", TYPE_CAPTION)
+        c.drawString(42, top - 68, subtitle[:125])
+        c.setFillColor(self.home_color)
+        c.setFont("Helvetica-Bold", TYPE_BODY)
+        c.drawRightString(PAGE_W - 300, PAGE_H - 50, self.context["home"].upper())
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_TITLE)
+        c.drawCentredString(PAGE_W - 245, PAGE_H - 50, self.context["score"])
+        c.setFillColor(self.away_color)
+        c.setFont("Helvetica-Bold", TYPE_BODY)
+        c.drawString(PAGE_W - 190, PAGE_H - 50, self.context["away"].upper())
 
-    def _paragraph(self, text: str, x: float, top: float, width: float, max_height: float, style: ParagraphStyle | None = None) -> float:
+    def _paragraph(
+        self,
+        text: str,
+        x: float,
+        top: float,
+        width: float,
+        max_height: float,
+        style: ParagraphStyle | None = None,
+    ) -> float:
         # Every sentence in the report goes through here, which makes it the one
         # place a fault common to a dozen writers can be stopped. See
         # prose_hygiene: a count of one printed as a plural is repaired, and
@@ -855,17 +1138,18 @@ class TacticalPDF:
 
         text = clean(text) or text
         import copy
+
         fitted = copy.copy(style or self.body)
         paragraph = Paragraph(text, fitted)
         _, height = paragraph.wrap(width, max_height)
         floor = min(8.0, fitted.fontSize)
-        while height > max_height + .1 and fitted.fontSize > floor:
-            fitted.fontSize = max(floor, fitted.fontSize-.25)
-            fitted.leading = fitted.fontSize*1.3
+        while height > max_height + 0.1 and fitted.fontSize > floor:
+            fitted.fontSize = max(floor, fitted.fontSize - 0.25)
+            fitted.leading = fitted.fontSize * 1.3
             paragraph = Paragraph(text, fitted)
             _, height = paragraph.wrap(width, max_height)
-        if height > max_height + .1:
-            raise ValueError(f'PDF text exceeds its allotted area on page {self.page}: {text[:80]}')
+        if height > max_height + 0.1:
+            raise ValueError(f"PDF text exceeds its allotted area on page {self.page}: {text[:80]}")
         paragraph.drawOn(self.canvas, x, top - height)
         return height
 
@@ -894,11 +1178,36 @@ class TacticalPDF:
         # pass_share counts passes attempted, not completed: the mask carries no
         # outcome filter. Both descriptions of it said "completed".
         ("split", "pass_share", "Pass share", "share of all passes played"),
-        ("rate", "box_entry_to_shot_rate", "Box entry to shot", "share of penalty-area entries that became a shot"),
-        ("rate", "regain_to_shot_rate", "Regain to shot", "share of possession regains that became a shot"),
-        ("rate", "transition_shot_rate", "Transition to shot", "share of transitions that became a shot"),
-        ("rate", "build_up_success_rate", "Build-up success", "share of build-up attempts that cleared the press"),
-        ("rate", "final_third_entry_efficiency", "Final-third efficiency", "share of final-third entries that became a box entry"),
+        (
+            "rate",
+            "box_entry_to_shot_rate",
+            "Box entry to shot",
+            "share of penalty-area entries that became a shot",
+        ),
+        (
+            "rate",
+            "regain_to_shot_rate",
+            "Regain to shot",
+            "share of possession regains that became a shot",
+        ),
+        (
+            "rate",
+            "transition_shot_rate",
+            "Transition to shot",
+            "share of transitions that became a shot",
+        ),
+        (
+            "rate",
+            "build_up_success_rate",
+            "Build-up success",
+            "share of build-up attempts that cleared the press",
+        ),
+        (
+            "rate",
+            "final_third_entry_efficiency",
+            "Final-third efficiency",
+            "share of final-third entries that became a box entry",
+        ),
     )
 
     def _verdict(self) -> str:
@@ -926,15 +1235,19 @@ class TacticalPDF:
             lead_xg, trail_xg = xg_for(home), xg_for(away)
             if lead_xg is not None and trail_xg is not None and trail_xg > lead_xg:
                 leader, trailer = away, home
-            return (f"The draw flattered neither side equally: {leader} created "
-                    f"the better share of the chances {trailer} had to survive.")
+            return (
+                f"The draw flattered neither side equally: {leader} created "
+                f"the better share of the chances {trailer} had to survive."
+            )
 
         winner_xg, loser_xg = xg_for(winner), xg_for(loser)
         if winner_xg is None or loser_xg is None:
             return f"{winner} took the result; the process behind it is what the report examines."
         if winner_xg >= loser_xg:
-            return (f"{winner} won the execution battle. "
-                    f"{loser}'s activity never became control of shot quality.")
+            return (
+                f"{winner} won the execution battle. "
+                f"{loser}'s activity never became control of shot quality."
+            )
         # The higher total is not the better performance when almost all of it
         # arrived after going behind. This is the first line a reader sees, and
         # it was making the claim the report goes on to correct eleven pages
@@ -943,11 +1256,15 @@ class TacticalPDF:
         verdict = self.context.get("verdict")
         if verdict is not None and verdict.loser_was_only_chasing:
             beaten = verdict.of(loser)
-            return (f"{loser}'s xG is a chase, not a performance. "
-                    f"{100 * beaten.chasing_share:.0f}% of it arrived behind; "
-                    f"before that, {beaten.not_chasing_xg:.2f}.")
-        return (f"{loser} created the better chances and lost. "
-                f"{winner} needed fewer of them and took them.")
+            return (
+                f"{loser}'s xG is a chase, not a performance. "
+                f"{100 * beaten.chasing_share:.0f}% of it arrived behind; "
+                f"before that, {beaten.not_chasing_xg:.2f}."
+            )
+        return (
+            f"{loser} created the better chances and lost. "
+            f"{winner} needed fewer of them and took them."
+        )
 
     def _cover_lead(self):
         """The match's most lopsided percentage, and how to draw it.
@@ -998,18 +1315,34 @@ class TacticalPDF:
                     pad = size * 0.06
                     c.saveState()
                     c.setFillColor(colors.HexColor("#0A0A0A"))
-                    c.roundRect(cx - size / 2 - pad, top - size - pad,
-                                size + 2 * pad, size + 2 * pad, size * 0.09,
-                                stroke=0, fill=1)
+                    c.roundRect(
+                        cx - size / 2 - pad,
+                        top - size - pad,
+                        size + 2 * pad,
+                        size + 2 * pad,
+                        size * 0.09,
+                        stroke=0,
+                        fill=1,
+                    )
                     c.restoreState()
-                c.drawImage(str(LOGO_PATH), cx - size / 2, top - size, size, size,
-                            mask=None, preserveAspectRatio=True, anchor="c")
+                c.drawImage(
+                    str(LOGO_PATH),
+                    cx - size / 2,
+                    top - size,
+                    size,
+                    size,
+                    mask=None,
+                    preserveAspectRatio=True,
+                    anchor="c",
+                )
                 return top - size
             except Exception:
                 pass  # unreadable image: fall through to the wordmark
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_DISPLAY)
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_DISPLAY)
         c.drawCentredString(cx, top - 34, "TACTICAL")
-        c.setFillColor(BRAND); c.setFont("Helvetica-Bold", TYPE_BODY)
+        c.setFillColor(BRAND)
+        c.setFont("Helvetica-Bold", TYPE_BODY)
         c.drawCentredString(cx, top - 50, "F O O T B A L L   D A T A   &   A N A L Y S I S")
         return top - 62
 
@@ -1023,12 +1356,12 @@ class TacticalPDF:
     # Six rows in two named groups: three about the chances, three about the
     # territory. COVER_GROUPS slices this tuple, so there is one list of rows.
     COVER_ROWS = (
-        ("EXPECTED GOALS",      "xG",                  "{:.2f}"),
-        ("SHOTS  (ON TARGET)",  "shots",               ""),
-        ("BIG CHANCES",         "big_chances",         "{:.0f}"),
-        ("POSSESSION",          "possession_share",    "{:.0f}%"),
-        ("BOX ENTRIES",         "box_entries",         "{:.0f}"),
-        ("FIELD TILT",          "field_tilt",          "{:.0f}%"),
+        ("EXPECTED GOALS", "xG", "{:.2f}"),
+        ("SHOTS  (ON TARGET)", "shots", ""),
+        ("BIG CHANCES", "big_chances", "{:.0f}"),
+        ("POSSESSION", "possession_share", "{:.0f}%"),
+        ("BOX ENTRIES", "box_entries", "{:.0f}"),
+        ("FIELD TILT", "field_tilt", "{:.0f}%"),
     )
 
     def _cover_competition(self) -> str:
@@ -1079,15 +1412,21 @@ class TacticalPDF:
         crest, spread = 92, 232
 
         for team_id, colour, name, x in (
-            (self.context.get("home_id"), self.home_color,
-             self.context["home"], centre - spread),
-            (self.context.get("away_id"), self.away_color,
-             self.context["away"], centre + spread),
+            (self.context.get("home_id"), self.home_color, self.context["home"], centre - spread),
+            (self.context.get("away_id"), self.away_color, self.context["away"], centre + spread),
         ):
             badge = self._crest_reader(team_id)
             if badge is not None:
-                c.drawImage(badge, x - crest / 2, y - crest / 2, crest, crest,
-                            mask="auto", preserveAspectRatio=True, anchor="c")
+                c.drawImage(
+                    badge,
+                    x - crest / 2,
+                    y - crest / 2,
+                    crest,
+                    crest,
+                    mask="auto",
+                    preserveAspectRatio=True,
+                    anchor="c",
+                )
             else:
                 # No crest cached: a disc in the club's colour with its
                 # initials, which is what the crest would have carried.
@@ -1126,11 +1465,13 @@ class TacticalPDF:
         c = self.canvas
         left, right = COVER_MARGIN, PAGE_W - COVER_MARGIN
 
-        c.setFillColor(COVER_LABEL); c.setFont(COVER_TEXT, TYPE_COVER_META)
+        c.setFillColor(COVER_LABEL)
+        c.setFont(COVER_TEXT, TYPE_COVER_META)
         c.drawString(left, PAGE_H - 54, self._cv2_meta(left_side=True))
         c.setFillColor(COVER_META)
         c.drawRightString(right, PAGE_H - 54, self._cv2_meta(left_side=False))
-        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.6)
         c.line(left, PAGE_H - 66, right, PAGE_H - 66)
 
         home_goals, away_goals = self._cv2_goal_lists()
@@ -1166,8 +1507,10 @@ class TacticalPDF:
             digits = "".join(ch for ch in round_name if ch.isdigit())
             # The parse stores "4" for one league and "Matchweek 04" for
             # another; the cover printed both. One spelling, unpadded.
-            if digits and (round_name.isdigit()
-                           or round_name.lower().startswith(("matchweek", "round", "week"))):
+            if digits and (
+                round_name.isdigit()
+                or round_name.lower().startswith(("matchweek", "round", "week"))
+            ):
                 parts.append(f"MATCHWEEK {int(digits)}")
             elif round_name:
                 parts.append(round_name)
@@ -1203,7 +1546,9 @@ class TacticalPDF:
     def _cv2_hero(self, left: float, right: float, top: float):
         c = self.canvas
         centre = PAGE_W / 2
-        c.setFillColor(PANEL); c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.setFillColor(PANEL)
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.6)
         c.roundRect(left, top - 132, right - left, 132, 10, stroke=1, fill=1)
         mid = top - 62
         crest = 60
@@ -1212,18 +1557,28 @@ class TacticalPDF:
             name = str(self.context[side])
             badge = self._crest_reader(self.context.get(f"{side}_id"))
             if badge is not None:
-                c.drawImage(badge, x_crest - crest / 2, mid - crest / 2, crest, crest,
-                            mask="auto", preserveAspectRatio=True, anchor="c")
+                c.drawImage(
+                    badge,
+                    x_crest - crest / 2,
+                    mid - crest / 2,
+                    crest,
+                    crest,
+                    mask="auto",
+                    preserveAspectRatio=True,
+                    anchor="c",
+                )
             else:
                 c.setFillColor(self._cv2_kit(side))
                 c.circle(x_crest, mid, crest / 2, stroke=0, fill=1)
-                c.setFillColor(colors.white); c.setFont(COVER_DISPLAY, 20)
+                c.setFillColor(colors.white)
+                c.setFont(COVER_DISPLAY, 20)
                 c.drawCentredString(x_crest, mid - 7, _club_initials(name))
             measure = centre - 95 - (left + 110)
             size = self._cv2_fit(name, COVER_TEXT, 22, measure)
             manager = str(managers.get(side) or "").strip() if isinstance(managers, dict) else ""
             sub = "  ·  ".join(p for p in (manager, self._cv2_shape(side)) if p)
-            c.setFillColor(TEXT); c.setFont(COVER_TEXT, size)
+            c.setFillColor(TEXT)
+            c.setFont(COVER_TEXT, size)
             c.setFillColor(TEXT)
             if anchor == "left":
                 c.drawString(left + 110, mid + 4, name)
@@ -1239,16 +1594,19 @@ class TacticalPDF:
                 else:
                     c.drawRightString(right - 110, mid - 18, sub)
         score = f"{int(_number(self.context.get('home_goals')))}  –  {int(_number(self.context.get('away_goals')))}"
-        c.setFillColor(TEXT); c.setFont(COVER_DISPLAY, 58)
+        c.setFillColor(TEXT)
+        c.setFont(COVER_DISPLAY, 58)
         c.drawCentredString(centre, mid - 20, score)
-        c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 9.5)
+        c.setFillColor(COVER_META)
+        c.setFont(COVER_TEXT, 9.5)
         c.drawCentredString(centre, top - 118, "FULL TIME")
 
     def _cv2_title(self, left: float, right: float, baseline: float):
         c = self.canvas
         text = f"Match Analysis  |  {self.context['home']} vs {self.context['away']}"
         size = self._cv2_fit(text, COVER_TEXT, 16, right - left)
-        c.setFillColor(TEXT); c.setFont(COVER_TEXT, size)
+        c.setFillColor(TEXT)
+        c.setFont(COVER_TEXT, size)
         c.drawCentredString(PAGE_W / 2, baseline, text)
 
     def _cv2_groups(self, left: float, right: float, baseline: float) -> float:
@@ -1258,20 +1616,30 @@ class TacticalPDF:
         lowest = baseline
         for index, (heading, rows) in enumerate(self.COVER_GROUPS):
             x0 = left if index == 0 else right - column
-            c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 10)
+            c.setFillColor(COVER_META)
+            c.setFont(COVER_TEXT, 10)
             c.drawString(x0, baseline, heading)
-            c.setStrokeColor(GRID); c.setLineWidth(0.6)
+            c.setStrokeColor(GRID)
+            c.setLineWidth(0.6)
             c.line(x0, baseline - 8, x0 + column, baseline - 8)
             for row, (label, key, shape) in enumerate(rows):
                 home, away, home_text, away_text = self._cover_pair(key, shape)
                 row_base = baseline - 36 - 54 * row
-                self._cv2_split_row(x0, column, row_base, label, home, away,
-                                    home_text, away_text)
+                self._cv2_split_row(x0, column, row_base, label, home, away, home_text, away_text)
                 lowest = min(lowest, row_base - 24)
         return lowest
 
-    def _cv2_split_row(self, x0: float, column: float, baseline: float, label: str,
-                       home: float, away: float, home_text: str, away_text: str):
+    def _cv2_split_row(
+        self,
+        x0: float,
+        column: float,
+        baseline: float,
+        label: str,
+        home: float,
+        away: float,
+        home_text: str,
+        away_text: str,
+    ):
         """Two figures, the metric between them, and a bar split on their total."""
         c = self.canvas
         total = abs(home) + abs(away)
@@ -1282,7 +1650,8 @@ class TacticalPDF:
         c.drawString(x0, baseline, home_text)
         c.setFillColor(TEXT if away_leads else COVER_FIGURE_DIM)
         c.drawRightString(x0 + column, baseline, away_text)
-        c.setFillColor(COVER_LABEL); c.setFont(COVER_TEXT, 9.5)
+        c.setFillColor(COVER_LABEL)
+        c.setFont(COVER_TEXT, 9.5)
         c.drawCentredString(x0 + column / 2, baseline + 2, label)
 
         split = x0 + column * share
@@ -1293,7 +1662,10 @@ class TacticalPDF:
             c.setFillColor(self._cv2_kit(side))
             if IS_LIGHT_THEME:
                 # A thin dark edge, so a pale kit still reads on the light page.
-                c.saveState(); c.setStrokeColor(TEXT); c.setStrokeAlpha(0.3); c.setLineWidth(0.5)
+                c.saveState()
+                c.setStrokeColor(TEXT)
+                c.setStrokeAlpha(0.3)
+                c.setLineWidth(0.5)
                 c.rect(start, bar_y, end - start, bar_h, stroke=1, fill=1)
                 c.restoreState()
             else:
@@ -1307,9 +1679,11 @@ class TacticalPDF:
         import pandas as pd
 
         c = self.canvas
-        c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 10)
+        c.setFillColor(COVER_META)
+        c.setFont(COVER_TEXT, 10)
         c.drawString(left, title_base, "HOW THE CHANCES ACCUMULATED")
-        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.6)
         c.line(left, title_base - 8, right, title_base - 8)
         px, pw = left + 30, (right - left) - 30
         top = title_base - 22
@@ -1323,8 +1697,10 @@ class TacticalPDF:
             shots = shots[~_bool(shots["is_penalty_shootout"])]
         if "is_own_goal" in shots:
             shots = shots[~_bool(shots["is_own_goal"])]
-        shots["_t"] = (pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
-                       + pd.to_numeric(shots.get("second", 0), errors="coerce").fillna(0) / 60)
+        shots["_t"] = (
+            pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
+            + pd.to_numeric(shots.get("second", 0), errors="coerce").fillna(0) / 60
+        )
         shots["_xg"] = pd.to_numeric(shots.get("xG", 0), errors="coerce").fillna(0)
         end = max(95.0, float(shots["_t"].max()) + 1.0) if not shots.empty else 95.0
 
@@ -1349,13 +1725,18 @@ class TacticalPDF:
         c.setLineWidth(0.4)
         level = 0.0
         while level <= ymax + 1e-9:
-            c.setStrokeColor(GRID); c.line(px, Y(level), px + pw, Y(level))
-            c.setFillColor(COVER_FIGURE_DIM); c.setFont(COVER_DISPLAY, 8.5)
+            c.setStrokeColor(GRID)
+            c.line(px, Y(level), px + pw, Y(level))
+            c.setFillColor(COVER_FIGURE_DIM)
+            c.setFont(COVER_DISPLAY, 8.5)
             c.drawRightString(px - 6, Y(level) - 3, f"{level:.1f}")
             level += step
         for minute in (0, 15, 30, 45, 60, 75, 90):
             c.drawCentredString(X(minute), bottom - 13, f"{minute}'")
-        c.saveState(); c.setStrokeColor(COVER_FIGURE_DIM); c.setDash(3, 3); c.setLineWidth(0.6)
+        c.saveState()
+        c.setStrokeColor(COVER_FIGURE_DIM)
+        c.setDash(3, 3)
+        c.setLineWidth(0.6)
         c.line(X(45), bottom, X(45), top)
         c.restoreState()
 
@@ -1368,18 +1749,25 @@ class TacticalPDF:
                 path.lineTo(X(times[i]), Y(values[i - 1]))
                 path.lineTo(X(times[i]), Y(values[i]))
             if IS_LIGHT_THEME:
-                c.saveState(); c.setStrokeColor(TEXT); c.setStrokeAlpha(0.25); c.setLineWidth(3.4)
-                c.drawPath(path, stroke=1, fill=0); c.restoreState()
-            c.setStrokeColor(kit); c.setLineWidth(2.4)
+                c.saveState()
+                c.setStrokeColor(TEXT)
+                c.setStrokeAlpha(0.25)
+                c.setLineWidth(3.4)
+                c.drawPath(path, stroke=1, fill=0)
+                c.restoreState()
+            c.setStrokeColor(kit)
+            c.setLineWidth(2.4)
             c.drawPath(path, stroke=1, fill=0)
 
         # Legend, top left inside the plot.
         ly = top - 10
         for side in ("home", "away"):
             times, values = curves[side]
-            c.setStrokeColor(self._cv2_kit(side)); c.setLineWidth(2.4)
+            c.setStrokeColor(self._cv2_kit(side))
+            c.setLineWidth(2.4)
             c.line(px + 10, ly + 3, px + 30, ly + 3)
-            c.setFillColor(TEXT); c.setFont(COVER_TEXT, 9.5)
+            c.setFillColor(TEXT)
+            c.setFont(COVER_TEXT, 9.5)
             c.drawString(px + 36, ly, f"{self.context[side]}  {values[-1]:.2f} xG")
             ly -= 15
 
@@ -1393,7 +1781,9 @@ class TacticalPDF:
                     reached = v
             gx, gy = X(when), Y(reached)
             kit = self._cv2_kit(side)
-            c.setFillColor(kit); c.setStrokeColor(TEXT); c.setLineWidth(1.1)
+            c.setFillColor(kit)
+            c.setStrokeColor(TEXT)
+            c.setLineWidth(1.1)
             c.circle(gx, gy, 4.5, stroke=1, fill=1)
             tag = f"{int(_number(goal.get('minute')))}'  {str(goal.get('player') or '').split()[-1] if goal.get('player') else '?'}"
             if goal.get("penalty"):
@@ -1406,7 +1796,9 @@ class TacticalPDF:
             if bx < px + 4:
                 bx = gx + 12
             by = max(gy - 22, bottom + 4)
-            c.setFillColor(PANEL); c.setStrokeColor(kit); c.setLineWidth(0.8)
+            c.setFillColor(PANEL)
+            c.setStrokeColor(kit)
+            c.setLineWidth(0.8)
             c.roundRect(bx, by, tw + 8, 14, 3, stroke=1, fill=1)
             c.setFillColor(TEXT)
             c.drawString(bx + 4, by + 4, tag)
@@ -1425,24 +1817,38 @@ class TacticalPDF:
             (home if self._cv2_goal_side(goal) == "home" else away).append(goal)
         return home, away
 
-    def _cv2_goal_block(self, left: float, right: float, rule_y: float,
-                        home_goals: list, away_goals: list, lines: int):
+    def _cv2_goal_block(
+        self,
+        left: float,
+        right: float,
+        rule_y: float,
+        home_goals: list,
+        away_goals: list,
+        lines: int,
+    ):
         c = self.canvas
-        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.6)
         c.line(left, rule_y, right, rule_y)
-        c.setFillColor(COVER_META); c.setFont(COVER_TEXT, 10)
+        c.setFillColor(COVER_META)
+        c.setFont(COVER_TEXT, 10)
         c.drawString(left, rule_y - 20, "GOALS")
         if not home_goals and not away_goals:
-            c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 11)
+            c.setFillColor(MUTED)
+            c.setFont(COVER_DISPLAY, 11)
             c.drawString(left + 70, rule_y - 20, "No goals")
             return
         half = (right - left) / 2
-        for side, goals, x in (("home", home_goals, left + 70), ("away", away_goals, left + half + 20)):
+        for side, goals, x in (
+            ("home", home_goals, left + 70),
+            ("away", away_goals, left + half + 20),
+        ):
             kit = self._cv2_kit(side)
             if not goals:
                 # An empty column under the other side's goals read as a gap in
                 # the page rather than as a side that did not score.
-                c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 10.5)
+                c.setFillColor(MUTED)
+                c.setFont(COVER_DISPLAY, 10.5)
                 c.drawString(x + 12, rule_y - 20, f"{self.context[side]}: no goals")
                 continue
             shown = goals[:lines]
@@ -1450,13 +1856,17 @@ class TacticalPDF:
             for index, goal in enumerate(shown):
                 y = rule_y - 20 - 18 * index
                 if hidden and index == lines - 1:
-                    c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 10.5)
+                    c.setFillColor(MUTED)
+                    c.setFont(COVER_DISPLAY, 10.5)
                     c.drawString(x + 12, y, f"+ {hidden + 1} more")
                     break
-                c.setFillColor(kit); c.setStrokeColor(TEXT); c.setLineWidth(0.8)
+                c.setFillColor(kit)
+                c.setStrokeColor(TEXT)
+                c.setLineWidth(0.8)
                 c.circle(x + 3, y + 3.5, 3.5, stroke=1, fill=1)
                 main = f"{int(_number(goal.get('minute')))}'  {goal.get('player') or 'Unnamed'}"
-                c.setFillColor(TEXT); c.setFont(COVER_TEXT, 10.5)
+                c.setFillColor(TEXT)
+                c.setFont(COVER_TEXT, 10.5)
                 c.drawString(x + 12, y, main)
                 if goal.get("penalty"):
                     detail = "penalty"
@@ -1467,7 +1877,8 @@ class TacticalPDF:
                 else:
                     detail = ""
                 if detail:
-                    c.setFillColor(MUTED); c.setFont(COVER_DISPLAY, 10.5)
+                    c.setFillColor(MUTED)
+                    c.setFont(COVER_DISPLAY, 10.5)
                     c.drawString(x + 12 + c.stringWidth(main, COVER_TEXT, 10.5) + 8, y, detail)
 
     def _cover_rows(self):
@@ -1486,15 +1897,19 @@ class TacticalPDF:
         if key == "shots":
             home = _number(context.get("home_shots"))
             away = _number(context.get("away_shots"))
-            return (home, away,
-                    f"{home:.0f} ({_number(context.get('home_on_target')):.0f})",
-                    f"{away:.0f} ({_number(context.get('away_on_target')):.0f})")
+            return (
+                home,
+                away,
+                f"{home:.0f} ({_number(context.get('home_on_target')):.0f})",
+                f"{away:.0f} ({_number(context.get('away_on_target')):.0f})",
+            )
         home = _number(context.get(f"home_{key}"))
         away = _number(context.get(f"away_{key}"))
         return home, away, shape.format(home), shape.format(away)
 
-    def _cover_row(self, centre: float, y: float, label: str,
-                   home_text: str, away_text: str, home_share: float):
+    def _cover_row(
+        self, centre: float, y: float, label: str, home_text: str, away_text: str, home_share: float
+    ):
         """A label, two figures, and one bar split between the two colours.
 
         Both halves grow outwards from the centre line, which is what makes a
@@ -1513,8 +1928,7 @@ class TacticalPDF:
 
         # The track, so a short bar still reads against a measured length.
         c.setFillColor(GRID)
-        c.roundRect(left, y - height / 2, width, height, height / 2,
-                    stroke=0, fill=1)
+        c.roundRect(left, y - height / 2, width, height, height / 2, stroke=0, fill=1)
 
         # Each half is that side's share of the pair, scaled so the larger
         # figure fills its half and the smaller is drawn in proportion to it.
@@ -1529,11 +1943,11 @@ class TacticalPDF:
         # Both bars meet at the centre line and grow outwards, so the end each
         # one reaches is its figure and the two are read against one another.
         c.setFillColor(self.home_color)
-        c.roundRect(centre - home_length, y - height / 2, home_length, height,
-                    height / 2, stroke=0, fill=1)
+        c.roundRect(
+            centre - home_length, y - height / 2, home_length, height, height / 2, stroke=0, fill=1
+        )
         c.setFillColor(self.away_color)
-        c.roundRect(centre, y - height / 2, away_length, height,
-                    height / 2, stroke=0, fill=1)
+        c.roundRect(centre, y - height / 2, away_length, height, height / 2, stroke=0, fill=1)
 
         # The leader's figure is printed in its own colour; the other stays
         # neutral, so the winner of each row is readable without the bar.
@@ -1616,19 +2030,37 @@ class TacticalPDF:
         left = centre - total / 2
         x = left
         if home_badge is not None:
-            c.drawImage(home_badge, x, baseline - 10, crest, crest,
-                        mask="auto", preserveAspectRatio=True, anchor="c")
+            c.drawImage(
+                home_badge,
+                x,
+                baseline - 10,
+                crest,
+                crest,
+                mask="auto",
+                preserveAspectRatio=True,
+                anchor="c",
+            )
             x += lead_in
-        c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", TYPE_FIXTURE)
+        c.setFillColor(self.home_color)
+        c.setFont("Helvetica-Bold", TYPE_FIXTURE)
         c.drawString(x, baseline, home.upper())
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_DISPLAY)
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_DISPLAY)
         c.drawString(x + home_w + gap, baseline - 9, score)
-        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_FIXTURE)
+        c.setFillColor(self.away_color)
+        c.setFont("Helvetica-Bold", TYPE_FIXTURE)
         c.drawString(x + home_w + gap + score_w + gap, baseline, away.upper())
         if away_badge is not None:
-            c.drawImage(away_badge, x + home_w + gap + score_w + gap + away_w + pad,
-                        baseline - 10, crest, crest,
-                        mask="auto", preserveAspectRatio=True, anchor="c")
+            c.drawImage(
+                away_badge,
+                x + home_w + gap + score_w + gap + away_w + pad,
+                baseline - 10,
+                crest,
+                crest,
+                mask="auto",
+                preserveAspectRatio=True,
+                anchor="c",
+            )
 
         # The two-colour rule every visual and poster closes its header with,
         # so the cover is recognisably the front of the same document.
@@ -1650,8 +2082,9 @@ class TacticalPDF:
         except Exception:
             return None
 
-    def _cover_lead_bar(self, kind: str, name: str, note: str,
-                        home_value: float, away_value: float, y: float):
+    def _cover_lead_bar(
+        self, kind: str, name: str, note: str, home_value: float, away_value: float, y: float
+    ):
         """The match's most lopsided percentage, at full width.
 
         ``kind`` decides the graphic. A "split" divides one bar between the two
@@ -1671,22 +2104,29 @@ class TacticalPDF:
         home_y = y + (66 if stacked else 40)
         away_y = y + (56 if stacked else 30)
 
-        c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_CAPTION)
+        c.setFillColor(MUTED)
+        c.setFont("Helvetica-Bold", TYPE_CAPTION)
         c.drawString(left, label_y, f"{name.upper()}  ·  {note.upper()}")
 
         # Deliberately mismatched: the side that lost the battle is set smaller
         # so the pair reads as lopsided before either number is parsed.
-        minor, major = ((TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR) if away_value >= home_value
-                        else (TYPE_LEAD_MAJOR, TYPE_LEAD_MINOR))
-        c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", minor)
+        minor, major = (
+            (TYPE_LEAD_MINOR, TYPE_LEAD_MAJOR)
+            if away_value >= home_value
+            else (TYPE_LEAD_MAJOR, TYPE_LEAD_MINOR)
+        )
+        c.setFillColor(self.home_color)
+        c.setFont("Helvetica-Bold", minor)
         c.drawString(left, home_y, f"{home_value:.1f}%")
-        c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", major)
+        c.setFillColor(self.away_color)
+        c.setFont("Helvetica-Bold", major)
         c.drawRightString(left + width, away_y, f"{away_value:.1f}%")
 
         if kind == "split":
             total = max(home_value + away_value, 1e-6)
             home_w = width * home_value / total
-            c.setFillColor(self.home_color); c.rect(left, y, home_w, 14, fill=1, stroke=0)
+            c.setFillColor(self.home_color)
+            c.rect(left, y, home_w, 14, fill=1, stroke=0)
             c.setFillColor(self.away_color)
             c.rect(left + home_w, y, width - home_w, 14, fill=1, stroke=0)
         else:
@@ -1694,8 +2134,10 @@ class TacticalPDF:
             # together they looked like one two-tone bar, which is exactly the
             # split reading this mode exists to avoid.
             ceiling = max(home_value, away_value, 1e-6)
-            for offset, value, colour in ((26, home_value, self.home_color),
-                                          (0, away_value, self.away_color)):
+            for offset, value, colour in (
+                (26, home_value, self.home_color),
+                (0, away_value, self.away_color),
+            ):
                 c.setFillColor(PANEL_2)
                 c.rect(left, y + offset, width, 12, fill=1, stroke=0)
                 c.setFillColor(colour)
@@ -1719,9 +2161,24 @@ class TacticalPDF:
         cells = [
             ("Expected goals", self.context.get("home_xG"), self.context.get("away_xG"), "{:.2f}"),
             ("Shots", self.context.get("home_shots"), self.context.get("away_shots"), "{:.0f}"),
-            ("Box entries", self.context.get("home_box_entries"), self.context.get("away_box_entries"), "{:.0f}"),
-            ("Field tilt", self.context.get("home_field_tilt"), self.context.get("away_field_tilt"), "{:.1f}"),
-            ("Possession", self.context.get("home_possession_share"), self.context.get("away_possession_share"), "{:.1f}"),
+            (
+                "Box entries",
+                self.context.get("home_box_entries"),
+                self.context.get("away_box_entries"),
+                "{:.0f}",
+            ),
+            (
+                "Field tilt",
+                self.context.get("home_field_tilt"),
+                self.context.get("away_field_tilt"),
+                "{:.1f}",
+            ),
+            (
+                "Possession",
+                self.context.get("home_possession_share"),
+                self.context.get("away_possession_share"),
+                "{:.1f}",
+            ),
         ]
         if exclude:
             cells = [cell for cell in cells if cell[0].lower() != exclude.lower()]
@@ -1729,30 +2186,47 @@ class TacticalPDF:
         step = width / len(cells)
         for idx, (label, home_value, away_value, fmt) in enumerate(cells):
             x = left + idx * step
-            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.setFillColor(MUTED)
+            c.setFont("Helvetica-Bold", TYPE_MICRO)
             c.drawString(x, y + 34, label.upper())
             try:
                 home_text, away_text = fmt.format(float(home_value)), fmt.format(float(away_value))
             except (TypeError, ValueError):
                 continue
-            c.setFillColor(self.home_color); c.setFont("Helvetica-Bold", TYPE_TITLE)
+            c.setFillColor(self.home_color)
+            c.setFont("Helvetica-Bold", TYPE_TITLE)
             c.drawString(x, y + 10, home_text)
             offset = c.stringWidth(home_text, "Helvetica-Bold", 19)
-            c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_SECTION)
+            c.setFillColor(NEUTRAL)
+            c.setFont("Helvetica-Bold", TYPE_SECTION)
             c.drawString(x + offset + 6, y + 10, "/")
-            c.setFillColor(self.away_color); c.setFont("Helvetica-Bold", TYPE_TITLE)
+            c.setFillColor(self.away_color)
+            c.setFont("Helvetica-Bold", TYPE_TITLE)
             c.drawString(x + offset + 18, y + 10, away_text)
-        c.setStrokeColor(GRID); c.setLineWidth(0.6)
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.6)
         c.line(left, y - 12, left + width, y - 12)
 
     def executive_summary(self, sections: dict[str, dict]):
         self._start("executive_summary", "Executive Summary")
-        self._header("Executive Summary", "The result, the mechanism and the main coaching implications", "REPORT OPEN")
+        self._header(
+            "Executive Summary",
+            "The result, the mechanism and the main coaching implications",
+            "REPORT OPEN",
+        )
         c = self.canvas
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_TITLE)
         # Same sentence as the cover, from the same numbers — the summary used
         # to assert the winner had created more regardless of whether they had.
-        self._paragraph(escape(self.context.get('headline', 'Match evidence')),42,PAGE_H-124,PAGE_W-84,48,self.body)
+        self._paragraph(
+            escape(self.context.get("headline", "Match evidence")),
+            42,
+            PAGE_H - 124,
+            PAGE_W - 84,
+            48,
+            self.body,
+        )
         bullets = [
             sections["Match Story"]["data"][1],
             sections["Chance Creation"]["data"][0],
@@ -1775,7 +2249,7 @@ class TacticalPDF:
 
         pairs = list(zip(bullets[:4], range(1, 5)))
         row_heights = [
-            max(card_height(body, column_w) for (_t, body), _i in pairs[start:start + 2])
+            max(card_height(body, column_w) for (_t, body), _i in pairs[start : start + 2])
             for start in (0, 2)
         ]
         wide_preview = card_height(bullets[4][1], wide_w)
@@ -1791,7 +2265,7 @@ class TacticalPDF:
 
         y = top
         for row_start in (0, 2):
-            row = pairs[row_start:row_start + 2]
+            row = pairs[row_start : row_start + 2]
             row_h = row_heights[row_start // 2]
             for column, ((title, body), idx) in enumerate(row):
                 x = 42 + column * (column_w + col_gap)
@@ -1811,14 +2285,19 @@ class TacticalPDF:
         # air, so the headline splits go underneath — the same four the cover
         # uses, which is what a reader arriving from page 01 expects to see.
         if y > 150:
-            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_MICRO)
+            c.setFillColor(MUTED)
+            c.setFont("Helvetica-Bold", TYPE_MICRO)
             c.drawString(42, y, "THE FOUR SPLITS BEHIND THE VERDICT")
             self._cover_strip(y=y - 52)
         self._finish()
 
     def toc(self, entries: list[tuple[str, int, str]]):
         self._start("contents", "Contents")
-        self._header("Report Contents", "A performance-analysis reading path followed by the complete player appendix", "NAVIGATION")
+        self._header(
+            "Report Contents",
+            "A performance-analysis reading path followed by the complete player appendix",
+            "NAVIGATION",
+        )
         c = self.canvas
         y = PAGE_H - 150
         for idx, (title, page, subtitle) in enumerate(entries, start=1):
@@ -1827,10 +2306,12 @@ class TacticalPDF:
             # team's section". One neutral rule per row instead.
             c.setFillColor(NEUTRAL)
             c.rect(56, y - 12, 2, 26, fill=1, stroke=0)
-            c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_SECTION)
+            c.setFillColor(TEXT)
+            c.setFont("Helvetica-Bold", TYPE_SECTION)
             label = f"{idx:02d}  {title}"
             c.drawString(74, y, label)
-            c.setFillColor(MUTED); c.setFont("Helvetica", TYPE_CAPTION)
+            c.setFillColor(MUTED)
+            c.setFont("Helvetica", TYPE_CAPTION)
             c.drawString(74, y - 15, subtitle[:106])
 
             # Leader rule starts where the title ends rather than at a fixed
@@ -1839,9 +2320,11 @@ class TacticalPDF:
             page_label = f"PAGE {page:02d}"
             rule_end = PAGE_W - 55 - c.stringWidth(page_label, "Helvetica-Bold", 10) - 12
             if rule_end > rule_start:
-                c.setStrokeColor(GRID); c.setLineWidth(0.6)
+                c.setStrokeColor(GRID)
+                c.setLineWidth(0.6)
                 c.line(rule_start, y + 3, rule_end, y + 3)
-            c.setFillColor(MUTED); c.setFont("Helvetica-Bold", TYPE_SECTION)
+            c.setFillColor(MUTED)
+            c.setFont("Helvetica-Bold", TYPE_SECTION)
             c.drawRightString(PAGE_W - 55, y, page_label)
             y -= 57
         self._finish()
@@ -1855,34 +2338,59 @@ class TacticalPDF:
         for x, rows in [(42, copy["performance"]), (522, copy["data"])]:
             top = 520
             for idx, (label, body) in enumerate(rows, start=1):
-                self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", TYPE_CAPTION)
+                self.canvas.setFillColor(FOCUS)
+                self.canvas.setFont("Helvetica-Bold", TYPE_CAPTION)
                 self.canvas.drawString(x + 14, top, f"{idx:02d}  {label.upper()}")
                 height = self._paragraph(escape(body), x + 14, top - 10, 416, 55, self.small)
                 top -= max(62, height + 29)
         self._card_box(42, 97, PAGE_W - 84, 140, "Tactical Implication", FOCUS)
         self._paragraph(escape(copy["implication"]), 60, 202, PAGE_W - 120, 75, self.body)
-        self.canvas.setFillColor(NEUTRAL); self.canvas.setFont("Helvetica", TYPE_MICRO)
-        self.canvas.drawString(60, 118, "Use the following visuals as evidence for this section. Read the explanation and next analytical step below every chart.")
+        self.canvas.setFillColor(NEUTRAL)
+        self.canvas.setFont("Helvetica", TYPE_MICRO)
+        self.canvas.drawString(
+            60,
+            118,
+            "Use the following visuals as evidence for this section. Read the explanation and next analytical step below every chart.",
+        )
         self._finish()
 
     def verdict(self):
         self._start("final_verdict", "Final Tactical Verdict")
-        self._header("Final Tactical Verdict", "A joined performance and data conclusion", "SYNTHESIS")
+        self._header(
+            "Final Tactical Verdict", "A joined performance and data conclusion", "SYNTHESIS"
+        )
         c = self.canvas
         home, away = self.context["home"], self.context["away"]
-        c.setFillColor(TEXT); c.setFont("Helvetica-Bold", TYPE_TITLE)
-        c.drawString(42, PAGE_H - 142, f"{self.context['winner']} controlled the decisive moments, not every phase of the match.")
-        self._card_box(42, 365, 444, 170, "Why the winner won", AWAY if self.context["winner"] == away else HOME)
+        c.setFillColor(TEXT)
+        c.setFont("Helvetica-Bold", TYPE_TITLE)
+        c.drawString(
+            42,
+            PAGE_H - 142,
+            f"{self.context['winner']} controlled the decisive moments, not every phase of the match.",
+        )
+        self._card_box(
+            42,
+            365,
+            444,
+            170,
+            "Why the winner won",
+            AWAY if self.context["winner"] == away else HOME,
+        )
         winner_side = "home" if self.context["winner"] == home else "away"
         winner_text = (
             f"The winning side combined {self.context[f'{winner_side}_xG']:.2f} xG-level chance production with the stronger transition conversion and superior final execution. "
             "They did not need to dominate every territorial metric because their best attacks arrived before the opponent could restore compactness."
         )
         self._paragraph(escape(winner_text), 58, 495, 412, 105, self.body)
-        self._card_box(522, 365, 444, 170, "Why the loser remained dangerous", HOME if self.context["winner"] == away else AWAY)
-        loser_text = (
-            f"The losing side still generated repeated final-third access, pressure and sequence value. Their problem was conversion: territory and activity did not produce the same shot quality, while greater attacking commitment increased exposure behind the ball."
+        self._card_box(
+            522,
+            365,
+            444,
+            170,
+            "Why the loser remained dangerous",
+            HOME if self.context["winner"] == away else AWAY,
         )
+        loser_text = "The losing side still generated repeated final-third access, pressure and sequence value. Their problem was conversion: territory and activity did not produce the same shot quality, while greater attacking commitment increased exposure behind the ball."
         self._paragraph(escape(loser_text), 538, 495, 412, 105, self.body)
         self._card_box(42, 117, PAGE_W - 84, 190, "Coaching priorities", FOCUS)
         priorities = [
@@ -1899,24 +2407,53 @@ class TacticalPDF:
 
     def methodology(self):
         self._start("methodology", "Methodology and Caveats")
-        self._header("Methodology and Caveats", "Definitions and limits needed to interpret a single-match report", "TRUST LAYER")
+        self._header(
+            "Methodology and Caveats",
+            "Definitions and limits needed to interpret a single-match report",
+            "TRUST LAYER",
+        )
         left = [
             ("xG", "Expected-goal value estimates chance quality before the shot outcome."),
-            ("Post-shot xG (xGOT)", "A published reference value where one exists: placement, pace and keeper position. Otherwise a local placement-weighted estimate."),
-            ("xT", "Expected threat values ball progression by the change in scoring potential between locations."),
-            ("PPDA", "Opponent passes per defensive action in the pressing zone. Lower means more frequent actions relative to passes, not necessarily a better press."),
+            (
+                "Post-shot xG (xGOT)",
+                "A published reference value where one exists: placement, pace and keeper position. Otherwise a local placement-weighted estimate.",
+            ),
+            (
+                "xT",
+                "Expected threat values ball progression by the change in scoring potential between locations.",
+            ),
+            (
+                "PPDA",
+                "Opponent passes per defensive action in the pressing zone. Lower means more frequent actions relative to passes, not necessarily a better press.",
+            ),
         ]
         right = [
-            ("Single-match sample", "Finishing, transition conversion and player radar extremes can be highly volatile."),
-            ("Game-state effect", "A team protecting a lead and a team chasing it face different incentives; totals are not tactically neutral."),
-            ("Assists", "When the source assist field is empty, the report infers the last successful key pass within 15 seconds of the goal and should be read as a derived assist."),
-            ("Player profiles", "The radar pages describe match contribution, not long-term player quality or recruitment-grade percentiles."),
+            (
+                "Single-match sample",
+                "Finishing, transition conversion and player radar extremes can be highly volatile.",
+            ),
+            (
+                "Game-state effect",
+                "A team protecting a lead and a team chasing it face different incentives; totals are not tactically neutral.",
+            ),
+            (
+                "Assists",
+                "When the source assist field is empty, the report infers the last successful key pass within 15 seconds of the goal and should be read as a derived assist.",
+            ),
+            (
+                "Player profiles",
+                "The radar pages describe match contribution, not long-term player quality or recruitment-grade percentiles.",
+            ),
         ]
-        for x, title, rows, accent in [(42, "Metric definitions", left, HOME), (522, "Interpretation limits", right, AWAY)]:
+        for x, title, rows, accent in [
+            (42, "Metric definitions", left, HOME),
+            (522, "Interpretation limits", right, AWAY),
+        ]:
             self._card_box(x, 162, 444, 390, title, accent)
             top = 512
             for label, body in rows:
-                self.canvas.setFillColor(FOCUS); self.canvas.setFont("Helvetica-Bold", TYPE_CAPTION)
+                self.canvas.setFillColor(FOCUS)
+                self.canvas.setFont("Helvetica-Bold", TYPE_CAPTION)
                 self.canvas.drawString(x + 16, top, label.upper())
                 self._paragraph(escape(body), x + 16, top - 12, 410, 55, self.card)
                 top -= 83
@@ -1939,7 +2476,15 @@ class TacticalPDF:
         width, height = iw * scale, ih * scale
         x = (PAGE_W - width) / 2
         y = VISUAL_NOTE_H + (image_region_h - height) / 2
-        c.drawImage(ImageReader(str(path)), x, y, width=width, height=height, preserveAspectRatio=True, mask="auto")
+        c.drawImage(
+            ImageReader(str(path)),
+            x,
+            y,
+            width=width,
+            height=height,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
         # Pure black, matching the visual sitting above it. Filling this band
         # with PANEL put #0A0A0A against the image's #000000 and drew a visible
         # horizontal seam across every visual page; the team rule below is what
@@ -1949,11 +2494,15 @@ class TacticalPDF:
         # The same two-tone team rule that tops every rendered visual, repeated
         # here so the commentary band reads as part of the same document rather
         # than as a caption bolted underneath it.
-        c.setFillColor(self.home_color); c.rect(0, VISUAL_NOTE_H - 2.5, PAGE_W / 2, 2.5, fill=1, stroke=0)
-        c.setFillColor(self.away_color); c.rect(PAGE_W / 2, VISUAL_NOTE_H - 2.5, PAGE_W / 2, 2.5, fill=1, stroke=0)
+        c.setFillColor(self.home_color)
+        c.rect(0, VISUAL_NOTE_H - 2.5, PAGE_W / 2, 2.5, fill=1, stroke=0)
+        c.setFillColor(self.away_color)
+        c.rect(PAGE_W / 2, VISUAL_NOTE_H - 2.5, PAGE_W / 2, 2.5, fill=1, stroke=0)
 
         title = visual_commentary_title(path, self.context)
-        self._paragraph(escape(title), 42, VISUAL_NOTE_H - 24, PAGE_W - 84, 24, self.commentary_title)
+        self._paragraph(
+            escape(title), 42, VISUAL_NOTE_H - 24, PAGE_W - 84, 24, self.commentary_title
+        )
 
         # Two columns. The page is 14 inches wide, so a single measure ran to
         # roughly 830pt at 9pt type — far past the length an eye can track back
@@ -1975,13 +2524,22 @@ class TacticalPDF:
         top = VISUAL_NOTE_H - 52
         self._paragraph(escape(left_text), 42, top, column_w, 165, self.commentary_body)
         if right_text:
-            self._paragraph(escape(right_text), 42 + column_w + gutter, top, column_w, 165, self.commentary_body)
-            c.setStrokeColor(GRID); c.setLineWidth(0.6)
+            self._paragraph(
+                escape(right_text), 42 + column_w + gutter, top, column_w, 165, self.commentary_body
+            )
+            c.setStrokeColor(GRID)
+            c.setLineWidth(0.6)
             c.line(42 + column_w + gutter / 2, top - 158, 42 + column_w + gutter / 2, top + 4)
 
-        c.setStrokeColor(GRID); c.setLineWidth(0.5); c.line(42, 31, PAGE_W - 42, 31)
-        self._paragraph(escape(next_visual_step(next_path)), 42, 25, PAGE_W - 250, 18, self.commentary_next)
-        c.setFillColor(NEUTRAL); c.setFont("Helvetica-Bold", TYPE_MICRO); c.drawRightString(PAGE_W - 24, 10, f"{section.upper()}  |  PAGE {self.page:02d}")
+        c.setStrokeColor(GRID)
+        c.setLineWidth(0.5)
+        c.line(42, 31, PAGE_W - 42, 31)
+        self._paragraph(
+            escape(next_visual_step(next_path)), 42, 25, PAGE_W - 250, 18, self.commentary_next
+        )
+        c.setFillColor(NEUTRAL)
+        c.setFont("Helvetica-Bold", TYPE_MICRO)
+        c.drawRightString(PAGE_W - 24, 10, f"{section.upper()}  |  PAGE {self.page:02d}")
         c.showPage()
 
     def save(self):
@@ -2036,8 +2594,7 @@ def build_tactical_pdf(
     try:
         from match_article import cover_headline
 
-        context["headline"] = cover_headline(
-            events, xg, team_metrics, player_metrics, match_info)
+        context["headline"] = cover_headline(events, xg, team_metrics, player_metrics, match_info)
     except Exception:
         context["headline"] = ""
 
@@ -2050,7 +2607,9 @@ def build_tactical_pdf(
         "Pressing and Rest Defence",
         "Transitions and Efficiency",
     ]
-    visual_sequence = [path for title in core for path in groups[title]] + groups["Player Impact Appendix"]
+    visual_sequence = [path for title in core for path in groups[title]] + groups[
+        "Player Impact Appendix"
+    ]
     next_visual = {
         path.resolve(): (visual_sequence[index + 1] if index + 1 < len(visual_sequence) else None)
         for index, path in enumerate(visual_sequence)
@@ -2062,13 +2621,31 @@ def build_tactical_pdf(
         toc_entries.append((title, page_cursor, section_copy[title]["subtitle"]))
         page_cursor += 1 + len(groups[title])
     verdict_page = page_cursor
-    toc_entries.append(("Final Tactical Verdict", verdict_page, "Joined performance and data conclusion with coaching priorities"))
+    toc_entries.append(
+        (
+            "Final Tactical Verdict",
+            verdict_page,
+            "Joined performance and data conclusion with coaching priorities",
+        )
+    )
     page_cursor += 1
     methodology_page = page_cursor
-    toc_entries.append(("Methodology and Caveats", methodology_page, "Metric definitions, game-state context and single-match limitations"))
+    toc_entries.append(
+        (
+            "Methodology and Caveats",
+            methodology_page,
+            "Metric definitions, game-state context and single-match limitations",
+        )
+    )
     page_cursor += 1
     appendix_page = page_cursor
-    toc_entries.append(("Player Impact Appendix", appendix_page, section_copy["Player Impact Appendix"]["subtitle"]))
+    toc_entries.append(
+        (
+            "Player Impact Appendix",
+            appendix_page,
+            section_copy["Player Impact Appendix"]["subtitle"],
+        )
+    )
 
     report = TacticalPDF(output, context)
     # Reuse the article's paragraphs under the corresponding visuals. This
@@ -2076,13 +2653,16 @@ def build_tactical_pdf(
     # explains mechanism, game state and coaching meaning.
     try:
         from match_article import build_article
+
         article = build_article(events, xg, team_metrics, player_metrics, match_info, output.parent)
         for section in article.sections:
             prose = " ".join(str(p).strip() for p in section.paragraphs if str(p).strip())
             for visual_path in section.visuals:
                 report.article_readings[Path(visual_path).name] = prose
     except Exception as error:
-        raise RuntimeError("Cannot build PDF article commentary; Word/PDF text would diverge") from error
+        raise RuntimeError(
+            "Cannot build PDF article commentary; Word/PDF text would diverge"
+        ) from error
     report.cover()
     report.executive_summary(section_copy)
     report.toc(toc_entries)
@@ -2092,7 +2672,9 @@ def build_tactical_pdf(
             report.visual(path, title, next_visual[path.resolve()])
     report.verdict()
     report.methodology()
-    report.section_page("Player Impact Appendix", section_copy["Player Impact Appendix"], len(core) + 1)
+    report.section_page(
+        "Player Impact Appendix", section_copy["Player Impact Appendix"], len(core) + 1
+    )
     for path in groups["Player Impact Appendix"]:
         report.visual(path, "Player Impact", next_visual[path.resolve()])
     report.save()
@@ -2101,9 +2683,15 @@ def build_tactical_pdf(
 
 # Legacy templates remain private for archived-report compatibility. Production
 # uses one evidence-led contract shared with the article.
-from match_editorial import (section_copy as _section_copy,
-    visual_section as classify_visual, reading as visual_explanation,
-    reading as visual_narrative, commentary_title as visual_commentary_title,
-    reading as visual_data_read, reading as visual_implication)
+from match_editorial import (
+    section_copy as _section_copy,
+    visual_section as classify_visual,
+    reading as visual_explanation,
+    reading as visual_narrative,
+    commentary_title as visual_commentary_title,
+    reading as visual_data_read,
+    reading as visual_implication,
+)
 from publication_v2 import pdf_verdict
+
 TacticalPDF.verdict = pdf_verdict

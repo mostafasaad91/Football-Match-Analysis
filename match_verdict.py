@@ -21,6 +21,7 @@ Nothing here reaches outside the data. Every judgement below is built from the
 game-state splits, the chance quality and the box access the pipeline already
 computes, which is what keeps a published claim checkable.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -53,14 +54,14 @@ class SideVerdict:
     # quantity is everything created before falling behind, which is the right
     # complement to chasing_xg; the name now says so, and seven sentences that
     # called it "level" were reworded off the back of it.
-    not_chasing_xg: float    # created while level or ahead
-    chasing_xg: float        # created while behind
+    not_chasing_xg: float  # created while level or ahead
+    chasing_xg: float  # created while behind
     chasing_share: float
     xg_per_shot: float
     big_chances: int
     box_entries: int
     final_third_entries: int
-    level_only_xg: float = 0.0   # created with the score level, nothing else
+    level_only_xg: float = 0.0  # created with the score level, nothing else
 
     @property
     def was_chasing(self) -> bool:
@@ -142,6 +143,7 @@ class Verdict:
 
 def read_match(team_metrics, xg, info) -> Verdict:
     """Judge both sides from the frames the pipeline already produced."""
+
     def side(name: str):
         rows = team_metrics[team_metrics["side"].astype(str).eq(name)]
         return rows.iloc[0] if not rows.empty else {}

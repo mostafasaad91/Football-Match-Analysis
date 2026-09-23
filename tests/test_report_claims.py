@@ -58,6 +58,7 @@ def _mirrored(context):
 # the helper every such sentence now asks
 # --------------------------------------------------------------------------
 
+
 def test_the_leader_is_whichever_side_leads():
     assert _lead("H", "A", 2.0, 1.0) == ("H", "A", False)
     assert _lead("H", "A", 1.0, 2.0) == ("A", "H", False)
@@ -77,6 +78,7 @@ def test_an_unusable_value_does_not_raise():
 # the sentences
 # --------------------------------------------------------------------------
 
+
 def _xg_flow_claim(context):
     text = visual_explanation(Path("01_xg_flow.png"), context)
     return next(part for part in text.split(". ") if "curve" in part)
@@ -88,7 +90,8 @@ def test_the_xg_curve_names_the_side_that_created_more(mirror):
     if mirror:
         context = _mirrored(context)
     leader, trailer, _level = _lead(
-        context["home"], context["away"], context["home_xG"], context["away_xG"])
+        context["home"], context["away"], context["home_xG"], context["away_xG"]
+    )
     claim = _xg_flow_claim(context)
     assert claim.startswith(f"{leader}'s curve finished above {trailer}'s"), claim
 
@@ -110,8 +113,12 @@ def test_chance_quality_names_the_side_with_the_better_xg_per_shot(mirror):
     if mirror:
         context = _mirrored(context)
     leader, _trailer, level = _lead(
-        context["home"], context["away"],
-        context["home_xG_per_shot"], context["away_xG_per_shot"], tolerance=0.005)
+        context["home"],
+        context["away"],
+        context["home_xG_per_shot"],
+        context["away_xG_per_shot"],
+        tolerance=0.005,
+    )
     text = visual_explanation(Path("xg_summary.png"), context)
     if not level:
         assert f"favoured {leader}" in text, text
@@ -122,11 +129,12 @@ def test_the_overview_names_the_territory_and_the_xg_sides_correctly(mirror):
     context = _context()
     if mirror:
         context = _mirrored(context)
-    tilt_leader, _t, _l = _lead(context["home"], context["away"],
-                                context["home_field_tilt"], context["away_field_tilt"])
-    xg_leader, _x, xg_level = _lead(context["home"], context["away"],
-                                    context["home_xG"], context["away_xG"],
-                                    tolerance=0.05)
+    tilt_leader, _t, _l = _lead(
+        context["home"], context["away"], context["home_field_tilt"], context["away_field_tilt"]
+    )
+    xg_leader, _x, xg_level = _lead(
+        context["home"], context["away"], context["home_xG"], context["away_xG"], tolerance=0.05
+    )
     text = visual_explanation(Path("match_stats.png"), context)
     assert tilt_leader in text, text
     if not xg_level and xg_leader != tilt_leader:

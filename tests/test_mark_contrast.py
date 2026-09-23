@@ -70,7 +70,9 @@ def test_lifting_does_not_wash_the_colour_out(name, colour):
         pytest.skip("an achromatic kit has no saturation to keep")
     before = colorsys.rgb_to_hls(*mcolors.to_rgb(colour))
     after = colorsys.rgb_to_hls(*mcolors.to_rgb(lift_to_floor(colour)))
-    assert after[2] >= before[2] * 0.75, f"{name}: saturation fell from {before[2]:.2f} to {after[2]:.2f}"
+    assert after[2] >= before[2] * 0.75, (
+        f"{name}: saturation fell from {before[2]:.2f} to {after[2]:.2f}"
+    )
 
 
 def test_lifting_is_idempotent():

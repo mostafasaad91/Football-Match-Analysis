@@ -76,8 +76,8 @@ def test_a_light_fill_goes_lighter_and_a_dark_one_darker():
     def luminance(colour):
         return sum(mcolors.to_rgb(colour))
 
-    light = "#fe676a"   # already light, just under the floor
-    dark = "#cb0106"    # deep, just under the floor
+    light = "#fe676a"  # already light, just under the floor
+    dark = "#cb0106"  # deep, just under the floor
     assert luminance(_chip_fill(light)) >= luminance(light)
     assert luminance(_chip_fill(dark)) <= luminance(dark)
 
@@ -86,8 +86,9 @@ def test_the_nudge_only_ever_raises_contrast():
     fill = "#fe0107"
     plain = _chip_fill(fill)
     nudged = _chip_fill(fill, nudge=CHIP_SEPARATION)
-    assert (contrast_ratio(_chip_text_color(nudged), nudged)
-            >= contrast_ratio(_chip_text_color(plain), plain))
+    assert contrast_ratio(_chip_text_color(nudged), nudged) >= contrast_ratio(
+        _chip_text_color(plain), plain
+    )
 
 
 def test_an_unparseable_colour_is_returned_untouched():
@@ -99,6 +100,7 @@ def test_an_unparseable_colour_is_returned_untouched():
 # how loudly a value is printed
 # --------------------------------------------------------------------------
 
+
 def test_a_tile_reading_zero_is_quiet():
     """A third of a defensive midfielder's radar is zeroes.
 
@@ -106,8 +108,7 @@ def test_a_tile_reading_zero_is_quiet():
     value the player never registered shouted as loudly as the best figure on
     the pitch and the eye had nothing to prioritise.
     """
-    for value, shown in ((0, "0"), (0.0, "0.0"), (0.045, "0.0"),
-                         (0, "0 / 2"), (0, "0 / 0")):
+    for value, shown in ((0, "0"), (0.0, "0.0"), (0.045, "0.0"), (0, "0 / 2"), (0, "0 / 0")):
         assert pr._is_zero(value, shown), (value, shown)
 
 
@@ -145,7 +146,7 @@ def test_the_group_colours_are_calmer_than_the_kit():
 
     import matplotlib.colors as mcolors
 
-    kit = "#fe0107"                       # a fully saturated red
+    kit = "#fe0107"  # a fully saturated red
     _h, _l, kit_saturation = colorsys.rgb_to_hls(*mcolors.to_rgb(kit))
     for shade in pr.team_group_colors(kit, 5):
         _h2, _l2, shade_saturation = colorsys.rgb_to_hls(*mcolors.to_rgb(shade))
@@ -170,7 +171,9 @@ def test_every_group_colour_carries_its_weight_on_the_page():
     """
     for shade in pr.group_palette(len(GROUPS)):
         assert contrast_ratio(shade, pr.BG_DARK) >= pr.GROUP_PAGE_CONTRAST - 0.05, (
-            shade, contrast_ratio(shade, pr.BG_DARK))
+            shade,
+            contrast_ratio(shade, pr.BG_DARK),
+        )
 
 
 def test_the_group_colours_share_one_saturation():
@@ -179,8 +182,10 @@ def test_the_group_colours_share_one_saturation():
 
     import matplotlib.colors as mcolors
 
-    levels = {round(colorsys.rgb_to_hls(*mcolors.to_rgb(shade))[2], 2)
-              for shade in pr.group_palette(len(GROUPS))}
+    levels = {
+        round(colorsys.rgb_to_hls(*mcolors.to_rgb(shade))[2], 2)
+        for shade in pr.group_palette(len(GROUPS))
+    }
     assert len(levels) == 1, levels
 
 

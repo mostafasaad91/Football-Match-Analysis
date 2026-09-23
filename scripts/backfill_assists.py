@@ -51,9 +51,11 @@ def snapshot_index() -> dict:
         data = _load(path)
         if data is None:
             continue
-        key = ((data.get("home") or {}).get("teamId"),
-               (data.get("away") or {}).get("teamId"),
-               str(data.get("startDate") or data.get("startTime") or "")[:10])
+        key = (
+            (data.get("home") or {}).get("teamId"),
+            (data.get("away") or {}).get("teamId"),
+            str(data.get("startDate") or data.get("startTime") or "")[:10],
+        )
         found[key] = path
         del data
     return found
@@ -106,16 +108,20 @@ def repair(events_path: Path, assists: dict, write: bool) -> tuple[int, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--dry-run", action="store_true", help="report, write nothing")
     args = parser.parse_args()
 
     snapshots = snapshot_index()
-    packages = [p.parent for p in sorted(OUTPUT.rglob("match_info.json"))
-                if p.parent.name != "light"
-                and not any(x.startswith(".") for x in p.parent.parts)
-                and (p.parent / "events.csv").exists()]
+    packages = [
+        p.parent
+        for p in sorted(OUTPUT.rglob("match_info.json"))
+        if p.parent.name != "light"
+        and not any(x.startswith(".") for x in p.parent.parts)
+        and (p.parent / "events.csv").exists()
+    ]
     total_goals = total_shots = 0
     missing = []
     for folder in packages:
@@ -136,9 +142,11 @@ def main() -> int:
         total_shots += shots
         print(f"{folder.name:<46} goals {goals:>2}   assisted shots {shots:>3}")
 
-    print(f"\n{len(packages) - len(missing)}/{len(packages)} packages"
-          f"{' (dry run)' if args.dry_run else ''}: "
-          f"{total_goals} assisted goals, {total_shots} assisted shots")
+    print(
+        f"\n{len(packages) - len(missing)}/{len(packages)} packages"
+        f"{' (dry run)' if args.dry_run else ''}: "
+        f"{total_goals} assisted goals, {total_shots} assisted shots"
+    )
     if missing:
         print("no snapshot for:", ", ".join(missing))
     return 1 if missing else 0

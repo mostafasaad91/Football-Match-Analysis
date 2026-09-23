@@ -11,6 +11,7 @@ match: a player belongs to one side, the goals add up to the score, the teams
 named are the teams that played. Each returns a Problem naming what it found
 and what it expected, so a failure is a sentence rather than a stack trace.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -60,8 +61,7 @@ def _named(series) -> pd.Series:
     if series is None:
         return pd.Series(dtype=bool)
     text = series.astype(str).str.strip()
-    return series.notna() & text.ne("") & ~text.str.lower().isin(
-        ["nan", "none", "nat", "<na>"])
+    return series.notna() & text.ne("") & ~text.str.lower().isin(["nan", "none", "nat", "<na>"])
 
 
 def check_no_player_appears_for_both_sides(events, players, info) -> list[Problem]:
@@ -74,10 +74,12 @@ def check_no_player_appears_for_both_sides(events, players, info) -> list[Proble
     if not shared:
         return []
     listed = ", ".join(shared[:6]) + (" …" if len(shared) > 6 else "")
-    return [Problem(
-        "player on two teams",
-        f"{len(shared)} player(s) are listed for both sides: {listed}",
-    )]
+    return [
+        Problem(
+            "player on two teams",
+            f"{len(shared)} player(s) are listed for both sides: {listed}",
+        )
+    ]
 
 
 def check_event_players_belong_to_their_team(events, players, info) -> list[Problem]:
@@ -107,15 +109,19 @@ def check_event_players_belong_to_their_team(events, players, info) -> list[Prob
             strays[int(team_id)] = loose
 
     problems = []
-    names = {int(info["home_id"]): str(info["home_name"]),
-             int(info["away_id"]): str(info["away_name"])}
+    names = {
+        int(info["home_id"]): str(info["home_name"]),
+        int(info["away_id"]): str(info["away_name"]),
+    }
     for team_id, loose in strays.items():
         listed = ", ".join(sorted(loose)[:6]) + (" …" if len(loose) > 6 else "")
-        problems.append(Problem(
-            "player outside the squad",
-            f"{len(loose)} player(s) act for {names.get(team_id, team_id)} "
-            f"without appearing in its squad: {listed}",
-        ))
+        problems.append(
+            Problem(
+                "player outside the squad",
+                f"{len(loose)} player(s) act for {names.get(team_id, team_id)} "
+                f"without appearing in its squad: {listed}",
+            )
+        )
     return problems
 
 
@@ -142,10 +148,12 @@ def check_goals_match_the_score(events, xg, info) -> list[Problem]:
         counted[name] = scored
         stated = _goals(xg, name)
         if stated is not None and stated != scored:
-            problems.append(Problem(
-                "score does not match the events",
-                f"{name}: the export says {stated} goal(s), the events contain {scored}",
-            ))
+            problems.append(
+                Problem(
+                    "score does not match the events",
+                    f"{name}: the export says {stated} goal(s), the events contain {scored}",
+                )
+            )
     return problems
 
 
@@ -187,11 +195,13 @@ def check_the_published_shots_match_the_events(events, xg, info) -> list[Problem
                 continue
             gap = abs(stated - counted)
             if gap > max(2, 0.2 * max(stated, counted, 1)):
-                problems.append(Problem(
-                    "shot totals disagree with the events",
-                    f"{name}: the export says {stated} {column.replace('_', ' ')}, "
-                    f"the events contain {counted}",
-                ))
+                problems.append(
+                    Problem(
+                        "shot totals disagree with the events",
+                        f"{name}: the export says {stated} {column.replace('_', ' ')}, "
+                        f"the events contain {counted}",
+                    )
+                )
     return problems
 
 
@@ -266,11 +276,13 @@ def check_players_belong_to_the_squad_you_named(events, players, info) -> list[P
         strangers = sorted({n for n in listed if _fold(n) not in folded})
         if strangers:
             shown = ", ".join(strangers[:6]) + (" …" if len(strangers) > 6 else "")
-            problems.append(Problem(
-                "player not in the squad you listed",
-                f"{name}: {len(strangers)} player(s) are not in your {SQUADS_FILE} "
-                f"roster: {shown}",
-            ))
+            problems.append(
+                Problem(
+                    "player not in the squad you listed",
+                    f"{name}: {len(strangers)} player(s) are not in your {SQUADS_FILE} "
+                    f"roster: {shown}",
+                )
+            )
     return problems
 
 
@@ -278,8 +290,18 @@ def check_players_belong_to_the_squad_you_named(events, players, info) -> list[P
 # leaves nothing behind: "Ødegaard" folded to "degaard" and a roster typed as
 # "Odegaard" was reported as a player who does not exist.
 _LETTER_ALIASES = {
-    "ø": "o", "æ": "ae", "œ": "oe", "å": "a", "ð": "d", "þ": "th",
-    "ß": "ss", "ł": "l", "đ": "d", "ħ": "h", "ı": "i", "ŋ": "n",
+    "ø": "o",
+    "æ": "ae",
+    "œ": "oe",
+    "å": "a",
+    "ð": "d",
+    "þ": "th",
+    "ß": "ss",
+    "ł": "l",
+    "đ": "d",
+    "ħ": "h",
+    "ı": "i",
+    "ŋ": "n",
 }
 
 
@@ -347,17 +369,18 @@ def check_no_player_changed_team_since_a_stored_match(events, players, info) -> 
                 moved.append(f"{player} (last seen for {sorted(previous)[0]})")
         if moved:
             shown = ", ".join(moved[:5]) + (" …" if len(moved) > 5 else "")
-            problems.append(Problem(
-                "player listed for a different team than the history has",
-                f"{name}: {shown}",
-            ))
+            problems.append(
+                Problem(
+                    "player listed for a different team than the history has",
+                    f"{name}: {shown}",
+                )
+            )
     return problems
 
 
 def check_the_teams_are_two_and_named(events, info) -> list[Problem]:
     """Exactly two team ids act in the match, and both are the ones named."""
-    ids = {int(v) for v in events["team_id"].dropna().unique()
-           if str(v).strip() not in ("", "nan")}
+    ids = {int(v) for v in events["team_id"].dropna().unique() if str(v).strip() not in ("", "nan")}
     try:
         expected = {int(info["home_id"]), int(info["away_id"])}
     except (KeyError, TypeError, ValueError):
@@ -377,10 +400,12 @@ def check_the_match_has_enough_events(events, info) -> list[Problem]:
     """A parsed match with almost no events is a collection failure."""
     if len(events) >= 400:
         return []
-    return [Problem(
-        "too few events",
-        f"{len(events)} events parsed; a full match is normally well over a thousand",
-    )]
+    return [
+        Problem(
+            "too few events",
+            f"{len(events)} events parsed; a full match is normally well over a thousand",
+        )
+    ]
 
 
 CHECKS = (
@@ -393,17 +418,16 @@ CHECKS = (
 )
 
 
-def inspect(events: pd.DataFrame, players: pd.DataFrame, xg: pd.DataFrame,
-            info: dict) -> list[Problem]:
+def inspect(
+    events: pd.DataFrame, players: pd.DataFrame, xg: pd.DataFrame, info: dict
+) -> list[Problem]:
     """Run every check. An empty list means the fixture looks coherent."""
     problems: list[Problem] = []
     for check in CHECKS:
         try:
-            if check in (check_goals_match_the_score,
-                         check_the_published_shots_match_the_events):
+            if check in (check_goals_match_the_score, check_the_published_shots_match_the_events):
                 problems.extend(check(events, xg, info))
-            elif check in (check_the_teams_are_two_and_named,
-                           check_the_match_has_enough_events):
+            elif check in (check_the_teams_are_two_and_named, check_the_match_has_enough_events):
                 problems.extend(check(events, info))
             else:
                 problems.extend(check(events, players, info))

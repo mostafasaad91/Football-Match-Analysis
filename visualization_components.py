@@ -719,15 +719,9 @@ def themed_pitch(
     # Penalty + 6-yard boxes + spots
     for x0 in (0, 100):
         sign = 1 if x0 == 0 else -1
-        ax.plot(
-            [x0, x0 + sign * 16.5, x0 + sign * 16.5, x0], [21.1, 21.1, 78.9, 78.9], **lc
-        )
-        ax.plot(
-            [x0, x0 + sign * 5.5, x0 + sign * 5.5, x0], [36.8, 36.8, 63.2, 63.2], **lc
-        )
-        ax.scatter(
-            [x0 + sign * 11], [50], color=line_color, s=5, alpha=line_alpha, zorder=2
-        )
+        ax.plot([x0, x0 + sign * 16.5, x0 + sign * 16.5, x0], [21.1, 21.1, 78.9, 78.9], **lc)
+        ax.plot([x0, x0 + sign * 5.5, x0 + sign * 5.5, x0], [36.8, 36.8, 63.2, 63.2], **lc)
+        ax.scatter([x0 + sign * 11], [50], color=line_color, s=5, alpha=line_alpha, zorder=2)
     # Goals
     for x0 in (0, 100):
         sign = 1 if x0 == 0 else -1
@@ -802,7 +796,7 @@ def save_figure(fig, path, *, dpi=155, **kwargs):
         try:
             fig.savefig(path, dpi=max(int(dpi * step), 40), **kwargs)
             return max(int(dpi * step), 40)
-        except MemoryError as error:            # pragma: no cover - machine state
+        except MemoryError as error:  # pragma: no cover - machine state
             last = error
             # The half-built buffer is still held until the next allocation
             # fails too, and the retry needs the room.
@@ -812,8 +806,7 @@ def save_figure(fig, path, *, dpi=155, **kwargs):
     raise last
 
 
-def slope_label_offsets(series, ceiling, above=13.0, below=-20.0, step=15.0,
-                        room=0.13):
+def slope_label_offsets(series, ceiling, above=13.0, below=-20.0, step=15.0, room=0.13):
     """Which side of its marker every point label sits on, one list per series.
 
     Two lines drawn over the same stages carry a figure on each point, and the

@@ -53,6 +53,7 @@ from visualization_components import (
 
 try:
     import visual_redesign_preview as _identity
+
     BG_DARK, TEXT_BRIGHT, TEXT_DIM = _identity.BG, _identity.TEXT, _identity.MUTED
 except Exception:  # pragma: no cover - fallback colours
     _identity = None
@@ -74,11 +75,11 @@ RADAR_GRID = _identity.GRID if _identity is not None else "#242424"
 # rule under the header — the wedges are better spent saying which group they
 # belong to.
 GROUP_HUES = (
-    36.0,    # ATTACK   — amber
-    212.0,   # PASSING  — blue
-    338.0,   # THREAT   — rose
-    162.0,   # DEFENCE  — green
-    276.0,   # DUELS    — violet
+    36.0,  # ATTACK   — amber
+    212.0,  # PASSING  — blue
+    338.0,  # THREAT   — rose
+    162.0,  # DEFENCE  — green
+    276.0,  # DUELS    — violet
 )
 
 # Saturation is held constant across the five hues — that is what makes them
@@ -114,7 +115,7 @@ def group_palette(n_groups: int) -> list[str]:
     import colorsys
 
     hues = list(GROUP_HUES)
-    while len(hues) < n_groups:            # more groups than hues: keep spacing
+    while len(hues) < n_groups:  # more groups than hues: keep spacing
         hues.append((hues[-1] + 360.0 / max(n_groups, 1)) % 360.0)
 
     return [_hue_at_page_contrast(hue) for hue in hues[:n_groups]]
@@ -191,8 +192,8 @@ def _hue_at_page_contrast(hue: float, saturation: float | None = None) -> str:
 #
 # Mixing in RGB was the other candidate and is worse still: 35% of amber into a
 # blue gives an olive grey.
-TEAM_TINT_SHARE = 0.5      # fraction of the way from the anchor hue to the kit
-TEAM_TINT_MAX = 34.0       # ...but never further than this, in degrees
+TEAM_TINT_SHARE = 0.5  # fraction of the way from the anchor hue to the kit
+TEAM_TINT_MAX = 34.0  # ...but never further than this, in degrees
 TEAM_TINT_SATURATION = 0.10  # how much of the kit's saturation is carried over
 
 # How far apart the two sides' wheels are held. Below this the two pages read
@@ -263,8 +264,9 @@ def fixture_hue_offsets(home_color: str, away_color: str) -> tuple[float, float]
     anchor = GROUP_HUES[0]
 
     def turn(cast: float) -> float:
-        return float(np.clip(_signed_gap(anchor, cast) * TEAM_TINT_SHARE,
-                             -TEAM_TINT_MAX, TEAM_TINT_MAX))
+        return float(
+            np.clip(_signed_gap(anchor, cast) * TEAM_TINT_SHARE, -TEAM_TINT_MAX, TEAM_TINT_MAX)
+        )
 
     home, away = turn(home_cast), turn(away_cast)
     gap = away - home
@@ -275,8 +277,7 @@ def fixture_hue_offsets(home_color: str, away_color: str) -> tuple[float, float]
     return home, away
 
 
-def group_palette_for(offset: float, kit_color: str,
-                      n_groups: int) -> list[str]:
+def group_palette_for(offset: float, kit_color: str, n_groups: int) -> list[str]:
     """The five group colours with one side's turn applied to all of them."""
     hues = list(GROUP_HUES)
     while len(hues) < n_groups:
@@ -286,16 +287,18 @@ def group_palette_for(offset: float, kit_color: str,
     # club's own colour as the wedges should carry: they are spent saying which
     # group an action belongs to.
     kit_saturation = _saturation_of(kit_color, GROUP_SATURATION)
-    saturation = float(np.clip(
-        GROUP_SATURATION * (1 - TEAM_TINT_SATURATION)
-        + kit_saturation * TEAM_TINT_SATURATION, 0.30, 0.70))
+    saturation = float(
+        np.clip(
+            GROUP_SATURATION * (1 - TEAM_TINT_SATURATION) + kit_saturation * TEAM_TINT_SATURATION,
+            0.30,
+            0.70,
+        )
+    )
 
-    return [_hue_at_page_contrast((hue + offset) % 360.0, saturation)
-            for hue in hues[:n_groups]]
+    return [_hue_at_page_contrast((hue + offset) % 360.0, saturation) for hue in hues[:n_groups]]
 
 
-def fixture_group_palettes(home_color: str, away_color: str,
-                           n_groups: int) -> dict[str, list[str]]:
+def fixture_group_palettes(home_color: str, away_color: str, n_groups: int) -> dict[str, list[str]]:
     """Both sides' palettes, built together so they cannot collide."""
     home_offset, away_offset = fixture_hue_offsets(home_color, away_color)
     return {
@@ -333,9 +336,7 @@ def team_group_colors(team_color: str, n_groups: int) -> list[str]:
     if n_groups <= 1:
         levels = [(lows + highs) / 2]
     else:
-        levels = [
-            lows + (highs - lows) * i / (n_groups - 1) for i in range(n_groups)
-        ]
+        levels = [lows + (highs - lows) * i / (n_groups - 1) for i in range(n_groups)]
     # Alternate dark/light so neighbouring groups never sit on adjacent steps.
     ordered = []
     front, back = 0, len(levels) - 1
@@ -352,10 +353,10 @@ def team_group_colors(team_color: str, n_groups: int) -> list[str]:
     # without letting the radar stop reading as one team.
     spread = [(-1.4, 0.0, 1.4, -0.7, 0.7)[i % 5] for i in range(len(ordered))]
     return [
-        mcolors.to_hex(colorsys.hls_to_rgb(
-            (hue + shift / 360.0) % 1.0, level, saturation))
+        mcolors.to_hex(colorsys.hls_to_rgb((hue + shift / 360.0) % 1.0, level, saturation))
         for level, shift in zip(ordered[:n_groups], spread)
     ]
+
 
 # ── Metric layout: (group name, colour, [metric labels]) ──────────────────────
 # A full tactical + numerical match profile, grouped by role of the action.
@@ -420,14 +421,14 @@ GROUPS = [
 # Sixteen slices, all of them things a goalkeeper does. Post-shot expected
 # goals is absent on purpose — see goalkeeper_metrics for why.
 GK_GROUPS = [
-    ("SHOT STOPPING", C_GOLD,
-     ["Saves", "Save %", "Shots\nfaced", "Goals\nconceded", "Penalties\nfaced"]),
-    ("BOX COMMAND", C_HOME,
-     ["Claims", "Punches", "Pickups", "Smothers"]),
-    ("OFF THE LINE", C_AWAY,
-     ["Sweeps", "Recov\neries", "Clear\nances", "Errors"]),
-    ("DISTRIBUTION", C_HOME,
-     ["Passes", "Pass %", "Long\nballs", "Long ball %"]),
+    (
+        "SHOT STOPPING",
+        C_GOLD,
+        ["Saves", "Save %", "Shots\nfaced", "Goals\nconceded", "Penalties\nfaced"],
+    ),
+    ("BOX COMMAND", C_HOME, ["Claims", "Punches", "Pickups", "Smothers"]),
+    ("OFF THE LINE", C_AWAY, ["Sweeps", "Recov\neries", "Clear\nances", "Errors"]),
+    ("DISTRIBUTION", C_HOME, ["Passes", "Pass %", "Long\nballs", "Long ball %"]),
 ]
 
 
@@ -437,10 +438,20 @@ GK_GROUPS = [
 # other one is either 0% or 100%; a reference drawn from real keeper matches
 # is the honest alternative to a pool of two.
 GK_FULL_BAR = {
-    "Saves": 5, "Save %": 100, "Shots\nfaced": 8,
-    "Claims": 2, "Punches": 2, "Pickups": 9, "Smothers": 1,
-    "Sweeps": 2, "Recov\neries": 3, "Clear\nances": 2,
-    "Passes": 51, "Pass %": 88, "Long\nballs": 12, "Long ball %": 64,
+    "Saves": 5,
+    "Save %": 100,
+    "Shots\nfaced": 8,
+    "Claims": 2,
+    "Punches": 2,
+    "Pickups": 9,
+    "Smothers": 1,
+    "Sweeps": 2,
+    "Recov\neries": 3,
+    "Clear\nances": 2,
+    "Passes": 51,
+    "Pass %": 88,
+    "Long\nballs": 12,
+    "Long ball %": 64,
 }
 
 # More of these is worse, so they carry the figure and no bar. A long wedge
@@ -559,14 +570,14 @@ CHIP_SEPARATION = 0.055
 CHIP_PAGE_CONTRAST = 2.4
 
 
-def _chip_at_page_contrast(hue: float, saturation: float, floor: float,
-                           nudge: float) -> str:
+def _chip_at_page_contrast(hue: float, saturation: float, floor: float, nudge: float) -> str:
     """The lightest tile of this hue that still reads as a tile on the page.
 
     Lightest, because contrast against a white page rises as the tile darkens
     and the figure's own contrast falls with it: the lightest level that clears
     CHIP_PAGE_CONTRAST is the one that leaves the most room for the ink.
     """
+
     def at(level: float) -> str:
         return mcolors.to_hex(colorsys.hls_to_rgb(hue, level, saturation))
 
@@ -608,8 +619,7 @@ def _chip_at_page_contrast(hue: float, saturation: float, floor: float,
     return at(level)
 
 
-def _chip_fill(color: str, floor: float = CHIP_CONTRAST_FLOOR,
-               nudge: float = 0.0) -> str:
+def _chip_fill(color: str, floor: float = CHIP_CONTRAST_FLOOR, nudge: float = 0.0) -> str:
     """Move a group colour's lightness until a label on it is properly legible.
 
     The direction follows whichever tier the fill already prefers, so the pale
@@ -641,8 +651,7 @@ def _chip_fill(color: str, floor: float = CHIP_CONTRAST_FLOOR,
         else:
             low = mid
     if nudge:
-        high = float(np.clip(high + (nudge if target > lightness else -nudge),
-                             0.06, 0.96))
+        high = float(np.clip(high + (nudge if target > lightness else -nudge), 0.06, 0.96))
     return mcolors.to_hex(colorsys.hls_to_rgb(hue, high, saturation))
 
 
@@ -710,8 +719,9 @@ CHIP_PAD = 0.30
 CHIP_EDGE = 1.0
 
 
-def _chip_style(chip: str, group: str, percentile: float, zero: bool,
-                unmeasured: bool = False) -> dict:
+def _chip_style(
+    chip: str, group: str, percentile: float, zero: bool, unmeasured: bool = False
+) -> dict:
     """How loudly one value should be printed.
 
     Four states, one shape. ``unmeasured`` is a rate whose denominator is too
@@ -719,13 +729,12 @@ def _chip_style(chip: str, group: str, percentile: float, zero: bool,
     and a false one about the player — so it keeps the figure, loses the wedge,
     and is the only state that changes the border rather than the fill.
     """
+
     def tile(fill, text, edge, weight="bold", dashed=False, effects=None):
-        box = dict(boxstyle=f"round,pad={CHIP_PAD}", fc=fill, ec=edge,
-                   lw=CHIP_EDGE)
+        box = dict(boxstyle=f"round,pad={CHIP_PAD}", fc=fill, ec=edge, lw=CHIP_EDGE)
         if dashed:
             box["linestyle"] = (0, (2.5, 1.6))
-        return {"color": text, "weight": weight,
-                "effects": effects or [], "bbox": box}
+        return {"color": text, "weight": weight, "effects": effects or [], "bbox": box}
 
     # A zero and an unmeasurable rate are both quiet, and quiet was being done
     # with TEXT_DIM — grey on grey, a figure a reader had to hunt for. The
@@ -734,21 +743,26 @@ def _chip_style(chip: str, group: str, percentile: float, zero: bool,
     # the shape rather than for the contrast.
     quiet_ink = _readable_on_page(group, 4.5)
     if unmeasured:
-        return tile("none", quiet_ink, _mix(group, BG_DARK, 0.30),
-                    weight="normal", dashed=True)
+        return tile("none", quiet_ink, _mix(group, BG_DARK, 0.30), weight="normal", dashed=True)
     if zero:
         # Present for anyone who looks, silent for anyone who does not.
-        return tile("none", quiet_ink, _mix(group, BG_DARK, 0.55),
-                    weight="normal")
+        return tile("none", quiet_ink, _mix(group, BG_DARK, 0.55), weight="normal")
     if percentile >= CHIP_LOUD:
-        return tile(chip, _chip_text_color(chip), _mix(chip, BG_DARK, 0.35),
-                    effects=label_outline(chip, linewidth=1.4))
+        return tile(
+            chip,
+            _chip_text_color(chip),
+            _mix(chip, BG_DARK, 0.35),
+            effects=label_outline(chip, linewidth=1.4),
+        )
     if percentile >= CHIP_QUIET:
         soft = _mix(chip, BG_DARK, 0.42)
-        return tile(soft, _chip_text_color(soft), _mix(soft, BG_DARK, 0.35),
-                    effects=label_outline(soft, linewidth=1.2))
-    return tile("none", _readable_on_page(group, 4.5),
-                _mix(group, BG_DARK, 0.45), weight="normal")
+        return tile(
+            soft,
+            _chip_text_color(soft),
+            _mix(soft, BG_DARK, 0.35),
+            effects=label_outline(soft, linewidth=1.2),
+        )
+    return tile("none", _readable_on_page(group, 4.5), _mix(group, BG_DARK, 0.45), weight="normal")
 
 
 def pad_values(values: list[str]) -> list[str]:
@@ -772,7 +786,7 @@ def _spoke_rotation(angle: float) -> tuple[float, bool]:
     end and anchored on its right, which keeps every word reading left to right
     instead of upside down.
     """
-    screen = (np.pi / 2) - angle          # matplotlib's own frame
+    screen = (np.pi / 2) - angle  # matplotlib's own frame
     degrees = np.degrees(screen) % 360.0
     # bool(), not the numpy scalar np.degrees hands back: callers and
     # tests compare it with `is True` / `is False`.
@@ -823,6 +837,8 @@ def _readable_on_page(color: str, min_ratio: float = 4.0) -> str:
         return TEXT_BRIGHT
     except Exception:
         return TEXT_BRIGHT
+
+
 # metrics whose chip shows "numerator / denominator" instead of a single number.
 # Value is (numerator_key, denominator_key); the bar still uses the label's own
 # value. Passes/Shots/Long balls -> completed·on-target / total; duels -> won / contested.
@@ -912,20 +928,17 @@ def _creation_credits(events: pd.DataFrame) -> dict:
         return credits
 
     from match_metrics import build_possessions
+
     ev, _ = build_possessions(events)
     ev = ev.reset_index(drop=True)
     is_shot = ev["is_shot"].fillna(False) == True
-    is_kp = (
-        ev.get("is_key_pass", pd.Series(False, index=ev.index)).fillna(False) == True
-    )
+    is_kp = ev.get("is_key_pass", pd.Series(False, index=ev.index)).fillna(False) == True
     typ = ev["type"].astype(str) if "type" in ev else pd.Series("", index=ev.index)
     team = ev["team_id"] if "team_id" in ev else pd.Series(0, index=ev.index)
     minute = ev["minute"] if "minute" in ev else pd.Series(0, index=ev.index)
     xg = ev["xG"].fillna(0) if "xG" in ev else pd.Series(0.0, index=ev.index)
     goal = (
-        ev["is_goal"].fillna(False) == True
-        if "is_goal" in ev
-        else pd.Series(False, index=ev.index)
+        ev["is_goal"].fillna(False) == True if "is_goal" in ev else pd.Series(False, index=ev.index)
     )
     own = (
         ev["is_own_goal"].fillna(False) == True
@@ -950,17 +963,24 @@ def _creation_credits(events: pd.DataFrame) -> dict:
         # with "boolean value of NA is ambiguous". An event with no possession
         # is not in the shot's possession, which is the same answer the walk
         # back wants: stop looking.
-        shot_possession = ev['possession_id'].iloc[i]
+        shot_possession = ev["possession_id"].iloc[i]
         j = i - 1
-        while j >= 0 and (i - j) <= 6 and 0 <= ev['_clock_seconds'].iloc[i] - ev['_clock_seconds'].iloc[j] <= 15:
-            step_possession = ev['possession_id'].iloc[j]
-            if (pd.isna(step_possession) or pd.isna(shot_possession)
-                    or step_possession != shot_possession):
+        while (
+            j >= 0
+            and (i - j) <= 6
+            and 0 <= ev["_clock_seconds"].iloc[i] - ev["_clock_seconds"].iloc[j] <= 15
+        ):
+            step_possession = ev["possession_id"].iloc[j]
+            if (
+                pd.isna(step_possession)
+                or pd.isna(shot_possession)
+                or step_possession != shot_possession
+            ):
                 break
             if (
                 is_kp.iloc[j]
                 and typ.iloc[j] == "Pass"
-                and str(ev['outcome'].iloc[j]).lower() == 'successful'
+                and str(ev["outcome"].iloc[j]).lower() == "successful"
                 and team.iloc[j] == t
                 and _valid_name(ev["player"].iloc[j])
                 and ev["player"].iloc[j] != shooter
@@ -1070,11 +1090,7 @@ def _period_timeline(events: pd.DataFrame) -> dict:
         period_events = event_seconds[mask]
         event_types = events.loc[mask, "type"].astype(str)
         end_events = period_events[event_types.eq("End")]
-        clock_end = (
-            float(end_events.max())
-            if not end_events.empty
-            else float(period_events.max())
-        )
+        clock_end = float(end_events.max()) if not end_events.empty else float(period_events.max())
         duration = max(clock_end - clock_start, nominal_minutes * 60.0)
         timeline[code] = {
             "clock_start": clock_start,
@@ -1114,9 +1130,7 @@ def player_participation(events: pd.DataFrame) -> dict:
     Durations include added time in every period and extra time when played.
     Penalty shootouts are excluded."""
     timeline = _period_timeline(events)
-    match_end = max(
-        (period["elapsed_end"] for period in timeline.values()), default=0.0
-    )
+    match_end = max((period["elapsed_end"] for period in timeline.values()), default=0.0)
     ty = events["type"].astype(str)
     subs_on, subs_off, sent_off = {}, {}, {}
     for _, r in events[ty == "SubstitutionOn"].iterrows():
@@ -1217,14 +1231,8 @@ def compute_xt_grid(events, nx=16, ny=12, n_iter=500, eps=1e-7):
     goal_from = np.zeros(ncell)
     Tcount = np.zeros((ncell, ncell))
 
-    isp = (
-        events.get("is_pass", pd.Series(False, index=events.index)).fillna(False)
-        == True
-    )
-    succ = (
-        events.get("outcome", pd.Series("", index=events.index)).astype(str)
-        == "Successful"
-    )
+    isp = events.get("is_pass", pd.Series(False, index=events.index)).fillna(False) == True
+    succ = events.get("outcome", pd.Series("", index=events.index)).astype(str) == "Successful"
     have_xy = (
         events["x"].notna()
         & events["y"].notna()
@@ -1237,10 +1245,7 @@ def compute_xt_grid(events, nx=16, ny=12, n_iter=500, eps=1e-7):
         move_from[z] += 1
         Tcount[z, z2] += 1
 
-    issh = (
-        events.get("is_shot", pd.Series(False, index=events.index)).fillna(False)
-        == True
-    )
+    issh = events.get("is_shot", pd.Series(False, index=events.index)).fillna(False) == True
     sh = events[issh & events["x"].notna() & events["y"].notna()]
     isg = sh.get("is_goal", pd.Series(False, index=sh.index)).fillna(False) == True
     isog = sh.get("is_own_goal", pd.Series(False, index=sh.index)).fillna(False) == True
@@ -1398,8 +1403,9 @@ def goalkeeper_metrics(events: pd.DataFrame, player: str) -> dict:
     if not len(mine):
         return {}
     kind = mine["type"].astype(str) if "type" in mine else pd.Series([], dtype=str)
-    outcome = (mine["outcome"].astype(str) if "outcome" in mine
-               else pd.Series(index=mine.index, dtype=str))
+    outcome = (
+        mine["outcome"].astype(str) if "outcome" in mine else pd.Series(index=mine.index, dtype=str)
+    )
     ok = outcome.eq("Successful")
 
     def count(*types, only_successful=False):
@@ -1481,17 +1487,9 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
     ev = events
     d = ev[ev["player"].astype(str) == str(player)]
     ty = d["type"].astype(str) if "type" in d else pd.Series([], dtype=str)
-    o = (
-        d["outcome"].astype(str)
-        if "outcome" in d
-        else pd.Series(index=d.index, dtype=str)
-    )
+    o = d["outcome"].astype(str) if "outcome" in d else pd.Series(index=d.index, dtype=str)
     isp = d.get("is_pass", False)
-    isp = (
-        (isp.fillna(False) == True)
-        if hasattr(isp, "fillna")
-        else pd.Series(False, index=d.index)
-    )
+    isp = (isp.fillna(False) == True) if hasattr(isp, "fillna") else pd.Series(False, index=d.index)
     pc = d[isp & (o == "Successful")]
 
     prog = int(progressive_pass_mask(d).sum())
@@ -1505,9 +1503,7 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
         xt = d["xT"].fillna(0)
         xt_pos = float(xt[isp & (o == "Successful") & (xt > 0)].sum())
 
-    cr = _get_credits(ev).get(
-        str(player), {"xA": 0.0, "assists": 0, "bcc": 0, "sca": 0}
-    )
+    cr = _get_credits(ev).get(str(player), {"xA": 0.0, "assists": 0, "bcc": 0, "sca": 0})
     sequence = player_sequence_metrics(ev).get(
         str(player), {"xGChain": 0.0, "xGBuildup": 0.0, "sequence_xT": 0.0}
     )
@@ -1570,17 +1566,13 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
     duel_pct = round(100 * duel_won / duel_att) if duel_att else 0
     high_reg = 0
     if "x" in d.columns:
-        high_reg = int(
-            (ty.isin(["Tackle", "Interception", "BallRecovery"]) & (d["x"] > 50)).sum()
-        )
+        high_reg = int((ty.isin(["Tackle", "Interception", "BallRecovery"]) & (d["x"] > 50)).sum())
 
     # ── advanced passing ──
     prog_pct = round(100 * prog / pass_tot) if pass_tot else 0
     f3 = 0
     if {"x", "end_x"}.issubset(d.columns):
-        f3 = int(
-            (isp & (o == "Successful") & (d["x"] < 66.67) & (d["end_x"] >= 66.67)).sum()
-        )
+        f3 = int((isp & (o == "Successful") & (d["x"] < 66.67) & (d["end_x"] >= 66.67)).sum())
     qn = d.get("qualifier_names", pd.Series("", index=d.index)).astype(str)
     lb_mask = isp & qn.str.contains("Longball")
     lb_tot = int(lb_mask.sum())
@@ -1601,9 +1593,7 @@ def player_metrics(events: pd.DataFrame, player: str) -> dict:
         xgot = 0.0
 
     key_passes = int(
-        (
-            d.get("is_key_pass", pd.Series(False, index=d.index)).fillna(False) == True
-        ).sum()
+        (d.get("is_key_pass", pd.Series(False, index=d.index)).fillna(False) == True).sum()
     )
 
     # ── grid-model xT contribution (see compute_xt_grid) ──
@@ -1756,9 +1746,17 @@ def compute_metrics_pool(events: pd.DataFrame):
 # thin falls back to the whole pitch.
 POSITION_LINES = {
     "GK": "keeper",
-    "DC": "defence", "DL": "defence", "DR": "defence",
-    "DMC": "midfield", "MC": "midfield", "ML": "midfield", "MR": "midfield",
-    "AMC": "attack", "AML": "attack", "AMR": "attack", "FW": "attack",
+    "DC": "defence",
+    "DL": "defence",
+    "DR": "defence",
+    "DMC": "midfield",
+    "MC": "midfield",
+    "ML": "midfield",
+    "MR": "midfield",
+    "AMC": "attack",
+    "AML": "attack",
+    "AMR": "attack",
+    "FW": "attack",
 }
 MIN_LINE_POOL = 5
 
@@ -1858,8 +1856,18 @@ def describe_position(code: str, fallback: str = "Player") -> str:
 
 
 def make_player_pizza(
-    events, player, team_name, role, allm, elig, subtitle_extra="", opponent_name="",
-    team_color=None, opponent_color=None, side="home", players=None,
+    events,
+    player,
+    team_name,
+    role,
+    allm,
+    elig,
+    subtitle_extra="",
+    opponent_name="",
+    team_color=None,
+    opponent_color=None,
+    side="home",
+    players=None,
 ):
     """Build and return the pizza Figure for one player.
 
@@ -1928,8 +1936,7 @@ def make_player_pizza(
             if keeper:
                 pcts.append(gk_bar(m, v))
             else:
-                pcts.append(
-                    _percentile(allm, pool, m, v) if (pool and measured) else 0)
+                pcts.append(_percentile(allm, pool, m, v) if (pool and measured) else 0)
             gidx.append(gi)
 
     # Every tile the same width: monospace plus a common character count.
@@ -2041,8 +2048,7 @@ def make_player_pizza(
     # is legible — a tile carrying an 8pt digit and a wedge carrying a
     # percentile do not have the same job.
     chip_by_group = dict(zip(group_colors, chip_fills(group_colors)))
-    for a, lab, dv, p, c, v, unmeasured in zip(
-            angs, labels, disps, pcts, colors, vals, thin):
+    for a, lab, dv, p, c, v, unmeasured in zip(angs, labels, disps, pcts, colors, vals, thin):
         chip = chip_by_group.get(c, _chip_fill(c))
         spin, flipped = _spoke_rotation(a)
         ax.text(
@@ -2097,9 +2103,7 @@ def make_player_pizza(
         sp.set_visible(False)
 
     # clean centre ring
-    ax.plot(
-        np.linspace(0, 2 * np.pi, 120), [R0] * 120, color="#2e2e2e", lw=1.2, zorder=6
-    )
+    ax.plot(np.linspace(0, 2 * np.pi, 120), [R0] * 120, color="#2e2e2e", lw=1.2, zorder=6)
 
     participation = _get_participation(events).get(str(player), {})
     played_time = participation.get("played_time", "0′ 00″")
@@ -2108,8 +2112,7 @@ def make_player_pizza(
     # "Player" and a centre-back who scored read "sub_out". The position comes
     # from the squad export; whether he started is said in the words for it.
     described = describe_position(position, fallback=str(role))
-    entrance = {"sub_in": "on as a substitute",
-                "sub_out": "substituted"}.get(str(role), "")
+    entrance = {"sub_in": "on as a substitute", "sub_out": "substituted"}.get(str(role), "")
     # A player listed as "Sub" has no position recorded, so "Substitute" is all
     # the squad knows about him and the entrance note would only repeat it.
     if described == "Substitute":
@@ -2121,7 +2124,10 @@ def make_player_pizza(
         sub += f"  ·  {subtitle_extra}"
     if _identity is not None:
         _identity.amoled_header(
-            fig, str(player).upper(), sub, section="PLAYER PIZZA",
+            fig,
+            str(player).upper(),
+            sub,
+            section="PLAYER PIZZA",
             active_team=team_name,
         )
 
@@ -2132,9 +2138,7 @@ def make_player_pizza(
     for gi, (gn, _gc, _ms) in enumerate(groups):
         gc = group_colors[gi]
         fig.add_artist(
-            mpatches.Circle(
-                (lx, 0.822), 0.006, transform=fig.transFigure, facecolor=gc, ec="none"
-            )
+            mpatches.Circle((lx, 0.822), 0.006, transform=fig.transFigure, facecolor=gc, ec="none")
         )
         fig.text(
             lx + 0.012,
@@ -2155,9 +2159,11 @@ def make_player_pizza(
     # against every player on the pitch, which was the defect; saying it still,
     # now that the comparison is within the line, would be the same sentence
     # telling a different lie.
-    against = {"defence": "the defenders", "midfield": "the midfielders",
-               "attack": "the attackers"}.get(position_line(position),
-                                              "all match players")
+    against = {
+        "defence": "the defenders",
+        "midfield": "the midfielders",
+        "attack": "the attackers",
+    }.get(position_line(position), "all match players")
     if keeper:
         measured_against = "share of a strong goalkeeping match for that action"
     elif len(pool) < len(elig):
@@ -2168,16 +2174,23 @@ def make_player_pizza(
     # both edges of the page, and the half a reader needs first — what the bar
     # length means — was the half that got cut.
     fig.text(
-        0.5, 0.030,
-        f"bar length = {measured_against}   ·   "
-        "dashed chip = too few attempts to rank",
-        ha="center", color="#5f5f5f", fontsize=9.5, style="italic",
+        0.5,
+        0.030,
+        f"bar length = {measured_against}   ·   dashed chip = too few attempts to rank",
+        ha="center",
+        color="#5f5f5f",
+        fontsize=9.5,
+        style="italic",
     )
     fig.text(
-        0.5, 0.010,
+        0.5,
+        0.010,
         "chip = match value   ·   passes and long balls = completed/total   ·   "
         "shots = on-target/total   ·   duels = won/contested",
-        ha="center", color="#4a4a4a", fontsize=8.5, style="italic",
+        ha="center",
+        color="#4a4a4a",
+        fontsize=8.5,
+        style="italic",
     )
     return fig
 
@@ -2196,9 +2209,7 @@ def player_commentary(events, player, team_name, opp_name, allm, elig, role="Pla
             "elite"
             if p >= 85
             else (
-                "strong"
-                if p >= 70
-                else "solid" if p >= 50 else "modest" if p >= 30 else "limited"
+                "strong" if p >= 70 else "solid" if p >= 50 else "modest" if p >= 30 else "limited"
             )
         )
 
@@ -2249,13 +2260,11 @@ def player_commentary(events, player, team_name, opp_name, allm, elig, role="Pla
     tops = [lab.replace("\n", " ").lower() for lab, p in ranked[:3] if p >= 60]
     mins_txt = f" across {minutes} minutes" if minutes else ""
     lead = (
-        f"Operating as {('a ' + role.lower()) if role and role.lower() not in ('player','') else 'an outfield option'} "
+        f"Operating as {('a ' + role.lower()) if role and role.lower() not in ('player', '') else 'an outfield option'} "
         f"for {team_name} against {opp_name}{mins_txt}, "
     )
     if tops:
-        lead += (
-            f"{_surname(player)} ranked among the match's best for {', '.join(tops)}."
-        )
+        lead += f"{_surname(player)} ranked among the match's best for {', '.join(tops)}."
     else:
         lead += f"{_surname(player)} operated in a supporting role by the underlying numbers."
     s1.append(lead)
@@ -2285,9 +2294,7 @@ def player_commentary(events, player, team_name, opp_name, allm, elig, role="Pla
             parts.append(f"{bcc} big chance{'s' if bcc != 1 else ''} created")
         line = "As a creator he generated " + ", ".join(parts) + "."
         if assists:
-            line += (
-                f" That converted into {assists} assist{'s' if assists != 1 else ''}."
-            )
+            line += f" That converted into {assists} assist{'s' if assists != 1 else ''}."
         s1.append(line)
 
     # ── Paragraph 2: possession involvement + defence + verdict ──
@@ -2303,11 +2310,7 @@ def player_commentary(events, player, team_name, opp_name, allm, elig, role="Pla
         s2.append(
             f"He arrived in the penalty area {box_t} time{'s' if box_t != 1 else ''}, "
             f"carried the ball {carries} time{'s' if carries != 1 else ''} ({prog_car} progressively)"
-            + (
-                f" and completed {drib} dribble{'s' if drib != 1 else ''}"
-                if drib
-                else ""
-            )
+            + (f" and completed {drib} dribble{'s' if drib != 1 else ''}" if drib else "")
             + "."
         )
     defw = tkl + intc + rec + clr + blocks
@@ -2331,7 +2334,7 @@ def player_commentary(events, player, team_name, opp_name, allm, elig, role="Pla
         )
     else:
         s2.append(
-            f"His influence was felt more in structure and workload than in direct threat generation."
+            "His influence was felt more in structure and workload than in direct threat generation."
         )
 
     return " ".join(s1) + "\n\n" + " ".join(s2)
@@ -2433,11 +2436,15 @@ def export_player_radars(events, info, out_dir, dpi=115, squad=None):
             try:
                 opponent = info.get("away_name") if side == "home" else info.get("home_name")
                 fig = make_player_pizza(
-                    events, p, team_name, role, allm, elig,
+                    events,
+                    p,
+                    team_name,
+                    role,
+                    allm,
+                    elig,
                     opponent_name=str(opponent or ""),
                     team_color=_side_team_color(info, side),
-                    opponent_color=_side_team_color(
-                        info, "away" if side == "home" else "home"),
+                    opponent_color=_side_team_color(info, "away" if side == "home" else "home"),
                     side=side,
                     players=squad,
                 )
@@ -2482,11 +2489,15 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
             try:
                 opponent = info.get("away_name") if side == "home" else info.get("home_name")
                 fig = make_player_pizza(
-                    events, p, team_name, role, allm, elig,
+                    events,
+                    p,
+                    team_name,
+                    role,
+                    allm,
+                    elig,
                     opponent_name=str(opponent or ""),
                     team_color=_side_team_color(info, side),
-                    opponent_color=_side_team_color(
-                        info, "away" if side == "home" else "home"),
+                    opponent_color=_side_team_color(info, "away" if side == "home" else "home"),
                     side=side,
                     players=squad,
                 )
@@ -2514,15 +2525,12 @@ def build_report_radars(events, info, out_dir, top_n=5, dpi=115):
                     subtitle_extra=f"Team rank #{rank}",
                     opponent_name=str(opp[side]),
                     team_color=_side_team_color(info, side),
-                    opponent_color=_side_team_color(
-                        info, "away" if side == "home" else "home"),
+                    opponent_color=_side_team_color(info, "away" if side == "home" else "home"),
                     side=side,
                     players=squad,
                 )
                 try:
-                    note = player_commentary(
-                        events, p, team_name, opp[side], allm, elig, role
-                    )
+                    note = player_commentary(events, p, team_name, opp[side], allm, elig, role)
                 except Exception:
                     note = ""
                 figs.append((p, f, role, note))

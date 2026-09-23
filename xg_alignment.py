@@ -46,21 +46,47 @@ METHODS = (METHOD, REFERENCE_METHOD)
 # Every term the fit may use, in one place, so the stored file and the reader
 # cannot disagree about which name means what.
 TERMS = (
-    "const", "logit", "big_chance",
-    "dist", "dist2", "inv_dist", "angle", "log_angle", "central", "dy",
-    "header", "right_foot", "first_touch", "six_yard", "box_centre",
-    "box_wide", "out_of_box", "individual", "intentional_assist",
-    "fast_break", "through_ball", "cross", "one_on_one", "from_corner",
+    "const",
+    "logit",
+    "big_chance",
+    "dist",
+    "dist2",
+    "inv_dist",
+    "angle",
+    "log_angle",
+    "central",
+    "dy",
+    "header",
+    "right_foot",
+    "first_touch",
+    "six_yard",
+    "box_centre",
+    "box_wide",
+    "out_of_box",
+    "individual",
+    "intentional_assist",
+    "fast_break",
+    "through_ball",
+    "cross",
+    "one_on_one",
+    "from_corner",
     # Read after the ball was struck, so they may describe the chance but can
     # never help predict whether it was scored: a blocked shot never is. The
     # fit that targets goals leaves them at zero; only a fit that targets
     # another model's published numbers may use them.
-    "block_dist", "block_dist2", "block_known", "blocked",
+    "block_dist",
+    "block_dist2",
+    "block_known",
+    "blocked",
     # A flat lift for "big chance" is what both fits kept getting wrong: Opta
     # spreads flagged chances from 0.03 to 0.99 on what it sees, and a flagged
     # chance from the byline is not a flagged chance from the spot. These let
     # the flag be priced by where the chance was and how it was struck.
-    "bc_log_angle", "bc_dist", "bc_header", "bc_one_on_one", "header_corner",
+    "bc_log_angle",
+    "bc_dist",
+    "bc_header",
+    "bc_one_on_one",
+    "header_corner",
 )
 
 # Products of a flag and a place. The goal fit never sees them: two hundred
@@ -69,8 +95,9 @@ INTERACTIONS = {"bc_log_angle", "bc_dist", "bc_header", "bc_one_on_one", "header
 
 # Anything the outcome fit is allowed to weigh. A shot cannot be priced on what
 # happened to it after it left the boot.
-PRE_SHOT = tuple(t for t in TERMS
-                 if t not in {"block_dist", "block_dist2", "block_known", "blocked"})
+PRE_SHOT = tuple(
+    t for t in TERMS if t not in {"block_dist", "block_dist2", "block_known", "blocked"}
+)
 
 # Where the shot was taken from is the engine's answer to give, and the distance
 # calibration already corrects it on held-out matches. Letting this layer weigh
@@ -79,10 +106,22 @@ PRE_SHOT = tuple(t for t in TERMS
 # the published xG stopped falling with distance between 20 and 30 metres. Two
 # corrections arguing over one variable is worse than either alone, so this one
 # is allowed the level and the flags and nothing geometric.
-GEOMETRIC = {"dist", "dist2", "inv_dist", "angle", "log_angle", "central", "dy",
-             "six_yard", "box_centre", "box_wide", "out_of_box"}
-LEVEL_TERMS = tuple(t for t in PRE_SHOT
-                    if t not in GEOMETRIC and t not in INTERACTIONS and t != "logit")
+GEOMETRIC = {
+    "dist",
+    "dist2",
+    "inv_dist",
+    "angle",
+    "log_angle",
+    "central",
+    "dy",
+    "six_yard",
+    "box_centre",
+    "box_wide",
+    "out_of_box",
+}
+LEVEL_TERMS = tuple(
+    t for t in PRE_SHOT if t not in GEOMETRIC and t not in INTERACTIONS and t != "logit"
+)
 
 _LOADED: object = "unread"
 
@@ -99,8 +138,9 @@ def qualifier_names(row) -> set[str]:
         return set()
     quals = row.get("qualifiers") or []
     if isinstance(quals, (list, tuple)) and quals and isinstance(quals[0], dict):
-        found = {str((q.get("type") or {}).get("displayName", "")) for q in quals
-                 if isinstance(q, dict)}
+        found = {
+            str((q.get("type") or {}).get("displayName", "")) for q in quals if isinstance(q, dict)
+        }
         found.discard("")
         if found:
             return found

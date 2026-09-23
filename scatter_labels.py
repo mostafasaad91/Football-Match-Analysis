@@ -3,6 +3,7 @@
 Coordinates are never jittered. Where values coincide, a leader connects each
 full player name to that exact point. Placement uses actual font extents.
 """
+
 import numpy as np
 from matplotlib.font_manager import FontProperties
 from matplotlib.transforms import Bbox
@@ -15,6 +16,7 @@ def _segments_cross(p1, p2, p3, p4):
     start from the same crowded point are not a crossing, and treating them as
     one would push every label in a tight cluster out to the axes edge.
     """
+
     def side(a, b, c):
         return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
@@ -41,42 +43,64 @@ def label_players(ax, frame, x, y, *, color, background, fontsize=9):
     # Crowded points get first choice; a stable sort makes exports reproducible.
     distances = np.linalg.norm(points[:, None] - points[None, :], axis=2)
     density = (distances < 70).sum(axis=1)
-    for i in np.argsort(-density, kind='stable'):
-        name = str(frame.iloc[i]['player'])
+    for i in np.argsort(-density, kind="stable"):
+        name = str(frame.iloc[i]["player"])
         w, h, _ = renderer.get_text_width_height_descent(name, font, False)
-        w += 8; h = max(h + 8, fontsize * fig.dpi / 72 + 7)
+        w += 8
+        h = max(h + 8, fontsize * fig.dpi / 72 + 7)
         px, py = points[i]
         candidates = []
         # Nearby offsets first, then a full axes grid for dense zero clusters.
         for radius in [12, 26, 44, 66, 92, 125, 170, 225]:
-            for angle in np.linspace(0, 2*np.pi, 16, endpoint=False):
-                candidates.append((px + radius*np.cos(angle), py + radius*np.sin(angle)))
-        candidates += [(cx, cy) for cy in np.arange(bounds.y0+h/2, bounds.y1-h/2, h+3)
-                       for cx in np.arange(bounds.x0+w/2, bounds.x1-w/2, max(24,w/3))]
+            for angle in np.linspace(0, 2 * np.pi, 16, endpoint=False):
+                candidates.append((px + radius * np.cos(angle), py + radius * np.sin(angle)))
+        candidates += [
+            (cx, cy)
+            for cy in np.arange(bounds.y0 + h / 2, bounds.y1 - h / 2, h + 3)
+            for cx in np.arange(bounds.x0 + w / 2, bounds.x1 - w / 2, max(24, w / 3))
+        ]
         best = None
         for cx, cy in candidates:
-            cx = np.clip(cx, bounds.x0+w/2, bounds.x1-w/2)
-            cy = np.clip(cy, bounds.y0+h/2, bounds.y1-h/2)
-            box = Bbox.from_bounds(cx-w/2, cy-h/2, w, h)
+            cx = np.clip(cx, bounds.x0 + w / 2, bounds.x1 - w / 2)
+            cy = np.clip(cy, bounds.y0 + h / 2, bounds.y1 - h / 2)
+            box = Bbox.from_bounds(cx - w / 2, cy - h / 2, w, h)
             if any(box.overlaps(other) for other in occupied):
                 continue
             covers = sum(box.padded(5).contains(*p) for p in points)
-            crossings = sum(_segments_cross((px, py), (cx, cy), a, b)
-                            for a, b in leaders)
+            crossings = sum(_segments_cross((px, py), (cx, cy), a, b) for a, b in leaders)
             # A crossing costs more than any placement distance on this canvas
             # but less than covering a point, so the solver will accept a
             # longer leader to stay untangled and still never hide a datum.
-            cost = (cx-px)**2+(cy-py)**2 + covers*10000 + crossings*4000
-            if best is None or cost < best[0]:best=(cost,cx,cy,box)
+            cost = (cx - px) ** 2 + (cy - py) ** 2 + covers * 10000 + crossings * 4000
+            if best is None or cost < best[0]:
+                best = (cost, cx, cy, box)
         if best is None:
-            raise ValueError(f'Insufficient chart space for every player label: {name}')
-        _,cx,cy,box=best;occupied.append(box);leaders.append(((px,py),(cx,cy)))
-        position=ax.transAxes.inverted().transform((cx,cy))
-        text=ax.annotate(name, xy=tuple(frame.iloc[i][[x,y]]), xycoords='data',
-            xytext=position, textcoords='axes fraction', ha='center', va='center',
-            color=color, fontsize=fontsize, zorder=8,
-            bbox={'facecolor':background,'edgecolor':'none','alpha':.88,'pad':1},
-            arrowprops={'arrowstyle':'-','color':color,'lw':.55,'alpha':.55,
-                        'shrinkA':2,'shrinkB':5},annotation_clip=False)
+            raise ValueError(f"Insufficient chart space for every player label: {name}")
+        _, cx, cy, box = best
+        occupied.append(box)
+        leaders.append(((px, py), (cx, cy)))
+        position = ax.transAxes.inverted().transform((cx, cy))
+        text = ax.annotate(
+            name,
+            xy=tuple(frame.iloc[i][[x, y]]),
+            xycoords="data",
+            xytext=position,
+            textcoords="axes fraction",
+            ha="center",
+            va="center",
+            color=color,
+            fontsize=fontsize,
+            zorder=8,
+            bbox={"facecolor": background, "edgecolor": "none", "alpha": 0.88, "pad": 1},
+            arrowprops={
+                "arrowstyle": "-",
+                "color": color,
+                "lw": 0.55,
+                "alpha": 0.55,
+                "shrinkA": 2,
+                "shrinkB": 5,
+            },
+            annotation_clip=False,
+        )
         labels.append(text)
     return labels

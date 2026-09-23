@@ -17,6 +17,7 @@ Resolution order for one team:
 3. a monogram roundel drawn in the side's kit colour, so a poster never fails
    to build because a crest could not be fetched.
 """
+
 from __future__ import annotations
 
 import io
@@ -41,8 +42,7 @@ _USER_AGENT = "Mozilla/5.0"
 NATIVE_PX = 70
 
 
-def _draw(fig, image: np.ndarray, x: float, y: float, width: float,
-          zorder: float) -> None:
+def _draw(fig, image: np.ndarray, x: float, y: float, width: float, zorder: float) -> None:
     """Paint ``image`` centred on a figure-fraction point, at ``width`` of it.
 
     Drawn into its own transparent axes rather than as an AnnotationBbox. The
@@ -55,11 +55,11 @@ def _draw(fig, image: np.ndarray, x: float, y: float, width: float,
     so each crest also came out half again too large.
     """
     height = width * fig.get_figwidth() / fig.get_figheight()
-    ax = fig.add_axes([x - width / 2, y - height / 2, width, height],
-                      zorder=zorder)
+    ax = fig.add_axes([x - width / 2, y - height / 2, width, height], zorder=zorder)
     ax.imshow(image, interpolation="lanczos", aspect="auto")
     ax.set_axis_off()
     ax.patch.set_alpha(0.0)
+
 
 # A crest earns a plate when too little of it separates from the page. Judged
 # per pixel rather than on the crest's mean colour: Aston Villa's averages
@@ -147,8 +147,10 @@ def crest_luminance(image: np.ndarray) -> float:
     weight = alpha.sum()
     if weight <= 0:
         return 0.0
-    rgb = [float((image[..., channel].astype(float) / 255.0 * alpha).sum() / weight)
-           for channel in range(3)]
+    rgb = [
+        float((image[..., channel].astype(float) / 255.0 * alpha).sum() / weight)
+        for channel in range(3)
+    ]
     return _relative_luminance(rgb)
 
 
@@ -160,8 +162,7 @@ def readable_fraction(image: np.ndarray, background: str) -> float:
         return 1.0
     rgb = image[..., :3].astype(float) / 255.0
     channels = np.where(rgb <= 0.03928, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
-    luminance = (0.2126 * channels[..., 0] + 0.7152 * channels[..., 1]
-                 + 0.0722 * channels[..., 2])
+    luminance = 0.2126 * channels[..., 0] + 0.7152 * channels[..., 1] + 0.0722 * channels[..., 2]
     page = _relative_luminance(mcolors.to_rgb(background))
     bright = np.maximum(luminance, page)
     dark = np.minimum(luminance, page)
@@ -211,33 +212,57 @@ def place_crest(
     image = crest_image(team_id, allow_download=allow_download)
     if text_colour is None:
         # The monogram sits on the kit colour, so it follows the fill.
-        text_colour = "#111418" if _relative_luminance(
-            mcolors.to_rgb(colour)) > 0.42 else "#FFFFFF"
+        text_colour = "#111418" if _relative_luminance(mcolors.to_rgb(colour)) > 0.42 else "#FFFFFF"
     width_frac = width
     height_frac = width * fig.get_figwidth() / fig.get_figheight()
 
     if image is None:
         # Monogram roundel: an ellipse in figure fractions, since the figure is
         # not square and a circle in those units would not be round.
-        fig.add_artist(Ellipse((x, y), width_frac, height_frac, facecolor=colour,
-                               edgecolor="none", zorder=zorder))
-        fig.add_artist(Ellipse((x, y), width_frac * 0.78, height_frac * 0.78,
-                               facecolor="none", edgecolor=text_colour, lw=1.1,
-                               alpha=0.5, zorder=zorder + 1))
-        fig.text(x, y, monogram, color=text_colour,
-                 fontsize=width * fig.get_figwidth() * 8.3,
-                 fontweight="bold", ha="center", va="center", zorder=zorder + 2)
+        fig.add_artist(
+            Ellipse(
+                (x, y), width_frac, height_frac, facecolor=colour, edgecolor="none", zorder=zorder
+            )
+        )
+        fig.add_artist(
+            Ellipse(
+                (x, y),
+                width_frac * 0.78,
+                height_frac * 0.78,
+                facecolor="none",
+                edgecolor=text_colour,
+                lw=1.1,
+                alpha=0.5,
+                zorder=zorder + 1,
+            )
+        )
+        fig.text(
+            x,
+            y,
+            monogram,
+            color=text_colour,
+            fontsize=width * fig.get_figwidth() * 8.3,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            zorder=zorder + 2,
+        )
         return False
 
     if needs_plate(image, background):
         pad_w, pad_h = width_frac * 0.14, height_frac * 0.14
-        fig.add_artist(FancyBboxPatch(
-            (x - width_frac / 2 - pad_w, y - height_frac / 2 - pad_h),
-            width_frac + 2 * pad_w, height_frac + 2 * pad_h,
-            boxstyle="round,pad=0,rounding_size=0.008",
-            facecolor=plate_colour(image, background), edgecolor="none",
-            alpha=0.93, zorder=zorder - 1,
-        ))
+        fig.add_artist(
+            FancyBboxPatch(
+                (x - width_frac / 2 - pad_w, y - height_frac / 2 - pad_h),
+                width_frac + 2 * pad_w,
+                height_frac + 2 * pad_h,
+                boxstyle="round,pad=0,rounding_size=0.008",
+                facecolor=plate_colour(image, background),
+                edgecolor="none",
+                alpha=0.93,
+                zorder=zorder - 1,
+            )
+        )
 
     _draw(fig, image, x, y, width, zorder=zorder)
     return True
@@ -254,8 +279,7 @@ def logo_image() -> np.ndarray | None:
     return _LOGO_MEMO[0]
 
 
-def place_logo(fig, x: float, y: float, *, width: float,
-               background: str = "#000000") -> bool:
+def place_logo(fig, x: float, y: float, *, width: float, background: str = "#000000") -> bool:
     """Draw the publisher's badge at a figure-fraction position.
 
     The badge is a JPEG on its own black ground, so on a light page it lands as
@@ -269,12 +293,17 @@ def place_logo(fig, x: float, y: float, *, width: float,
     height_frac = width * fig.get_figwidth() / fig.get_figheight()
     if _relative_luminance(mcolors.to_rgb(background)) > 0.5:
         pad_w, pad_h = width_frac * 0.09, height_frac * 0.09
-        fig.add_artist(FancyBboxPatch(
-            (x - width_frac / 2 - pad_w, y - height_frac / 2 - pad_h),
-            width_frac + 2 * pad_w, height_frac + 2 * pad_h,
-            boxstyle="round,pad=0,rounding_size=0.006",
-            facecolor="#0A0A0A", edgecolor="none", zorder=94,
-        ))
+        fig.add_artist(
+            FancyBboxPatch(
+                (x - width_frac / 2 - pad_w, y - height_frac / 2 - pad_h),
+                width_frac + 2 * pad_w,
+                height_frac + 2 * pad_h,
+                boxstyle="round,pad=0,rounding_size=0.006",
+                facecolor="#0A0A0A",
+                edgecolor="none",
+                zorder=94,
+            )
+        )
     _draw(fig, image, x, y, width, zorder=95)
     return True
 

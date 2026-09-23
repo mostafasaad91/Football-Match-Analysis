@@ -21,6 +21,7 @@ Everything here is computed from columns already in the event frame. Three of
 them — Aerial duels, Dispossessed and Challenge — were in the data and read by
 nothing.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -28,8 +29,14 @@ import pandas as pd
 
 # Actions that can only occur while the other side has the ball. They are the
 # numerator of the possession adjustment; opponent touches are the denominator.
-_DEFENSIVE_TYPES = ("Tackle", "Interception", "BallRecovery", "Clearance",
-                    "Challenge", "BlockedPass")
+_DEFENSIVE_TYPES = (
+    "Tackle",
+    "Interception",
+    "BallRecovery",
+    "Clearance",
+    "Challenge",
+    "BlockedPass",
+)
 
 # A ball into the box counts as final third for reception purposes.
 _FINAL_THIRD_X = 66.7
@@ -74,7 +81,8 @@ def possession_adjusted(events, players_frame):
         out[str(name)] = {
             "defensive_actions": actions,
             "padj_defensive_actions": (
-                100.0 * actions / opponent_touches if opponent_touches else 0.0),
+                100.0 * actions / opponent_touches if opponent_touches else 0.0
+            ),
         }
     return out
 
@@ -87,8 +95,10 @@ def progression_distance(events):
     sums the actual advance of successful passes and carries, so distance is
     what it is measured in.
     """
-    moves = events[(events["type"].isin(["Pass", "Carry"]))
-                   & (events.get("outcome", "").astype(str).str.lower() == "successful")]
+    moves = events[
+        (events["type"].isin(["Pass", "Carry"]))
+        & (events.get("outcome", "").astype(str).str.lower() == "successful")
+    ]
     if moves.empty:
         return {}
     start = _numeric(moves, "x")
@@ -156,7 +166,12 @@ def line_breaking(events):
         return {}
     angle = _numeric(passes, "pass_angle")
     length = _numeric(passes, "pass_length")
-    complete = passes.get("outcome", pd.Series("", index=passes.index)).astype(str).str.lower().eq("successful")
+    complete = (
+        passes.get("outcome", pd.Series("", index=passes.index))
+        .astype(str)
+        .str.lower()
+        .eq("successful")
+    )
     # Angle is radians with 0 as straight ahead, so forward is the half circle
     # around zero.
     forward = (angle < np.pi / 2) | (angle > 3 * np.pi / 2)
@@ -179,7 +194,12 @@ def final_third_receptions(events):
     in this package: the feed names the passer, not the receiver.
     """
     passes = events[_flag(events, "is_pass")].copy()
-    complete = passes.get("outcome", pd.Series("", index=passes.index)).astype(str).str.lower().eq("successful")
+    complete = (
+        passes.get("outcome", pd.Series("", index=passes.index))
+        .astype(str)
+        .str.lower()
+        .eq("successful")
+    )
     landed = _numeric(passes, "end_x") >= _FINAL_THIRD_X
     arrivals = passes[complete & landed]
     if arrivals.empty:
@@ -229,16 +249,19 @@ def enrich(observations, events, players_frame=None):
     for column in columns:
         default = absent.get(column, 0.0)
         frame[column] = [
-            combined.get(str(name), {}).get(column, default)
-            for name in frame["player"]
+            combined.get(str(name), {}).get(column, default) for name in frame["player"]
         ]
 
     # Per-90 versions of the volume measures, so a substitute is compared on
     # rate rather than on having played less of the match.
     minutes = pd.to_numeric(frame.get("minutes"), errors="coerce").fillna(0)
     safe = minutes.where(minutes >= 1, np.nan)
-    for column in ("progression_metres", "line_breaking_passes",
-                   "final_third_receptions", "defensive_actions"):
+    for column in (
+        "progression_metres",
+        "line_breaking_passes",
+        "final_third_receptions",
+        "defensive_actions",
+    ):
         if column in frame:
             frame[column + "_p90"] = (frame[column] * 90 / safe).fillna(0.0)
     return frame

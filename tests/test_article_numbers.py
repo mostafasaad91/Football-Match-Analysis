@@ -25,8 +25,7 @@ MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1"]
 
 # Figures that belong to the language rather than to the data: percentages of
 # a whole, ordinals, and the handful of counts the prose spells out.
-PROSE_NUMBERS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "14",
-                 "20", "90", "100"}
+PROSE_NUMBERS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "14", "20", "90", "100"}
 
 
 def _frames(match):
@@ -146,7 +145,11 @@ def test_the_scoreline_in_the_standfirst_is_the_scoreline(match):
 
     home, away = goals(info["home_name"]), goals(info["away_name"])
     assert f"{home}–{away}" in article.standfirst + article.strap, (
-        article.standfirst, article.strap, home, away)
+        article.standfirst,
+        article.strap,
+        home,
+        away,
+    )
 
 
 def test_the_checker_would_catch_an_invented_number():

@@ -12,6 +12,7 @@ Each fixture runs in its own process, because the renderers keep module-level
 state that one match configures and never puts back. A failure is reported and
 the round carries on; the summary at the end says which ones need another go.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,9 @@ ROOT = Path(__file__).resolve().parent
 # Four times a normal fixture, so a slow provider or a big match is never cut
 # off, and a hung scrape costs half an hour instead of the rest of the round.
 FIXTURE_TIMEOUT_S = 30 * 60
-MATCH_URL = re.compile(r"https?://(?:www\.)?whoscored\.com/matches/\d+/(?:live|show)/\S*",
-                       re.IGNORECASE)
+MATCH_URL = re.compile(
+    r"https?://(?:www\.)?whoscored\.com/matches/\d+/(?:live|show)/\S*", re.IGNORECASE
+)
 
 
 def read_urls(args) -> list[str]:
@@ -51,8 +53,12 @@ def read_urls(args) -> list[str]:
                 available = sorted(p.name for p in (ROOT / "rounds").glob("*.txt"))
                 raise SystemExit(
                     f"No URL file at {name!r}.\n"
-                    + (f"Saved rounds in rounds/: {', '.join(available)}"
-                       if available else "No saved rounds in rounds/ yet."))
+                    + (
+                        f"Saved rounds in rounds/: {', '.join(available)}"
+                        if available
+                        else "No saved rounds in rounds/ yet."
+                    )
+                )
         found.extend(MATCH_URL.findall(path.read_text(encoding="utf-8")))
     ordered, seen = [], set()
     for url in found:
@@ -62,7 +68,6 @@ def read_urls(args) -> list[str]:
             seen.add(url)
             ordered.append(url)
     return ordered
-
 
 
 def _light_missing(url: str, environment: dict) -> Path | None:
@@ -79,9 +84,11 @@ def _light_missing(url: str, environment: dict) -> Path | None:
         where = where / part
     if not where.is_dir():
         return None
-    packages = [p for p in where.iterdir()
-                if p.is_dir() and not p.name.startswith(".")
-                and (p / "match_info.json").exists()]
+    packages = [
+        p
+        for p in where.iterdir()
+        if p.is_dir() and not p.name.startswith(".") and (p / "match_info.json").exists()
+    ]
     if not packages:
         return None
     newest = max(packages, key=lambda p: p.stat().st_mtime)
@@ -115,10 +122,16 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
     # and with no limit here the whole round waited behind it. Past the limit
     # the child is killed and reported, and the round moves on.
     try:
-        finished = subprocess.run([sys.executable, "football_match_analysis.py"],
-                                  cwd=ROOT, env=environment, capture_output=True,
-                                  text=True, encoding="utf-8", errors="replace",
-                                  timeout=FIXTURE_TIMEOUT_S)
+        finished = subprocess.run(
+            [sys.executable, "football_match_analysis.py"],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=FIXTURE_TIMEOUT_S,
+        )
     except subprocess.TimeoutExpired:
         took = f"{(time.time() - started) / 60:.1f} min"
         return False, f"{took} :: no result after {FIXTURE_TIMEOUT_S // 60} min, stopped"
@@ -136,13 +149,22 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
         if missing is not None:
             retry = subprocess.run(
                 [sys.executable, "render_light.py", str(missing), "--child"],
-                cwd=ROOT, env={**environment, "MATCH_ANALYSIS_THEME": "light",
-                               "MATCH_ANALYSIS_LIGHT_COPY": "0"},
-                capture_output=True, text=True, encoding="utf-8", errors="replace")
+                cwd=ROOT,
+                env={
+                    **environment,
+                    "MATCH_ANALYSIS_THEME": "light",
+                    "MATCH_ANALYSIS_LIGHT_COPY": "0",
+                },
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             if retry.returncode != 0:
                 tail = (retry.stderr or retry.stdout or "").strip().splitlines()[-2:]
                 return True, took + " :: light copy still missing :: " + " | ".join(
-                    line.strip() for line in tail)
+                    line.strip() for line in tail
+                )
             took += " (+light retried)"
         return True, took
     # The last few lines carry the reason; the whole log is rarely the point.
@@ -151,19 +173,23 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--round", required=True,
-                        help='Matchweek number or name: 1, "Matchweek 1", "الجولة 1"')
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--round", required=True, help='Matchweek number or name: 1, "Matchweek 1", "الجولة 1"'
+    )
     parser.add_argument("--url", action="append", help="One fixture URL; repeatable")
-    parser.add_argument("--urls", action="append",
-                        help="A file holding fixture URLs; repeatable")
-    parser.add_argument("--dark-only", action="store_true",
-                        help="Skip the light copy (it is built by default)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="List what would run, and where it would be shelved")
-    parser.add_argument("--no-refit", action="store_true",
-                        help="Skip refitting the xG layer after the round")
+    parser.add_argument("--urls", action="append", help="A file holding fixture URLs; repeatable")
+    parser.add_argument(
+        "--dark-only", action="store_true", help="Skip the light copy (it is built by default)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="List what would run, and where it would be shelved"
+    )
+    parser.add_argument(
+        "--no-refit", action="store_true", help="Skip refitting the xG layer after the round"
+    )
     args = parser.parse_args()
 
     from match_fixture import normalise_round, shelf
@@ -216,17 +242,34 @@ def refit_xg() -> None:
     """
     print("\nRefitting the xG layer on the stored Opta shot maps ...", flush=True)
     try:
-        done = subprocess.run([sys.executable, "scripts/fit_xg_reference.py"], cwd=ROOT,
-                              env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-                              capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=FIXTURE_TIMEOUT_S)
+        done = subprocess.run(
+            [sys.executable, "scripts/fit_xg_reference.py"],
+            cwd=ROOT,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=FIXTURE_TIMEOUT_S,
+        )
     except subprocess.TimeoutExpired:
         print("  refit took too long, stopped; the previous fit stays")
         return
     lines = (done.stdout or done.stderr or "").strip().splitlines()
     for line in lines:
-        if line.lstrip().startswith(("shots paired", "Opta-fitted", "what ships", "written",
-                                     "nothing written", "The fit")) or "shots paired" in line:
+        if (
+            line.lstrip().startswith(
+                (
+                    "shots paired",
+                    "Opta-fitted",
+                    "what ships",
+                    "written",
+                    "nothing written",
+                    "The fit",
+                )
+            )
+            or "shots paired" in line
+        ):
             print("  " + line.strip())
 
 

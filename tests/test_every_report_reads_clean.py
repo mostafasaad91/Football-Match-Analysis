@@ -56,9 +56,15 @@ def _fixtures():
             continue
         if any(part.startswith(".") for part in out.relative_to(OUTPUT).parts):
             continue
-        if all((out / name).exists() for name in
-               ("events.csv", "xg.csv", "team_advanced_metrics.csv",
-                "player_sequence_metrics.csv")):
+        if all(
+            (out / name).exists()
+            for name in (
+                "events.csv",
+                "xg.csv",
+                "team_advanced_metrics.csv",
+                "player_sequence_metrics.csv",
+            )
+        ):
             found.append(out)
     return found
 
@@ -79,9 +85,15 @@ _BUILT: dict[Path, tuple] = {}
 def _article(out: Path):
     if out not in _BUILT:
         info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
-        frames = [pd.read_csv(out / name) for name in
-                  ("events.csv", "xg.csv", "team_advanced_metrics.csv",
-                   "player_sequence_metrics.csv")]
+        frames = [
+            pd.read_csv(out / name)
+            for name in (
+                "events.csv",
+                "xg.csv",
+                "team_advanced_metrics.csv",
+                "player_sequence_metrics.csv",
+            )
+        ]
         _BUILT[out] = (build_article(*frames, info, out), frames, info)
     return _BUILT[out]
 
@@ -98,9 +110,10 @@ def _prose(article):
 # headlines
 # --------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_no_headline_awards_a_win_the_result_did_not(out):
-    """"X Won The Match" is a claim about the result, not about a metric."""
+    """ "X Won The Match" is a claim about the result, not about a metric."""
     article, (_events, xg, _tm, _pm), info = _article(out)
     goals = {str(r["team"]): float(r["goals"]) for _, r in xg.iterrows()}
     home, away = str(info["home_name"]), str(info["away_name"])
@@ -112,15 +125,13 @@ def test_no_headline_awards_a_win_the_result_did_not(out):
     if not claim:
         return
     named = claim.group(1)
-    assert winner is not None, (
-        f"'{article.title}' names a winner in a match that was drawn")
-    assert named == winner, (
-        f"'{article.title}' names {named}; {winner} won {goals}")
+    assert winner is not None, f"'{article.title}' names a winner in a match that was drawn"
+    assert named == winner, f"'{article.title}' names {named}; {winner} won {goals}"
 
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_a_sentence_naming_the_winner_first_prints_their_goals_first(out):
-    """"Leeds beat Nottingham Forest 0–1" shipped in four of fifteen articles.
+    """ "Leeds beat Nottingham Forest 0–1" shipped in four of fifteen articles.
 
     The standfirst names the winner first and the score was held in home-away
     order, so every away win read as though the winner had scored none. Four
@@ -133,14 +144,13 @@ def test_a_sentence_naming_the_winner_first_prints_their_goals_first(out):
     winner = max(goals, key=goals.get)
     loser = min(goals, key=goals.get)
 
-    pattern = re.compile(
-        rf"{re.escape(winner)} beat {re.escape(loser)} (\d+)[–—-](\d+)")
+    pattern = re.compile(rf"{re.escape(winner)} beat {re.escape(loser)} (\d+)[–—-](\d+)")
     for text in _paragraphs(article) + [article.standfirst]:
         for found in pattern.finditer(text):
             first, second = int(found.group(1)), int(found.group(2))
             assert (first, second) == (goals[winner], goals[loser]), (
-                f"'{found.group(0)}' — {winner} scored {goals[winner]}, "
-                f"{loser} {goals[loser]}")
+                f"'{found.group(0)}' — {winner} scored {goals[winner]}, {loser} {goals[loser]}"
+            )
 
 
 def test_two_matches_do_not_share_a_headline():
@@ -149,8 +159,13 @@ def test_two_matches_do_not_share_a_headline():
     fixtures = {}
     for out in FIXTURES:
         article, _, info = _article(out)
-        identity = (info.get('home_name'), info.get('away_name'), info.get('date'),
-                    info.get('competition'), info.get('score'))
+        identity = (
+            info.get("home_name"),
+            info.get("away_name"),
+            info.get("date"),
+            info.get("competition"),
+            info.get("score"),
+        )
         fixtures.setdefault(identity, article.title)
     titles = list(fixtures.values())
     repeated = {t: n for t, n in Counter(titles).items() if n > 1}
@@ -159,7 +174,7 @@ def test_two_matches_do_not_share_a_headline():
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_a_headline_that_praises_a_side_is_not_about_a_heavy_defeat(out):
-    """"Monza Shot Less And Meant It More" fronted a 4-1 defeat."""
+    """ "Monza Shot Less And Meant It More" fronted a 4-1 defeat."""
     article, (_events, xg, _tm, _pm), info = _article(out)
     goals = {str(r["team"]): float(r["goals"]) for _, r in xg.iterrows()}
     home, away = str(info["home_name"]), str(info["away_name"])
@@ -170,13 +185,14 @@ def test_a_headline_that_praises_a_side_is_not_about_a_heavy_defeat(out):
     for phrase in praise:
         if phrase in article.title:
             assert not article.title.startswith(beaten), (
-                f"'{article.title}' praises a side beaten by "
-                f"{abs(goals[home] - goals[away]):.0f}")
+                f"'{article.title}' praises a side beaten by {abs(goals[home] - goals[away]):.0f}"
+            )
 
 
 # --------------------------------------------------------------------------
 # one verdict per article
 # --------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_the_closing_does_not_reverse_the_opening(out):
@@ -190,15 +206,21 @@ def test_the_closing_does_not_reverse_the_opening(out):
     # This test sat dormant while every fixture was titled "<X> #-# <Y> - Match
     # study", because no such title contains "chase" and the check above
     # returned first.
-    closing = next((s for s in article.sections
-                    if s.heading in ("What to take from it",
-                                     "What to take into the video review")), None)
+    closing = next(
+        (
+            s
+            for s in article.sections
+            if s.heading in ("What to take from it", "What to take into the video review")
+        ),
+        None,
+    )
     assert closing is not None, [s.heading for s in article.sections]
     text = " ".join(closing.paragraphs)
     loser = article.title.split("'")[0]
     assert f"it belongs to {loser}" not in text, (
         f"headline calls {loser}'s xG a chase and the closing awards them the "
-        f"performance: {text[:200]}")
+        f"performance: {text[:200]}"
+    )
 
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
@@ -213,6 +235,7 @@ def test_no_heading_says_the_territory_paid_when_the_verdict_says_otherwise(out)
 # --------------------------------------------------------------------------
 # nothing said twice
 # --------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_no_sentence_is_printed_twice(out):
@@ -244,7 +267,8 @@ def test_no_paragraph_restates_the_one_before_it(out):
             figures = tuple(re.findall(r"\d+\.\d{2}", paragraph))
             if len(figures) >= 2:
                 assert sorted(figures) not in seen, (
-                    f"{section.heading}: two paragraphs carry {figures}")
+                    f"{section.heading}: two paragraphs carry {figures}"
+                )
                 seen.append(sorted(figures))
 
 
@@ -257,7 +281,7 @@ MACHINE = re.compile(r"\b(nan|NaN|inf)\b|\{\w+\}|\s\|\s")
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_no_machine_string_reaches_the_page(out):
-    """"None" is the awkward one: it is both a repr and an English pronoun.
+    """ "None" is the awkward one: it is both a repr and an English pronoun.
 
     "None of that is the striker's doing" and "None of this makes the win
     undeserved" are correct prose, so the word only means a leak when it turns
@@ -270,8 +294,7 @@ def test_no_machine_string_reaches_the_page(out):
         assert not found, (found.group(0), paragraph[:160])
         for sentence in re.split(r"(?<=[.!?:])\s+", paragraph):
             body = sentence.strip()
-            assert "None" not in body[1:], (
-                f"'None' inside a sentence: {body[:160]}")
+            assert "None" not in body[1:], f"'None' inside a sentence: {body[:160]}"
 
 
 # The "1" has to be a count, not the tail of something longer. A digit or a
@@ -301,8 +324,7 @@ def _plural_offenders(texts) -> list[str]:
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_no_count_of_one_is_printed_as_a_plural(out):
     article, _frames, _info = _article(out)
-    assert not _plural_offenders(
-        _paragraphs(article) + [article.title, article.standfirst])
+    assert not _plural_offenders(_paragraphs(article) + [article.title, article.standfirst])
 
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
@@ -339,8 +361,7 @@ def test_the_report_writers_agree_with_their_own_counts(out):
     for writer in (visual_explanation, visual_implication, visual_data_read):
         texts += [writer(path, context) for path in boards]
     for section in _section_copy(context).values():
-        texts += [t for _, t in
-                  section.get("performance", []) + section.get("data", [])]
+        texts += [t for _, t in section.get("performance", []) + section.get("data", [])]
         texts.append(str(section.get("implication", "")))
 
     assert not _plural_offenders(texts)
@@ -367,6 +388,7 @@ def test_the_article_reaches_the_length_it_promises(out):
 # a headline that says what the match was
 # --------------------------------------------------------------------------
 
+
 def test_the_headlines_use_more_than_a_handful_of_sentences():
     """Fifteen different strings and five different sentences.
 
@@ -386,20 +408,32 @@ def test_the_headlines_use_more_than_a_handful_of_sentences():
     # headline is title case, so a regex for "a proper noun" swallows the
     # sentence along with the names and reports every title as identical.
     shapes = set()
-    spelled = ("one", "two", "three", "four", "five", "six", "seven", "eight",
-               "nine", "ten", "eleven", "twelve")
+    spelled = (
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+    )
     for out in FIXTURES:
         article, _frames, info = _article(out)
         shape = article.title
         for name in (str(info["home_name"]), str(info["away_name"])):
             shape = shape.replace(name, "X")
         shape = re.sub(r"\d+(?:\.\d+)?", "#", shape)
-        shape = re.sub(r"\b(?:%s)\b" % "|".join(spelled), "#", shape,
-                       flags=re.IGNORECASE)
+        shape = re.sub(r"\b(?:%s)\b" % "|".join(spelled), "#", shape, flags=re.IGNORECASE)
         shapes.add(shape)
     assert len(shapes) >= 7, (
         f"{len(FIXTURES)} fixtures share only {len(shapes)} sentences: "
-        + " | ".join(sorted(shapes)))
+        + " | ".join(sorted(shapes))
+    )
 
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)

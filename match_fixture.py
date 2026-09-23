@@ -20,6 +20,7 @@ The round is not in the URL and not in the match feed, so it is not invented.
 A fixture whose round cannot be established is filed under the season directly,
 which is honest and still sorted.
 """
+
 from __future__ import annotations
 
 import re
@@ -37,11 +38,25 @@ _URL_SLUG = re.compile(
 # where the region is two words. Listing those is shorter and safer than
 # guessing from the shape of the slug.
 _TWO_WORD_REGIONS = (
-    "united-states", "south-africa", "south-korea", "saudi-arabia",
-    "new-zealand", "czech-republic", "north-macedonia", "bosnia-herzegovina",
-    "costa-rica", "el-salvador", "hong-kong", "ivory-coast", "north-ireland",
-    "northern-ireland", "republic-of-ireland", "san-marino", "faroe-islands",
-    "united-arab-emirates", "trinidad-and-tobago",
+    "united-states",
+    "south-africa",
+    "south-korea",
+    "saudi-arabia",
+    "new-zealand",
+    "czech-republic",
+    "north-macedonia",
+    "bosnia-herzegovina",
+    "costa-rica",
+    "el-salvador",
+    "hong-kong",
+    "ivory-coast",
+    "north-ireland",
+    "northern-ireland",
+    "republic-of-ireland",
+    "san-marino",
+    "faroe-islands",
+    "united-arab-emirates",
+    "trinidad-and-tobago",
 )
 
 
@@ -49,10 +64,10 @@ _TWO_WORD_REGIONS = (
 class Fixture:
     """The shelf a match belongs on."""
 
-    region: str            # "England"
-    competition: str       # "Premier League"
-    season: str            # "2026-2027"
-    round_name: str        # "Matchweek 03", or "" when it is not known
+    region: str  # "England"
+    competition: str  # "Premier League"
+    season: str  # "2026-2027"
+    round_name: str  # "Matchweek 03", or "" when it is not known
 
     @property
     def competition_folder(self) -> str:
@@ -89,8 +104,12 @@ def normalise_round(text: str) -> str:
     # A bare number is a matchweek. Anything else that is only digits has no
     # other reading here, and leaving it alone shelved a round under a folder
     # literally named "1".
-    match = re.fullmatch(r"(?:(?:matchweek|match week|week|round|gameweek|gw|md)"
-                         r"[\s._-]*)?(\d{1,2})", raw, flags=re.IGNORECASE)
+    match = re.fullmatch(
+        r"(?:(?:matchweek|match week|week|round|gameweek|gw|md)"
+        r"[\s._-]*)?(\d{1,2})",
+        raw,
+        flags=re.IGNORECASE,
+    )
     if match:
         return f"Matchweek {int(match.group(1)):02d}"
     # Arabic is the other language this project's own comments are written in,
@@ -108,10 +127,19 @@ def _folder(text: str) -> str:
 
 
 def _titled(slug: str) -> str:
-    """"premier-league" -> "Premier League", keeping known casings."""
-    special = {"uefa": "UEFA", "fa": "FA", "efl": "EFL", "mls": "MLS",
-               "afc": "AFC", "caf": "CAF", "concacaf": "CONCACAF",
-               "laliga": "LaLiga", "psg": "PSG", "usa": "USA"}
+    """ "premier-league" -> "Premier League", keeping known casings."""
+    special = {
+        "uefa": "UEFA",
+        "fa": "FA",
+        "efl": "EFL",
+        "mls": "MLS",
+        "afc": "AFC",
+        "caf": "CAF",
+        "concacaf": "CONCACAF",
+        "laliga": "LaLiga",
+        "psg": "PSG",
+        "usa": "USA",
+    }
     words = []
     for word in slug.split("-"):
         words.append(special.get(word, word.capitalize()))
@@ -133,7 +161,7 @@ def from_url(url: str | None) -> Fixture:
             region_slug = candidate
             break
 
-    competition_slug = slug[len(region_slug):].strip("-")
+    competition_slug = slug[len(region_slug) :].strip("-")
     return Fixture(
         region=_titled(region_slug),
         competition=_titled(competition_slug),
@@ -169,10 +197,9 @@ def round_from_date(played_on: str | None) -> str:
     text = str(played_on or "").strip()
     if not text:
         return ""
-    for shape in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d",
-                  "%d/%m/%Y", "%d-%m-%Y"):
+    for shape in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
         try:
-            when = datetime.strptime(text[:len(shape) + 4], shape).date()
+            when = datetime.strptime(text[: len(shape) + 4], shape).date()
             break
         except ValueError:
             continue
@@ -182,8 +209,7 @@ def round_from_date(played_on: str | None) -> str:
     return f"Week_of_{monday.isoformat()}"
 
 
-def shelf(url: str | None, round_name: str = "",
-          played_on: str | None = None) -> tuple[str, ...]:
+def shelf(url: str | None, round_name: str = "", played_on: str | None = None) -> tuple[str, ...]:
     """The directories one fixture belongs under, outermost first.
 
     ``round_name`` wins when the caller knows the matchweek. Without it the
@@ -193,6 +219,5 @@ def shelf(url: str | None, round_name: str = "",
     fixture = from_url(url)
     name = normalise_round(round_name) or round_from_date(played_on)
     if name:
-        fixture = Fixture(fixture.region, fixture.competition,
-                          fixture.season, name)
+        fixture = Fixture(fixture.region, fixture.competition, fixture.season, name)
     return fixture.parts

@@ -55,7 +55,8 @@ def test_no_renderer_takes_the_last_word_without_a_guard(module):
     offenders = _unguarded(path)
     assert not offenders, (
         f"{module} indexes a split with no fallback — use frame_values.surname:\n"
-        + "\n".join(f"  line {n}: {t}" for n, t in offenders))
+        + "\n".join(f"  line {n}: {t}" for n, t in offenders)
+    )
 
 
 def test_surname_survives_every_shape_of_missing_name():
@@ -91,10 +92,10 @@ def test_every_renderer_that_uses_the_helper_imports_it(module):
     imported = any(
         isinstance(node, ast.ImportFrom)
         and node.module == "frame_values"
-        and any(alias.asname == "_surname" or alias.name == "surname"
-                for alias in node.names)
+        and any(alias.asname == "_surname" or alias.name == "surname" for alias in node.names)
         for node in ast.walk(tree)
     )
-    defined = any(isinstance(node, ast.FunctionDef) and node.name == "_surname"
-                  for node in ast.walk(tree))
+    defined = any(
+        isinstance(node, ast.FunctionDef) and node.name == "_surname" for node in ast.walk(tree)
+    )
     assert imported or defined, f"{module} calls _surname without importing it"

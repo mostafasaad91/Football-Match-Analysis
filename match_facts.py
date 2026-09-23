@@ -9,6 +9,7 @@ for.
 Nothing in here is rounded for display. Formatting belongs to the writer; a
 fact that arrives pre-rounded cannot be compared against another one.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,14 @@ BOX_X = 83.0
 BOX_Y = (21.1, 78.9)
 ZONE14 = ((FINAL_THIRD, 83.3), (THIRD, 2 * THIRD))
 
-DEFENSIVE_ACTIONS = ("Tackle", "Interception", "BallRecovery", "Clearance",
-                     "Challenge", "BlockedPass")
+DEFENSIVE_ACTIONS = (
+    "Tackle",
+    "Interception",
+    "BallRecovery",
+    "Clearance",
+    "Challenge",
+    "BlockedPass",
+)
 PRESSING_ACTIONS = ("Tackle", "Interception", "Challenge", "Foul")
 
 
@@ -60,7 +67,8 @@ def _truthy(series: pd.Series) -> pd.Series:
 @dataclass
 class Side:
     """One team's match, in the order the report argues it."""
-    key: str                      # "home" or "away"
+
+    key: str  # "home" or "away"
     team_id: int
     name: str
     slug: str
@@ -279,7 +287,7 @@ def _clean_text(value) -> str:
     if value is None:
         return ""
     try:
-        if value != value:            # NaN is the only value unequal to itself
+        if value != value:  # NaN is the only value unequal to itself
             return ""
     except Exception:
         pass
@@ -363,9 +371,12 @@ def _fill_from_xg(side: Side, xg: pd.DataFrame) -> None:
 
 
 _TEAM_METRIC_FIELDS = {
-    "possession_share": "possession_share", "pass_share": "pass_share",
-    "field_tilt": "field_tilt", "touches": "touches",
-    "touch_def_pct": "touch_def_pct", "touch_mid_pct": "touch_mid_pct",
+    "possession_share": "possession_share",
+    "pass_share": "pass_share",
+    "field_tilt": "field_tilt",
+    "touches": "touches",
+    "touch_def_pct": "touch_def_pct",
+    "touch_mid_pct": "touch_mid_pct",
     "touch_att_pct": "touch_att_pct",
     "progressive_passes": "progressive_passes",
     "deep_completions": "deep_completions",
@@ -373,18 +384,23 @@ _TEAM_METRIC_FIELDS = {
     "final_third_entry_efficiency": "final_third_entry_efficiency",
     "box_entries": "box_entries",
     "box_entry_to_shot_rate": "box_entry_to_shot_rate",
-    "crosses": "crosses", "completed_crosses": "completed_crosses",
-    "sequence_xt": "sequence_xT", "xt_per_possession": "xt_per_possession",
+    "crosses": "crosses",
+    "completed_crosses": "completed_crosses",
+    "sequence_xt": "sequence_xT",
+    "xt_per_possession": "xt_per_possession",
     "directness": "directness",
     "build_up_attempts": "build_up_attempts",
     "build_up_successes": "build_up_successes",
     "build_up_success_rate": "build_up_success_rate",
-    "regains": "possession_regains", "high_regains": "high_regains",
+    "regains": "possession_regains",
+    "high_regains": "high_regains",
     "counterpress_regains": "counterpress_regains",
     "counterpress_attempts": "counterpress_attempts",
     "counterpress_success_rate": "counterpress_success_rate",
-    "regain_xg": "regain_xG", "regain_xt": "regain_xT",
-    "transitions": "transitions", "transition_shots": "transition_shots",
+    "regain_xg": "regain_xG",
+    "regain_xt": "regain_xT",
+    "transitions": "transitions",
+    "transition_shots": "transition_shots",
     "transition_xg": "transition_xG",
     "transition_box_entries": "transition_box_entries",
     "transition_shot_rate": "transition_shot_rate",
@@ -394,11 +410,24 @@ _TEAM_METRIC_FIELDS = {
     "rest_defence_vulnerability": "rest_defence_vulnerability",
 }
 _INTEGER_FIELDS = {
-    "touches", "progressive_passes", "deep_completions", "final_third_entries",
-    "box_entries", "crosses", "completed_crosses", "build_up_attempts",
-    "build_up_successes", "regains", "high_regains", "counterpress_regains",
-    "counterpress_attempts", "transitions", "transition_shots",
-    "transition_box_entries", "rest_defence_exposures", "rest_defence_dangerous",
+    "touches",
+    "progressive_passes",
+    "deep_completions",
+    "final_third_entries",
+    "box_entries",
+    "crosses",
+    "completed_crosses",
+    "build_up_attempts",
+    "build_up_successes",
+    "regains",
+    "high_regains",
+    "counterpress_regains",
+    "counterpress_attempts",
+    "transitions",
+    "transition_shots",
+    "transition_box_entries",
+    "rest_defence_exposures",
+    "rest_defence_dangerous",
 }
 
 
@@ -412,8 +441,15 @@ def _fill_from_team_metrics(side: Side, frame: pd.DataFrame) -> None:
             setattr(side, attribute, value)
     for state in ("leading", "drawing", "trailing"):
         side.states.setdefault(state, {})
-        for metric in ("possessions", "completed_passes", "shots", "xG",
-                       "sequence_xT", "transitions", "box_entries"):
+        for metric in (
+            "possessions",
+            "completed_passes",
+            "shots",
+            "xG",
+            "sequence_xT",
+            "transitions",
+            "box_entries",
+        ):
             column = f"game_state_{state}_{metric}"
             if column in row:
                 side.states[state][metric] = _num(row[column])
@@ -434,13 +470,16 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
         lengths = pd.to_numeric(passes["pass_length"], errors="coerce").dropna()
         side.avg_pass_length = float(lengths.mean()) if len(lengths) else 0.0
         side.long_passes = int((lengths >= 30).sum())
-    forward = passes[pd.to_numeric(passes["end_x"], errors="coerce")
-                     > pd.to_numeric(passes["x"], errors="coerce")]
+    forward = passes[
+        pd.to_numeric(passes["end_x"], errors="coerce")
+        > pd.to_numeric(passes["x"], errors="coerce")
+    ]
     side.forward_passes = len(forward)
 
     side.corners = int((own["type"].astype(str) == "CornerAwarded").sum())
-    side.fouls = int(((own["type"].astype(str) == "Foul")
-                      & (own["outcome"].astype(str) == "Unsuccessful")).sum())
+    side.fouls = int(
+        ((own["type"].astype(str) == "Foul") & (own["outcome"].astype(str) == "Unsuccessful")).sum()
+    )
     side.cards = int((own["type"].astype(str) == "Card").sum())
     aerials = own[own["type"].astype(str) == "Aerial"]
     side.aerials = len(aerials)
@@ -448,8 +487,9 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
 
     x = pd.to_numeric(own.get("x"), errors="coerce")
     y = pd.to_numeric(own.get("y"), errors="coerce")
-    in_zone14 = ((x >= ZONE14[0][0]) & (x <= ZONE14[0][1])
-                 & (y >= ZONE14[1][0]) & (y <= ZONE14[1][1]))
+    in_zone14 = (
+        (x >= ZONE14[0][0]) & (x <= ZONE14[0][1]) & (y >= ZONE14[1][0]) & (y <= ZONE14[1][1])
+    )
     side.zone14_touches = int(in_zone14.sum())
     side.zone14_passes = int((in_zone14 & _truthy(own["is_pass"])).sum())
     side.final_third_touches = int((x >= FINAL_THIRD).sum())
@@ -464,7 +504,11 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
 
     # PPDA: the opponent's passes in their own 60%, per pressing action of ours
     # in the same area of the pitch.
-    opponent_passes = opponent[_truthy(opponent["is_pass"])] if "is_pass" in opponent.columns else opponent.iloc[0:0]
+    opponent_passes = (
+        opponent[_truthy(opponent["is_pass"])]
+        if "is_pass" in opponent.columns
+        else opponent.iloc[0:0]
+    )
     deep = pd.to_numeric(opponent_passes.get("x"), errors="coerce") <= 60
     pressing = own[own["type"].astype(str).isin(PRESSING_ACTIONS)]
     high = pd.to_numeric(pressing.get("x"), errors="coerce") >= 40
@@ -476,8 +520,10 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
         side.crosses = len(crosses)
         side.completed_crosses = int((crosses["outcome"].astype(str) == "Successful").sum())
 
-    entries = completed[(pd.to_numeric(completed["x"], errors="coerce") < FINAL_THIRD)
-                        & (pd.to_numeric(completed["end_x"], errors="coerce") >= FINAL_THIRD)]
+    entries = completed[
+        (pd.to_numeric(completed["x"], errors="coerce") < FINAL_THIRD)
+        & (pd.to_numeric(completed["end_x"], errors="coerce") >= FINAL_THIRD)
+    ]
     end_y = pd.to_numeric(entries.get("end_y"), errors="coerce")
     side.lane_left = int((end_y >= FINAL_THIRD).sum())
     side.lane_centre = int(((end_y >= THIRD) & (end_y < FINAL_THIRD)).sum())
@@ -485,8 +531,9 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
 
     shots = own[_truthy(own["is_shot"])] if "is_shot" in own.columns else own.iloc[0:0]
     qualifiers = shots.get("qualifier_names", pd.Series(dtype=str)).astype(str)
-    set_piece = shots[qualifiers.str.contains("SetPiece|Corner|FreeKick|ThrowIn",
-                                              case=False, na=False)]
+    set_piece = shots[
+        qualifiers.str.contains("SetPiece|Corner|FreeKick|ThrowIn", case=False, na=False)
+    ]
     side.set_piece_shots = len(set_piece)
     side.set_piece_xg = float(pd.to_numeric(set_piece.get("xG"), errors="coerce").sum() or 0.0)
 
@@ -498,15 +545,25 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
         side.outfield_blocks = int(len(saves) - side.gk_saves)
 
     for label, code in (("first", "1h"), ("second", "2h")):
-        half = own[own["period_code"].astype(str) == code] if "period_code" in own.columns else own.iloc[0:0]
+        half = (
+            own[own["period_code"].astype(str) == code]
+            if "period_code" in own.columns
+            else own.iloc[0:0]
+        )
         half_passes = half[_truthy(half["is_pass"])] if len(half) else half
         half_shots = half[_truthy(half["is_shot"])] if len(half) else half
         side.half[label] = {
             "passes": float(len(half_passes)),
-            "completed": float((half_passes["outcome"].astype(str) == "Successful").sum()) if len(half_passes) else 0.0,
+            "completed": float((half_passes["outcome"].astype(str) == "Successful").sum())
+            if len(half_passes)
+            else 0.0,
             "shots": float(len(half_shots)),
-            "xG": float(pd.to_numeric(half_shots.get("xG"), errors="coerce").sum() or 0.0) if len(half_shots) else 0.0,
-            "xT": float(pd.to_numeric(half.get("xT"), errors="coerce").sum() or 0.0) if len(half) else 0.0,
+            "xG": float(pd.to_numeric(half_shots.get("xG"), errors="coerce").sum() or 0.0)
+            if len(half_shots)
+            else 0.0,
+            "xT": float(pd.to_numeric(half.get("xT"), errors="coerce").sum() or 0.0)
+            if len(half)
+            else 0.0,
             "box_entries": float(_box_entries(half)),
         }
 
@@ -541,7 +598,9 @@ def _fill_from_possessions(side: Side, frame: pd.DataFrame) -> None:
         return
     passes = pd.to_numeric(own["passes"], errors="coerce").fillna(0)
     side.possessions = len(own)
-    side.avg_possession_seconds = float(pd.to_numeric(own["duration"], errors="coerce").mean() or 0.0)
+    side.avg_possession_seconds = float(
+        pd.to_numeric(own["duration"], errors="coerce").mean() or 0.0
+    )
     side.avg_possession_passes = float(passes.mean() or 0.0)
     side.long_sequences = int((passes >= 6).sum())
     side.short_sequences = int((passes <= 2).sum())
@@ -591,14 +650,19 @@ def _fill_from_spells(side: Side, frame: pd.DataFrame) -> None:
             continue
         bucket = side.states.setdefault(state if state != "level" else "drawing", {})
         bucket["minutes"] = float(pd.to_numeric(rows["minutes"], errors="coerce").sum() or 0.0)
-        bucket.setdefault("shots", float(pd.to_numeric(rows["shots"], errors="coerce").sum() or 0.0))
+        bucket.setdefault(
+            "shots", float(pd.to_numeric(rows["shots"], errors="coerce").sum() or 0.0)
+        )
         bucket["spell_shots"] = float(pd.to_numeric(rows["shots"], errors="coerce").sum() or 0.0)
         bucket["spell_xG"] = float(pd.to_numeric(rows["xG"], errors="coerce").sum() or 0.0)
-        bucket["spell_box_entries"] = float(pd.to_numeric(rows["box_entries"], errors="coerce").sum() or 0.0)
+        bucket["spell_box_entries"] = float(
+            pd.to_numeric(rows["box_entries"], errors="coerce").sum() or 0.0
+        )
 
 
-def _fill_players(side: Side, players: pd.DataFrame, sequences: pd.DataFrame,
-                  events: pd.DataFrame) -> None:
+def _fill_players(
+    side: Side, players: pd.DataFrame, sequences: pd.DataFrame, events: pd.DataFrame
+) -> None:
     if players.empty:
         return
     own = players[players["team_id"].apply(lambda v: _int(v) == side.team_id)]
@@ -614,8 +678,10 @@ def _fill_players(side: Side, players: pd.DataFrame, sequences: pd.DataFrame,
                 }
     key_passes = {}
     if not events.empty and "is_key_pass" in events.columns:
-        marked = events[_truthy(events["is_key_pass"])
-                        & events["team_id"].apply(lambda v: _int(v) == side.team_id)]
+        marked = events[
+            _truthy(events["is_key_pass"])
+            & events["team_id"].apply(lambda v: _int(v) == side.team_id)
+        ]
         key_passes = marked["player"].astype(str).value_counts().to_dict()
 
     records = []
@@ -658,9 +724,16 @@ def _fill_players(side: Side, players: pd.DataFrame, sequences: pd.DataFrame,
 # Weights are deliberately blunt and printed in the report, so a reader can
 # disagree with the ranking by disagreeing with a number rather than a taste.
 IMPACT_WEIGHTS = {
-    "goals": 1.20, "xG": 0.70, "xA": 0.90, "xGChain": 0.80,
-    "positive_xT": 0.12, "progressive_passes": 0.035, "box_entries": 0.07,
-    "key_passes": 0.10, "takeons_won": 0.03, "saves": 0.06,
+    "goals": 1.20,
+    "xG": 0.70,
+    "xA": 0.90,
+    "xGChain": 0.80,
+    "positive_xT": 0.12,
+    "progressive_passes": 0.035,
+    "box_entries": 0.07,
+    "key_passes": 0.10,
+    "takeons_won": 0.03,
+    "saves": 0.06,
 }
 DEFENSIVE_WEIGHT = 0.03
 MIN_MINUTES = 20.0
@@ -669,8 +742,9 @@ MIN_MINUTES = 20.0
 def _impact_score(player: dict) -> float:
     if player["minutes"] < MIN_MINUTES:
         return 0.0
-    total = sum(weight * _num(player.get(field_name))
-                for field_name, weight in IMPACT_WEIGHTS.items())
+    total = sum(
+        weight * _num(player.get(field_name)) for field_name, weight in IMPACT_WEIGHTS.items()
+    )
     stops = player["tackles_won"] + player["interceptions"] + player["clearances"]
     return total + DEFENSIVE_WEIGHT * stops
 
@@ -699,52 +773,60 @@ def _fill_timeline(facts: MatchFacts, events: pd.DataFrame, sides: dict[str, Sid
     for _, row in shots.sort_values("minute").iterrows():
         side = side_of(row)
         qualifiers = str(row.get("qualifier_names") or "")
-        facts.shots.append({
-            "minute": _int(row.get("minute")),
-            "player": str(row.get("player")),
-            "team": side.name if side else "",
-            "side": side.key if side else "",
-            "xG": _num(row.get("xG")),
-            "type": str(row.get("type")),
-            "big_chance": str(row.get("big_chance")).lower() == "true",
-            "header": str(row.get("is_header")).lower() == "true",
-            "penalty": str(row.get("is_penalty")).lower() == "true",
-            "set_piece": bool(re.search(r"SetPiece|Corner|FreeKick", qualifiers, re.I)),
-            # NaN is truthy, so `row.get("body_part") or ""` never fired on a
-            # missing value and str(nan) reached the page: "0.00 expected
-            # goals, nan".
-            "body": _clean_text(row.get("body_part")),
-        })
+        facts.shots.append(
+            {
+                "minute": _int(row.get("minute")),
+                "player": str(row.get("player")),
+                "team": side.name if side else "",
+                "side": side.key if side else "",
+                "xG": _num(row.get("xG")),
+                "type": str(row.get("type")),
+                "big_chance": str(row.get("big_chance")).lower() == "true",
+                "header": str(row.get("is_header")).lower() == "true",
+                "penalty": str(row.get("is_penalty")).lower() == "true",
+                "set_piece": bool(re.search(r"SetPiece|Corner|FreeKick", qualifiers, re.I)),
+                # NaN is truthy, so `row.get("body_part") or ""` never fired on a
+                # missing value and str(nan) reached the page: "0.00 expected
+                # goals, nan".
+                "body": _clean_text(row.get("body_part")),
+            }
+        )
         if str(row.get("is_goal")).lower() == "true":
             facts.goals.append(facts.shots[-1])
 
     cards = events[events["type"].astype(str) == "Card"]
     for _, row in cards.sort_values("minute").iterrows():
         side = side_of(row)
-        facts.cards.append({
-            "minute": _int(row.get("minute")),
-            "player": str(row.get("player")),
-            "team": side.name if side else "",
-            "colour": "Red" if "Red" in str(row.get("qualifier_names")) else "Yellow",
-        })
+        facts.cards.append(
+            {
+                "minute": _int(row.get("minute")),
+                "player": str(row.get("player")),
+                "team": side.name if side else "",
+                "colour": "Red" if "Red" in str(row.get("qualifier_names")) else "Yellow",
+            }
+        )
 
     subs = events[events["type"].astype(str).str.startswith("Substitution")]
     for _, row in subs.sort_values("minute").iterrows():
         side = side_of(row)
-        facts.substitutions.append({
-            "minute": _int(row.get("minute")),
-            "player": str(row.get("player")),
-            "team": side.name if side else "",
-            "direction": "on" if str(row.get("type")).endswith("On") else "off",
-        })
+        facts.substitutions.append(
+            {
+                "minute": _int(row.get("minute")),
+                "player": str(row.get("player")),
+                "team": side.name if side else "",
+                "direction": "on" if str(row.get("type")).endswith("On") else "off",
+            }
+        )
 
     for _, row in events[events["type"].astype(str) == "Error"].iterrows():
         side = side_of(row)
-        facts.errors.append({
-            "minute": _int(row.get("minute")),
-            "player": str(row.get("player")),
-            "team": side.name if side else "",
-        })
+        facts.errors.append(
+            {
+                "minute": _int(row.get("minute")),
+                "player": str(row.get("player")),
+                "team": side.name if side else "",
+            }
+        )
 
 
 def _fill_manifest(facts: MatchFacts, out: Path) -> None:

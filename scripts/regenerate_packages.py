@@ -34,8 +34,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 OUTPUT = ROOT / "output"
-FRAMES = ("events.csv", "players.csv", "xg.csv",
-          "team_advanced_metrics.csv", "player_sequence_metrics.csv")
+FRAMES = (
+    "events.csv",
+    "players.csv",
+    "xg.csv",
+    "team_advanced_metrics.csv",
+    "player_sequence_metrics.csv",
+)
 
 
 def fixtures(patterns: list[str]) -> list[Path]:
@@ -71,9 +76,7 @@ def rebuild(out: Path) -> dict:
     )
     if (info.get("home_color"), info.get("away_color")) != (home_color, away_color):
         info["home_color"], info["away_color"] = home_color, away_color
-        info_path.write_text(
-            json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
     frames = {name: pd.read_csv(out / name) for name in FRAMES}
     return generate_match_package(
         frames["events.csv"],
@@ -87,10 +90,21 @@ def rebuild(out: Path) -> dict:
 
 
 def _run(arguments: list[str], theme: str, light_copy: str) -> subprocess.CompletedProcess:
-    child = {**os.environ, "MATCH_ANALYSIS_THEME": theme,
-             "MATCH_ANALYSIS_LIGHT_COPY": light_copy, "PYTHONIOENCODING": "utf-8"}
-    return subprocess.run(arguments, cwd=ROOT, env=child, capture_output=True,
-                          text=True, encoding="utf-8", errors="replace")
+    child = {
+        **os.environ,
+        "MATCH_ANALYSIS_THEME": theme,
+        "MATCH_ANALYSIS_LIGHT_COPY": light_copy,
+        "PYTHONIOENCODING": "utf-8",
+    }
+    return subprocess.run(
+        arguments,
+        cwd=ROOT,
+        env=child,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 def _reason(done: subprocess.CompletedProcess) -> str:
@@ -112,8 +126,9 @@ def main() -> int:
     patterns = [a for a in sys.argv[1:] if not a.startswith("-")]
     if "--list" in sys.argv:
         listed = Path(sys.argv[sys.argv.index("--list") + 1])
-        patterns = [line.strip() for line in
-                    listed.read_text(encoding="utf-8").splitlines() if line.strip()]
+        patterns = [
+            line.strip() for line in listed.read_text(encoding="utf-8").splitlines() if line.strip()
+        ]
         patterns = [p for p in patterns if p not in {str(listed)}]
     targets = fixtures(patterns)
     if not targets:
@@ -140,15 +155,17 @@ def main() -> int:
     for index, out in enumerate(targets, 1):
         label = f"[{index}/{len(targets)}] {out.name}"
         started = time.time()
-        dark = _run([sys.executable, str(Path(__file__).resolve()), "--child", str(out)],
-                    theme, "0")
+        dark = _run(
+            [sys.executable, str(Path(__file__).resolve()), "--child", str(out)], theme, "0"
+        )
         if dark.returncode != 0:
             failed.append((out.name, _reason(dark)))
             print(f"{label}  FAILED  {_reason(dark)}")
             continue
         if theme != "light":
-            light = _run([sys.executable, str(ROOT / "render_light.py"), str(out), "--child"],
-                         "light", "0")
+            light = _run(
+                [sys.executable, str(ROOT / "render_light.py"), str(out), "--child"], "light", "0"
+            )
             if light.returncode != 0:
                 failed.append((f"{out.name} (light)", _reason(light)))
                 print(f"{label}  ok, LIGHT FAILED  {_reason(light)}")

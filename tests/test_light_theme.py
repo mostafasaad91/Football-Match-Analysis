@@ -34,18 +34,21 @@ def _in_theme(theme: str, body: str):
     }
     completed = subprocess.run(
         [sys.executable, "-c", textwrap.dedent(body)],
-        cwd=ROOT, env=environment, capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=180,
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
 # Kits that clear the floor on one page and fail on the other.
-BRIGHT_KITS = {"Man City sky": "#6CABDD", "Juventus silver": "#DCE3EC",
-               "Norwich yellow": "#FFF200"}
-DARK_KITS = {"PSG navy": "#004170", "Aston Villa claret": "#7A003C",
-             "near-black": "#111111"}
+BRIGHT_KITS = {"Man City sky": "#6CABDD", "Juventus silver": "#DCE3EC", "Norwich yellow": "#FFF200"}
+DARK_KITS = {"PSG navy": "#004170", "Aston Villa claret": "#7A003C", "near-black": "#111111"}
 
 
 _LIFT_PROBE = """
@@ -149,6 +152,7 @@ def test_the_two_pages_do_not_share_a_background():
 # crest plate
 # --------------------------------------------------------------------------
 
+
 def test_the_plate_opposes_the_page_not_the_crest():
     """A silver crest on paper needs a dark plate, not another light one."""
     import numpy as np
@@ -195,6 +199,7 @@ def test_the_plate_is_decided_per_pixel_not_on_the_crest_mean():
 # --------------------------------------------------------------------------
 # the light pass itself
 # --------------------------------------------------------------------------
+
 
 def test_light_output_is_a_subfolder_so_neither_run_clobbers_the_other():
     assert render_light.light_dir("output/x").name == "light"
@@ -243,7 +248,10 @@ def test_a_failed_light_run_returns_none_rather_than_raising(tmp_path, monkeypat
 def test_the_child_refuses_to_render_under_the_dark_theme():
     """Rendering without the env var would write the black set into light/."""
     completed = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent("""
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent("""
             import render_light, pathlib, sys
             try:
                 render_light._render_here(pathlib.Path("."))
@@ -251,10 +259,15 @@ def test_the_child_refuses_to_render_under_the_dark_theme():
                 print("REFUSED", error)
                 sys.exit(0)
             sys.exit(1)
-        """)],
+        """),
+        ],
         cwd=ROOT,
         env={**os.environ, "MATCH_ANALYSIS_THEME": "dark", "PYTHONIOENCODING": "utf-8"},
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
     assert "REFUSED" in completed.stdout
@@ -316,6 +329,7 @@ def test_report_chrome_reads_on_its_own_page(theme):
 # the radars have to survive the change of page too
 # ---------------------------------------------------------------------------
 
+
 def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
     """A number needs a tile under it, and the tile needs the page under that.
 
@@ -345,11 +359,13 @@ def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
     for theme, floor in (("light", 2.0), ("dark", 1.1)):
         out = subprocess.run(
             [sys.executable, "-c", probe],
-            capture_output=True, text=True, cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
             env={**os.environ, "MATCH_ANALYSIS_THEME": theme},
         )
         assert out.returncode == 0, out.stderr
-        measured = eval(out.stdout.strip())          # noqa: S307 - our own output
+        measured = eval(out.stdout.strip())  # noqa: S307 - our own output
         assert len(measured) == 5
         for tile_vs_page, ink_vs_tile in measured:
             assert tile_vs_page >= floor, (theme, measured)
@@ -363,5 +379,5 @@ def test_the_light_package_carries_the_squad_for_advanced_profiles():
     import visual_redesign_full as vrf
 
     source = inspect.getsource(vrf.generate_match_package)
-    assert 'players.csv' in source, "the squad is not written beside the frames"
+    assert "players.csv" in source, "the squad is not written beside the frames"
     assert "build_insight_visuals(events, players, match_info, OUT)" in source

@@ -15,6 +15,7 @@ a chart down rather than a sentence.
 The same defect has now been found in four separate files, which is the point
 at which it stops being a bug and starts being a missing helper.
 """
+
 from __future__ import annotations
 
 import math

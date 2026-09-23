@@ -374,7 +374,11 @@ def player_position_xy(x, y):
 
 def pitch_axes(title: str, subtitle: str):
     fig = plt.figure(figsize=(12, 9), facecolor=BG)
-    active_team = HOME_NAME if HOME_NAME.lower() in title.lower() else (AWAY_NAME if AWAY_NAME.lower() in title.lower() else None)
+    active_team = (
+        HOME_NAME
+        if HOME_NAME.lower() in title.lower()
+        else (AWAY_NAME if AWAY_NAME.lower() in title.lower() else None)
+    )
     base.amoled_header(fig, title, subtitle, active_team=active_team)
     pitch = fig.add_axes([0.075, 0.105, 0.48, 0.72])
     side = fig.add_axes([0.615, 0.145, 0.325, 0.62])
@@ -385,7 +389,14 @@ def pitch_axes(title: str, subtitle: str):
     side.set_yticks([])
     side.set_xlim(0, 1)
     side.set_ylim(0, 1)
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA", ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return fig, pitch, side
 
 
@@ -394,16 +405,38 @@ def draw_long_pitch(ax, line_color=PITCH_LINE, lw=1.15):
     ax.set_xlim(-half_w - 5, half_w + 5)
     ax.set_ylim(-3, PITCH_LENGTH + 3)
     ax.set_aspect("equal")
-    ax.add_patch(Rectangle((-half_w, 0), PITCH_WIDTH, PITCH_LENGTH, fill=False, ec=line_color, lw=lw))
+    ax.add_patch(
+        Rectangle((-half_w, 0), PITCH_WIDTH, PITCH_LENGTH, fill=False, ec=line_color, lw=lw)
+    )
     ax.plot([-half_w, half_w], [PITCH_LENGTH / 2, PITCH_LENGTH / 2], color=line_color, lw=lw)
-    ax.add_patch(Circle((0, PITCH_LENGTH / 2), PITCH_LENGTH * 0.0915, fill=False, ec=line_color, lw=lw))
+    ax.add_patch(
+        Circle((0, PITCH_LENGTH / 2), PITCH_LENGTH * 0.0915, fill=False, ec=line_color, lw=lw)
+    )
     penalty_w = PITCH_WIDTH * 0.595
     six_w = PITCH_WIDTH * 0.265
     box_l = PITCH_LENGTH * 0.157
     six_l = PITCH_LENGTH * 0.052
     for y0, direction in [(0, 1), (PITCH_LENGTH, -1)]:
-        ax.add_patch(Rectangle((-penalty_w / 2, y0 if direction > 0 else y0 - box_l), penalty_w, box_l, fill=False, ec=line_color, lw=lw))
-        ax.add_patch(Rectangle((-six_w / 2, y0 if direction > 0 else y0 - six_l), six_w, six_l, fill=False, ec=line_color, lw=lw))
+        ax.add_patch(
+            Rectangle(
+                (-penalty_w / 2, y0 if direction > 0 else y0 - box_l),
+                penalty_w,
+                box_l,
+                fill=False,
+                ec=line_color,
+                lw=lw,
+            )
+        )
+        ax.add_patch(
+            Rectangle(
+                (-six_w / 2, y0 if direction > 0 else y0 - six_l),
+                six_w,
+                six_l,
+                fill=False,
+                ec=line_color,
+                lw=lw,
+            )
+        )
         spot_y = y0 + direction * PITCH_LENGTH * 0.105
         ax.scatter([0], [spot_y], s=7, color=line_color)
         arc_center = y0 + direction * box_l
@@ -411,7 +444,15 @@ def draw_long_pitch(ax, line_color=PITCH_LINE, lw=1.15):
             ax.add_patch(Arc((0, spot_y), 18.3, 18.3, theta1=37, theta2=143, ec=line_color, lw=lw))
         else:
             ax.add_patch(Arc((0, spot_y), 18.3, 18.3, theta1=217, theta2=323, ec=line_color, lw=lw))
-    ax.annotate("ATTACK", xy=(0, PITCH_LENGTH + 1.5), ha="center", va="bottom", color=FOCUS, fontsize=8, fontweight="bold")
+    ax.annotate(
+        "ATTACK",
+        xy=(0, PITCH_LENGTH + 1.5),
+        ha="center",
+        va="bottom",
+        color=FOCUS,
+        fontsize=8,
+        fontweight="bold",
+    )
     ax.axis("off")
 
 
@@ -453,12 +494,23 @@ def pitch_legend(ax, items, ncol: int | None = None, y: float = -0.075):
         if kind == "patch":
             # A near-black swatch on a black page is invisible without an
             # outline — the "contested" key read as a gap in the legend.
-            handles.append(Patch(facecolor=colour, edgecolor=EVENT_NEUTRAL,
-                                 linewidth=0.7, label=label))
+            handles.append(
+                Patch(facecolor=colour, edgecolor=EVENT_NEUTRAL, linewidth=0.7, label=label)
+            )
         else:
-            handles.append(Line2D([], [], linestyle="none", marker=kind,
-                                  markerfacecolor=colour, markeredgecolor=BG,
-                                  markeredgewidth=0.9, markersize=7, label=label))
+            handles.append(
+                Line2D(
+                    [],
+                    [],
+                    linestyle="none",
+                    marker=kind,
+                    markerfacecolor=colour,
+                    markeredgecolor=BG,
+                    markeredgewidth=0.9,
+                    markersize=7,
+                    label=label,
+                )
+            )
     ax.legend(
         handles=handles,
         loc="lower center",
@@ -494,7 +546,16 @@ def side_rows(
             fontweight=label_weight,
             va="center",
         )
-        ax.text(0.92, y, str(value), color=value_color, fontsize=8.5, fontweight="bold", ha="right", va="center")
+        ax.text(
+            0.92,
+            y,
+            str(value),
+            color=value_color,
+            fontsize=8.5,
+            fontweight="bold",
+            ha="right",
+            va="center",
+        )
         ax.plot([0.08, 0.92], [y - gap * 0.45, y - gap * 0.45], color=GRID, lw=0.55, alpha=0.7)
 
 
@@ -508,18 +569,33 @@ def save(fig, filename: str) -> Path:
             except Exception:
                 continue
         title_item = max(candidates, key=lambda item: float(item.get_fontsize()), default=None)
-        title = title_item.get_text() if title_item is not None else filename.rsplit(".", 1)[0].replace("_", " ").title()
-        subtitle_items = [item for item in candidates if item is not title_item and item.get_text().strip()]
-        subtitle = subtitle_items[0].get_text() if subtitle_items else f"{HOME_NAME} vs {AWAY_NAME} · real match data"
+        title = (
+            title_item.get_text()
+            if title_item is not None
+            else filename.rsplit(".", 1)[0].replace("_", " ").title()
+        )
+        subtitle_items = [
+            item for item in candidates if item is not title_item and item.get_text().strip()
+        ]
+        subtitle = (
+            subtitle_items[0].get_text()
+            if subtitle_items
+            else f"{HOME_NAME} vs {AWAY_NAME} · real match data"
+        )
         for item in candidates:
             item.set_visible(False)
-        active_team = HOME_NAME if HOME_NAME.lower() in title.lower() else (AWAY_NAME if AWAY_NAME.lower() in title.lower() else None)
+        active_team = (
+            HOME_NAME
+            if HOME_NAME.lower() in title.lower()
+            else (AWAY_NAME if AWAY_NAME.lower() in title.lower() else None)
+        )
         base.amoled_header(fig, title, subtitle, active_team=active_team)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / filename
     from visual_guide import guide
     import textwrap
-    fig.text(.055,-.015,textwrap.fill(guide(filename),140),color=MUTED,fontsize=9,va='top')
+
+    fig.text(0.055, -0.015, textwrap.fill(guide(filename), 140), color=MUTED, fontsize=9, va="top")
     try:
         fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0.16, facecolor=BG)
     finally:
@@ -540,7 +616,7 @@ def compact_player_label(name: str, limit: int = 7) -> str:
     "Locate…" there threw away a legible name to save space nothing needed.
     """
     surname = _surname(name, "?")
-    return surname if len(surname) <= limit else f"{surname[:limit - 1]}…"
+    return surname if len(surname) <= limit else f"{surname[: limit - 1]}…"
 
 
 def shirt_number_map(players) -> dict[str, str]:
@@ -565,10 +641,18 @@ _LABEL_HALF_WIDTH_PER_CHAR = 0.48
 _LABEL_HALF_HEIGHT = 1.4
 
 
-def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch: float,
-                    node_color: str | None = None, shirt: str | None = None,
-                    node_radius: float = 2.6,
-                    neighbours: "tuple[tuple[float, float, float], ...]" = ()):
+def draw_node_label(
+    ax,
+    x: float,
+    y: float,
+    name: str,
+    touches: float,
+    max_touch: float,
+    node_color: str | None = None,
+    shirt: str | None = None,
+    node_radius: float = 2.6,
+    neighbours: "tuple[tuple[float, float, float], ...]" = (),
+):
     """Put the shirt number inside the node and the player's name beside it.
 
     A surname squeezed inside the marker has to shrink to fit and gets clipped
@@ -588,9 +672,21 @@ def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch
     inside = text_on_fill(fill)
 
     if shirt:
-        number = ax.text(x, y, str(shirt), color=inside, fontsize=6.6 if ratio >= 0.25 else 5.8,
-                         fontweight="bold", ha="center", va="center", zorder=7, clip_on=True)
-        number.set_path_effects([path_effects.withStroke(linewidth=1.6, foreground=fill, alpha=0.6)])
+        number = ax.text(
+            x,
+            y,
+            str(shirt),
+            color=inside,
+            fontsize=6.6 if ratio >= 0.25 else 5.8,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            zorder=7,
+            clip_on=True,
+        )
+        number.set_path_effects(
+            [path_effects.withStroke(linewidth=1.6, foreground=fill, alpha=0.6)]
+        )
 
     label = compact_player_label(name) if not shirt else _surname(name)[:12]
 
@@ -629,8 +725,16 @@ def draw_node_label(ax, x: float, y: float, name: str, touches: float, max_touch
                 dx, dy, ha, va = cand_dx, cand_dy, cand_ha, cand_va
 
     name_text = ax.text(
-        x + dx, y + dy, label, color=TEXT, fontsize=5.9, fontweight="bold",
-        ha=ha, va=va, zorder=7, clip_on=True,
+        x + dx,
+        y + dy,
+        label,
+        color=TEXT,
+        fontsize=5.9,
+        fontweight="bold",
+        ha=ha,
+        va=va,
+        zorder=7,
+        clip_on=True,
     )
     name_text.set_path_effects([path_effects.withStroke(linewidth=2.2, foreground=BG, alpha=0.95)])
 
@@ -668,8 +772,9 @@ def _network_node_radius(touches: float, max_touch: float) -> float:
     return math.sqrt(area / math.pi) / 4.2 + 0.7
 
 
-def _node_neighbours(display: dict[str, tuple[float, float, float]],
-                     radii: dict[str, float], exclude: str):
+def _node_neighbours(
+    display: dict[str, tuple[float, float, float]], radii: dict[str, float], exclude: str
+):
     """Every node except ``exclude``, as the (x, y, radius) triples the label
     placement search needs."""
     return tuple(
@@ -737,14 +842,21 @@ def shot_map(events, xg, team_id, number):
     # 0.183 is 3.11/17 — the xg frame had already excluded it, so the card
     # disagreed with itself and with the cover.
     own_goal = as_bool(events.get("is_own_goal", pd.Series(False, index=events.index)))
-    shots = events[events["team_id"].eq(team_id) & as_bool(events["is_shot"]) & ~pso & ~own_goal].copy().dropna(subset=["x", "y"])
+    shots = (
+        events[events["team_id"].eq(team_id) & as_bool(events["is_shot"]) & ~pso & ~own_goal]
+        .copy()
+        .dropna(subset=["x", "y"])
+    )
     shots["xG"] = pd.to_numeric(shots["xG"], errors="coerce").fillna(0).clip(lower=0)
-    fig, pitch, side = pitch_axes(f"Shot Map · {TEAM_NAME[team_id]}", "Shot location, outcome and chance quality · marker size = xG")
+    fig, pitch, side = pitch_axes(
+        f"Shot Map · {TEAM_NAME[team_id]}",
+        "Shot location, outcome and chance quality · marker size = xG",
+    )
     draw_long_pitch(pitch)
     # Colour carries the outcome (shared shot palette, one key across the whole
     if not shots.empty:
         # Zoom without dropping any recorded shot, including unusual long shots.
-        pitch.set_ylim(max(-3, min(48, float(shots['x'].min())*1.05-5)), PITCH_LENGTH+3)
+        pitch.set_ylim(max(-3, min(48, float(shots["x"].min()) * 1.05 - 5)), PITCH_LENGTH + 3)
     # report); marker shape repeats it so the map still reads in grayscale.
     # Goals are listed last so they draw on top of the other outcomes, and the
     # star glyph is scaled up because it reads much smaller than a disc of the
@@ -762,11 +874,37 @@ def shot_map(events, xg, team_id, number):
             continue
         px, py = attack_xy(subset["x"], subset["y"])
         sizes = (45 + subset["xG"].to_numpy() * 520) * scale
-        pitch.scatter(px, py, s=sizes, marker=marker, facecolors=color, edgecolors=BG, linewidths=1.0, alpha=0.95, label=f"{label} ({len(subset)})", zorder=5 if event_type == "Goal" else 4)
-    pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.08), ncol=3, frameon=False, labelcolor=TEXT, fontsize=7.5)
+        pitch.scatter(
+            px,
+            py,
+            s=sizes,
+            marker=marker,
+            facecolors=color,
+            edgecolors=BG,
+            linewidths=1.0,
+            alpha=0.95,
+            label=f"{label} ({len(subset)})",
+            zorder=5 if event_type == "Goal" else 4,
+        )
+    pitch.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.08),
+        ncol=3,
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=7.5,
+    )
     xr = xg_row(xg, TEAM_NAME[team_id])
     side_title(side, "SHOT OUTPUT")
-    kpi_bottom = side_kpis(side, [("Shots", f"{len(shots)}"), ("xG", f"{float(xr.get('xG', 0)):.2f}"), ("xG / shot", f"{float(xr.get('xG_per_shot', 0)):.3f}"), ("On target", f"{int(float(xr.get('on_target', 0)))}")])
+    kpi_bottom = side_kpis(
+        side,
+        [
+            ("Shots", f"{len(shots)}"),
+            ("xG", f"{float(xr.get('xG', 0)):.2f}"),
+            ("xG / shot", f"{float(xr.get('xG_per_shot', 0)):.3f}"),
+            ("On target", f"{int(float(xr.get('on_target', 0)))}"),
+        ],
+    )
 
     # Shot location says where the chance came from; this says which part of
     # the goal the keeper actually had to cover. Anchored under the KPI block
@@ -774,13 +912,23 @@ def shot_map(events, xg, team_id, number):
     zones = shot_placement_zones(events, team_id)
     if sum(zones.values()):
         heading_y = kpi_bottom - 0.03
-        side.text(0.08, heading_y, "GOAL FRAME TARGETED", color=MUTED, fontsize=7.5, fontweight="bold")
+        side.text(
+            0.08, heading_y, "GOAL FRAME TARGETED", color=MUTED, fontsize=7.5, fontweight="bold"
+        )
         ranked = [item for item in sorted(zones.items(), key=lambda pair: -pair[1]) if item[1]][:3]
         for idx, (zone, count) in enumerate(ranked):
             y = heading_y - 0.05 - idx * 0.055
             side.text(0.08, y, zone.replace("_", " ").title(), color=TEXT, fontsize=8, va="center")
-            side.text(0.92, y, str(count), color=TEXT, fontsize=8.5, fontweight="bold",
-                      ha="right", va="center")
+            side.text(
+                0.92,
+                y,
+                str(count),
+                color=TEXT,
+                fontsize=8.5,
+                fontweight="bold",
+                ha="right",
+                va="center",
+            )
     return save(fig, f"{number:02d}_shot_map_{_team_slug(team_id)}.png")
 
 
@@ -789,21 +937,29 @@ def goals_breakdown(events):
     goals = events[as_bool(events["is_goal"]) & ~pso].copy()
     fig = plt.figure(figsize=(14, 8), facecolor=BG)
     fig.text(0.055, 0.94, "Goal Breakdown", fontsize=23, fontweight="bold", color=TEXT)
-    fig.text(0.055, 0.898, "Scoring timeline and goal profile · penalty shootout excluded", fontsize=11, color=MUTED)
-    fig.add_artist(Line2D([0.055, 0.945], [0.86, 0.86], transform=fig.transFigure, color=GRID, lw=1))
+    fig.text(
+        0.055,
+        0.898,
+        "Scoring timeline and goal profile · penalty shootout excluded",
+        fontsize=11,
+        color=MUTED,
+    )
+    fig.add_artist(
+        Line2D([0.055, 0.945], [0.86, 0.86], transform=fig.transFigure, color=GRID, lw=1)
+    )
     ax = fig.add_axes([0.08, 0.18, 0.84, 0.56])
     base.clean_ax(ax)
     max_min = max(90, int(pd.to_numeric(events["minute"], errors="coerce").max()) + 2)
     ax.set_xlim(0, max_min)
     ax.set_ylim(-1.4, 1.4)
     ax.axhline(0, color=GRID, lw=1.5)
-    ax.set_yticks([0.75, -0.75]); ax.set_yticklabels([HOME_NAME, AWAY_NAME], fontsize=11)
+    ax.set_yticks([0.75, -0.75])
+    ax.set_yticklabels([HOME_NAME, AWAY_NAME], fontsize=11)
     ax.set_xlabel("Match minute")
     ordered = events.sort_values(["minute", "second", "event_id"], kind="stable").copy()
-    ordered["_clock"] = (
-        pd.to_numeric(ordered["minute"], errors="coerce").fillna(0) * 60
-        + pd.to_numeric(ordered["second"], errors="coerce").fillna(0)
-    )
+    ordered["_clock"] = pd.to_numeric(ordered["minute"], errors="coerce").fillna(
+        0
+    ) * 60 + pd.to_numeric(ordered["second"], errors="coerce").fillna(0)
 
     def assist_for(goal):
         explicit = goal.get("assist_player", np.nan)
@@ -837,15 +993,21 @@ def goals_breakdown(events):
         is_own = bool(as_bool(pd.Series([goal.get("is_own_goal", False)])).iloc[0])
         assist = assist_for(goal)
         assist_label = (
-            "OWN GOAL" if is_own
+            "OWN GOAL"
+            if is_own
             else ("UNASSISTED" if assist == "UNASSISTED" else f"ASSIST · {assist.split()[-1]}")
         )
         label = f"{int(minute)}′  {player}\n{assist_label}"
         horizontal_nudge = -10 if team_goal_count[tid] % 2 else 10
         ax.annotate(
-            label, (minute, y),
-            xytext=(horizontal_nudge, 18 if y > 0 else -18), textcoords="offset points",
-            ha="center", va="bottom" if y > 0 else "top", color=TEXT, fontsize=7.2,
+            label,
+            (minute, y),
+            xytext=(horizontal_nudge, 18 if y > 0 else -18),
+            textcoords="offset points",
+            ha="center",
+            va="bottom" if y > 0 else "top",
+            color=TEXT,
+            fontsize=7.2,
             linespacing=1.35,
             bbox=dict(boxstyle="round,pad=0.28", facecolor=PANEL, edgecolor=GRID, linewidth=0.65),
         )
@@ -860,7 +1022,9 @@ def _half_network_data(events, players, team_id, half):
     team_frame = frame[frame["team_id"].eq(team_id)].copy()
 
     work = frame.copy()
-    work["clock"] = pd.to_numeric(work["minute"], errors="coerce").fillna(0) * 60 + pd.to_numeric(work["second"], errors="coerce").fillna(0)
+    work["clock"] = pd.to_numeric(work["minute"], errors="coerce").fillna(0) * 60 + pd.to_numeric(
+        work["second"], errors="coerce"
+    ).fillna(0)
     work["next_team"] = work["team_id"].shift(-1)
     work["next_player"] = work["player"].shift(-1)
     work["next_clock"] = work["clock"].shift(-1)
@@ -876,10 +1040,20 @@ def _half_network_data(events, players, team_id, half):
     passes = passes[passes["player"].astype(str).ne(passes["next_player"].astype(str))]
 
     touches = team_frame[touch_mask(team_frame)].dropna(subset=["player", "x", "y"]).copy()
-    sub_events = team_frame[team_frame["type"].astype(str).isin(["SubstitutionOn", "SubstitutionOff"])].copy()
+    sub_events = team_frame[
+        team_frame["type"].astype(str).isin(["SubstitutionOn", "SubstitutionOff"])
+    ].copy()
     log_sub_events = sub_events.copy()
-    sub_on = set(sub_events[sub_events["type"].astype(str).eq("SubstitutionOn")]["player"].dropna().astype(str))
-    sub_off = set(sub_events[sub_events["type"].astype(str).eq("SubstitutionOff")]["player"].dropna().astype(str))
+    sub_on = set(
+        sub_events[sub_events["type"].astype(str).eq("SubstitutionOn")]["player"]
+        .dropna()
+        .astype(str)
+    )
+    sub_off = set(
+        sub_events[sub_events["type"].astype(str).eq("SubstitutionOff")]["player"]
+        .dropna()
+        .astype(str)
+    )
     if half == 1:
         interval_events = events[
             events["team_id"].eq(team_id)
@@ -887,31 +1061,49 @@ def _half_network_data(events, players, team_id, half):
             & events["type"].astype(str).isin(["SubstitutionOn", "SubstitutionOff"])
             & (pd.to_numeric(events["minute"], errors="coerce").fillna(999) <= 45)
         ].copy()
-        interval_off = interval_events[interval_events["type"].astype(str).eq("SubstitutionOff")]["player"]
+        interval_off = interval_events[interval_events["type"].astype(str).eq("SubstitutionOff")][
+            "player"
+        ]
         sub_off |= set(interval_off.dropna().astype(str))
         # The player introduced at the interval belongs to the second-half
         # visual only. Keep the outgoing starter marked, but do not name the
         # incoming player anywhere on the first-half card.
         log_sub_events = pd.concat(
-            [sub_events, interval_events[interval_events["type"].astype(str).eq("SubstitutionOff")]],
+            [
+                sub_events,
+                interval_events[interval_events["type"].astype(str).eq("SubstitutionOff")],
+            ],
             ignore_index=False,
         )
     participants = set(touches["player"].dropna().astype(str)) | sub_on
     if half == 1:
-        starters = players[players["team_id"].eq(team_id) & players["is_first_xi"].astype(str).str.lower().isin(["true", "1", "yes"])]["name"]
+        starters = players[
+            players["team_id"].eq(team_id)
+            & players["is_first_xi"].astype(str).str.lower().isin(["true", "1", "yes"])
+        ]["name"]
         participants |= set(starters.dropna().astype(str))
 
     player_info = players[players["team_id"].eq(team_id)].set_index("name")
-    all_touches = events[touch_mask(events) & events["team_id"].eq(team_id)].dropna(subset=["player", "x", "y"])
+    all_touches = events[touch_mask(events) & events["team_id"].eq(team_id)].dropna(
+        subset=["player", "x", "y"]
+    )
     position_rows = []
     for name in sorted(participants):
         player_touches = touches[touches["player"].astype(str).eq(name)]
         coords = player_touches[["x", "y"]].apply(pd.to_numeric, errors="coerce").dropna()
         if coords.empty:
-            event_coords = team_frame[team_frame["player"].astype(str).eq(name)][["x", "y"]].apply(pd.to_numeric, errors="coerce").dropna()
+            event_coords = (
+                team_frame[team_frame["player"].astype(str).eq(name)][["x", "y"]]
+                .apply(pd.to_numeric, errors="coerce")
+                .dropna()
+            )
             coords = event_coords
         if coords.empty:
-            whole_coords = all_touches[all_touches["player"].astype(str).eq(name)][["x", "y"]].apply(pd.to_numeric, errors="coerce").dropna()
+            whole_coords = (
+                all_touches[all_touches["player"].astype(str).eq(name)][["x", "y"]]
+                .apply(pd.to_numeric, errors="coerce")
+                .dropna()
+            )
             coords = whole_coords
         if coords.empty:
             role = player_info.at[name, "position"] if name in player_info.index else ""
@@ -919,10 +1111,22 @@ def _half_network_data(events, players, team_id, half):
         else:
             x, y = float(coords["x"].mean()), float(coords["y"].mean())
         position_rows.append({"player": name, "x": x, "y": y, "touches": int(len(player_touches))})
-    positions = pd.DataFrame(position_rows).set_index("player") if position_rows else pd.DataFrame(columns=["x", "y", "touches"])
+    positions = (
+        pd.DataFrame(position_rows).set_index("player")
+        if position_rows
+        else pd.DataFrame(columns=["x", "y", "touches"])
+    )
     names = set(positions.index.astype(str))
-    passes = passes[passes["player"].astype(str).isin(names) & passes["next_player"].astype(str).isin(names)]
-    edges = passes.groupby(["player", "next_player"]).size().reset_index(name="passes").sort_values("passes", ascending=False).head(22)
+    passes = passes[
+        passes["player"].astype(str).isin(names) & passes["next_player"].astype(str).isin(names)
+    ]
+    edges = (
+        passes.groupby(["player", "next_player"])
+        .size()
+        .reset_index(name="passes")
+        .sort_values("passes", ascending=False)
+        .head(22)
+    )
 
     substitutions = []
     events_sorted = log_sub_events.sort_values(["minute", "second", "event_id"], kind="stable")
@@ -936,7 +1140,9 @@ def _half_network_data(events, players, team_id, half):
         if str(row.get("type")) == "SubstitutionOff":
             pending_off.append((minute, name))
         else:
-            match_idx = next((idx for idx, item in enumerate(pending_off) if item[0] == minute), None)
+            match_idx = next(
+                (idx for idx, item in enumerate(pending_off) if item[0] == minute), None
+            )
             off_name = pending_off.pop(match_idx)[1] if match_idx is not None else "—"
             substitutions.append((minute, name, off_name))
     for minute, off_name in pending_off:
@@ -945,7 +1151,9 @@ def _half_network_data(events, players, team_id, half):
 
 
 def pass_network(events, players, team_id, number, half):
-    positions, edges, sub_on, sub_off, substitutions, completed_links = _half_network_data(events, players, team_id, half)
+    positions, edges, sub_on, sub_off, substitutions, completed_links = _half_network_data(
+        events, players, team_id, half
+    )
     half_label = "First Half" if half == 1 else "Second Half"
     fig, pitch, side = pitch_axes(
         f"Pass Network · {TEAM_NAME[team_id]} · {half_label}",
@@ -961,47 +1169,96 @@ def pass_network(events, players, team_id, number, half):
     edges = edges.sort_values("passes", ascending=False).copy()
     max_edge = max(float(edges["passes"].max()) if not edges.empty else 1, 1)
     if not edges.empty:
-        strong_cut = float(edges["passes"].quantile(.75))
-        medium_cut = float(edges["passes"].quantile(.40))
+        strong_cut = float(edges["passes"].quantile(0.75))
+        medium_cut = float(edges["passes"].quantile(0.40))
     else:
         strong_cut, medium_cut = 1.0, 1.0
     for _, edge in edges.iterrows():
         a, b = str(edge["player"]), str(edge["next_player"])
         if a not in display or b not in display:
             continue
-        ax, ay, _ = display[a]; bx, by, _ = display[b]
+        ax, ay, _ = display[a]
+        bx, by, _ = display[b]
         passes = float(edge["passes"])
-        strength = "strong" if passes >= strong_cut else ("medium" if passes >= medium_cut else "weak")
-        alpha = {"strong": .90, "medium": .58, "weak": .24}[strength]
+        strength = (
+            "strong" if passes >= strong_cut else ("medium" if passes >= medium_cut else "weak")
+        )
+        alpha = {"strong": 0.90, "medium": 0.58, "weak": 0.24}[strength]
         width = {"strong": 4.2, "medium": 2.5, "weak": 1.0}[strength]
-        pitch.plot([ax, bx], [ay, by], color=link_color, alpha=alpha,
-                   lw=width * (.55 + .45 * passes / max_edge), zorder=2)
+        pitch.plot(
+            [ax, bx],
+            [ay, by],
+            color=link_color,
+            alpha=alpha,
+            lw=width * (0.55 + 0.45 * passes / max_edge),
+            zorder=2,
+        )
     max_touch = max([value[2] for value in display.values()] or [1])
     shirts = shirt_number_map(players)
-    radii = {name: _network_node_radius(touches, max_touch)
-             for name, (_x, _y, touches) in display.items()}
+    radii = {
+        name: _network_node_radius(touches, max_touch)
+        for name, (_x, _y, touches) in display.items()
+    }
     for name, (px, py, touches) in display.items():
         entered = name in sub_on
         left = name in sub_off
-        pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
-                      color=_team_mark_color(team_id), edgecolor=FOCUS if left else link_color,
-                      linewidth=2.3 if left else 1.15, zorder=4)
-        draw_node_label(pitch, px, py, name, touches, max_touch,
-                        node_color=_team_mark_color(team_id),
-                        shirt=shirts.get(str(name)), node_radius=radii[name],
-                        neighbours=_node_neighbours(display, radii, name))
+        pitch.scatter(
+            px,
+            py,
+            s=260 + 640 * touches / max_touch,
+            marker="s" if entered else "o",
+            color=_team_mark_color(team_id),
+            edgecolor=FOCUS if left else link_color,
+            linewidth=2.3 if left else 1.15,
+            zorder=4,
+        )
+        draw_node_label(
+            pitch,
+            px,
+            py,
+            name,
+            touches,
+            max_touch,
+            node_color=_team_mark_color(team_id),
+            shirt=shirts.get(str(name)),
+            node_radius=radii[name],
+            neighbours=_node_neighbours(display, radii, name),
+        )
 
     side_title(side, "TOP HALF CONNECTIONS")
-    side.text(0.92, 0.94, f"{len(positions)} players", color=TEXT, fontsize=8,
-              fontweight="bold", ha="right", va="top")
+    side.text(
+        0.92,
+        0.94,
+        f"{len(positions)} players",
+        color=TEXT,
+        fontsize=8,
+        fontweight="bold",
+        ha="right",
+        va="top",
+    )
     # Decode relationship strength outside the pitch so the network itself
     # stays clean and the same key works for every team/half.
     for y, label, width, alpha in [
-        (.875, "Strong", 4.0, .90), (.845, "Medium", 2.5, .58), (.815, "Weak", 1.0, .24)
+        (0.875, "Strong", 4.0, 0.90),
+        (0.845, "Medium", 2.5, 0.58),
+        (0.815, "Weak", 1.0, 0.24),
     ]:
-        side.plot([.08, .18], [y, y], color=link_color, lw=width, alpha=alpha, solid_capstyle="round")
-        side.text(.22, y, label, color=TEXT, fontsize=7.2, va="center")
-    side_rows(side, [(f"{compact_player_label(r.player, 11)} → {compact_player_label(r.next_player, 11)}", str(int(r.passes))) for r in edges.head(5).itertuples()], start=0.755, gap=0.065)
+        side.plot(
+            [0.08, 0.18], [y, y], color=link_color, lw=width, alpha=alpha, solid_capstyle="round"
+        )
+        side.text(0.22, y, label, color=TEXT, fontsize=7.2, va="center")
+    side_rows(
+        side,
+        [
+            (
+                f"{compact_player_label(r.player, 11)} → {compact_player_label(r.next_player, 11)}",
+                str(int(r.passes)),
+            )
+            for r in edges.head(5).itertuples()
+        ],
+        start=0.755,
+        gap=0.065,
+    )
 
     # Link volume names the busiest pair. Betweenness names the player the
     # network routes through — take them out and it splits in two.
@@ -1016,9 +1273,19 @@ def pass_network(events, players, team_id, number, half):
         side.text(0.08, 0.455, "CONNECTORS", color=MUTED, fontsize=7.5, fontweight="bold")
         for idx, row in enumerate(centrality.head(3).itertuples()):
             y = 0.412 - idx * 0.043
-            side.text(0.08, y, compact_player_label(row.player, 16), color=TEXT, fontsize=8, va="center")
-            side.text(0.92, y, f"{row.betweenness:.3f}", color=TEXT, fontsize=8.5,
-                      fontweight="bold", ha="right", va="center")
+            side.text(
+                0.08, y, compact_player_label(row.player, 16), color=TEXT, fontsize=8, va="center"
+            )
+            side.text(
+                0.92,
+                y,
+                f"{row.betweenness:.3f}",
+                color=TEXT,
+                fontsize=8.5,
+                fontweight="bold",
+                ha="right",
+                va="center",
+            )
 
     side.text(0.08, 0.255, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
     if substitutions:
@@ -1030,27 +1297,62 @@ def pass_network(events, players, team_id, number, half):
         gap = 0.042 if len(shown) < 2 else min(0.042, (top - floor) / (len(shown) - 1))
         for idx, (minute, on_name, off_name) in enumerate(shown):
             y = top - idx * gap
-            side.text(0.08, y, f"{minute}′", color=TEXT, fontsize=7.5, fontweight="bold", va="center")
-            change = f"{off_name} OFF AT INTERVAL" if on_name == "—" else f"{on_name} IN  ·  {off_name} OFF"
+            side.text(
+                0.08, y, f"{minute}′", color=TEXT, fontsize=7.5, fontweight="bold", va="center"
+            )
+            change = (
+                f"{off_name} OFF AT INTERVAL"
+                if on_name == "—"
+                else f"{on_name} IN  ·  {off_name} OFF"
+            )
             side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
     else:
         side.text(0.08, 0.215, "No in-half changes", color=MUTED, fontsize=8)
-    side.text(0.08, 0.105, f"Completed pass links: {completed_links}", color=TEXT, fontsize=8, fontweight="bold")
+    side.text(
+        0.08,
+        0.105,
+        f"Completed pass links: {completed_links}",
+        color=TEXT,
+        fontsize=8,
+        fontweight="bold",
+    )
     # "Began half" is wider than the old 0.19 gap between markers, so it ran
     # under the next swatch. Spaced to the widest label rather than to an
     # eyeballed step.
-    side.scatter([0.06, 0.34], [0.055, 0.055], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
-    side.scatter([0.60], [0.055], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
+    side.scatter(
+        [0.06, 0.34],
+        [0.055, 0.055],
+        s=[65, 65],
+        marker="o",
+        color=_team_mark_color(team_id),
+        edgecolor=[TEXT, FOCUS],
+        linewidth=[1.0, 2.1],
+    )
+    side.scatter(
+        [0.60],
+        [0.055],
+        s=65,
+        marker="s",
+        color=_team_mark_color(team_id),
+        edgecolor=TEXT,
+        linewidth=1.0,
+    )
     side.text(0.10, 0.055, "Began half", color=TEXT, fontsize=6.8, va="center")
     side.text(0.38, 0.055, "Went off", color=TEXT, fontsize=6.8, va="center")
     side.text(0.64, 0.055, "Came on", color=TEXT, fontsize=6.8, va="center")
     suffix = "1h" if half == 1 else "2h"
-    return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_pass_network_{_team_slug(team_id)}_{suffix}.png")
+    return save(
+        fig,
+        f"{number:02d}{'a' if half == 1 else 'b'}_pass_network_{_team_slug(team_id)}_{suffix}.png",
+    )
 
 
 def xt_map(events, team_id, number):
-    eligible = events[events['type'].isin(['Pass', 'Carry']) & events['outcome'].astype(str).str.lower().eq('successful')].dropna(subset=['x', 'y', 'end_x', 'end_y'])
-    team = eligible[eligible['team_id'].eq(team_id)].copy()
+    eligible = events[
+        events["type"].isin(["Pass", "Carry"])
+        & events["outcome"].astype(str).str.lower().eq("successful")
+    ].dropna(subset=["x", "y", "end_x", "end_y"])
+    team = eligible[eligible["team_id"].eq(team_id)].copy()
     team["xT"] = pd.to_numeric(team["xT"], errors="coerce").fillna(0).clip(lower=0)
     heat, _, _ = np.histogram2d(
         team["y"], team["x"], bins=[7, 12], range=[[0, 100], [0, 100]], weights=team["xT"]
@@ -1065,13 +1367,31 @@ def xt_map(events, team_id, number):
     cmap = LinearSegmentedColormap.from_list(
         f"xt_full_grid_{team_id}", [BG, PANEL_2, team_dark, team_mark]
     )
-    grids = [np.histogram2d(g['y'], g['x'], bins=[7,12], range=[[0,100],[0,100]], weights=pd.to_numeric(g['xT'], errors='coerce').fillna(0).clip(lower=0))[0] for _,g in eligible.groupby('team_id')]
-    vmax = max([float(grid.max()) for grid in grids]+[.001])
+    grids = [
+        np.histogram2d(
+            g["y"],
+            g["x"],
+            bins=[7, 12],
+            range=[[0, 100], [0, 100]],
+            weights=pd.to_numeric(g["xT"], errors="coerce").fillna(0).clip(lower=0),
+        )[0]
+        for _, g in eligible.groupby("team_id")
+    ]
+    vmax = max([float(grid.max()) for grid in grids] + [0.001])
     x_grid = np.linspace(-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 8)
     y_grid = np.linspace(0, PITCH_LENGTH, 13)
     image = pitch.pcolormesh(
-        x_grid, y_grid, heat.T, cmap=cmap, vmin=0, vmax=vmax, shading="flat",
-        edgecolors=GRID, linewidth=0.58, alpha=0.98, zorder=1,
+        x_grid,
+        y_grid,
+        heat.T,
+        cmap=cmap,
+        vmin=0,
+        vmax=vmax,
+        shading="flat",
+        edgecolors=GRID,
+        linewidth=0.58,
+        alpha=0.98,
+        zorder=1,
     )
     draw_long_pitch(pitch)
     for ix in range(7):
@@ -1085,8 +1405,13 @@ def xt_map(events, team_id, number):
             pitch.text(
                 (x_grid[ix] + x_grid[ix + 1]) / 2,
                 (y_grid[iy] + y_grid[iy + 1]) / 2,
-                f"{value:.2f}", color=number_color,
-                fontsize=5.0, fontweight="bold", ha="center", va="center", zorder=3,
+                f"{value:.2f}",
+                color=number_color,
+                fontsize=5.0,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=3,
             )
     top = team.nlargest(10, "xT")
     # Ranks 4–10 used to be drawn in the team colour, which is exactly the
@@ -1095,13 +1420,17 @@ def xt_map(events, team_id, number):
     # full opacity with a black halo, so they stay legible over every cell.
     dash_color = _on_team_heatmap_accent(team_mark)
     for rank, (_, row) in enumerate(top.iterrows(), start=1):
-        sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        sx, sy = attack_xy([row["x"]], [row["y"]])
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         top_three = rank <= 3
         arrow_color = EVENT_HIGHLIGHT if top_three else dash_color
         arrow = pitch.annotate(
-            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
             arrowprops=dict(
-                arrowstyle="-|>", color=arrow_color,
+                arrowstyle="-|>",
+                color=arrow_color,
                 lw=1.75 if top_three else 1.25,
                 alpha=0.94 if top_three else 0.92,
                 linestyle="-" if top_three else QUIET_DASH,
@@ -1109,10 +1438,12 @@ def xt_map(events, team_id, number):
             ),
         )
         if arrow.arrow_patch is not None:
-            arrow.arrow_patch.set_path_effects([
-                path_effects.Stroke(linewidth=3.0 if top_three else 2.6, foreground=BG),
-                path_effects.Normal(),
-            ])
+            arrow.arrow_patch.set_path_effects(
+                [
+                    path_effects.Stroke(linewidth=3.0 if top_three else 2.6, foreground=BG),
+                    path_effects.Normal(),
+                ]
+            )
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
     cbar.ax.tick_params(colors=MUTED, labelsize=7)
     cbar.outline.set_edgecolor(GRID)
@@ -1120,7 +1451,13 @@ def xt_map(events, team_id, number):
     side_title(side, "TOP 10 xT PASSES")
     side_rows(
         side,
-        [(f"{rank}. {_surname(row['player'])} {int(row['minute']):02d}:{int(row.get('second',0)):02d}", f"{float(row['xT']):.3f}") for rank, (_, row) in enumerate(top.iterrows(), start=1)],
+        [
+            (
+                f"{rank}. {_surname(row['player'])} {int(row['minute']):02d}:{int(row.get('second', 0)):02d}",
+                f"{float(row['xT']):.3f}",
+            )
+            for rank, (_, row) in enumerate(top.iterrows(), start=1)
+        ],
         start=0.835,
         gap=0.063,
         value_color=TEXT,
@@ -1144,15 +1481,15 @@ def pass_map(events, team_id, number):
         "Passes separated by starting third · solid: completed · dashed: incomplete · star: key pass",
     )
     fig.delaxes(pitch)
-    pass_panels=[]
-    for panel_index,third in enumerate(['Defensive third','Middle third','Attacking third']):
-        panel=fig.add_axes([.045+panel_index*.18,.24,.16,.48])
+    pass_panels = []
+    for panel_index, third in enumerate(["Defensive third", "Middle third", "Attacking third"]):
+        panel = fig.add_axes([0.045 + panel_index * 0.18, 0.24, 0.16, 0.48])
         draw_long_pitch(panel)
-        panel.set_title(third,color=TEXT,fontsize=9)
+        panel.set_title(third, color=TEXT, fontsize=9)
         pass_panels.append(panel)
     team_mark = _team_mark_color(team_id)
     for idx, row in frame.iterrows():
-        pitch=pass_panels[min(2,max(0,int(float(row['x'])/ (100/3))))]
+        pitch = pass_panels[min(2, max(0, int(float(row["x"]) / (100 / 3))))]
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         if bool(key_pass.loc[idx]):
@@ -1161,22 +1498,41 @@ def pass_map(events, team_id, number):
             color, alpha, width, style = team_mark, 0.24, 0.62, "-"
         else:
             color, alpha, width, style = team_mark, 0.34, 0.62, FAILURE_DASH
-        pitch.plot([sx[0], ex[0]], [sy[0], ey[0]], color=color, alpha=alpha,
-                   lw=width, ls=style, zorder=2)
+        pitch.plot(
+            [sx[0], ex[0]], [sy[0], ey[0]], color=color, alpha=alpha, lw=width, ls=style, zorder=2
+        )
         if bool(key_pass.loc[idx]):
-            pitch.scatter(ex[0], ey[0], s=22, marker="*", color=EVENT_HIGHLIGHT,
-                          edgecolor=TEXT, linewidth=0.45, zorder=4)
+            pitch.scatter(
+                ex[0],
+                ey[0],
+                s=22,
+                marker="*",
+                color=EVENT_HIGHLIGHT,
+                edgecolor=TEXT,
+                linewidth=0.45,
+                zorder=4,
+            )
     attempts = len(frame)
     complete_count = int(completed.sum())
-    forward = int((pd.to_numeric(frame["end_x"], errors="coerce") > pd.to_numeric(frame["x"], errors="coerce")).sum())
+    forward = int(
+        (
+            pd.to_numeric(frame["end_x"], errors="coerce")
+            > pd.to_numeric(frame["x"], errors="coerce")
+        ).sum()
+    )
     profile = pass_length_profile(events, team_id)
     side_title(side, "PASSING OUTPUT")
-    side_kpis(side, [
-        ("Attempts", attempts),
-        ("Completed", complete_count),
-        ("Completion", f"{100 * complete_count / max(attempts, 1):.1f}%"),
-        ("Forward passes", forward),
-    ], start=0.82, gap=0.115)
+    side_kpis(
+        side,
+        [
+            ("Attempts", attempts),
+            ("Completed", complete_count),
+            ("Completion", f"{100 * complete_count / max(attempts, 1):.1f}%"),
+            ("Forward passes", forward),
+        ],
+        start=0.82,
+        gap=0.115,
+    )
     # The same completion rate means different things at 13 m and at 25 m, so
     # length and long-ball survival sit next to the raw totals.
     side.text(0.08, 0.335, "LENGTH & DIRECTION", color=MUTED, fontsize=7.5, fontweight="bold")
@@ -1188,8 +1544,9 @@ def pass_map(events, team_id, number):
     for idx, (label, value) in enumerate(stat_rows):
         y = 0.29 - idx * 0.05
         side.text(0.08, y, label, color=TEXT, fontsize=8, va="center")
-        side.text(0.92, y, value, color=TEXT, fontsize=8.5, fontweight="bold",
-                  ha="right", va="center")
+        side.text(
+            0.92, y, value, color=TEXT, fontsize=8.5, fontweight="bold", ha="right", va="center"
+        )
     # The key sat at a fixed 0.235/0.165/0.095 while the rows above it ran to
     # 0.19, so the "Completed pass" swatch was drawn through the "Long balls"
     # figure. Anchored under the last row instead.
@@ -1202,8 +1559,16 @@ def pass_map(events, team_id, number):
     ]
     for y, (label, color, style, marker) in zip(legend_y, legend_items):
         side.plot([0.09, 0.25], [y, y], color=color, lw=2.0, ls=style)
-        side.scatter([0.25], [y], s=38 if marker == "*" else 20, marker=marker,
-                     color=color, edgecolor=TEXT, linewidth=0.45, zorder=4)
+        side.scatter(
+            [0.25],
+            [y],
+            s=38 if marker == "*" else 20,
+            marker=marker,
+            color=color,
+            edgecolor=TEXT,
+            linewidth=0.45,
+            zorder=4,
+        )
         side.text(0.31, y, label, color=TEXT, fontsize=8, va="center")
     return save(fig, f"{number:02d}_pass_map_{_team_slug(team_id)}.png")
 
@@ -1303,8 +1668,7 @@ def _keeper_name(players: pd.DataFrame, team_id: int) -> str:
     if players is None or players.empty or "position" not in players.columns:
         return "Goalkeeper"
     keepers = players[
-        players["team_id"].eq(team_id)
-        & players["position"].astype(str).str.upper().eq("GK")
+        players["team_id"].eq(team_id) & players["position"].astype(str).str.upper().eq("GK")
     ]
     if keepers.empty:
         return "Goalkeeper"
@@ -1371,21 +1735,39 @@ def gk_saves(events, xg, players):
                 body = str(row.get("body_part") or "").lower()
                 marker = _BODY_PART_MARKERS.get(body, ("o", "Right foot"))[0]
                 ax.scatter(
-                    [px], [py],
+                    [px],
+                    [py],
                     s=min(40 + float(row["xG"]) * 620, 380),
-                    marker=marker, facecolors=color, edgecolors=BG, linewidths=0.9,
-                    alpha=0.95, zorder=6 if event_type == "Goal" else 5,
+                    marker=marker,
+                    facecolors=color,
+                    edgecolors=BG,
+                    linewidths=0.9,
+                    alpha=0.95,
+                    zorder=6 if event_type == "Goal" else 5,
                 )
                 plotted += 1
 
         if plotted == 0:
-            ax.text(0, 0.5, "No placement data recorded", color=MUTED, fontsize=9,
-                    ha="center", va="center", zorder=7)
+            ax.text(
+                0,
+                0.5,
+                "No placement data recorded",
+                color=MUTED,
+                fontsize=9,
+                ha="center",
+                va="center",
+                zorder=7,
+            )
 
         keeper = _keeper_name(players, keeper_team)
         fig.text(x0, 0.815, keeper.upper(), color=accent, fontsize=14, fontweight="bold")
-        fig.text(x0, 0.788, f"{keeper_team_name} · {plotted} of {len(faced)} shots faced reached the frame",
-                 color=MUTED, fontsize=8)
+        fig.text(
+            x0,
+            0.788,
+            f"{keeper_team_name} · {plotted} of {len(faced)} shots faced reached the frame",
+            color=MUTED,
+            fontsize=8,
+        )
 
         on_target = int(shot_type.isin(["Goal", "SavedShot"]).sum())
         conceded = int(shot_type.eq("Goal").sum())
@@ -1400,20 +1782,52 @@ def gk_saves(events, xg, players):
             ("Saves", f"{saves}"),
             ("Conceded", f"{conceded}"),
             ("Save rate", f"{100 * saves / max(on_target, 1):.0f}%"),
-            ("Claims", f"{int(events[events['team_id'].eq(keeper_team) & events['type'].eq('Claim')].shape[0])}"),
-            ("Sweeps", f"{int(events[events['team_id'].eq(keeper_team) & events['type'].eq('KeeperSweeper')].shape[0])}"),
+            (
+                "Claims",
+                f"{int(events[events['team_id'].eq(keeper_team) & events['type'].eq('Claim')].shape[0])}",
+            ),
+            (
+                "Sweeps",
+                f"{int(events[events['team_id'].eq(keeper_team) & events['type'].eq('KeeperSweeper')].shape[0])}",
+            ),
         ]
         card_w = 0.40 / len(cards)
         for idx, (label, value) in enumerate(cards):
             cx = x0 + idx * card_w
-            fig.add_artist(Rectangle(
-                (cx, 0.290), card_w * 0.93, 0.105, transform=fig.transFigure,
-                facecolor=PANEL, edgecolor=GRID, lw=0.9, zorder=1,
-            ))
-            fig.text(cx + card_w * 0.465, 0.357, value, color=TEXT, fontsize=13,
-                     fontweight="bold", ha="center", va="center", zorder=2)
-            fig.text(cx + card_w * 0.465, 0.312, label.upper(), color=MUTED, fontsize=6.2,
-                     fontweight="bold", ha="center", va="center", zorder=2)
+            fig.add_artist(
+                Rectangle(
+                    (cx, 0.290),
+                    card_w * 0.93,
+                    0.105,
+                    transform=fig.transFigure,
+                    facecolor=PANEL,
+                    edgecolor=GRID,
+                    lw=0.9,
+                    zorder=1,
+                )
+            )
+            fig.text(
+                cx + card_w * 0.465,
+                0.357,
+                value,
+                color=TEXT,
+                fontsize=13,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=2,
+            )
+            fig.text(
+                cx + card_w * 0.465,
+                0.312,
+                label.upper(),
+                color=MUTED,
+                fontsize=6.2,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=2,
+            )
 
     # Shot-stopping is only half a keeper's match. Distribution says whether
     # they played out or launched it, and how much of that survived.
@@ -1442,25 +1856,55 @@ def gk_saves(events, xg, players):
     ):
         legend_x = 0.055
         for marker, color, label in entries:
-            fig.add_artist(Line2D([legend_x], [row_y], marker=marker, color=color, lw=0,
-                                  markersize=8, transform=fig.transFigure))
-            fig.text(legend_x + 0.013, row_y, label.upper(), color=MUTED, fontsize=7.2,
-                     fontweight="bold", va="center")
+            fig.add_artist(
+                Line2D(
+                    [legend_x],
+                    [row_y],
+                    marker=marker,
+                    color=color,
+                    lw=0,
+                    markersize=8,
+                    transform=fig.transFigure,
+                )
+            )
+            fig.text(
+                legend_x + 0.013,
+                row_y,
+                label.upper(),
+                color=MUTED,
+                fontsize=7.2,
+                fontweight="bold",
+                va="center",
+            )
             legend_x += 0.013 + 0.0062 * len(label) + 0.028
 
-    fig.text(0.055, 0.098,
-             "Goal frame seen from behind the shooter · off-target shots sit outside the posts · "
-             "blocked shots are excluded because they never reached the keeper",
-             fontsize=7, color=NEUTRAL)
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.055,
+        0.098,
+        "Goal frame seen from behind the shooter · off-target shots sit outside the posts · "
+        "blocked shots are excluded because they never reached the keeper",
+        fontsize=7,
+        color=NEUTRAL,
+    )
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "11_goalkeeper_saves.png")
 
 
 def zone14(events, team_id, number):
     team = events[events["team_id"].eq(team_id)].copy()
     successful = team["outcome"].astype(str).str.lower().eq("successful")
-    zone = successful & pd.to_numeric(team["end_x"], errors="coerce").between(70, 83) & pd.to_numeric(team["end_y"], errors="coerce").between(35, 65)
+    zone = (
+        successful
+        & pd.to_numeric(team["end_x"], errors="coerce").between(70, 83)
+        & pd.to_numeric(team["end_y"], errors="coerce").between(35, 65)
+    )
     actions = team[zone].dropna(subset=["x", "y", "end_x", "end_y"])
     final_third = team[successful & (pd.to_numeric(team["end_x"], errors="coerce") >= 66.7)].copy()
     final_third["end_y_num"] = pd.to_numeric(final_third["end_y"], errors="coerce")
@@ -1474,7 +1918,10 @@ def zone14(events, team_id, number):
     ]
     team_mark = _team_mark_color(team_id)
     lane_colors = [team_mark] * len(lane_defs)
-    lane_counts = [int(final_third["end_y_num"].between(lo, hi, inclusive="left").sum()) for _, lo, hi in lane_defs]
+    lane_counts = [
+        int(final_third["end_y_num"].between(lo, hi, inclusive="left").sum())
+        for _, lo, hi in lane_defs
+    ]
     fig, pitch, side = pitch_axes(
         f"Zone 14 & Five Lanes · {TEAM_NAME[team_id]}",
         "Lane numbers = completed actions ending in the final third · arrows = completed Zone 14 access",
@@ -1484,49 +1931,113 @@ def zone14(events, team_id, number):
     for (label, lo, hi), color in zip(lane_defs, lane_colors):
         x1, _ = attack_xy([66.7], [lo])
         x2, _ = attack_xy([66.7], [min(hi, 100)])
-        pitch.add_patch(Rectangle(
-            (min(x1[0], x2[0]), third_y), abs(x2[0] - x1[0]), PITCH_LENGTH - third_y,
-            facecolor=color, edgecolor=color, lw=0.9, alpha=_SHADE_ALPHA, zorder=0,
-        ))
+        pitch.add_patch(
+            Rectangle(
+                (min(x1[0], x2[0]), third_y),
+                abs(x2[0] - x1[0]),
+                PITCH_LENGTH - third_y,
+                facecolor=color,
+                edgecolor=color,
+                lw=0.9,
+                alpha=_SHADE_ALPHA,
+                zorder=0,
+            )
+        )
     for idx, ((_, lo, hi), count, color) in enumerate(zip(lane_defs, lane_counts, lane_colors)):
         center_y = (lo + min(hi, 100)) / 2
         cx, cy = attack_xy([68.8], [center_y])
-        pitch.text(cx[0], cy[0], str(count), ha="center", va="center", color=TEXT,
-                   fontsize=8, fontweight="bold",
-                   bbox=dict(boxstyle="round,pad=0.28", fc=PANEL, ec=color, lw=1.15, alpha=0.97), zorder=6)
-    zx1, zy1 = attack_xy([70], [35]); zx2, zy2 = attack_xy([83], [65])
-    pitch.add_patch(Rectangle(
-        (min(zx1[0], zx2[0]), min(zy1[0], zy2[0])),
-        abs(zx2[0] - zx1[0]), abs(zy2[0] - zy1[0]),
-        facecolor=FOCUS, alpha=_HATCH_ALPHA, edgecolor=FOCUS, lw=1.8, hatch="//", zorder=1,
-    ))
-    pitch.text(0, min(zy1[0], zy2[0]) + 0.9, "ZONE 14", color=FOCUS, fontsize=6.5,
-               fontweight="bold", ha="center", va="bottom", zorder=5)
+        pitch.text(
+            cx[0],
+            cy[0],
+            str(count),
+            ha="center",
+            va="center",
+            color=TEXT,
+            fontsize=8,
+            fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.28", fc=PANEL, ec=color, lw=1.15, alpha=0.97),
+            zorder=6,
+        )
+    zx1, zy1 = attack_xy([70], [35])
+    zx2, zy2 = attack_xy([83], [65])
+    pitch.add_patch(
+        Rectangle(
+            (min(zx1[0], zx2[0]), min(zy1[0], zy2[0])),
+            abs(zx2[0] - zx1[0]),
+            abs(zy2[0] - zy1[0]),
+            facecolor=FOCUS,
+            alpha=_HATCH_ALPHA,
+            edgecolor=FOCUS,
+            lw=1.8,
+            hatch="//",
+            zorder=1,
+        )
+    )
+    pitch.text(
+        0,
+        min(zy1[0], zy2[0]) + 0.9,
+        "ZONE 14",
+        color=FOCUS,
+        fontsize=6.5,
+        fontweight="bold",
+        ha="center",
+        va="bottom",
+        zorder=5,
+    )
     for _, row in actions.iterrows():
-        sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        sx, sy = attack_xy([row["x"]], [row["y"]])
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         pitch.annotate(
-            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
             arrowprops=dict(
-                arrowstyle="-|>", color=team_mark, alpha=0.42, lw=0.78,
-                linestyle=QUIET_DASH, mutation_scale=8,
+                arrowstyle="-|>",
+                color=team_mark,
+                alpha=0.42,
+                lw=0.78,
+                linestyle=QUIET_DASH,
+                mutation_scale=8,
             ),
         )
     top = actions.groupby("player").size().sort_values(ascending=False).head(3)
     side_title(side, "FIVE ATTACKING LANES")
     for idx, ((label, _, _), value, color) in enumerate(zip(lane_defs, lane_counts, lane_colors)):
         y = 0.81 - idx * 0.083
-        side.add_patch(Rectangle((0.08, y - 0.016), 0.035, 0.032, facecolor=color,
-                                 edgecolor=TEXT, lw=0.4, alpha=0.9))
+        side.add_patch(
+            Rectangle(
+                (0.08, y - 0.016), 0.035, 0.032, facecolor=color, edgecolor=TEXT, lw=0.4, alpha=0.9
+            )
+        )
         side.text(0.15, y, label, color=TEXT, fontsize=8.5, va="center")
-        side.text(0.92, y, str(value), color=TEXT, fontsize=8.8, fontweight="bold",
-                  ha="right", va="center")
+        side.text(
+            0.92,
+            y,
+            str(value),
+            color=TEXT,
+            fontsize=8.8,
+            fontweight="bold",
+            ha="right",
+            va="center",
+        )
         side.plot([0.08, 0.92], [y - 0.037, y - 0.037], color=GRID, lw=0.55, alpha=0.7)
     side.text(0.08, 0.34, "ZONE 14 CONTRIBUTORS", color=MUTED, fontsize=7.5, fontweight="bold")
     for idx, (name, value) in enumerate(top.items()):
         y = 0.285 - idx * 0.06
         side.text(0.08, y, _surname(name), color=TEXT, fontsize=8, va="center")
-        side.text(0.92, y, str(int(value)), color=TEXT, fontsize=8, fontweight="bold", ha="right", va="center")
-    side.text(0.08, 0.075, f"Zone 14 entries: {len(actions)}", color=TEXT, fontsize=9.5, fontweight="bold")
+        side.text(
+            0.92,
+            y,
+            str(int(value)),
+            color=TEXT,
+            fontsize=8,
+            fontweight="bold",
+            ha="right",
+            va="center",
+        )
+    side.text(
+        0.08, 0.075, f"Zone 14 entries: {len(actions)}", color=TEXT, fontsize=9.5, fontweight="bold"
+    )
     return save(fig, f"{number:02d}_zone14_{_team_slug(team_id)}.png")
 
 
@@ -1545,7 +2056,9 @@ def _derived_expected_assists(events: pd.DataFrame, team_id: int) -> float:
     work["minute_num"] = pd.to_numeric(work.get("minute"), errors="coerce").fillna(0)
     work["second_num"] = pd.to_numeric(work.get("second"), errors="coerce").fillna(0)
     work["period_num"] = pd.to_numeric(work.get("period"), errors="coerce").fillna(0)
-    work = work.sort_values(["period_num", "minute_num", "second_num", "event_id"]).reset_index(drop=True)
+    work = work.sort_values(["period_num", "minute_num", "second_num", "event_id"]).reset_index(
+        drop=True
+    )
     live = ~as_bool(work.get("is_penalty_shootout", pd.Series(False, index=work.index)))
     key_pass = as_bool(work.get("is_key_pass", pd.Series(False, index=work.index))) & live
     shot = as_bool(work.get("is_shot", pd.Series(False, index=work.index))) & live
@@ -1557,7 +2070,9 @@ def _derived_expected_assists(events: pd.DataFrame, team_id: int) -> float:
             candidate = work.loc[next_idx]
             if candidate["period_num"] != source["period_num"]:
                 break
-            elapsed = float(candidate["minute_num"]) * 60 + float(candidate["second_num"]) - source_time
+            elapsed = (
+                float(candidate["minute_num"]) * 60 + float(candidate["second_num"]) - source_time
+            )
             if elapsed > 20:
                 break
             if candidate["team_id"] == team_id and bool(shot.loc[next_idx]):
@@ -1584,54 +2099,219 @@ def post_match_advanced_dashboard(events, xg, team_metrics):
         home_ppda = away_ppda = 0.0
 
     metric = lambda side, key: float(base.metric_lookup(team_metrics, side, key))
-    home_counts, away_counts = team_event_counts(events, HOME_ID), team_event_counts(events, AWAY_ID)
+    home_counts, away_counts = (
+        team_event_counts(events, HOME_ID),
+        team_event_counts(events, AWAY_ID),
+    )
     home_xa = _derived_expected_assists(events, HOME_ID)
     away_xa = _derived_expected_assists(events, AWAY_ID)
     attack_rows = [
         ("Shots", float(home_xg.get("shots", 0)), float(away_xg.get("shots", 0)), "{:.0f}", False),
-        ("Shots on target", float(home_xg.get("on_target", 0)), float(away_xg.get("on_target", 0)), "{:.0f}", False),
-        ("Big chances", float(home_xg.get("big_chances", 0)), float(away_xg.get("big_chances", 0)), "{:.0f}", False),
-        ("Expected goals (xG)", float(home_xg.get("xG", 0)), float(away_xg.get("xG", 0)), "{:.2f}", False),
-        ("Local post-shot estimate*", float(home_xg.get("xGoT", 0)), float(away_xg.get("xGoT", 0)), "{:.2f}", False),
-        ("xG per shot", float(home_xg.get("xG_per_shot", 0)), float(away_xg.get("xG_per_shot", 0)), "{:.3f}", False),
-        ("Transition xG", metric("home", "transition_xG"), metric("away", "transition_xG"), "{:.2f}", False),
-        ("Transition shot rate", metric("home", "transition_shot_rate"), metric("away", "transition_shot_rate"), "{:.1f}%", False),
+        (
+            "Shots on target",
+            float(home_xg.get("on_target", 0)),
+            float(away_xg.get("on_target", 0)),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Big chances",
+            float(home_xg.get("big_chances", 0)),
+            float(away_xg.get("big_chances", 0)),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Expected goals (xG)",
+            float(home_xg.get("xG", 0)),
+            float(away_xg.get("xG", 0)),
+            "{:.2f}",
+            False,
+        ),
+        (
+            "Local post-shot estimate*",
+            float(home_xg.get("xGoT", 0)),
+            float(away_xg.get("xGoT", 0)),
+            "{:.2f}",
+            False,
+        ),
+        (
+            "xG per shot",
+            float(home_xg.get("xG_per_shot", 0)),
+            float(away_xg.get("xG_per_shot", 0)),
+            "{:.3f}",
+            False,
+        ),
+        (
+            "Transition xG",
+            metric("home", "transition_xG"),
+            metric("away", "transition_xG"),
+            "{:.2f}",
+            False,
+        ),
+        (
+            "Transition shot rate",
+            metric("home", "transition_shot_rate"),
+            metric("away", "transition_shot_rate"),
+            "{:.1f}%",
+            False,
+        ),
     ]
     creation_rows = [
-        ("Possession share", metric("home", "possession_share"), metric("away", "possession_share"), "{:.1f}%", False),
+        (
+            "Possession share",
+            metric("home", "possession_share"),
+            metric("away", "possession_share"),
+            "{:.1f}%",
+            False,
+        ),
         ("Expected assists (xA)", home_xa, away_xa, "{:.2f}", False),
         ("Open-play xT", float(home_xg.get("xT", 0)), float(away_xg.get("xT", 0)), "{:.2f}", False),
-        ("Field tilt", metric("home", "field_tilt"), metric("away", "field_tilt"), "{:.1f}%", False),
-        ("Progressive passes", metric("home", "progressive_passes"), metric("away", "progressive_passes"), "{:.0f}", False),
-        ("Final-third entries", metric("home", "final_third_entries"), metric("away", "final_third_entries"), "{:.0f}", False),
-        ("Deep completions", metric("home", "deep_completions"), metric("away", "deep_completions"), "{:.0f}", False),
-        ("Box entries", metric("home", "box_entries"), metric("away", "box_entries"), "{:.0f}", False),
+        (
+            "Field tilt",
+            metric("home", "field_tilt"),
+            metric("away", "field_tilt"),
+            "{:.1f}%",
+            False,
+        ),
+        (
+            "Progressive passes",
+            metric("home", "progressive_passes"),
+            metric("away", "progressive_passes"),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Final-third entries",
+            metric("home", "final_third_entries"),
+            metric("away", "final_third_entries"),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Deep completions",
+            metric("home", "deep_completions"),
+            metric("away", "deep_completions"),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Box entries",
+            metric("home", "box_entries"),
+            metric("away", "box_entries"),
+            "{:.0f}",
+            False,
+        ),
     ]
     defence_rows = [
         ("PPDA", home_ppda, away_ppda, "{:.2f}", True),
         ("Tackles", float(home_counts["Tackles"]), float(away_counts["Tackles"]), "{:.0f}", False),
-        ("Interceptions", float(home_counts["Interceptions"]), float(away_counts["Interceptions"]), "{:.0f}", False),
-        ("Possession regains", metric("home", "possession_regains"), metric("away", "possession_regains"), "{:.0f}", False),
-        ("High regains", metric("home", "high_regains"), metric("away", "high_regains"), "{:.0f}", False),
-        ("Counterpress success", metric("home", "counterpress_success_rate"), metric("away", "counterpress_success_rate"), "{:.1f}%", False),
+        (
+            "Interceptions",
+            float(home_counts["Interceptions"]),
+            float(away_counts["Interceptions"]),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Possession regains",
+            metric("home", "possession_regains"),
+            metric("away", "possession_regains"),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "High regains",
+            metric("home", "high_regains"),
+            metric("away", "high_regains"),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Counterpress success",
+            metric("home", "counterpress_success_rate"),
+            metric("away", "counterpress_success_rate"),
+            "{:.1f}%",
+            False,
+        ),
         # Absorbed from the former standalone defensive-summary page: these are
         # the rows it carried that were not already here.
-        ("Recoveries", float(home_counts["Recoveries"]), float(away_counts["Recoveries"]), "{:.0f}", False),
-        ("Clearances", float(home_counts["Clearances"]), float(away_counts["Clearances"]), "{:.0f}", False),
+        (
+            "Recoveries",
+            float(home_counts["Recoveries"]),
+            float(away_counts["Recoveries"]),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Clearances",
+            float(home_counts["Clearances"]),
+            float(away_counts["Clearances"]),
+            "{:.0f}",
+            False,
+        ),
         ("Blocks", float(home_counts["Blocks"]), float(away_counts["Blocks"]), "{:.0f}", False),
         ("Fouls", float(home_counts["Fouls"]), float(away_counts["Fouls"]), "{:.0f}", True),
     ]
     # Absorbed from the former standalone advanced-metrics page: process,
     # sequence value and the risk carried behind the ball.
     process_rows = [
-        ("Transitions", metric("home", "transitions"), metric("away", "transitions"), "{:.0f}", False),
-        ("Build-up success", metric("home", "build_up_success_rate"), metric("away", "build_up_success_rate"), "{:.1f}%", False),
-        ("Final-third entry efficiency", metric("home", "final_third_entry_efficiency"), metric("away", "final_third_entry_efficiency"), "{:.1f}%", False),
-        ("Box entry → shot", metric("home", "box_entry_to_shot_rate"), metric("away", "box_entry_to_shot_rate"), "{:.1f}%", False),
-        ("Sequence xT", metric("home", "sequence_xT"), metric("away", "sequence_xT"), "{:.2f}", False),
-        ("Transition xT", metric("home", "transition_xT"), metric("away", "transition_xT"), "{:.2f}", False),
-        ("Directness", metric("home", "directness"), metric("away", "directness"), "{:.1f}%", False),
-        ("Transition exposure", metric("home", "rest_defence_exposures"), metric("away", "rest_defence_exposures"), "{:.0f}", True),
+        (
+            "Transitions",
+            metric("home", "transitions"),
+            metric("away", "transitions"),
+            "{:.0f}",
+            False,
+        ),
+        (
+            "Build-up success",
+            metric("home", "build_up_success_rate"),
+            metric("away", "build_up_success_rate"),
+            "{:.1f}%",
+            False,
+        ),
+        (
+            "Final-third entry efficiency",
+            metric("home", "final_third_entry_efficiency"),
+            metric("away", "final_third_entry_efficiency"),
+            "{:.1f}%",
+            False,
+        ),
+        (
+            "Box entry → shot",
+            metric("home", "box_entry_to_shot_rate"),
+            metric("away", "box_entry_to_shot_rate"),
+            "{:.1f}%",
+            False,
+        ),
+        (
+            "Sequence xT",
+            metric("home", "sequence_xT"),
+            metric("away", "sequence_xT"),
+            "{:.2f}",
+            False,
+        ),
+        (
+            "Transition xT",
+            metric("home", "transition_xT"),
+            metric("away", "transition_xT"),
+            "{:.2f}",
+            False,
+        ),
+        (
+            "Directness",
+            metric("home", "directness"),
+            metric("away", "directness"),
+            "{:.1f}%",
+            False,
+        ),
+        (
+            "Transition exposure",
+            metric("home", "rest_defence_exposures"),
+            metric("away", "rest_defence_exposures"),
+            "{:.0f}",
+            True,
+        ),
     ]
 
     fig = plt.figure(figsize=(19, 9), facecolor=BG)
@@ -1652,9 +2332,20 @@ def post_match_advanced_dashboard(events, xg, team_metrics):
         ax = fig.add_axes([left, 0.18, 0.22, 0.61])
         _post_match_metric_panel(ax, title, rows)
 
-    territory_team = HOME_NAME if metric("home", "field_tilt") > metric("away", "field_tilt") else AWAY_NAME
-    quality_team = HOME_NAME if float(home_xg.get("xG_per_shot", 0)) > float(away_xg.get("xG_per_shot", 0)) else AWAY_NAME
-    secure_team = HOME_NAME if metric("home", "rest_defence_vulnerability") < metric("away", "rest_defence_vulnerability") else AWAY_NAME
+    territory_team = (
+        HOME_NAME if metric("home", "field_tilt") > metric("away", "field_tilt") else AWAY_NAME
+    )
+    quality_team = (
+        HOME_NAME
+        if float(home_xg.get("xG_per_shot", 0)) > float(away_xg.get("xG_per_shot", 0))
+        else AWAY_NAME
+    )
+    secure_team = (
+        HOME_NAME
+        if metric("home", "rest_defence_vulnerability")
+        < metric("away", "rest_defence_vulnerability")
+        else AWAY_NAME
+    )
     fig.text(0.035, 0.112, "MATCH READ", color=FOCUS, fontsize=7.5, fontweight="bold")
     fig.text(
         0.093,
@@ -1663,60 +2354,113 @@ def post_match_advanced_dashboard(events, xg, team_metrics):
         color=TEXT,
         fontsize=8.5,
     )
-    fig.text(0.035, 0.066, "xA = xG of the shot following each provider-tagged key pass (within 20 seconds).", color=MUTED, fontsize=7)
-    fig.text(0.965, 0.066, "↓ LOWER IS BETTER   ·   REAL MATCH EVENTS", color=NEUTRAL, fontsize=7, ha="right")
+    fig.text(
+        0.035,
+        0.066,
+        "xA = xG of the shot following each provider-tagged key pass (within 20 seconds).",
+        color=MUTED,
+        fontsize=7,
+    )
+    fig.text(
+        0.965,
+        0.066,
+        "↓ LOWER IS BETTER   ·   REAL MATCH EVENTS",
+        color=NEUTRAL,
+        fontsize=7,
+        ha="right",
+    )
     return save(fig, "14_post_match_advanced_dashboard.png")
 
 
 def progressive(events, team_id, number):
-    prog = events[progressive_pass_mask(events) & events["team_id"].eq(team_id)].copy().dropna(subset=["x", "y", "end_x", "end_y"])
+    prog = (
+        events[progressive_pass_mask(events) & events["team_id"].eq(team_id)]
+        .copy()
+        .dropna(subset=["x", "y", "end_x", "end_y"])
+    )
     prog["xT"] = pd.to_numeric(prog["xT"], errors="coerce").fillna(0)
-    fig, pitch, side = pitch_axes(f"Progressive Passes · {TEAM_NAME[team_id]}", "Canonical zone-aware thresholds · strongest ten actions highlighted by xT added")
+    fig, pitch, side = pitch_axes(
+        f"Progressive Passes · {TEAM_NAME[team_id]}",
+        "Canonical zone-aware thresholds · strongest ten actions highlighted by xT added",
+    )
     draw_long_pitch(pitch)
     # The dashed layer carries the full progressive volume, so it has to stay
     # legible under the ten white highlight arrows. Denser dash, heavier stroke
     # and a much higher alpha than the generic QUIET_DASH treatment.
     volume_dash = (0, (3.4, 2.2))
     for _, row in prog.iterrows():
-        sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        sx, sy = attack_xy([row["x"]], [row["y"]])
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         pitch.annotate(
-            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
             arrowprops=dict(
-                arrowstyle="-|>", color=_team_mark_color(team_id), alpha=0.55,
-                lw=1.15, linestyle=volume_dash, mutation_scale=10,
+                arrowstyle="-|>",
+                color=_team_mark_color(team_id),
+                alpha=0.55,
+                lw=1.15,
+                linestyle=volume_dash,
+                mutation_scale=10,
             ),
         )
     for _, row in prog.nlargest(10, "xT").iterrows():
-        sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        sx, sy = attack_xy([row["x"]], [row["y"]])
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         pitch.annotate(
-            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
             arrowprops=dict(
-                arrowstyle="-|>", color=EVENT_HIGHLIGHT, alpha=0.95,
-                lw=1.9, mutation_scale=11,
+                arrowstyle="-|>",
+                color=EVENT_HIGHLIGHT,
+                alpha=0.95,
+                lw=1.9,
+                mutation_scale=11,
             ),
         )
     top = prog.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PROGRESSORS")
     side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
-    side.text(0.08, 0.14, f"Team-colour dashed = all progressive passes ({len(prog)})", color=_team_mark_color(team_id), fontsize=8.2)
-    side.text(0.08, 0.09, f"{HIGHLIGHT_LABEL} = top 10 by xT added", color=EVENT_HIGHLIGHT, fontsize=8.4)
+    side.text(
+        0.08,
+        0.14,
+        f"Team-colour dashed = all progressive passes ({len(prog)})",
+        color=_team_mark_color(team_id),
+        fontsize=8.2,
+    )
+    side.text(
+        0.08, 0.09, f"{HIGHLIGHT_LABEL} = top 10 by xT added", color=EVENT_HIGHLIGHT, fontsize=8.4
+    )
     return save(fig, f"{number:02d}_progressive_{_team_slug(team_id)}.png")
 
 
 def crosses(events, team_id, number):
     mask = cross_mask(events)
-    frame = events[mask & events["team_id"].eq(team_id)].copy().dropna(subset=["x", "y", "end_x", "end_y"])
+    frame = (
+        events[mask & events["team_id"].eq(team_id)]
+        .copy()
+        .dropna(subset=["x", "y", "end_x", "end_y"])
+    )
     success = frame["outcome"].astype(str).str.lower().eq("successful")
-    fig, pitch, side = pitch_axes(f"Crosses · {TEAM_NAME[team_id]}", "Cross origins and targets · completed deliveries use filled arrowheads")
+    fig, pitch, side = pitch_axes(
+        f"Crosses · {TEAM_NAME[team_id]}",
+        "Cross origins and targets · completed deliveries use filled arrowheads",
+    )
     draw_long_pitch(pitch)
     if not frame.empty:
-        pitch.set_ylim(max(-3,min(48,float(frame[['x','end_x']].min().min())*1.05-5)),PITCH_LENGTH+3)
+        pitch.set_ylim(
+            max(-3, min(48, float(frame[["x", "end_x"]].min().min()) * 1.05 - 5)), PITCH_LENGTH + 3
+        )
     team_mark = _team_mark_color(team_id)
     for idx, row in frame.iterrows():
-        sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        sx, sy = attack_xy([row["x"]], [row["y"]])
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         good = bool(success.loc[idx])
         pitch.annotate(
-            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
             arrowprops=dict(
                 arrowstyle="-|>" if good else "->",
                 color=team_mark,
@@ -1726,9 +2470,23 @@ def crosses(events, team_id, number):
                 mutation_scale=9,
             ),
         )
-    completed = int(success.sum()); rate = 100 * completed / max(len(frame), 1)
+    completed = int(success.sum())
+    rate = 100 * completed / max(len(frame), 1)
     side_title(side, "CROSSING OUTPUT")
-    side_kpis(side, [("Crosses", len(frame)), ("Completed", completed), ("Completion", f"{rate:.1f}%"), ("Open-play", int((~frame["qualifier_names"].astype(str).str.lower().str.contains("corner")).sum()))])
+    side_kpis(
+        side,
+        [
+            ("Crosses", len(frame)),
+            ("Completed", completed),
+            ("Completion", f"{rate:.1f}%"),
+            (
+                "Open-play",
+                int(
+                    (~frame["qualifier_names"].astype(str).str.lower().str.contains("corner")).sum()
+                ),
+            ),
+        ],
+    )
     side.plot([0.09, 0.24], [0.12, 0.12], color=team_mark, lw=1.35)
     side.text(0.28, 0.12, "Completed", color=TEXT, fontsize=7.5, va="center")
     side.plot([0.55, 0.70], [0.12, 0.12], color=team_mark, lw=1.0, linestyle=FAILURE_DASH)
@@ -1740,13 +2498,13 @@ def defensive_activity(events, team_id, number):
     event_types = events["type"].astype(str)
     non_foul_actions = event_types.isin(["Tackle", "Interception", "BallRecovery", "Clearance"])
     committed_fouls = fouls_committed_mask(events)
-    own_actions = events[
-        events["team_id"].eq(team_id) & (non_foul_actions | committed_fouls)
-    ].dropna(subset=["x", "y"]).copy()
-    opponent_id = AWAY_ID if team_id == HOME_ID else HOME_ID
-    block_actions = defensive_block_events(events, team_id, opponent_id).dropna(
-        subset=["x", "y"]
+    own_actions = (
+        events[events["team_id"].eq(team_id) & (non_foul_actions | committed_fouls)]
+        .dropna(subset=["x", "y"])
+        .copy()
     )
+    opponent_id = AWAY_ID if team_id == HOME_ID else HOME_ID
+    block_actions = defensive_block_events(events, team_id, opponent_id).dropna(subset=["x", "y"])
     actions = pd.concat([own_actions, block_actions], ignore_index=True, sort=False)
     fig, pitch, side = pitch_axes(
         f"Defensive Activity · {TEAM_NAME[team_id]}",
@@ -1777,7 +2535,14 @@ def defensive_activity(events, team_id, number):
         interpolation="bicubic",
     )
     draw_long_pitch(pitch)
-    marker_map = {"Tackle": "o", "Interception": "D", "BallRecovery": "s", "Clearance": "^", "BlockedShot": "P", "Foul": "X"}
+    marker_map = {
+        "Tackle": "o",
+        "Interception": "D",
+        "BallRecovery": "s",
+        "Clearance": "^",
+        "BlockedShot": "P",
+        "Foul": "X",
+    }
     action_colors = {
         "Tackle": "#67E8F9",
         "Interception": "#C4B5FD",
@@ -1788,7 +2553,8 @@ def defensive_activity(events, team_id, number):
     }
     for event_type, marker in marker_map.items():
         subset = actions[actions["type"].astype(str).eq(event_type)]
-        if subset.empty: continue
+        if subset.empty:
+            continue
         px, py = attack_xy(subset["x"], subset["y"])
         pitch.scatter(
             px,
@@ -1804,27 +2570,56 @@ def defensive_activity(events, team_id, number):
     counts = team_event_counts(events, team_id)
     side_title(side, "ACTION TYPE LEGEND")
     label_to_event = {
-        "Tackles": "Tackle", "Interceptions": "Interception", "Recoveries": "BallRecovery",
-        "Clearances": "Clearance", "Blocks": "BlockedShot", "Fouls": "Foul",
+        "Tackles": "Tackle",
+        "Interceptions": "Interception",
+        "Recoveries": "BallRecovery",
+        "Clearances": "Clearance",
+        "Blocks": "BlockedShot",
+        "Fouls": "Foul",
     }
     for idx, (label, value) in enumerate(counts.items()):
         y = 0.81 - idx * 0.095
         marker = marker_map[label_to_event[label]]
         event_type = label_to_event[label]
         side.scatter(
-            [0.13], [y], s=52, marker=marker,
-            facecolors=action_colors[event_type], edgecolors=BG, linewidth=0.9,
+            [0.13],
+            [y],
+            s=52,
+            marker=marker,
+            facecolors=action_colors[event_type],
+            edgecolors=BG,
+            linewidth=0.9,
         )
         side.text(0.21, y, label, color=TEXT, fontsize=8.5, va="center")
-        side.text(0.90, y, str(value), color=TEXT, fontsize=8.5, fontweight="bold", ha="right", va="center")
+        side.text(
+            0.90,
+            y,
+            str(value),
+            color=TEXT,
+            fontsize=8.5,
+            fontweight="bold",
+            ha="right",
+            va="center",
+        )
         side.plot([0.08, 0.92], [y - 0.043, y - 0.043], color=GRID, lw=0.55, alpha=0.7)
-    side.add_patch(Rectangle((0.09, 0.105), 0.08, 0.055, facecolor=team_mark, edgecolor=GRID, alpha=0.82))
-    side.text(0.21, 0.132, f"{TEAM_NAME[team_id]} colour = action density", color=TEXT, fontsize=8, va="center")
+    side.add_patch(
+        Rectangle((0.09, 0.105), 0.08, 0.055, facecolor=team_mark, edgecolor=GRID, alpha=0.82)
+    )
+    side.text(
+        0.21,
+        0.132,
+        f"{TEAM_NAME[team_id]} colour = action density",
+        color=TEXT,
+        fontsize=8,
+        va="center",
+    )
     return save(fig, f"{number:02d}_defensive_activity_{_team_slug(team_id)}.png")
 
 
 def average_positions(events, players, team_id, number, half):
-    positions, _edges, sub_on, sub_off, substitutions, _completed_links = _half_network_data(events, players, team_id, half)
+    positions, _edges, sub_on, sub_off, substitutions, _completed_links = _half_network_data(
+        events, players, team_id, half
+    )
     half_label = "First Half" if half == 1 else "Second Half"
     fig, pitch, side = pitch_axes(
         f"Average Positions · {TEAM_NAME[team_id]} · {half_label}",
@@ -1839,40 +2634,98 @@ def average_positions(events, players, team_id, number, half):
     _link_low, outline_color, _link_strong = network_link_palette(TEAM_COLOR[team_id])
     max_touch = max([value[2] for value in display.values()] or [1])
     shirts = shirt_number_map(players)
-    radii = {name: _network_node_radius(touches, max_touch)
-             for name, (_x, _y, touches) in display.items()}
+    radii = {
+        name: _network_node_radius(touches, max_touch)
+        for name, (_x, _y, touches) in display.items()
+    }
     for name, (px, py, touches) in display.items():
         entered = name in sub_on
         left = name in sub_off
-        pitch.scatter(px, py, s=260 + 640 * touches / max_touch, marker="s" if entered else "o",
-                      color=_team_mark_color(team_id), edgecolor=FOCUS if left else outline_color,
-                      linewidth=2.3 if left else 1.15, zorder=4)
-        draw_node_label(pitch, px, py, name, touches, max_touch,
-                        node_color=_team_mark_color(team_id),
-                        shirt=shirts.get(str(name)), node_radius=radii[name],
-                        neighbours=_node_neighbours(display, radii, name))
+        pitch.scatter(
+            px,
+            py,
+            s=260 + 640 * touches / max_touch,
+            marker="s" if entered else "o",
+            color=_team_mark_color(team_id),
+            edgecolor=FOCUS if left else outline_color,
+            linewidth=2.3 if left else 1.15,
+            zorder=4,
+        )
+        draw_node_label(
+            pitch,
+            px,
+            py,
+            name,
+            touches,
+            max_touch,
+            node_color=_team_mark_color(team_id),
+            shirt=shirts.get(str(name)),
+            node_radius=radii[name],
+            neighbours=_node_neighbours(display, radii, name),
+        )
 
     side_title(side, "HALF PARTICIPATION")
-    side.text(0.92, 0.94, f"{len(positions)} players", color=TEXT, fontsize=8,
-              fontweight="bold", ha="right", va="top")
+    side.text(
+        0.92,
+        0.94,
+        f"{len(positions)} players",
+        color=TEXT,
+        fontsize=8,
+        fontweight="bold",
+        ha="right",
+        va="top",
+    )
     active = positions.sort_values("touches", ascending=False).head(5)
-    side_rows(side, [(compact_player_label(name, 16), str(int(row["touches"]))) for name, row in active.iterrows()], start=0.81, gap=0.075)
+    side_rows(
+        side,
+        [
+            (compact_player_label(name, 16), str(int(row["touches"])))
+            for name, row in active.iterrows()
+        ],
+        start=0.81,
+        gap=0.075,
+    )
     side.text(0.08, 0.40, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
     if substitutions:
         for idx, (minute, on_name, off_name) in enumerate(substitutions[:5]):
             y = 0.35 - idx * 0.052
-            side.text(0.08, y, f"{minute}′", color=TEXT, fontsize=7.5, fontweight="bold", va="center")
-            change = f"{off_name} OFF AT INTERVAL" if on_name == "—" else f"{on_name} IN  ·  {off_name} OFF"
+            side.text(
+                0.08, y, f"{minute}′", color=TEXT, fontsize=7.5, fontweight="bold", va="center"
+            )
+            change = (
+                f"{off_name} OFF AT INTERVAL"
+                if on_name == "—"
+                else f"{on_name} IN  ·  {off_name} OFF"
+            )
             side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
     else:
         side.text(0.08, 0.34, "No in-half changes", color=MUTED, fontsize=8)
-    side.scatter([0.06, 0.34], [0.075, 0.075], s=[65, 65], marker="o", color=_team_mark_color(team_id), edgecolor=[TEXT, FOCUS], linewidth=[1.0, 2.1])
-    side.scatter([0.60], [0.075], s=65, marker="s", color=_team_mark_color(team_id), edgecolor=TEXT, linewidth=1.0)
+    side.scatter(
+        [0.06, 0.34],
+        [0.075, 0.075],
+        s=[65, 65],
+        marker="o",
+        color=_team_mark_color(team_id),
+        edgecolor=[TEXT, FOCUS],
+        linewidth=[1.0, 2.1],
+    )
+    side.scatter(
+        [0.60],
+        [0.075],
+        s=65,
+        marker="s",
+        color=_team_mark_color(team_id),
+        edgecolor=TEXT,
+        linewidth=1.0,
+    )
     side.text(0.10, 0.075, "Began half", color=TEXT, fontsize=6.8, va="center")
     side.text(0.38, 0.075, "Went off", color=TEXT, fontsize=6.8, va="center")
     side.text(0.64, 0.075, "Came on", color=TEXT, fontsize=6.8, va="center")
     suffix = "1h" if half == 1 else "2h"
-    return save(fig, f"{number:02d}{'a' if half == 1 else 'b'}_average_positions_{_team_slug(team_id)}_{suffix}.png")
+    return save(
+        fig,
+        f"{number:02d}{'a' if half == 1 else 'b'}_average_positions_{_team_slug(team_id)}_{suffix}.png",
+    )
 
 
 def dominating_zones(events):
@@ -1884,9 +2737,20 @@ def dominating_zones(events):
     total = hh + ah
     diff = np.divide(hh - ah, total, out=np.zeros_like(total), where=total > 0)
     counts = hh - ah
-    fig, pitch, side = pitch_axes("Dominating Zones", "Touch-share difference · diverging scale centred on an even 50/50 split")
+    fig, pitch, side = pitch_axes(
+        "Dominating Zones",
+        "Touch-share difference · diverging scale centred on an even 50/50 split",
+    )
     cmap = LinearSegmentedColormap.from_list("dom_full", [AWAY, PANEL_2, HOME])
-    image = pitch.imshow(diff.T, extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH], origin="lower", cmap=cmap, vmin=-1, vmax=1, aspect="equal")
+    image = pitch.imshow(
+        diff.T,
+        extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
+        origin="lower",
+        cmap=cmap,
+        vmin=-1,
+        vmax=1,
+        aspect="equal",
+    )
     draw_long_pitch(pitch)
     for ix in range(5):
         for iy in range(7):
@@ -1895,18 +2759,28 @@ def dominating_zones(events):
             # Diverging ramp: both ends carry a team colour, so either end can
             # be light. Read the label colour off the cell it sits on.
             cell_fill = mcolors.to_hex(cmap((float(diff[ix, iy]) + 1.0) / 2.0))
-            pitch.text(px, py, f"{int(counts[ix, iy]):+d}", ha="center", va="center",
-                       color=text_on_fill(cell_fill), fontsize=6.5, fontweight="bold",
-                       path_effects=label_outline(cell_fill))
+            pitch.text(
+                px,
+                py,
+                f"{int(counts[ix, iy]):+d}",
+                ha="center",
+                va="center",
+                color=text_on_fill(cell_fill),
+                fontsize=6.5,
+                fontweight="bold",
+                path_effects=label_outline(cell_fill),
+            )
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02, ticks=[-1, 0, 1])
-    cbar.ax.set_yticklabels([AWAY_NAME, "Balanced", HOME_NAME]); cbar.ax.tick_params(colors=MUTED, labelsize=7); cbar.outline.set_edgecolor(GRID)
+    cbar.ax.set_yticklabels([AWAY_NAME, "Balanced", HOME_NAME])
+    cbar.ax.tick_params(colors=MUTED, labelsize=7)
+    cbar.outline.set_edgecolor(GRID)
     side_title(side, "TERRITORY TOTALS")
     side_kpis(
         side,
         [
             (f"{HOME_NAME} touches", len(home)),
             (f"{AWAY_NAME} touches", len(away)),
-            ("Difference", f"{len(home)-len(away):+d}"),
+            ("Difference", f"{len(home) - len(away):+d}"),
             ("Cell label", f"{HOME_NAME} − {AWAY_NAME}"),
         ],
     )
@@ -1974,8 +2848,9 @@ def _corridor_arrow(ax, x_tail, x_head, y, half_height, colour):
     # A hairline in the team colour around the whole shape. The fill fades
     # towards the page at the tail, and on the light page that end reached the
     # background before the chevron ended: the arrow lost its own outline.
-    chevron = Polygon(outline, closed=True, facecolor="none",
-                      edgecolor=colour, linewidth=0.9, zorder=4)
+    chevron = Polygon(
+        outline, closed=True, facecolor="none", edgecolor=colour, linewidth=0.9, zorder=4
+    )
     ax.add_patch(chevron)
     dim = mcolors.to_hex(_mix(colour, BG, 0.55 if IS_LIGHT_THEME else 0.72))
     ramp = LinearSegmentedColormap.from_list("corridor", [dim, colour])
@@ -1984,8 +2859,13 @@ def _corridor_arrow(ax, x_tail, x_head, y, half_height, colour):
         gradient = gradient[:, ::-1]
     left, right = min(x_head, x_tail), max(x_head, x_tail)
     image = ax.imshow(
-        gradient, extent=[left, right, y - half_height, y + half_height],
-        cmap=ramp, vmin=0.0, vmax=1.0, aspect="auto", zorder=3,
+        gradient,
+        extent=[left, right, y - half_height, y + half_height],
+        cmap=ramp,
+        vmin=0.0,
+        vmax=1.0,
+        aspect="auto",
+        zorder=3,
         interpolation="bilinear",
     )
     image.set_clip_path(chevron)
@@ -2015,6 +2895,7 @@ def match_statistics(events, match_info):
     from tactical_visualizations import make_match_stats_v2
 
     fig = make_match_stats_v2(events, match_info, compute_ppda_both(match_info, events))
+
     # The captured figure arrives wearing match_report's own chrome: an eyebrow
     # and title at the top, a score and report tag at the foot. Both are
     # replaced here by the package's, so the page carries the same identity as
@@ -2034,9 +2915,11 @@ def match_statistics(events, match_info):
         coordinates. Hiding only the text left the bullet floating over the
         page with nothing beside it.
         """
-        for read in (lambda: item.get_position()[1],
-                     lambda: item.center[1],
-                     lambda: item.get_xy()[1]):
+        for read in (
+            lambda: item.get_position()[1],
+            lambda: item.center[1],
+            lambda: item.get_xy()[1],
+        ):
             try:
                 return float(read())
             except Exception:
@@ -2048,7 +2931,8 @@ def match_statistics(events, match_info):
         if y is not None and (y >= 0.84 or y < 0.06):
             item.set_visible(False)
     base.amoled_header(
-        fig, "Match Statistics",
+        fig,
+        "Match Statistics",
         "Attack, passing, pressing and defensive actions · every figure counted from the event stream",
     )
     return save(fig, "01b_match_statistics.png")
@@ -2071,7 +2955,8 @@ def attacking_zones(events):
     """
     fig = plt.figure(figsize=(13.0, 8.6), facecolor=BG)
     base.amoled_header(
-        fig, "Attacking Zones",
+        fig,
+        "Attacking Zones",
         "Share of each side's final-third entries by corridor · corridor read where the entry landed",
     )
     ax = fig.add_axes([0.055, 0.105, 0.89, 0.68])
@@ -2105,76 +2990,130 @@ def attacking_zones(events):
                 x_head = x_tail + direction * reach
                 _corridor_arrow(ax, x_tail, x_head, row_y, 7.4, colour)
             else:
-                ax.plot([x_tail, x_tail + direction * span * 0.22], [row_y, row_y],
-                        color=GRID, lw=1.2, zorder=3)
+                ax.plot(
+                    [x_tail, x_tail + direction * span * 0.22],
+                    [row_y, row_y],
+                    color=GRID,
+                    lw=1.2,
+                    zorder=3,
+                )
             label = f"{share:.0f}%" if total else "—"
             ax.text(
-                x_tail + direction * 3.0, row_y, label,
-                ha="left" if direction > 0 else "right", va="center",
-                color=text_on_fill(colour), fontsize=13, fontweight="bold", zorder=6,
+                x_tail + direction * 3.0,
+                row_y,
+                label,
+                ha="left" if direction > 0 else "right",
+                va="center",
+                color=text_on_fill(colour),
+                fontsize=13,
+                fontweight="bold",
+                zorder=6,
                 bbox=dict(boxstyle="round,pad=0.42", facecolor=colour, edgecolor="none"),
             )
             ax.text(
-                x_tail + direction * (span * 0.30), row_y + 10.4,
+                x_tail + direction * (span * 0.30),
+                row_y + 10.4,
                 f"{name.upper()}  ·  {count} {'entry' if count == 1 else 'entries'}",
-                ha="center", va="center", color=MUTED, fontsize=8.5,
-                fontweight="bold", zorder=6,
+                ha="center",
+                va="center",
+                color=MUTED,
+                fontsize=8.5,
+                fontweight="bold",
+                zorder=6,
             )
         # Under the touchline rather than inside it: at the foot of its own
         # half the name landed on the penalty-area lines.
         ax.text(
-            (x_tail + x_limit) / 2.0, -5.5, team_name.upper(),
-            ha="center", va="center",
-            color=colour, fontsize=11.5, fontweight="bold", zorder=6,
+            (x_tail + x_limit) / 2.0,
+            -5.5,
+            team_name.upper(),
+            ha="center",
+            va="center",
+            color=colour,
+            fontsize=11.5,
+            fontweight="bold",
+            zorder=6,
         )
         ax.annotate(
-            "", xy=(x_limit - direction * 2.0, 95.0),
+            "",
+            xy=(x_limit - direction * 2.0, 95.0),
             xytext=(x_limit - direction * 14.0, 95.0),
-            arrowprops=dict(arrowstyle="-|>", color=colour, lw=1.4), zorder=6,
+            arrowprops=dict(arrowstyle="-|>", color=colour, lw=1.4),
+            zorder=6,
         )
         ax.text(
-            x_limit - direction * 15.5, 95.0, "ATTACKS",
-            ha="right" if direction > 0 else "left", va="center",
-            color=MUTED, fontsize=8, fontweight="bold", zorder=6,
+            x_limit - direction * 15.5,
+            95.0,
+            "ATTACKS",
+            ha="right" if direction > 0 else "left",
+            va="center",
+            color=MUTED,
+            fontsize=8,
+            fontweight="bold",
+            zorder=6,
         )
 
     home_total = summary[HOME_ID][2]
     away_total = summary[AWAY_ID][2]
     fig.text(
-        0.055, 0.045,
+        0.055,
+        0.045,
         f"Denominator · {HOME_NAME} {home_total} final-third "
         f"{'entry' if home_total == 1 else 'entries'}, {AWAY_NAME} {away_total}. "
         "A share of a small count moves a long way on one entry.",
-        color=MUTED, fontsize=9,
+        color=MUTED,
+        fontsize=9,
     )
     return save(fig, "24b_attacking_zones.png")
 
 
 def box_entries(events, team_id, number):
-    frame = events[box_entry_mask(events) & events["team_id"].eq(team_id)].copy().dropna(subset=["x", "y", "end_x", "end_y"])
-    fig, pitch, side = pitch_axes(f"Box Entries · {TEAM_NAME[team_id]}", "Completed actions entering the penalty area · entry method encoded by shape")
+    frame = (
+        events[box_entry_mask(events) & events["team_id"].eq(team_id)]
+        .copy()
+        .dropna(subset=["x", "y", "end_x", "end_y"])
+    )
+    fig, pitch, side = pitch_axes(
+        f"Box Entries · {TEAM_NAME[team_id]}",
+        "Completed actions entering the penalty area · entry method encoded by shape",
+    )
     draw_long_pitch(pitch)
     if not frame.empty:
-        pitch.set_ylim(max(-3,min(48,float(frame[['x','end_x']].min().min())*1.05-5)),PITCH_LENGTH+3)
+        pitch.set_ylim(
+            max(-3, min(48, float(frame[["x", "end_x"]].min().min()) * 1.05 - 5)), PITCH_LENGTH + 3
+        )
     team_mark = _team_mark_color(team_id)
     for _, row in frame.iterrows():
-        sx, sy = attack_xy([row["x"]], [row["y"]]); ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        sx, sy = attack_xy([row["x"]], [row["y"]])
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         event_type = str(row["type"])
         marker = "o" if event_type == "Pass" else "D"
         is_pass = marker == "o"
         entry_color = team_mark
         pitch.annotate(
-            "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
             arrowprops=dict(
-                arrowstyle="-|>", color=entry_color, alpha=0.62 if is_pass else 0.52,
+                arrowstyle="-|>",
+                color=entry_color,
+                alpha=0.62 if is_pass else 0.52,
                 lw=1.0 if is_pass else 0.82,
-                linestyle="-" if is_pass else FAILURE_DASH, mutation_scale=8,
+                linestyle="-" if is_pass else FAILURE_DASH,
+                mutation_scale=8,
             ),
         )
-        pitch.scatter(ex[0], ey[0], s=32, marker=marker, color=entry_color, edgecolor=TEXT, linewidth=0.65)
+        pitch.scatter(
+            ex[0], ey[0], s=32, marker=marker, color=entry_color, edgecolor=TEXT, linewidth=0.65
+        )
     top = frame.groupby("player").size().sort_values(ascending=False).head(5)
     side_title(side, "ENTRY CONTRIBUTORS")
-    side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()], start=0.81, gap=0.083)
+    side_rows(
+        side,
+        [(_surname(name), str(int(value))) for name, value in top.items()],
+        start=0.81,
+        gap=0.083,
+    )
     pass_count = int(frame["type"].astype(str).eq("Pass").sum())
     carry_count = len(frame) - pass_count
     side.text(0.08, 0.35, "ENTRY METHOD LEGEND", color=MUTED, fontsize=7.5, fontweight="bold")
@@ -2182,15 +3121,25 @@ def box_entries(events, team_id, number):
     side.text(0.21, 0.285, f"Pass entry ({pass_count})", color=TEXT, fontsize=8, va="center")
     side.scatter([0.13], [0.22], s=45, marker="D", color=team_mark, edgecolor=TEXT, linewidth=0.6)
     side.text(0.21, 0.22, f"Carry / take-on ({carry_count})", color=TEXT, fontsize=8, va="center")
-    side.annotate("", xy=(0.18, 0.15), xytext=(0.08, 0.15), arrowprops=dict(arrowstyle="-|>", color=TEXT, lw=1.1))
+    side.annotate(
+        "",
+        xy=(0.18, 0.15),
+        xytext=(0.08, 0.15),
+        arrowprops=dict(arrowstyle="-|>", color=TEXT, lw=1.1),
+    )
     side.text(0.21, 0.15, "Arrow = entry path", color=TEXT, fontsize=8, va="center")
-    side.text(0.08, 0.075, f"Total entries: {len(frame)}", color=TEXT, fontsize=9.5, fontweight="bold")
+    side.text(
+        0.08, 0.075, f"Total entries: {len(frame)}", color=TEXT, fontsize=9.5, fontweight="bold"
+    )
     return save(fig, f"{number:02d}_box_entries_{_team_slug(team_id)}.png")
 
 
 def high_regains(events, team_id, number):
     frame = high_regain_events(events, team_id).dropna(subset=["x", "y"]).copy()
-    fig, pitch, side = pitch_axes(f"High Regains · {TEAM_NAME[team_id]}", "Open-play possession regains at x ≥ 60 · type encoded by shape")
+    fig, pitch, side = pitch_axes(
+        f"High Regains · {TEAM_NAME[team_id]}",
+        "Open-play possession regains at x ≥ 60 · type encoded by shape",
+    )
     draw_long_pitch(pitch)
     threshold_y = 60 * PITCH_LENGTH / 100
     pitch.axhspan(threshold_y, PITCH_LENGTH, color=FOCUS, alpha=0.055)
@@ -2199,51 +3148,125 @@ def high_regains(events, team_id, number):
     team_mark = _team_mark_color(team_id)
     for event_type, marker in marker_map.items():
         subset = frame[frame["type"].astype(str).eq(event_type)]
-        if subset.empty: continue
+        if subset.empty:
+            continue
         px, py = attack_xy(subset["x"], subset["y"])
-        pitch.scatter(px, py, s=65, marker=marker, color=team_mark, edgecolor=TEXT, linewidth=0.8, label=f"{event_type} ({len(subset)})")
+        pitch.scatter(
+            px,
+            py,
+            s=65,
+            marker=marker,
+            color=team_mark,
+            edgecolor=TEXT,
+            linewidth=0.8,
+            label=f"{event_type} ({len(subset)})",
+        )
     other = frame[~frame["type"].astype(str).isin(marker_map)]
     if not other.empty:
-        px, py = attack_xy(other["x"], other["y"]); pitch.scatter(px, py, s=65, marker="^", color=team_mark, edgecolor=TEXT, linewidth=0.8, label=f"Other ({len(other)})")
-    pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.09), ncol=2, frameon=False, labelcolor=TEXT, fontsize=7)
-    top = frame.groupby("player").size().sort_values(ascending=False).head(7) if "player" in frame else pd.Series(dtype=int)
+        px, py = attack_xy(other["x"], other["y"])
+        pitch.scatter(
+            px,
+            py,
+            s=65,
+            marker="^",
+            color=team_mark,
+            edgecolor=TEXT,
+            linewidth=0.8,
+            label=f"Other ({len(other)})",
+        )
+    pitch.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.09),
+        ncol=2,
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=7,
+    )
+    top = (
+        frame.groupby("player").size().sort_values(ascending=False).head(7)
+        if "player" in frame
+        else pd.Series(dtype=int)
+    )
     side_title(side, "HIGH-REGAIN LEADERS")
     side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
-    side.text(0.08, 0.14, f"Total high regains: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold")
+    side.text(
+        0.08, 0.14, f"Total high regains: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold"
+    )
     return save(fig, f"{number:02d}_high_regains_{_team_slug(team_id)}.png")
 
 
 def pass_targets(events, team_id, number):
-    frame = events[events["team_id"].eq(team_id) & events["type"].astype(str).eq("Pass") & events["outcome"].astype(str).str.lower().eq("successful")].dropna(subset=["end_x", "end_y"]).copy()
-    heat, _, _ = np.histogram2d(frame["end_y"], frame["end_x"], bins=[7, 12], range=[[0, 100], [0, 100]])
-    fig, pitch, side = pitch_axes(f"Pass Target Zones · {TEAM_NAME[team_id]}", "Completed-pass destinations · one sequential density scale")
-    team_mark = _team_mark_color(team_id)
-    cmap = LinearSegmentedColormap.from_list(
-        f"targets_{team_id}", _team_density_palette(team_id)
+    frame = (
+        events[
+            events["team_id"].eq(team_id)
+            & events["type"].astype(str).eq("Pass")
+            & events["outcome"].astype(str).str.lower().eq("successful")
+        ]
+        .dropna(subset=["end_x", "end_y"])
+        .copy()
     )
-    image = pitch.imshow(heat.T, extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH], origin="lower", cmap=cmap, aspect="equal", alpha=0.95)
+    heat, _, _ = np.histogram2d(
+        frame["end_y"], frame["end_x"], bins=[7, 12], range=[[0, 100], [0, 100]]
+    )
+    fig, pitch, side = pitch_axes(
+        f"Pass Target Zones · {TEAM_NAME[team_id]}",
+        "Completed-pass destinations · one sequential density scale",
+    )
+    team_mark = _team_mark_color(team_id)
+    cmap = LinearSegmentedColormap.from_list(f"targets_{team_id}", _team_density_palette(team_id))
+    image = pitch.imshow(
+        heat.T,
+        extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
+        origin="lower",
+        cmap=cmap,
+        aspect="equal",
+        alpha=0.95,
+    )
     draw_long_pitch(pitch)
     max_cell = max(float(heat.max()), 1.0)
     for ix in range(7):
         for iy in range(12):
             x0 = -PITCH_WIDTH / 2 + ix * PITCH_WIDTH / 7
             y0 = iy * PITCH_LENGTH / 12
-            pitch.add_patch(Rectangle((x0, y0), PITCH_WIDTH / 7, PITCH_LENGTH / 12,
-                                      fill=False, edgecolor=GRID, lw=0.42, alpha=0.55, zorder=3))
+            pitch.add_patch(
+                Rectangle(
+                    (x0, y0),
+                    PITCH_WIDTH / 7,
+                    PITCH_LENGTH / 12,
+                    fill=False,
+                    edgecolor=GRID,
+                    lw=0.42,
+                    alpha=0.55,
+                    zorder=3,
+                )
+            )
             value = int(heat[ix, iy])
             # The cell fill is a step on the team-colour ramp, so the label
             # colour has to be read off that fill — a fixed white disappears
             # at the top of a light ramp (Juventus silver, Real Madrid white).
             cell_fill = mcolors.to_hex(cmap(value / max_cell))
-            pitch.text(x0 + PITCH_WIDTH / 14, y0 + PITCH_LENGTH / 24, str(value),
-                       color=text_on_fill(cell_fill), fontsize=5.6, fontweight="bold",
-                       ha="center", va="center", zorder=5,
-                       path_effects=label_outline(cell_fill))
-    cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02); cbar.ax.tick_params(colors=MUTED, labelsize=7); cbar.outline.set_edgecolor(GRID); cbar.set_label("Completed-pass targets", color=MUTED, fontsize=8)
+            pitch.text(
+                x0 + PITCH_WIDTH / 14,
+                y0 + PITCH_LENGTH / 24,
+                str(value),
+                color=text_on_fill(cell_fill),
+                fontsize=5.6,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=5,
+                path_effects=label_outline(cell_fill),
+            )
+    cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
+    cbar.ax.tick_params(colors=MUTED, labelsize=7)
+    cbar.outline.set_edgecolor(GRID)
+    cbar.set_label("Completed-pass targets", color=MUTED, fontsize=8)
     top = frame.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PASSERS")
     side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
-    side.text(0.08, 0.14, f"Completed passes: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold")
+    side.text(
+        0.08, 0.14, f"Completed passes: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold"
+    )
     return save(fig, f"{number:02d}_pass_targets_{_team_slug(team_id)}.png")
 
 
@@ -2270,20 +3293,25 @@ def _ppda_by_state(events, info):
     # printed "not enough exposure" six times over a match with 645 passes in
     # it. PERIOD_ORDER is the same map score_spells sorted by.
     from match_metrics import PERIOD_ORDER, _normalise_period
-    period = (events.get("period_code", events.get("period"))
-              .map(_normalise_period).map(PERIOD_ORDER))
+
+    period = (
+        events.get("period_code", events.get("period")).map(_normalise_period).map(PERIOD_ORDER)
+    )
 
     out = {}
-    for side, team_id, opponent_id in [("home", info["home_id"], info["away_id"]),
-                                       ("away", info["away_id"], info["home_id"])]:
+    for side, team_id, opponent_id in [
+        ("home", info["home_id"], info["away_id"]),
+        ("away", info["away_id"], info["home_id"]),
+    ]:
         for state in ("level", "leading", "trailing"):
             windows = spells[spells.team_id.eq(team_id) & spells.state.eq(state)]
             if windows.empty:
                 continue
             mask = pd.Series(False, index=events.index)
             for row in windows.itertuples():
-                mask |= (period.eq(row.period)
-                         & clock.between(row.start * 60, row.end * 60, inclusive="left"))
+                mask |= period.eq(row.period) & clock.between(
+                    row.start * 60, row.end * 60, inclusive="left"
+                )
             if not mask.any():
                 continue
             result = calculate_ppda(events[mask], team_id, opponent_id)
@@ -2332,20 +3360,30 @@ def ppda(events):
         away = by_state.get(("away", state))
         if not home and not away:
             continue
-        rows.append((state.capitalize(),
-                     home[0] if home else None, home[1] if home else 0.0,
-                     away[0] if away else None, away[1] if away else 0.0))
+        rows.append(
+            (
+                state.capitalize(),
+                home[0] if home else None,
+                home[1] if home else 0.0,
+                away[0] if away else None,
+                away[1] if away else 0.0,
+            )
+        )
 
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
-    fig.text(0.055, 0.95, "Pressing Intensity", fontsize=23, fontweight="bold",
-             color=TEXT)
+    fig.text(0.055, 0.95, "Pressing Intensity", fontsize=23, fontweight="bold", color=TEXT)
     gap = abs(hp - ap)
     lead = HOME_NAME if hp < ap else AWAY_NAME
-    fig.text(0.055, 0.905,
-             f"{lead} pressed harder over the match, by {gap:.1f} PPDA"
-             if gap >= 0.2 and hp and ap else
-             "Neither side pressed measurably harder over the match",
-             fontsize=13, fontweight="bold", color=TEXT)
+    fig.text(
+        0.055,
+        0.905,
+        f"{lead} pressed harder over the match, by {gap:.1f} PPDA"
+        if gap >= 0.2 and hp and ap
+        else "Neither side pressed measurably harder over the match",
+        fontsize=13,
+        fontweight="bold",
+        color=TEXT,
+    )
 
     every = [v for row in rows for v in (row[1], row[3]) if v]
     ceiling = (max(every) if every else 20.0) * 1.26
@@ -2359,71 +3397,127 @@ def ppda(events):
     # The zones as ground: they interpret the number, so they sit behind it. As
     # headers they were labelling stretches of empty plot.
     for index, (low, high, label) in enumerate(
-            [(0, 8, "Elite press"), (8, 11, "High press"),
-             (11, 14, "Mid block"), (14, ceiling, "Low block")]):
+        [
+            (0, 8, "Elite press"),
+            (8, 11, "High press"),
+            (11, 14, "Mid block"),
+            (14, ceiling, "Low block"),
+        ]
+    ):
         if low >= ceiling:
             continue
         high = min(high, ceiling)
-        ax.axvspan(low, high, color=PANEL_2 if index % 2 else PANEL,
-                   alpha=0.9, lw=0, zorder=0)
-        ax.text((low + high) / 2, len(rows) - 0.33, label.upper(), color=MUTED,
-                fontsize=8, fontweight="bold", ha="center", va="bottom", zorder=2)
+        ax.axvspan(low, high, color=PANEL_2 if index % 2 else PANEL, alpha=0.9, lw=0, zorder=0)
+        ax.text(
+            (low + high) / 2,
+            len(rows) - 0.33,
+            label.upper(),
+            color=MUTED,
+            fontsize=8,
+            fontweight="bold",
+            ha="center",
+            va="bottom",
+            zorder=2,
+        )
 
     height = 0.30
     for row, (label, home, home_min, away, away_min) in enumerate(rows):
         y = len(rows) - 1 - row
         for value, minutes, colour, name, offset in (
-                (home, home_min, HOME, HOME_NAME, +height / 1.85),
-                (away, away_min, AWAY, AWAY_NAME, -height / 1.85)):
+            (home, home_min, HOME, HOME_NAME, +height / 1.85),
+            (away, away_min, AWAY, AWAY_NAME, -height / 1.85),
+        ):
             if not value:
-                ax.text(ceiling * 0.012, y + offset,
-                        f"{name} — under 30 opponent passes in this state",
-                        va="center", ha="left", fontsize=8.5, color=NEUTRAL,
-                        style="italic", zorder=3)
+                ax.text(
+                    ceiling * 0.012,
+                    y + offset,
+                    f"{name} — under 30 opponent passes in this state",
+                    va="center",
+                    ha="left",
+                    fontsize=8.5,
+                    color=NEUTRAL,
+                    style="italic",
+                    zorder=3,
+                )
                 continue
             ax.barh(y + offset, value, height=height, color=colour, zorder=3)
             # Outside the end of its own bar. In a bubble at the end it was
             # overlapped by the bar that produced it.
-            ax.text(value + ceiling * 0.014, y + offset, f"{value:.1f}",
-                    va="center", ha="left", fontsize=11.5, fontweight="bold",
-                    color=TEXT, zorder=4)
-            ax.text(value + ceiling * 0.075, y + offset,
-                    f"{name} · {minutes:.0f} min" if minutes else name,
-                    va="center", ha="left", fontsize=8.5, color=MUTED, zorder=4)
-        ax.text(-ceiling * 0.014, y, label, va="center", ha="right",
-                fontsize=10.5, fontweight="bold" if row == 0 else "normal",
-                color=TEXT)
+            ax.text(
+                value + ceiling * 0.014,
+                y + offset,
+                f"{value:.1f}",
+                va="center",
+                ha="left",
+                fontsize=11.5,
+                fontweight="bold",
+                color=TEXT,
+                zorder=4,
+            )
+            ax.text(
+                value + ceiling * 0.075,
+                y + offset,
+                f"{name} · {minutes:.0f} min" if minutes else name,
+                va="center",
+                ha="left",
+                fontsize=8.5,
+                color=MUTED,
+                zorder=4,
+            )
+        ax.text(
+            -ceiling * 0.014,
+            y,
+            label,
+            va="center",
+            ha="right",
+            fontsize=10.5,
+            fontweight="bold" if row == 0 else "normal",
+            color=TEXT,
+        )
         if row == 0 and len(rows) > 1:
             ax.axhline(y - 0.5, color=GRID, lw=0.8, zorder=2)
 
     ax.tick_params(axis="x", colors=MUTED, labelsize=8.5, length=0)
     ax.set_xlabel(
         "PPDA  —  opponent passes allowed per defensive action, lower is a harder press",
-        color=MUTED, fontsize=9, labelpad=10)
+        color=MUTED,
+        fontsize=9,
+        labelpad=10,
+    )
 
     # The denominators, beside the plot. Floating inside it they read as data.
-    fig.text(0.775, 0.755, "WHAT EACH RATIO DIVIDES", color=MUTED, fontsize=7.5,
-             fontweight="bold")
+    fig.text(0.775, 0.755, "WHAT EACH RATIO DIVIDES", color=MUTED, fontsize=7.5, fontweight="bold")
     top = 0.715
     for name, colour, side in ((HOME_NAME, HOME, "home"), (AWAY_NAME, AWAY, "away")):
         entry = data[side]
-        fig.text(0.775, top, name.upper(), color=colour, fontsize=10,
-                 fontweight="bold")
-        for step, (figure, caption) in enumerate((
+        fig.text(0.775, top, name.upper(), color=colour, fontsize=10, fontweight="bold")
+        for step, (figure, caption) in enumerate(
+            (
                 (entry.get("passes_allowed", 0), "opponent\npasses"),
-                (entry.get("defensive_actions", 0), "defensive\nactions"))):
+                (entry.get("defensive_actions", 0), "defensive\nactions"),
+            )
+        ):
             row_y = top - 0.042 - step * 0.054
-            fig.text(0.775, row_y, f"{float(figure or 0):.0f}", color=TEXT,
-                     fontsize=15, fontweight="bold")
-            fig.text(0.832, row_y + 0.006, caption, color=MUTED, fontsize=7.5,
-                     linespacing=1.3)
+            fig.text(
+                0.775,
+                row_y,
+                f"{float(figure or 0):.0f}",
+                color=TEXT,
+                fontsize=15,
+                fontweight="bold",
+            )
+            fig.text(0.832, row_y + 0.006, caption, color=MUTED, fontsize=7.5, linespacing=1.3)
         top -= 0.170
 
-    fig.text(0.135, 0.105,
-             "Opponent passes ÷ tackles + interceptions + fouls + challenges + recoveries, "
-             "in the opponent 60% of the pitch. A state under 30 opponent passes is left "
-             "unrated: one tackle would move it.",
-             color=NEUTRAL, fontsize=8.5)
+    fig.text(
+        0.135,
+        0.105,
+        "Opponent passes ÷ tackles + interceptions + fouls + challenges + recoveries, "
+        "in the opponent 60% of the pitch. A state under 30 opponent passes is left "
+        "unrated: one tackle would move it.",
+        color=NEUTRAL,
+        fontsize=8.5,
+    )
     return save(fig, "31_ppda_pressing.png")
 
 
@@ -2476,33 +3570,83 @@ def press_profile(events, xg=None, team_metrics=None):
 
     axes = []
     for label, floor, ceiling, lower_better, digits, home, away in (
-            ("Press\nintensity", 6.0, 20.0, True, 1,
-             ppda_data["home"]["ppda"], ppda_data["away"]["ppda"]),
-            # high_regains is the pipeline own count, used by every other
-            # board. Counting final-third recoveries again here produced a
-            # second, quieter definition of the same thing.
-            ("High\nrecoveries", 0.0, 22.0, False, 0,
-             metric("home", "high_regains"), metric("away", "high_regains")),
-            ("Regain\nconversion", 0.0, 20.0, False, 1,
-             metric("home", "regain_to_shot_rate"), metric("away", "regain_to_shot_rate")),
-            ("Counter\npress", 0.0, 25.0, False, 1,
-             metric("home", "counterpress_success_rate"),
-             metric("away", "counterpress_success_rate")),
-            ("Territory", 0.0, 100.0, False, 1,
-             metric("home", "field_tilt"), metric("away", "field_tilt")),
-            ("Rest\ndefence", 0.0, 30.0, True, 1,
-             _punished_share(metric("home", "rest_defence_dangerous_counters"),
-                             metric("home", "rest_defence_exposures")),
-             _punished_share(metric("away", "rest_defence_dangerous_counters"),
-                             metric("away", "rest_defence_exposures")))):
-        axes.append((label, float(home or 0), float(away or 0), floor, ceiling,
-                     lower_better, digits))
+        (
+            "Press\nintensity",
+            6.0,
+            20.0,
+            True,
+            1,
+            ppda_data["home"]["ppda"],
+            ppda_data["away"]["ppda"],
+        ),
+        # high_regains is the pipeline own count, used by every other
+        # board. Counting final-third recoveries again here produced a
+        # second, quieter definition of the same thing.
+        (
+            "High\nrecoveries",
+            0.0,
+            22.0,
+            False,
+            0,
+            metric("home", "high_regains"),
+            metric("away", "high_regains"),
+        ),
+        (
+            "Regain\nconversion",
+            0.0,
+            20.0,
+            False,
+            1,
+            metric("home", "regain_to_shot_rate"),
+            metric("away", "regain_to_shot_rate"),
+        ),
+        (
+            "Counter\npress",
+            0.0,
+            25.0,
+            False,
+            1,
+            metric("home", "counterpress_success_rate"),
+            metric("away", "counterpress_success_rate"),
+        ),
+        (
+            "Territory",
+            0.0,
+            100.0,
+            False,
+            1,
+            metric("home", "field_tilt"),
+            metric("away", "field_tilt"),
+        ),
+        (
+            "Rest\ndefence",
+            0.0,
+            30.0,
+            True,
+            1,
+            _punished_share(
+                metric("home", "rest_defence_dangerous_counters"),
+                metric("home", "rest_defence_exposures"),
+            ),
+            _punished_share(
+                metric("away", "rest_defence_dangerous_counters"),
+                metric("away", "rest_defence_exposures"),
+            ),
+        ),
+    ):
+        axes.append(
+            (label, float(home or 0), float(away or 0), floor, ceiling, lower_better, digits)
+        )
 
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
     fig.text(0.055, 0.95, "Pressing Profile", fontsize=23, fontweight="bold", color=TEXT)
-    fig.text(0.055, 0.905,
-             "Six questions about the same press · further from the centre is better on every axis",
-             fontsize=11, color=MUTED)
+    fig.text(
+        0.055,
+        0.905,
+        "Six questions about the same press · further from the centre is better on every axis",
+        fontsize=11,
+        color=MUTED,
+    )
 
     ax = fig.add_axes([0.345, 0.245, 0.295, 0.455], projection="polar")
     ax.set_facecolor(BG)
@@ -2522,18 +3666,34 @@ def press_profile(events, xg=None, team_metrics=None):
         loop = list(angles) + [angles[0]]
         ax.plot(loop, values + values[:1], color=colour, lw=2.4, zorder=4)
         ax.fill(loop, values + values[:1], color=colour, alpha=0.16, zorder=3)
-        ax.scatter(angles, values, color=colour, s=34, zorder=5,
-                   edgecolors=BG, linewidths=1.2)
+        ax.scatter(angles, values, color=colour, s=34, zorder=5, edgecolors=BG, linewidths=1.2)
 
     for angle, row in zip(angles, axes):
-        ax.text(angle, 1.19, row[0].upper(), ha="center", va="center", color=TEXT,
-                fontsize=8, fontweight="bold", linespacing=1.25)
+        ax.text(
+            angle,
+            1.19,
+            row[0].upper(),
+            ha="center",
+            va="center",
+            color=TEXT,
+            fontsize=8,
+            fontweight="bold",
+            linespacing=1.25,
+        )
         # One figure per line, each in its own side's colour. Side by side at an
         # angular offset they overlapped at the top and bottom of the ring,
         # where a small rotation is almost no horizontal distance.
         for radius, value, colour in ((1.36, row[1], HOME), (1.50, row[2], AWAY)):
-            ax.text(angle, radius, f"{value:.{row[6]}f}", ha="center", va="center",
-                    color=colour, fontsize=8.5, fontweight="bold")
+            ax.text(
+                angle,
+                radius,
+                f"{value:.{row[6]}f}",
+                ha="center",
+                va="center",
+                color=colour,
+                fontsize=8.5,
+                fontweight="bold",
+            )
 
     ax.set_ylim(0, 1)
     ax.set_xticks([])
@@ -2545,28 +3705,42 @@ def press_profile(events, xg=None, team_metrics=None):
         fig.text(0.055, top, name.upper(), color=colour, fontsize=11, fontweight="bold")
         # A club name on its own is a key, not a reading. Two figures under it
         # say what its shape is made of.
-        fig.text(0.055, top - 0.052,
-                 f"{metric(side, 'field_tilt'):.0f}% of the territory"
-                 + chr(10)
-                 + f"{metric(side, 'high_regains'):.0f} high recoveries",
-                 color=MUTED, fontsize=8.5, linespacing=1.5)
+        fig.text(
+            0.055,
+            top - 0.052,
+            f"{metric(side, 'field_tilt'):.0f}% of the territory"
+            + chr(10)
+            + f"{metric(side, 'high_regains'):.0f} high recoveries",
+            color=MUTED,
+            fontsize=8.5,
+            linespacing=1.5,
+        )
         top -= 0.14
 
     fig.text(0.055, 0.46, "HOW TO READ IT", color=MUTED, fontsize=7.5, fontweight="bold")
-    fig.text(0.055, 0.30,
-             "Press intensity is PPDA inverted and rest\n"
-             "defence is the share of advanced losses\n"
-             "punished, also inverted, so that further\n"
-             "out is better on all six.\n\n"
-             "The two figures on each axis are the raw\n"
-             "values, each in its own side's colour.",
-             color=MUTED, fontsize=8.5, linespacing=1.6)
+    fig.text(
+        0.055,
+        0.30,
+        "Press intensity is PPDA inverted and rest\n"
+        "defence is the share of advanced losses\n"
+        "punished, also inverted, so that further\n"
+        "out is better on all six.\n\n"
+        "The two figures on each axis are the raw\n"
+        "values, each in its own side's colour.",
+        color=MUTED,
+        fontsize=8.5,
+        linespacing=1.6,
+    )
 
-    fig.text(0.135, 0.062,
-             "A shape that reaches on intensity and recoveries but not on conversion is a side "
-             "winning the ball back without threatening from it. Axis floors and ceilings are "
-             "fixed, not scaled to this fixture, so two matches can be compared.",
-             color=NEUTRAL, fontsize=8.5)
+    fig.text(
+        0.135,
+        0.062,
+        "A shape that reaches on intensity and recoveries but not on conversion is a side "
+        "winning the ball back without threatening from it. Axis floors and ceilings are "
+        "fixed, not scaled to this fixture, so two matches can be compared.",
+        color=NEUTRAL,
+        fontsize=8.5,
+    )
     return save(fig, "31b_press_profile.png")
 
 
@@ -2584,50 +3758,90 @@ def transition_outcomes(events):
     team_data = {}
     for team_id in [HOME_ID, AWAY_ID]:
         transitions = possessions[
-            possessions["team_id"].eq(team_id)
-            & possessions["is_transition"].astype(bool)
+            possessions["team_id"].eq(team_id) & possessions["is_transition"].astype(bool)
         ].copy()
         total = len(transitions)
-        chances = int((pd.to_numeric(transitions["transition_shots"], errors="coerce").fillna(0) > 0).sum()) if total else 0
-        shots = int(pd.to_numeric(transitions["transition_shots"], errors="coerce").fillna(0).sum()) if total else 0
-        goals = int(pd.to_numeric(transitions["transition_goals"], errors="coerce").fillna(0).sum()) if total else 0
+        chances = (
+            int(
+                (
+                    pd.to_numeric(transitions["transition_shots"], errors="coerce").fillna(0) > 0
+                ).sum()
+            )
+            if total
+            else 0
+        )
+        shots = (
+            int(pd.to_numeric(transitions["transition_shots"], errors="coerce").fillna(0).sum())
+            if total
+            else 0
+        )
+        goals = (
+            int(pd.to_numeric(transitions["transition_goals"], errors="coerce").fillna(0).sum())
+            if total
+            else 0
+        )
         paths = []
         for transition in transitions.itertuples():
             window = annotated[
                 annotated["possession_id"].eq(int(transition.possession_id))
                 & annotated["team_id"].eq(team_id)
-                & (pd.to_numeric(annotated["_clock_seconds"], errors="coerce") <= float(transition.start_time) + 12.0)
+                & (
+                    pd.to_numeric(annotated["_clock_seconds"], errors="coerce")
+                    <= float(transition.start_time) + 12.0
+                )
             ].copy()
             points = [(float(transition.start_x), float(transition.start_y))]
             for _, row in window.iterrows():
-                for x_value, y_value in [(row.get("_x", np.nan), row.get("_y", np.nan)),
-                                         (row.get("_end_x", np.nan), row.get("_end_y", np.nan))]:
+                for x_value, y_value in [
+                    (row.get("_x", np.nan), row.get("_y", np.nan)),
+                    (row.get("_end_x", np.nan), row.get("_end_y", np.nan)),
+                ]:
                     if pd.notna(x_value) and pd.notna(y_value):
                         points.append((float(x_value), float(y_value)))
             end_x, end_y = max(points, key=lambda point: point[0])
-            paths.append({
-                "start_x": float(transition.start_x),
-                "start_y": float(transition.start_y),
-                "end_x": end_x,
-                "end_y": end_y,
-                "shot": int(transition.transition_shots) > 0,
-                "goal": int(transition.transition_goals) > 0,
-                "minute": int(float(transition.start_time) // 60),
-            })
+            paths.append(
+                {
+                    "start_x": float(transition.start_x),
+                    "start_y": float(transition.start_y),
+                    "end_x": end_x,
+                    "end_y": end_y,
+                    "shot": int(transition.transition_shots) > 0,
+                    "goal": int(transition.transition_goals) > 0,
+                    "minute": int(float(transition.start_time) // 60),
+                }
+            )
         team_data[team_id] = {
             "total": total,
             "chances": chances,
             "shots": shots,
             "goals": goals,
-            "xg": float(pd.to_numeric(transitions["transition_xG"], errors="coerce").fillna(0).sum()) if total else 0.0,
-            "box_entries": int(pd.to_numeric(transitions["transition_box_entries"], errors="coerce").fillna(0).sum()) if total else 0,
+            "xg": float(
+                pd.to_numeric(transitions["transition_xG"], errors="coerce").fillna(0).sum()
+            )
+            if total
+            else 0.0,
+            "box_entries": int(
+                pd.to_numeric(transitions["transition_box_entries"], errors="coerce")
+                .fillna(0)
+                .sum()
+            )
+            if total
+            else 0,
             "paths": paths,
         }
 
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
     fig.text(0.055, 0.95, "Transition Map & Outcomes", fontsize=23, fontweight="bold", color=TEXT)
-    fig.text(0.055, 0.908, "Each line runs from the regain/turnover location to the most advanced point reached inside 12 seconds", fontsize=10.5, color=MUTED)
-    fig.add_artist(Line2D([0.055, 0.945], [0.872, 0.872], transform=fig.transFigure, color=GRID, lw=1))
+    fig.text(
+        0.055,
+        0.908,
+        "Each line runs from the regain/turnover location to the most advanced point reached inside 12 seconds",
+        fontsize=10.5,
+        color=MUTED,
+    )
+    fig.add_artist(
+        Line2D([0.055, 0.945], [0.872, 0.872], transform=fig.transFigure, color=GRID, lw=1)
+    )
 
     layouts = [
         (HOME_ID, [0.055, 0.145, 0.265, 0.675], [0.335, 0.215, 0.135, 0.515], 0.19),
@@ -2635,8 +3849,15 @@ def transition_outcomes(events):
     ]
     for team_id, pitch_rect, card_rect, title_x in layouts:
         data = team_data[team_id]
-        fig.text(title_x, 0.835, TEAM_NAME[team_id], color=TEXT, fontsize=14,
-                 fontweight="bold", ha="center")
+        fig.text(
+            title_x,
+            0.835,
+            TEAM_NAME[team_id],
+            color=TEXT,
+            fontsize=14,
+            fontweight="bold",
+            ha="center",
+        )
         pitch = fig.add_axes(pitch_rect)
         pitch.axhspan(66.7 * PITCH_LENGTH / 100, PITCH_LENGTH, color=FOCUS, alpha=0.035, zorder=0)
         draw_long_pitch(pitch)
@@ -2645,66 +3866,174 @@ def transition_outcomes(events):
             sx, sy = player_position_xy([path["start_x"]], [path["start_y"]])
             ex, ey = player_position_xy([path["end_x"]], [path["end_y"]])
             if path["goal"]:
-                color, alpha, width, marker, size, line_style = EVENT_HIGHLIGHT, 0.95, 2.25, "*", 75, "-"
+                color, alpha, width, marker, size, line_style = (
+                    EVENT_HIGHLIGHT,
+                    0.95,
+                    2.25,
+                    "*",
+                    75,
+                    "-",
+                )
             elif path["shot"]:
-                color, alpha, width, marker, size, line_style = EVENT_SUCCESS, 0.82, 1.35, "D", 25, "-"
+                color, alpha, width, marker, size, line_style = (
+                    EVENT_SUCCESS,
+                    0.82,
+                    1.35,
+                    "D",
+                    25,
+                    "-",
+                )
             else:
-                color, alpha, width, marker, size, line_style = EVENT_NEUTRAL, 0.24, 0.62, None, 0, QUIET_DASH
-            pitch.annotate("", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
-                           arrowprops=dict(arrowstyle="-|>", color=color, alpha=alpha,
-                                           lw=width, linestyle=line_style,
-                                           mutation_scale=7 if not path["goal"] else 10), zorder=3)
-            pitch.scatter(sx[0], sy[0], s=8, facecolors=BG, edgecolors=color,
-                          linewidth=0.55, alpha=max(alpha, 0.35), zorder=4)
+                color, alpha, width, marker, size, line_style = (
+                    EVENT_NEUTRAL,
+                    0.24,
+                    0.62,
+                    None,
+                    0,
+                    QUIET_DASH,
+                )
+            pitch.annotate(
+                "",
+                xy=(ex[0], ey[0]),
+                xytext=(sx[0], sy[0]),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color=color,
+                    alpha=alpha,
+                    lw=width,
+                    linestyle=line_style,
+                    mutation_scale=7 if not path["goal"] else 10,
+                ),
+                zorder=3,
+            )
+            pitch.scatter(
+                sx[0],
+                sy[0],
+                s=8,
+                facecolors=BG,
+                edgecolors=color,
+                linewidth=0.55,
+                alpha=max(alpha, 0.35),
+                zorder=4,
+            )
             if marker:
-                pitch.scatter(ex[0], ey[0], s=size, marker=marker, color=color,
-                              edgecolor=TEXT, linewidth=0.55, zorder=5)
+                pitch.scatter(
+                    ex[0],
+                    ey[0],
+                    s=size,
+                    marker=marker,
+                    color=color,
+                    edgecolor=TEXT,
+                    linewidth=0.55,
+                    zorder=5,
+                )
             if path["goal"]:
-                pitch.text(ex[0], ey[0] + 2.0, f"{path['minute']}′", color=EVENT_HIGHLIGHT,
-                           fontsize=6.5, fontweight="bold", ha="center", zorder=6)
+                pitch.text(
+                    ex[0],
+                    ey[0] + 2.0,
+                    f"{path['minute']}′",
+                    color=EVENT_HIGHLIGHT,
+                    fontsize=6.5,
+                    fontweight="bold",
+                    ha="center",
+                    zorder=6,
+                )
 
         card = fig.add_axes(card_rect)
-        card.set_facecolor(PANEL); card.set_xlim(0, 1); card.set_ylim(0, 1); card.set_xticks([]); card.set_yticks([])
+        card.set_facecolor(PANEL)
+        card.set_xlim(0, 1)
+        card.set_ylim(0, 1)
+        card.set_xticks([])
+        card.set_yticks([])
         for spine in card.spines.values():
             spine.set_color(GRID)
         side_title(card, "OUTCOMES")
-        side_kpis(card, [
-            ("Transitions", data["total"]),
-            ("Created chance", data["chances"]),
-            ("Goals", data["goals"]),
-            ("Transition xG", f"{data['xg']:.2f}"),
-            ("Box entries", data["box_entries"]),
-        ], start=0.82, gap=0.135)
+        side_kpis(
+            card,
+            [
+                ("Transitions", data["total"]),
+                ("Created chance", data["chances"]),
+                ("Goals", data["goals"]),
+                ("Transition xG", f"{data['xg']:.2f}"),
+                ("Box entries", data["box_entries"]),
+            ],
+            start=0.82,
+            gap=0.135,
+        )
         chance_rate = 100 * data["chances"] / max(data["total"], 1)
-        card.text(0.08, 0.065, f"Chance rate: {chance_rate:.1f}%", color=TEXT,
-                  fontsize=7.5, fontweight="bold")
+        card.text(
+            0.08,
+            0.065,
+            f"Chance rate: {chance_rate:.1f}%",
+            color=TEXT,
+            fontsize=7.5,
+            fontweight="bold",
+        )
 
     legend = [
-        Line2D([0], [0], color=EVENT_NEUTRAL, lw=1.35, alpha=0.55,
-               linestyle=QUIET_DASH, label="Transition without shot"),
-        Line2D([0], [0], color=EVENT_SUCCESS, lw=2, marker="D", markersize=5,
-               label="Created a chance"),
-        Line2D([0], [0], color=EVENT_HIGHLIGHT, lw=2.5, marker="*", markersize=8,
-               label="Ended in a goal"),
+        Line2D(
+            [0],
+            [0],
+            color=EVENT_NEUTRAL,
+            lw=1.35,
+            alpha=0.55,
+            linestyle=QUIET_DASH,
+            label="Transition without shot",
+        ),
+        Line2D(
+            [0], [0], color=EVENT_SUCCESS, lw=2, marker="D", markersize=5, label="Created a chance"
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=EVENT_HIGHLIGHT,
+            lw=2.5,
+            marker="*",
+            markersize=8,
+            label="Ended in a goal",
+        ),
     ]
-    fig.legend(handles=legend, loc="lower center", bbox_to_anchor=(0.5, 0.067), ncol=3,
-               frameon=False, labelcolor=TEXT, fontsize=8)
-    fig.text(0.055, 0.032,
-             "DEFINITION  Open-play regain/turnover that within 12s progresses ≥20m, reaches the final third/box, or produces a shot · restarts excluded.",
-             color=NEUTRAL, fontsize=7.5)
-    fig.text(0.945, 0.032, "ARROW = START → MOST ADVANCED POINT", ha="right", fontsize=7.5, color=NEUTRAL)
+    fig.legend(
+        handles=legend,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.067),
+        ncol=3,
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=8,
+    )
+    fig.text(
+        0.055,
+        0.032,
+        "DEFINITION  Open-play regain/turnover that within 12s progresses ≥20m, reaches the final third/box, or produces a shot · restarts excluded.",
+        color=NEUTRAL,
+        fontsize=7.5,
+    )
+    fig.text(
+        0.945, 0.032, "ARROW = START → MOST ADVANCED POINT", ha="right", fontsize=7.5, color=NEUTRAL
+    )
     return save(fig, "32_transition_outcomes.png")
 
 
 def _game_state_durations(events):
     period = events.get("period_code", pd.Series("", index=events.index)).astype(str).str.lower()
-    live = events[~period.isin(["pre", "prematch", "post", "postgame", "pso", "penaltyshootout"])].copy()
-    live["_clock"] = pd.to_numeric(live["minute"], errors="coerce").fillna(0) * 60 + pd.to_numeric(live["second"], errors="coerce").fillna(0)
+    live = events[
+        ~period.isin(["pre", "prematch", "post", "postgame", "pso", "penaltyshootout"])
+    ].copy()
+    live["_clock"] = pd.to_numeric(live["minute"], errors="coerce").fillna(0) * 60 + pd.to_numeric(
+        live["second"], errors="coerce"
+    ).fillna(0)
     shootout = as_bool(live.get("is_penalty_shootout", pd.Series(False, index=live.index)))
-    goals = live[as_bool(live.get("is_goal", pd.Series(False, index=live.index))) & ~shootout].sort_values(["_clock", "event_id"], kind="stable").copy()
+    goals = (
+        live[as_bool(live.get("is_goal", pd.Series(False, index=live.index))) & ~shootout]
+        .sort_values(["_clock", "event_id"], kind="stable")
+        .copy()
+    )
     # Game state is driven by the scoreline, so own goals must be credited to
     # the side that benefits from them.
-    goals["_credited_team"] = base.credited_team(goals) if not goals.empty else pd.Series(dtype=float)
+    goals["_credited_team"] = (
+        base.credited_team(goals) if not goals.empty else pd.Series(dtype=float)
+    )
     end_time = float(live["_clock"].max()) if not live.empty else 0.0
     durations = {"drawing": 0.0, "home_ahead": 0.0, "away_ahead": 0.0}
     home_score = away_score = 0
@@ -2756,35 +4085,107 @@ def game_state(events, team_metrics):
             "color": AWAY,
         },
     ]
-    specs = [("Shots", "shots", "{:.0f}"), ("xG", "xG", "{:.2f}"), ("Transitions", "transitions", "{:.0f}"), ("Box entries", "box_entries", "{:.0f}")]
+    specs = [
+        ("Shots", "shots", "{:.0f}"),
+        ("xG", "xG", "{:.2f}"),
+        ("Transitions", "transitions", "{:.0f}"),
+        ("Box entries", "box_entries", "{:.0f}"),
+    ]
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
-    fig.text(0.055, 0.95, "Game-State Output by Match Situation", fontsize=23, fontweight="bold", color=TEXT)
-    fig.text(0.055, 0.908, "Each card is one shared scoreboard situation · values are totals from possessions starting in that situation", fontsize=10.5, color=MUTED)
-    fig.add_artist(Line2D([0.055, 0.945], [0.872, 0.872], transform=fig.transFigure, color=GRID, lw=1))
+    fig.text(
+        0.055,
+        0.95,
+        "Game-State Output by Match Situation",
+        fontsize=23,
+        fontweight="bold",
+        color=TEXT,
+    )
+    fig.text(
+        0.055,
+        0.908,
+        "Each card is one shared scoreboard situation · values are totals from possessions starting in that situation",
+        fontsize=10.5,
+        color=MUTED,
+    )
+    fig.add_artist(
+        Line2D([0.055, 0.945], [0.872, 0.872], transform=fig.transFigure, color=GRID, lw=1)
+    )
 
     timeline = fig.add_axes([0.075, 0.775, 0.85, 0.065])
-    timeline.set_xlim(0, max(match_seconds, 1)); timeline.set_ylim(0, 1); timeline.axis("off")
+    timeline.set_xlim(0, max(match_seconds, 1))
+    timeline.set_ylim(0, 1)
+    timeline.axis("off")
     left = 0.0
     for scenario in scenarios:
         duration = durations[scenario["duration_key"]]
         if duration > 0:
-            timeline.barh(0.56, duration, left=left, height=0.36, color=scenario["color"], alpha=0.82, edgecolor=BG, linewidth=1.0)
+            timeline.barh(
+                0.56,
+                duration,
+                left=left,
+                height=0.36,
+                color=scenario["color"],
+                alpha=0.82,
+                edgecolor=BG,
+                linewidth=1.0,
+            )
             if duration / max(match_seconds, 1) > 0.10:
-                timeline.text(left + duration / 2, 0.56, scenario["title"], color=TEXT, fontsize=7.5, fontweight="bold", ha="center", va="center")
+                timeline.text(
+                    left + duration / 2,
+                    0.56,
+                    scenario["title"],
+                    color=TEXT,
+                    fontsize=7.5,
+                    fontweight="bold",
+                    ha="center",
+                    va="center",
+                )
         left += duration
     timeline.text(0, 0.03, "MATCH TIME SHARE", color=MUTED, fontsize=6.8, ha="left")
-    timeline.text(max(match_seconds, 1), 0.03, f"TOTAL · {match_seconds / 60:.1f} min", color=MUTED, fontsize=6.8, ha="right")
+    timeline.text(
+        max(match_seconds, 1),
+        0.03,
+        f"TOTAL · {match_seconds / 60:.1f} min",
+        color=MUTED,
+        fontsize=6.8,
+        ha="right",
+    )
     legend_x = [0.15, 0.42, 0.70]
     for x, scenario in zip(legend_x, scenarios):
         minutes = durations[scenario["duration_key"]] / 60
-        fig.add_artist(Rectangle((x, 0.735), 0.014, 0.014, transform=fig.transFigure,
-                                 facecolor=scenario["color"], edgecolor=TEXT, lw=0.45, alpha=0.9))
-        fig.text(x + 0.020, 0.742, f"{scenario['title'].title()} · {minutes:.1f} min", color=TEXT, fontsize=8, va="center")
+        fig.add_artist(
+            Rectangle(
+                (x, 0.735),
+                0.014,
+                0.014,
+                transform=fig.transFigure,
+                facecolor=scenario["color"],
+                edgecolor=TEXT,
+                lw=0.45,
+                alpha=0.9,
+            )
+        )
+        fig.text(
+            x + 0.020,
+            0.742,
+            f"{scenario['title'].title()} · {minutes:.1f} min",
+            color=TEXT,
+            fontsize=8,
+            va="center",
+        )
 
-    active_scenarios = [scenario for scenario in scenarios if durations[scenario["duration_key"]] >= 3.0]
-    inactive_scenarios = [scenario for scenario in scenarios if durations[scenario["duration_key"]] < 3.0]
+    active_scenarios = [
+        scenario for scenario in scenarios if durations[scenario["duration_key"]] >= 3.0
+    ]
+    inactive_scenarios = [
+        scenario for scenario in scenarios if durations[scenario["duration_key"]] < 3.0
+    ]
     if len(active_scenarios) == 3:
-        card_positions = [[0.055, 0.16, 0.285, 0.535], [0.3575, 0.16, 0.285, 0.535], [0.66, 0.16, 0.285, 0.535]]
+        card_positions = [
+            [0.055, 0.16, 0.285, 0.535],
+            [0.3575, 0.16, 0.285, 0.535],
+            [0.66, 0.16, 0.285, 0.535],
+        ]
     elif len(active_scenarios) == 2:
         card_positions = [[0.06, 0.16, 0.415, 0.535], [0.525, 0.16, 0.415, 0.535]]
     else:
@@ -2796,22 +4197,46 @@ def game_state(events, team_metrics):
             "SCORE LEVEL": "The score was never level",
         }
         note = " · ".join(inactive_labels[scenario["title"]] for scenario in inactive_scenarios)
-        fig.text(0.50, 0.705, f"NOT PLAYED · {note}", color=FOCUS, fontsize=8.2,
-                 fontweight="bold", ha="center",
-                 bbox=dict(boxstyle="round,pad=0.38", fc=PANEL, ec=GRID, lw=0.7))
+        fig.text(
+            0.50,
+            0.705,
+            f"NOT PLAYED · {note}",
+            color=FOCUS,
+            fontsize=8.2,
+            fontweight="bold",
+            ha="center",
+            bbox=dict(boxstyle="round,pad=0.38", fc=PANEL, ec=GRID, lw=0.7),
+        )
     for rect, scenario in zip(card_positions, active_scenarios):
         ax = fig.add_axes(rect)
-        ax.set_facecolor(PANEL); ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.set_xticks([]); ax.set_yticks([])
+        ax.set_facecolor(PANEL)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
         for spine in ax.spines.values():
-            spine.set_color(scenario["color"]); spine.set_linewidth(1.2)
+            spine.set_color(scenario["color"])
+            spine.set_linewidth(1.2)
         duration_minutes = durations[scenario["duration_key"]] / 60
         ax.text(0.06, 0.93, scenario["title"], color=TEXT, fontsize=12, fontweight="bold", va="top")
         ax.text(0.06, 0.865, scenario["subtitle"], color=MUTED, fontsize=7.4, va="top")
-        ax.text(0.94, 0.93, f"{duration_minutes:.1f} min", color=TEXT, fontsize=9,
-                fontweight="bold", ha="right", va="top")
+        ax.text(
+            0.94,
+            0.93,
+            f"{duration_minutes:.1f} min",
+            color=TEXT,
+            fontsize=9,
+            fontweight="bold",
+            ha="right",
+            va="top",
+        )
         ax.plot([0.06, 0.94], [0.81, 0.81], color=GRID, lw=0.8)
-        ax.text(0.57, 0.755, HOME_NAME.upper(), color=HOME, fontsize=7.5, fontweight="bold", ha="center")
-        ax.text(0.84, 0.755, AWAY_NAME.upper(), color=AWAY, fontsize=7.5, fontweight="bold", ha="center")
+        ax.text(
+            0.57, 0.755, HOME_NAME.upper(), color=HOME, fontsize=7.5, fontweight="bold", ha="center"
+        )
+        ax.text(
+            0.84, 0.755, AWAY_NAME.upper(), color=AWAY, fontsize=7.5, fontweight="bold", ha="center"
+        )
         # The rate belongs on this card, not on a page of its own. It used to
         # live in a second chart that repeated these same three states with a
         # different denominator, so a reader comparing "Chelsea ahead" totals
@@ -2819,11 +4244,33 @@ def game_state(events, team_metrics):
         # level and ninety-four ahead cannot be read from totals alone.
         for idx, (label, key, fmt) in enumerate(specs):
             y = 0.66 - idx * 0.115
-            home_value = base.metric_lookup(team_metrics, "home", f"game_state_{scenario['home_state']}_{key}")
-            away_value = base.metric_lookup(team_metrics, "away", f"game_state_{scenario['away_state']}_{key}")
+            home_value = base.metric_lookup(
+                team_metrics, "home", f"game_state_{scenario['home_state']}_{key}"
+            )
+            away_value = base.metric_lookup(
+                team_metrics, "away", f"game_state_{scenario['away_state']}_{key}"
+            )
             ax.text(0.07, y, label, color=TEXT, fontsize=8.5, va="center")
-            ax.text(0.57, y, fmt.format(home_value), color=TEXT, fontsize=12, fontweight="bold", ha="center", va="center")
-            ax.text(0.84, y, fmt.format(away_value), color=TEXT, fontsize=12, fontweight="bold", ha="center", va="center")
+            ax.text(
+                0.57,
+                y,
+                fmt.format(home_value),
+                color=TEXT,
+                fontsize=12,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+            ax.text(
+                0.84,
+                y,
+                fmt.format(away_value),
+                color=TEXT,
+                fontsize=12,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
             ax.plot([0.07, 0.93], [y - 0.055, y - 0.055], color=GRID, lw=0.55, alpha=0.75)
             if key == "xG":
                 home_xg, away_xg = home_value, away_value
@@ -2833,37 +4280,87 @@ def game_state(events, team_metrics):
             # Below five minutes the ratio says more about the clock than the
             # football, which is the rule the separate chart already used.
             text = f"{value * 30 / duration_minutes:.2f}" if duration_minutes >= 5 else "—"
-            ax.text(x, rate_y, text, color=MUTED, fontsize=11, fontweight="bold",
-                    ha="center", va="center")
-        ax.text(0.07, 0.075,
-                "Rows above are totals; the italic row is the rate over this state's minutes.",
-                color=NEUTRAL, fontsize=6.7)
+            ax.text(
+                x,
+                rate_y,
+                text,
+                color=MUTED,
+                fontsize=11,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+        ax.text(
+            0.07,
+            0.075,
+            "Rows above are totals; the italic row is the rate over this state's minutes.",
+            color=NEUTRAL,
+            fontsize=6.7,
+        )
 
-    fig.text(0.055, 0.095, f"HOW TO READ  {HOME_NAME} ahead pairs {HOME_NAME}'s leading output with {AWAY_NAME}'s trailing output; {AWAY_NAME} ahead does the reverse.", color=MUTED, fontsize=8.2)
-    fig.text(0.055, 0.066, "Game state is assigned at possession start · Timeline duration is reconstructed from goal times.", color=NEUTRAL, fontsize=7.5)
-    fig.text(0.945, 0.035, f"{HOME_NAME.upper()} · {AWAY_NAME.upper()} · REAL MATCH DATA", ha="right", fontsize=7.5, color=NEUTRAL)
+    fig.text(
+        0.055,
+        0.095,
+        f"HOW TO READ  {HOME_NAME} ahead pairs {HOME_NAME}'s leading output with {AWAY_NAME}'s trailing output; {AWAY_NAME} ahead does the reverse.",
+        color=MUTED,
+        fontsize=8.2,
+    )
+    fig.text(
+        0.055,
+        0.066,
+        "Game state is assigned at possession start · Timeline duration is reconstructed from goal times.",
+        color=NEUTRAL,
+        fontsize=7.5,
+    )
+    fig.text(
+        0.945,
+        0.035,
+        f"{HOME_NAME.upper()} · {AWAY_NAME.upper()} · REAL MATCH DATA",
+        ha="right",
+        fontsize=7.5,
+        color=NEUTRAL,
+    )
     return save(fig, "33_game_state_splits.png")
 
 
 def player_sequence(player_metrics):
     metrics = [("xGChain", "xGChain"), ("xGBuildup", "xGBuildup"), ("Sequence xT", "sequence_xT")]
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
-    fig.text(0.055, 0.95, "Player Sequence Contribution", fontsize=23, fontweight="bold", color=TEXT)
-    fig.text(0.055, 0.91, "Top players by xGChain, xGBuildup and sequence xT involvement", fontsize=11, color=MUTED)
-    axes = fig.subplots(1, 3); fig.subplots_adjust(left=0.075, right=0.96, top=0.82, bottom=0.10, wspace=0.42)
+    fig.text(
+        0.055, 0.95, "Player Sequence Contribution", fontsize=23, fontweight="bold", color=TEXT
+    )
+    fig.text(
+        0.055,
+        0.91,
+        "Top players by xGChain, xGBuildup and sequence xT involvement",
+        fontsize=11,
+        color=MUTED,
+    )
+    axes = fig.subplots(1, 3)
+    fig.subplots_adjust(left=0.075, right=0.96, top=0.82, bottom=0.10, wspace=0.42)
     for ax, (title, column) in zip(axes, metrics):
         top = player_metrics.sort_values(column, ascending=False).head(5).sort_values(column)
         colors = [HOME if str(team).lower() == HOME_NAME.lower() else AWAY for team in top["team"]]
         ax.barh(top["player"].astype(str).str.split().str[-1], top[column], color=colors, alpha=0.9)
-        base.clean_ax(ax); ax.grid(axis="x", color=GRID, lw=0.65); ax.set_title(title.upper(), loc="left", color=MUTED, fontsize=10, fontweight="bold")
+        base.clean_ax(ax)
+        ax.grid(axis="x", color=GRID, lw=0.65)
+        ax.set_title(title.upper(), loc="left", color=MUTED, fontsize=10, fontweight="bold")
         # Room for the value that sits past the end of the bar, or the
         # longest one prints outside the axes and over its neighbour.
         widest = max(float(top[column].max()), 0.01)
         ax.set_xlim(0, widest * 1.22)
         for idx, value in enumerate(top[column]):
-            ax.text(value + widest * 0.025, idx, f"{value:.2f}", color=TEXT,
-                    va="center", fontsize=8)
-    fig.text(0.945, 0.035, f"{HOME_NAME.upper()} · {AWAY_NAME.upper()}", ha="right", fontsize=8, color=NEUTRAL)
+            ax.text(
+                value + widest * 0.025, idx, f"{value:.2f}", color=TEXT, va="center", fontsize=8
+            )
+    fig.text(
+        0.945,
+        0.035,
+        f"{HOME_NAME.upper()} · {AWAY_NAME.upper()}",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "34_player_sequence_leaders.png")
 
 
@@ -3002,11 +4499,18 @@ def momentum(events):
 
     fig = plt.figure(figsize=(14, 8.6), facecolor=BG)
     base.amoled_header(
-        fig, "Match Momentum",
+        fig,
+        "Match Momentum",
         "Threat built in a rolling eight minutes, and the spells the match divided into",
     )
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
 
     ax = fig.add_axes([0.075, 0.335, 0.875, 0.435])
     band = fig.add_axes([0.075, 0.150, 0.875, 0.075])
@@ -3031,19 +4535,44 @@ def momentum(events):
     ax.set_xticks([])
     ax.tick_params(labelsize=8)
     ax.set_ylabel("threat built in the window", fontsize=8.5, color=MUTED)
-    ax.text(0.004, 0.97, HOME_NAME.upper(), transform=ax.transAxes, color=home_colour,
-            fontsize=9.5, fontweight="bold", va="top")
-    ax.text(0.004, 0.03, AWAY_NAME.upper(), transform=ax.transAxes, color=away_colour,
-            fontsize=9.5, fontweight="bold", va="bottom")
+    ax.text(
+        0.004,
+        0.97,
+        HOME_NAME.upper(),
+        transform=ax.transAxes,
+        color=home_colour,
+        fontsize=9.5,
+        fontweight="bold",
+        va="top",
+    )
+    ax.text(
+        0.004,
+        0.03,
+        AWAY_NAME.upper(),
+        transform=ax.transAxes,
+        color=away_colour,
+        fontsize=9.5,
+        fontweight="bold",
+        va="bottom",
+    )
 
     for row in goals.itertuples():
         colour = home_colour if row.team_id == HOME_ID else away_colour
         y = float(np.interp(row.minute, grid, home if row.team_id == HOME_ID else -away))
-        ax.scatter([row.minute], [y], s=95, marker="o", color=colour,
-                   edgecolor=BG, lw=1.8, zorder=7)
-        ax.annotate(f"{_surname(str(row.player))} {int(row.minute)}'", (row.minute, y),
-                    textcoords="offset points", xytext=(0, 15 if y >= 0 else -21),
-                    ha="center", color=TEXT, fontsize=8.5, fontweight="bold", zorder=9)
+        ax.scatter(
+            [row.minute], [y], s=95, marker="o", color=colour, edgecolor=BG, lw=1.8, zorder=7
+        )
+        ax.annotate(
+            f"{_surname(str(row.player))} {int(row.minute)}'",
+            (row.minute, y),
+            textcoords="offset points",
+            xytext=(0, 15 if y >= 0 else -21),
+            ha="center",
+            color=TEXT,
+            fontsize=8.5,
+            fontweight="bold",
+            zorder=9,
+        )
 
     band.set_ylim(0, 1)
     band.set_yticks([])
@@ -3058,10 +4587,14 @@ def momentum(events):
         home_xg = float(segment.loc[segment["team_id"].eq(HOME_ID), "xG"].sum())
         away_xg = float(segment.loc[segment["team_id"].eq(AWAY_ID), "xG"].sum())
 
-        band.add_patch(Rectangle((lo, 0.0), hi - lo, 1.0, facecolor=away_colour,
-                                 alpha=0.88, lw=0, zorder=3))
-        band.add_patch(Rectangle((lo, 0.0), (hi - lo) * held, 1.0, facecolor=home_colour,
-                                 alpha=0.88, lw=0, zorder=4))
+        band.add_patch(
+            Rectangle((lo, 0.0), hi - lo, 1.0, facecolor=away_colour, alpha=0.88, lw=0, zorder=3)
+        )
+        band.add_patch(
+            Rectangle(
+                (lo, 0.0), (hi - lo) * held, 1.0, facecolor=home_colour, alpha=0.88, lw=0, zorder=4
+            )
+        )
         band.plot([hi, hi], [0, 1], color=BG, lw=1.4, zorder=6)
 
         span = f"{int(round(lo))}–{int(round(hi))}'"
@@ -3072,33 +4605,82 @@ def momentum(events):
             # never runs through the middle of the label.
             anchor = lo + (hi - lo) * (held / 2 if held >= 0.5 else (1 + held) / 2)
             fill = home_colour if held >= 0.5 else away_colour
-            band.text(anchor, 0.66, f"{span}   {split}", ha="center", va="center",
-                      color=text_on_fill(fill), fontsize=9, fontweight="bold", zorder=7)
-            band.text(anchor, 0.30, figures, ha="center", va="center",
-                      color=text_on_fill(fill), fontsize=8, zorder=7)
+            band.text(
+                anchor,
+                0.66,
+                f"{span}   {split}",
+                ha="center",
+                va="center",
+                color=text_on_fill(fill),
+                fontsize=9,
+                fontweight="bold",
+                zorder=7,
+            )
+            band.text(
+                anchor,
+                0.30,
+                figures,
+                ha="center",
+                va="center",
+                color=text_on_fill(fill),
+                fontsize=8,
+                zorder=7,
+            )
         else:
             # Too narrow for two lines. It goes under the band on alternating
             # rows, so two short spells side by side cannot collide.
             narrow_side *= -1
             y = -0.55 if narrow_side < 0 else -1.35
             mid = (lo + hi) / 2.0
-            band.plot([mid, mid], [-0.08, y + 0.30], color=MUTED, lw=0.9,
-                      alpha=0.8, clip_on=False, zorder=4)
-            band.text(mid, y, f"{span}  {split}\n{figures}", ha="center", va="top",
-                      color=MUTED, fontsize=7.6, linespacing=1.5,
-                      clip_on=False, zorder=6)
+            band.plot(
+                [mid, mid],
+                [-0.08, y + 0.30],
+                color=MUTED,
+                lw=0.9,
+                alpha=0.8,
+                clip_on=False,
+                zorder=4,
+            )
+            band.text(
+                mid,
+                y,
+                f"{span}  {split}\n{figures}",
+                ha="center",
+                va="top",
+                color=MUTED,
+                fontsize=7.6,
+                linespacing=1.5,
+                clip_on=False,
+                zorder=6,
+            )
 
-    band.text(0.0, 1.42, "SPELLS", transform=band.transAxes, color=MUTED,
-              fontsize=7.5, fontweight="bold", va="center")
-    band.text(1.0, 1.42,
-              "each block is split by the share of threat inside it · the pair beneath is the xG it produced",
-              transform=band.transAxes, color=MUTED, fontsize=7.5, va="center", ha="right")
+    band.text(
+        0.0,
+        1.42,
+        "SPELLS",
+        transform=band.transAxes,
+        color=MUTED,
+        fontsize=7.5,
+        fontweight="bold",
+        va="center",
+    )
+    band.text(
+        1.0,
+        1.42,
+        "each block is split by the share of threat inside it · the pair beneath is the xG it produced",
+        transform=band.transAxes,
+        color=MUTED,
+        fontsize=7.5,
+        va="center",
+        ha="right",
+    )
     ticks = [t for t in (0, 15, 30, 45, 60, 75, 90) if t <= last]
     band.set_xticks(ticks)
     band.set_xticklabels([str(t) for t in ticks], fontsize=8)
     band.tick_params(colors=MUTED, labelsize=8, pad=44)
     band.set_xlabel("Match minute", fontsize=9, color=MUTED, labelpad=16)
     return save(fig, "35_match_momentum.png")
+
 
 NOTE_STRUCK_AS_DESERVED = "struck as well as" + chr(10) + "the chance was worth"
 
@@ -3132,7 +4714,9 @@ def finishing_quality(events):
     if shots.empty:
         shots["_psxg"] = []
     else:
-        shots["_psxg"] = pd.to_numeric(post_shot_xg(events), errors="coerce").reindex(shots.index).fillna(0.0)
+        shots["_psxg"] = (
+            pd.to_numeric(post_shot_xg(events), errors="coerce").reindex(shots.index).fillna(0.0)
+        )
     shots["xG"] = pd.to_numeric(shots["xG"], errors="coerce").fillna(0).clip(lower=0)
     on_target = shots["shot_whoscored_type"].astype(str).isin(["Goal", "SavedShot"])
 
@@ -3153,31 +4737,53 @@ def finishing_quality(events):
     # striking was poor. Splitting out the on-target subset makes every step a
     # like-for-like comparison -- what reached the frame, how it was struck,
     # and what the goalkeeper did with it.
-    stages = ["Created\n(all attempts)", "Reached the\nframe (xG)",
-              "Struck\n(post-shot xG)", "Scored"]
+    stages = [
+        "Created\n(all attempts)",
+        "Reached the\nframe (xG)",
+        "Struck\n(post-shot xG)",
+        "Scored",
+    ]
     sides = [(HOME_ID, HOME), (AWAY_ID, AWAY)]
     series = []
     for team_id, _colour in sides:
         own = shots[shots["team_id"].eq(team_id)]
         framed_rows = own.loc[on_target.reindex(own.index, fill_value=False)]
-        series.append([
-            float(own["xG"].sum()),
-            float(framed_rows["xG"].sum()),
-            float(framed_rows["_psxg"].sum()),
-            float(as_bool(own.get("is_goal", pd.Series(False, index=own.index))).sum()),
-        ])
+        series.append(
+            [
+                float(own["xG"].sum()),
+                float(framed_rows["xG"].sum()),
+                float(framed_rows["_psxg"].sum()),
+                float(as_bool(own.get("is_goal", pd.Series(False, index=own.index))).sum()),
+            ]
+        )
     ceiling = max(max(values) for values in series)
     # The label goes on the outside of the pair rather than by team, so the
     # upper line's figure is never pushed down onto the lower line's.
     offsets = slope_label_offsets(series, ceiling * 1.28)
     for (team_id, colour), values, label_dy in zip(sides, series, offsets):
-        ax.plot(range(4), values, color=colour, lw=2.8, marker="o", markersize=11,
-                markeredgecolor=BG, markeredgewidth=1.4, zorder=4, label=TEAM_NAME[team_id])
+        ax.plot(
+            range(4),
+            values,
+            color=colour,
+            lw=2.8,
+            marker="o",
+            markersize=11,
+            markeredgecolor=BG,
+            markeredgewidth=1.4,
+            zorder=4,
+            label=TEAM_NAME[team_id],
+        )
         for index, value in enumerate(values):
-            ax.annotate(f"{value:.2f}" if index < 3 else f"{value:.0f}",
-                        (index, value), xytext=(0, label_dy[index]),
-                        textcoords="offset points",
-                        color=colour, fontsize=10, fontweight="bold", ha="center")
+            ax.annotate(
+                f"{value:.2f}" if index < 3 else f"{value:.0f}",
+                (index, value),
+                xytext=(0, label_dy[index]),
+                textcoords="offset points",
+                color=colour,
+                fontsize=10,
+                fontweight="bold",
+                ha="center",
+            )
     ax.set_xticks(range(4), stages, color=TEXT, fontsize=8.5)
     ax.set_xlim(-0.4, 3.4)
     ax.set_ylim(0, ceiling * 1.28)
@@ -3186,16 +4792,29 @@ def finishing_quality(events):
     # Above the plot, not in it. Inside, the top-right corner is exactly where
     # the higher side's goal count is written: Brighton 3-0 Arsenal printed the
     # "3" through the Arsenal key.
-    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.01), frameon=False,
-              labelcolor=TEXT, fontsize=8.5, ncol=2, borderaxespad=0.0)
+    ax.legend(
+        loc="lower right",
+        bbox_to_anchor=(1.0, 1.01),
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=8.5,
+        ncol=2,
+        borderaxespad=0.0,
+    )
     fig.text(0.075, 0.795, "From chance to goal", color=TEXT, fontsize=13, fontweight="bold")
 
     # -- every shot that reached the frame ------------------------------------
     ax2 = fig.add_axes([0.565, 0.435, 0.37, 0.33])
     base.clean_ax(ax2)
     framed = shots[on_target.reindex(shots.index, fill_value=False)]
-    limit = max(float(framed["xG"].max() if not framed.empty else 0),
-                float(framed["_psxg"].max() if not framed.empty else 0), 0.4) * 1.15
+    limit = (
+        max(
+            float(framed["xG"].max() if not framed.empty else 0),
+            float(framed["_psxg"].max() if not framed.empty else 0),
+            0.4,
+        )
+        * 1.15
+    )
     ax2.plot([0, limit], [0, limit], color=NEUTRAL, lw=0.9, ls=(0, (3, 3)), zorder=2)
     # The note labels the dashed line, and it sat on the line's top end --
     # which is exactly where a big chance struck well lands. Crystal Palace
@@ -3208,34 +4827,75 @@ def finishing_quality(events):
         (0.02, 0.98, "left", "top", (0.00, 0.34, 0.82, 1.00)),
         (0.98, 0.02, "right", "bottom", (0.64, 1.00, 0.00, 0.18)),
     )
-    marks = list(zip(pd.to_numeric(framed["xG"], errors="coerce").fillna(0.0),
-                     pd.to_numeric(framed["_psxg"], errors="coerce").fillna(0.0)))
+    marks = list(
+        zip(
+            pd.to_numeric(framed["xG"], errors="coerce").fillna(0.0),
+            pd.to_numeric(framed["_psxg"], errors="coerce").fillna(0.0),
+        )
+    )
     for note_x, note_y, note_ha, note_va, (x0, x1, y0, y1) in placements:
-        if not any(x0 * limit <= mx <= x1 * limit and y0 * limit <= my <= y1 * limit
-                   for mx, my in marks):
+        if not any(
+            x0 * limit <= mx <= x1 * limit and y0 * limit <= my <= y1 * limit for mx, my in marks
+        ):
             break
-    ax2.text(limit * note_x, limit * note_y, NOTE_STRUCK_AS_DESERVED,
-             color=NEUTRAL, fontsize=7.5, ha=note_ha, va=note_va)
+    ax2.text(
+        limit * note_x,
+        limit * note_y,
+        NOTE_STRUCK_AS_DESERVED,
+        color=NEUTRAL,
+        fontsize=7.5,
+        ha=note_ha,
+        va=note_va,
+    )
     for team_id, colour in [(HOME_ID, HOME), (AWAY_ID, AWAY)]:
         own = framed[framed["team_id"].eq(team_id)]
         if own.empty:
             continue
         scored = as_bool(own.get("is_goal", pd.Series(False, index=own.index)))
-        ax2.scatter(own.loc[~scored, "xG"], own.loc[~scored, "_psxg"], s=70, color=colour,
-                    alpha=0.55, edgecolors=TEXT, linewidths=0.5, zorder=4)
-        ax2.scatter(own.loc[scored, "xG"], own.loc[scored, "_psxg"], s=190, color=colour,
-                    marker="*", edgecolors=TEXT, linewidths=0.6, zorder=5)
+        ax2.scatter(
+            own.loc[~scored, "xG"],
+            own.loc[~scored, "_psxg"],
+            s=70,
+            color=colour,
+            alpha=0.55,
+            edgecolors=TEXT,
+            linewidths=0.5,
+            zorder=4,
+        )
+        ax2.scatter(
+            own.loc[scored, "xG"],
+            own.loc[scored, "_psxg"],
+            s=190,
+            color=colour,
+            marker="*",
+            edgecolors=TEXT,
+            linewidths=0.6,
+            zorder=5,
+        )
     # A little room below zero: a goal Opta prices near nothing after the strike
     # (Groß at Brighton, 0.01) otherwise sits on the axis with half its star cut.
     pad = limit * 0.03
-    ax2.set_xlim(-pad, limit); ax2.set_ylim(-pad, limit)
+    ax2.set_xlim(-pad, limit)
+    ax2.set_ylim(-pad, limit)
     ax2.set_xlabel("Pre-shot xG", fontsize=9, color=MUTED)
     ax2.set_ylabel("Post-shot xG", fontsize=9, color=MUTED)
     ax2.grid(color=GRID, lw=0.7, alpha=0.6)
     ax2.tick_params(labelsize=8.5)
-    fig.text(0.565, 0.795, "Each attempt that reached the frame", color=TEXT, fontsize=13, fontweight="bold")
-    fig.text(0.565, 0.775, "Above the line the ball was struck better than the chance deserved · star = goal",
-             color=MUTED, fontsize=8.5)
+    fig.text(
+        0.565,
+        0.795,
+        "Each attempt that reached the frame",
+        color=TEXT,
+        fontsize=13,
+        fontweight="bold",
+    )
+    fig.text(
+        0.565,
+        0.775,
+        "Above the line the ball was struck better than the chance deserved · star = goal",
+        color=MUTED,
+        fontsize=8.5,
+    )
 
     # -- the reading ----------------------------------------------------------
     lines = []
@@ -3250,33 +4910,52 @@ def finishing_quality(events):
         # one read post-shot xG against the xG of every shot including the
         # eleven that never reached the frame, and so called every side in
         # every match a poor finishing team.
-        verdict = ("struck them better than they arrived"
-                   if post > framed_xg else "struck them worse than they arrived")
+        verdict = (
+            "struck them better than they arrived"
+            if post > framed_xg
+            else "struck them worse than they arrived"
+        )
         lines.append(
             f"{TEAM_NAME[team_id]}: {pre:.2f} xG created, {framed_xg:.2f} of it reached the "
-            f"frame, worth {post:.2f} once struck, {goals} scored - {verdict}.")
+            f"frame, worth {post:.2f} once struck, {goals} scored - {verdict}."
+        )
     fig.text(0.075, 0.345, lines[0], color=HOME, fontsize=10)
     fig.text(0.075, 0.315, lines[1], color=AWAY, fontsize=10)
     # Say where the middle figure came from. Opta's post-shot value knows the
     # pace of the shot and where the keeper stood; the local estimate knows the
     # placement only, and reads well below it on the chances that matter.
     framed_all = shots[on_target.reindex(shots.index, fill_value=False)]
-    from_opta = (pd.to_numeric(framed_all.get("xgot_reference"), errors="coerce").notna().sum()
-                 if "xgot_reference" in framed_all else 0)
+    from_opta = (
+        pd.to_numeric(framed_all.get("xgot_reference"), errors="coerce").notna().sum()
+        if "xgot_reference" in framed_all
+        else 0
+    )
     if len(framed_all) and from_opta == len(framed_all):
-        source_note = ("Post-shot xG here is a published reference value: where the ball crossed the "
-                       "line, how hard it was struck and where the goalkeeper stood.")
+        source_note = (
+            "Post-shot xG here is a published reference value: where the ball crossed the "
+            "line, how hard it was struck and where the goalkeeper stood."
+        )
     elif from_opta:
-        source_note = (f"Post-shot xG is a published reference value for {from_opta} of {len(framed_all)} "
-                       "attempts on target; the rest are a local placement estimate without pace or "
-                       "keeper position.")
+        source_note = (
+            f"Post-shot xG is a published reference value for {from_opta} of {len(framed_all)} "
+            "attempts on target; the rest are a local placement estimate without pace or "
+            "keeper position."
+        )
     else:
-        source_note = ("Post-shot xG is a local placement estimate. It has no shot velocity and no goalkeeper "
-                       "position, so it prices where the ball went, not how hard it was to stop.")
+        source_note = (
+            "Post-shot xG is a local placement estimate. It has no shot velocity and no goalkeeper "
+            "position, so it prices where the ball went, not how hard it was to stop."
+        )
     fig.text(0.075, 0.265, source_note, color=NEUTRAL, fontsize=8.5)
 
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "44_finishing_quality.png")
 
 
@@ -3308,7 +4987,12 @@ def pass_sonar(events):
     passes["pass_angle"] = pd.to_numeric(passes.get("pass_angle"), errors="coerce")
     passes["pass_length"] = pd.to_numeric(passes.get("pass_length"), errors="coerce")
     passes = passes.dropna(subset=["pass_angle", "pass_length"])
-    completed = passes.get("outcome", pd.Series("", index=passes.index)).astype(str).str.lower().eq("successful")
+    completed = (
+        passes.get("outcome", pd.Series("", index=passes.index))
+        .astype(str)
+        .str.lower()
+        .eq("successful")
+    )
     passes["_ok"] = completed
 
     reach = float(passes["pass_length"].quantile(0.92)) if not passes.empty else 30.0
@@ -3322,7 +5006,8 @@ def pass_sonar(events):
     )
 
     for column, (team_id, team_name, colour) in enumerate(
-            [(HOME_ID, HOME_NAME, HOME), (AWAY_ID, AWAY_NAME, AWAY)]):
+        [(HOME_ID, HOME_NAME, HOME), (AWAY_ID, AWAY_NAME, AWAY)]
+    ):
         own = passes[passes["team_id"].eq(team_id)]
         ax = fig.add_axes([0.08 + column * 0.47, 0.19, 0.34, 0.49], projection="polar")
         ax.set_facecolor(BG)
@@ -3330,19 +5015,27 @@ def pass_sonar(events):
         ax.set_theta_direction(1)
         ax.set_ylim(0, reach)
         ax.set_yticks([reach / 3, 2 * reach / 3, reach])
-        ax.set_yticklabels([f"{reach / 3:.0f}m", f"{2 * reach / 3:.0f}m", f"{reach:.0f}m"],
-                           color=MUTED, fontsize=7.5)
+        ax.set_yticklabels(
+            [f"{reach / 3:.0f}m", f"{2 * reach / 3:.0f}m", f"{reach:.0f}m"],
+            color=MUTED,
+            fontsize=7.5,
+        )
         # The distance ticks default to the forward axis, which is where the
         # longest wedges are, so the metre labels sat on top of them.
         ax.set_rlabel_position(112)
         ax.set_xticks(np.linspace(0, 2 * np.pi, 8, endpoint=False))
-        ax.set_xticklabels(["FORWARD", "", "LEFT", "", "BACK", "", "RIGHT", ""],
-                           color=MUTED, fontsize=8, fontweight="bold")
+        ax.set_xticklabels(
+            ["FORWARD", "", "LEFT", "", "BACK", "", "RIGHT", ""],
+            color=MUTED,
+            fontsize=8,
+            fontweight="bold",
+        )
         ax.grid(color=GRID, lw=0.6, alpha=0.8)
         ax.spines["polar"].set_color(GRID)
 
-        binned = pd.cut(own["pass_angle"] % (2 * np.pi), bins=edges,
-                        labels=False, include_lowest=True)
+        binned = pd.cut(
+            own["pass_angle"] % (2 * np.pi), bins=edges, labels=False, include_lowest=True
+        )
         for index in range(BINS):
             slice_rows = own[binned.eq(index)]
             if slice_rows.empty:
@@ -3352,36 +5045,79 @@ def pass_sonar(events):
             # Opacity carries completion. The floor keeps a direction that was
             # tried and always lost from disappearing, which would read as a
             # direction nobody tried.
-            ax.bar(centres[index], min(median_length, reach), width=width * 0.88,
-                   bottom=0, color=colour, alpha=0.25 + 0.65 * rate,
-                   edgecolor=BG, linewidth=0.8, zorder=3)
+            ax.bar(
+                centres[index],
+                min(median_length, reach),
+                width=width * 0.88,
+                bottom=0,
+                color=colour,
+                alpha=0.25 + 0.65 * rate,
+                edgecolor=BG,
+                linewidth=0.8,
+                zorder=3,
+            )
             if len(slice_rows) >= max(3, len(own) * 0.03):
-                ax.text(centres[index], min(median_length, reach) + reach * 0.07,
-                        str(len(slice_rows)), color=TEXT, fontsize=7.5,
-                        ha="center", va="center", fontweight="bold")
+                ax.text(
+                    centres[index],
+                    min(median_length, reach) + reach * 0.07,
+                    str(len(slice_rows)),
+                    color=TEXT,
+                    fontsize=7.5,
+                    ha="center",
+                    va="center",
+                    fontweight="bold",
+                )
 
         forward = own[(own["pass_angle"] < np.pi / 2) | (own["pass_angle"] > 3 * np.pi / 2)]
         share = 100 * len(forward) / max(len(own), 1)
         # Clear of the polar frame's own direction labels, which are drawn
         # outside the axes box and were landing on this subtitle.
-        fig.text(0.08 + column * 0.47 + 0.17, 0.795, team_name.upper(), color=colour,
-                 fontsize=15, fontweight="bold", ha="center")
-        fig.text(0.08 + column * 0.47 + 0.17, 0.772,
-                 f"{len(own)} passes · {share:.0f}% forward · "
-                 f"median {own['pass_length'].median():.0f} m · "
-                 f"{100 * own['_ok'].mean():.0f}% completed",
-                 color=MUTED, fontsize=9, ha="center")
+        fig.text(
+            0.08 + column * 0.47 + 0.17,
+            0.795,
+            team_name.upper(),
+            color=colour,
+            fontsize=15,
+            fontweight="bold",
+            ha="center",
+        )
+        fig.text(
+            0.08 + column * 0.47 + 0.17,
+            0.772,
+            f"{len(own)} passes · {share:.0f}% forward · "
+            f"median {own['pass_length'].median():.0f} m · "
+            f"{100 * own['_ok'].mean():.0f}% completed",
+            color=MUTED,
+            fontsize=9,
+            ha="center",
+        )
 
-    fig.text(0.5, 0.135,
-             "Wedge length = median pass distance in that direction · "
-             "opacity = completion rate · figure outside the wedge = passes attempted",
-             color=MUTED, fontsize=9, ha="center")
-    fig.text(0.5, 0.108,
-             "Direction is the recorded pass angle, not the player's body orientation. "
-             "A short wedge is a short pass, not a rare one.",
-             color=NEUTRAL, fontsize=8.5, ha="center")
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.5,
+        0.135,
+        "Wedge length = median pass distance in that direction · "
+        "opacity = completion rate · figure outside the wedge = passes attempted",
+        color=MUTED,
+        fontsize=9,
+        ha="center",
+    )
+    fig.text(
+        0.5,
+        0.108,
+        "Direction is the recorded pass angle, not the player's body orientation. "
+        "A short wedge is a short pass, not a rare one.",
+        color=NEUTRAL,
+        fontsize=8.5,
+        ha="center",
+    )
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "43_pass_sonar.png")
 
 
@@ -3418,8 +5154,13 @@ def set_pieces(events):
         dead_ball_xg = sum(data[key]["xG"] for key in DEAD_BALL)
         total_xg = sum(data[key]["xG"] for key, _ in sources)
         share = 100 * dead_ball_xg / max(total_xg, 0.01)
-        fig.text(left, 0.768, f"{share:.0f}% of xG came from a dead ball (corners, free kicks, penalties)",
-                 color=MUTED, fontsize=8.5)
+        fig.text(
+            left,
+            0.768,
+            f"{share:.0f}% of xG came from a dead ball (corners, free kicks, penalties)",
+            color=MUTED,
+            fontsize=8.5,
+        )
 
         ax = fig.add_axes([left, 0.20, 0.39, 0.52])
         base.clean_ax(ax)
@@ -3438,12 +5179,24 @@ def set_pieces(events):
         for position, (count, value, (key, _label)) in enumerate(zip(shots, xgs, sources)):
             if count == 0:
                 continue
-            ax.text(count + max(max(shots), 1) * 0.03, position,
-                    f"{count}  \u00b7  {value:.2f} xG  \u00b7  {data[key]['goals']}G",
-                    color=TEXT, fontsize=8, va="center", fontweight="bold")
+            ax.text(
+                count + max(max(shots), 1) * 0.03,
+                position,
+                f"{count}  \u00b7  {value:.2f} xG  \u00b7  {data[key]['goals']}G",
+                color=TEXT,
+                fontsize=8,
+                va="center",
+                fontweight="bold",
+            )
 
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "36_set_pieces.png")
 
 
@@ -3462,26 +5215,46 @@ def turnovers(events, team_id, number):
         punished = frame[frame["punished"]]
         if not safe.empty:
             px, py = attack_xy(safe["x"], safe["y"])
-            pitch.scatter(px, py, s=34, marker="o", facecolors="none",
-                          edgecolors=team_mark, linewidths=0.9, alpha=0.55, zorder=4)
+            pitch.scatter(
+                px,
+                py,
+                s=34,
+                marker="o",
+                facecolors="none",
+                edgecolors=team_mark,
+                linewidths=0.9,
+                alpha=0.55,
+                zorder=4,
+            )
         if not punished.empty:
             px, py = attack_xy(punished["x"], punished["y"])
-            pitch.scatter(px, py, s=70 + punished["conceded_xG"].to_numpy() * 900,
-                          marker="o", facecolors=SHOT_GOAL, edgecolors=BG,
-                          linewidths=0.9, alpha=0.95, zorder=6)
+            pitch.scatter(
+                px,
+                py,
+                s=70 + punished["conceded_xG"].to_numpy() * 900,
+                marker="o",
+                facecolors=SHOT_GOAL,
+                edgecolors=BG,
+                linewidths=0.9,
+                alpha=0.95,
+                zorder=6,
+            )
 
     total = len(frame)
     punished_count = int(frame["punished"].sum()) if not frame.empty else 0
     conceded = float(frame["conceded_xG"].sum()) if not frame.empty else 0.0
     own_half = int((frame["x"] < 50).sum()) if not frame.empty else 0
     side_title(side, "LOSS PROFILE")
-    side_kpis(side, [
-        ("Possessions lost", f"{total}"),
-        ("Punished", f"{punished_count}"),
-        ("Punish rate", f"{100 * punished_count / max(total, 1):.0f}%"),
-        ("xG conceded from losses", f"{conceded:.2f}"),
-        ("Lost in own half", f"{own_half}"),
-    ])
+    side_kpis(
+        side,
+        [
+            ("Possessions lost", f"{total}"),
+            ("Punished", f"{punished_count}"),
+            ("Punish rate", f"{100 * punished_count / max(total, 1):.0f}%"),
+            ("xG conceded from losses", f"{conceded:.2f}"),
+            ("Lost in own half", f"{own_half}"),
+        ],
+    )
     return save(fig, f"{number:02d}_ball_losses_{_team_slug(team_id)}.png")
 
 
@@ -3497,7 +5270,7 @@ def _smoothed(frame, column, window=3):
     if frame.empty:
         return frame
     out = frame.copy()
-    out["_smooth"] = (out[column].rolling(window, center=True, min_periods=1).median())
+    out["_smooth"] = out[column].rolling(window, center=True, min_periods=1).median()
     return out
 
 
@@ -3539,8 +5312,15 @@ def shape_over_time(events):
             series[team_id] = frame
             minutes = frame["window_start"] + 2.5
             ax.scatter(minutes, frame[column], s=11, color=colour, alpha=0.30, zorder=2)
-            ax.plot(minutes, frame["_smooth"], color=colour, lw=2.6, zorder=4,
-                    solid_capstyle="round", label=TEAM_NAME[team_id])
+            ax.plot(
+                minutes,
+                frame["_smooth"],
+                color=colour,
+                lw=2.6,
+                zorder=4,
+                solid_capstyle="round",
+                label=TEAM_NAME[team_id],
+            )
 
         # The band is the finding: its colour names the side engaging higher
         # and its thickness is by how much, so a crossover is a place where the
@@ -3552,12 +5332,28 @@ def shape_over_time(events):
                 home_line = home_frame.set_index("window_start").loc[shared, "_smooth"]
                 away_line = away_frame.set_index("window_start").loc[shared, "_smooth"]
                 minutes = np.array(shared, dtype=float) + 2.5
-                ax.fill_between(minutes, home_line, away_line,
-                                where=home_line >= away_line, interpolate=True,
-                                color=HOME, alpha=0.16, zorder=1, linewidth=0)
-                ax.fill_between(minutes, home_line, away_line,
-                                where=home_line < away_line, interpolate=True,
-                                color=AWAY, alpha=0.16, zorder=1, linewidth=0)
+                ax.fill_between(
+                    minutes,
+                    home_line,
+                    away_line,
+                    where=home_line >= away_line,
+                    interpolate=True,
+                    color=HOME,
+                    alpha=0.16,
+                    zorder=1,
+                    linewidth=0,
+                )
+                ax.fill_between(
+                    minutes,
+                    home_line,
+                    away_line,
+                    where=home_line < away_line,
+                    interpolate=True,
+                    color=AWAY,
+                    alpha=0.16,
+                    zorder=1,
+                    linewidth=0,
+                )
         ax.set_ylabel(label, fontsize=8.5, color=MUTED)
 
     height_ax.set_ylim(0, 100)
@@ -3566,22 +5362,42 @@ def shape_over_time(events):
     height_ax.legend(loc="upper right", frameon=False, labelcolor=TEXT, fontsize=8, ncol=2)
     spread_ax.set_xlabel("Match minute", fontsize=9, color=MUTED)
 
-    for ax, source, column in [(height_ax, defensive_line_height, "height"),
-                               (spread_ax, team_compactness, "vertical_spread")]:
+    for ax, source, column in [
+        (height_ax, defensive_line_height, "height"),
+        (spread_ax, team_compactness, "vertical_spread"),
+    ]:
         combined = pd.concat([source(events, HOME_ID), source(events, AWAY_ID)])
         if combined.empty:
             continue
         median_value = float(combined[column].median())
         ax.axhline(median_value, color=TEXT, lw=0.8, ls=(0, (2, 3)), alpha=0.45)
-        ax.text(99, median_value + 1.5, f"match median {median_value:.0f}",
-                color=MUTED, fontsize=6.5, ha="right")
+        ax.text(
+            99,
+            median_value + 1.5,
+            f"match median {median_value:.0f}",
+            color=MUTED,
+            fontsize=6.5,
+            ha="right",
+        )
 
-    fig.text(0.075, 0.075,
-             "Line = rolling median of three windows · dots = the five-minute samples behind it",
-             color=NEUTRAL, fontsize=8)
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.075,
+        0.075,
+        "Line = rolling median of three windows · dots = the five-minute samples behind it",
+        color=NEUTRAL,
+        fontsize=8,
+    )
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "39_defensive_shape.png")
+
+
 def win_probability_curve(events):
     """How the result hardened: the same goal is worth more the later it lands."""
     frame = win_probability(events, HOME_ID, AWAY_ID, window=5)
@@ -3600,8 +5416,12 @@ def win_probability_curve(events):
     away = frame["away_win"].to_numpy() * 100
 
     ax.stackplot(
-        minutes, home, draw, away,
-        colors=[HOME, NEUTRAL, AWAY], alpha=0.88,
+        minutes,
+        home,
+        draw,
+        away,
+        colors=[HOME, NEUTRAL, AWAY],
+        alpha=0.88,
         labels=[HOME_NAME, "Draw", AWAY_NAME],
     )
     ax.set_xlim(minutes.min(), minutes.max())
@@ -3610,8 +5430,14 @@ def win_probability_curve(events):
     ax.set_ylabel("Probability (%)", fontsize=9, color=MUTED)
     ax.tick_params(labelsize=8)
     ax.axvline(45, color=BG, lw=1.1, ls=(0, (3, 4)))
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.16), ncol=3,
-              frameon=False, labelcolor=TEXT, fontsize=8.5)
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=3,
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=8.5,
+    )
 
     # Mark every goal: the step in the curve is the point of the chart.
     goals = events[as_bool(events["is_goal"])].copy()
@@ -3622,8 +5448,16 @@ def win_probability_curve(events):
             color = HOME if int(goal["_credited"]) == HOME_ID else AWAY
             ax.axvline(minute, color=BG, lw=2.4, alpha=0.9)
             ax.axvline(minute, color=color, lw=1.1)
-            ax.text(minute, 102, f"{int(minute)}\u2032", color=color, fontsize=6.4,
-                    fontweight="bold", ha="center", va="bottom")
+            ax.text(
+                minute,
+                102,
+                f"{int(minute)}\u2032",
+                color=color,
+                fontsize=6.4,
+                fontweight="bold",
+                ha="center",
+                va="bottom",
+            )
     return save(fig, "40_win_probability.png")
 
 
@@ -3643,9 +5477,12 @@ def playing_through(events, team_id, opponent_id, number):
             ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
             completed = bool(row["successful"])
             pitch.annotate(
-                "", xy=(ex[0], ey[0]), xytext=(sx[0], sy[0]),
+                "",
+                xy=(ex[0], ey[0]),
+                xytext=(sx[0], sy[0]),
                 arrowprops=dict(
-                    arrowstyle="-|>", color=team_mark if completed else EVENT_NEUTRAL,
+                    arrowstyle="-|>",
+                    color=team_mark if completed else EVENT_NEUTRAL,
                     alpha=0.85 if completed else 0.4,
                     lw=1.35 if completed else 0.75,
                     linestyle="-" if completed else FAILURE_DASH,
@@ -3656,24 +5493,32 @@ def playing_through(events, team_id, opponent_id, number):
     resistance = press_resistance(events, team_id)
     completed = int(breaks["successful"].sum()) if not breaks.empty else 0
     side_title(side, "PLAYING THROUGH")
-    side_kpis(side, [
-        ("Line-breaking passes", f"{len(breaks)}"),
-        ("Completed", f"{completed}"),
-        ("Completion", f"{100 * completed / max(len(breaks), 1):.0f}%"),
-    ], start=0.82, gap=0.13)
+    side_kpis(
+        side,
+        [
+            ("Line-breaking passes", f"{len(breaks)}"),
+            ("Completed", f"{completed}"),
+            ("Completion", f"{100 * completed / max(len(breaks), 1):.0f}%"),
+        ],
+        start=0.82,
+        gap=0.13,
+    )
 
     side.text(0.08, 0.40, "UNDER PRESSURE", color=MUTED, fontsize=7.5, fontweight="bold")
-    for idx, (label, value) in enumerate([
-        ("Passes pressed", f"{resistance['passes_under_pressure']}"),
-        ("Share of passes", f"{resistance['pressed_share']:.0f}%"),
-        ("Completion pressed", f"{resistance['pressed_completion']:.0f}%"),
-        ("Completion free", f"{resistance['free_completion']:.0f}%"),
-        ("Resistance gap", f"{resistance['resistance_gap']:+.0f} pts"),
-    ]):
+    for idx, (label, value) in enumerate(
+        [
+            ("Passes pressed", f"{resistance['passes_under_pressure']}"),
+            ("Share of passes", f"{resistance['pressed_share']:.0f}%"),
+            ("Completion pressed", f"{resistance['pressed_completion']:.0f}%"),
+            ("Completion free", f"{resistance['free_completion']:.0f}%"),
+            ("Resistance gap", f"{resistance['resistance_gap']:+.0f} pts"),
+        ]
+    ):
         y = 0.35 - idx * 0.048
         side.text(0.08, y, label, color=TEXT, fontsize=8, va="center")
-        side.text(0.92, y, value, color=TEXT, fontsize=8.5, fontweight="bold",
-                  ha="right", va="center")
+        side.text(
+            0.92, y, value, color=TEXT, fontsize=8.5, fontweight="bold", ha="right", va="center"
+        )
 
     duels = duel_map(events, team_id)
     if not duels.empty:
@@ -3681,15 +5526,24 @@ def playing_through(events, team_id, opponent_id, number):
         aerial = duels[duels["kind"] == "aerial"]
         side.text(0.08, 0.085, "DUELS", color=MUTED, fontsize=7.5, fontweight="bold")
         side.text(
-            0.08, 0.04,
+            0.08,
+            0.04,
             f"{won}/{len(duels)} won  \u00b7  aerial {int(aerial['won'].sum())}/{len(aerial)}",
-            color=TEXT, fontsize=8, va="center",
+            color=TEXT,
+            fontsize=8,
+            va="center",
         )
 
     pitch.plot([], [], color=team_mark, lw=1.35, label="Completed")
     pitch.plot([], [], color=EVENT_NEUTRAL, lw=0.9, ls=FAILURE_DASH, label="Incomplete")
-    pitch.legend(loc="lower center", bbox_to_anchor=(0.5, -0.075), ncol=2,
-                 frameon=False, labelcolor=TEXT, fontsize=7.5)
+    pitch.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.075),
+        ncol=2,
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=7.5,
+    )
     return save(fig, f"{number:02d}_playing_through_{_team_slug(team_id)}.png")
 
 
@@ -3740,16 +5594,39 @@ def action_value_leaders(events):
     for index, (off, dfn, total) in enumerate(
         zip(offensive, defensive, top["total_value"].to_numpy())
     ):
-        ax.text(max(off, 0.0) + max(dfn, 0.0) + _value_pad, index, f"{total:+.3f}",
-                color=TEXT, fontsize=8, fontweight="bold", va="center")
+        ax.text(
+            max(off, 0.0) + max(dfn, 0.0) + _value_pad,
+            index,
+            f"{total:+.3f}",
+            color=TEXT,
+            fontsize=8,
+            fontweight="bold",
+            va="center",
+        )
 
-    fig.text(0.20, 0.80, "SOLID = ON-BALL   ·   FADED = DEFENSIVE", color=MUTED,
-             fontsize=7.5, fontweight="bold")
-    fig.text(0.20, 0.075,
-             "Zone-value model, not a fitted VAEP: no labelled training data, so the value surface is explicit rather than learned.",
-             color=NEUTRAL, fontsize=7)
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.20,
+        0.80,
+        "SOLID = ON-BALL   ·   FADED = DEFENSIVE",
+        color=MUTED,
+        fontsize=7.5,
+        fontweight="bold",
+    )
+    fig.text(
+        0.20,
+        0.075,
+        "Zone-value model, not a fitted VAEP: no labelled training data, so the value surface is explicit rather than learned.",
+        color=NEUTRAL,
+        fontsize=7,
+    )
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "43_action_value.png")
 
 
@@ -3767,7 +5644,12 @@ def control_surface(events):
     pitch.imshow(
         grid.T,
         extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
-        origin="lower", cmap=cmap, vmin=0.25, vmax=0.75, aspect="equal", alpha=0.92,
+        origin="lower",
+        cmap=cmap,
+        vmin=0.25,
+        vmax=0.75,
+        aspect="equal",
+        alpha=0.92,
     )
     draw_long_pitch(pitch)
 
@@ -3780,27 +5662,43 @@ def control_surface(events):
         xs = positions["x"] if team_id == HOME_ID else 100 - positions["x"]
         ys = positions["y"] if team_id == HOME_ID else 100 - positions["y"]
         px, py = attack_xy(xs, ys)
-        pitch.scatter(px, py, s=44, marker="o", facecolors=color,
-                      edgecolors=BG, linewidths=1.0, zorder=6)
+        pitch.scatter(
+            px, py, s=44, marker="o", facecolors=color, edgecolors=BG, linewidths=1.0, zorder=6
+        )
 
     # Everything on this map is encoded: the field's colour is which side held
     # the space, the dots are average positions. Neither was stated anywhere.
-    pitch_legend(pitch, [
-        ("patch", HOME, f"{HOME_NAME} holds"),
-        ("patch", PANEL_2, "Contested"),
-        ("patch", AWAY, f"{AWAY_NAME} holds"),
-        ("o", TEXT, "Average position"),
-    ], ncol=4)
+    pitch_legend(
+        pitch,
+        [
+            ("patch", HOME, f"{HOME_NAME} holds"),
+            ("patch", PANEL_2, "Contested"),
+            ("patch", AWAY, f"{AWAY_NAME} holds"),
+            ("o", TEXT, "Average position"),
+        ],
+        ncol=4,
+    )
 
     side_title(side, "TERRITORY")
-    side_kpis(side, [
-        (f"{HOME_NAME} control", f"{shares['home']:.0f}%"),
-        (f"{AWAY_NAME} control", f"{shares['away']:.0f}%"),
-        ("Contested", f"{shares['contested']:.0f}%"),
-    ], start=0.82, gap=0.14)
-    side.text(0.08, 0.36,
-              "Contested = similar modeled influence.\nAverages include different participants\nat different times; this is not tracking.",
-              color=MUTED, fontsize=7.6, va="top", linespacing=1.6)
+    side_kpis(
+        side,
+        [
+            (f"{HOME_NAME} control", f"{shares['home']:.0f}%"),
+            (f"{AWAY_NAME} control", f"{shares['away']:.0f}%"),
+            ("Contested", f"{shares['contested']:.0f}%"),
+        ],
+        start=0.82,
+        gap=0.14,
+    )
+    side.text(
+        0.08,
+        0.36,
+        "Contested = similar modeled influence.\nAverages include different participants\nat different times; this is not tracking.",
+        color=MUTED,
+        fontsize=7.6,
+        va="top",
+        linespacing=1.6,
+    )
     return save(fig, "44_pitch_control.png")
 
 
@@ -3829,9 +5727,10 @@ def sequence_types(events):
         team_id: sequence_typology(events, team_id).set_index("type")
         for team_id in (HOME_ID, AWAY_ID)
     }
-    scale_max = max(
-        [float(frame["xG"].max()) for frame in both.values() if not frame.empty] or [0.1]
-    ) * 1.45
+    scale_max = (
+        max([float(frame["xG"].max()) for frame in both.values() if not frame.empty] or [0.1])
+        * 1.45
+    )
 
     for column, (team_id, team_name, color) in enumerate(
         [(HOME_ID, HOME_NAME, HOME), (AWAY_ID, AWAY_NAME, AWAY)]
@@ -3857,18 +5756,34 @@ def sequence_types(events):
             if key not in typology.index:
                 continue
             row = typology.loc[key]
-            ax.text(float(row["xG"]) + scale_max * 0.02, index,
-                    f"{int(row['sequences'])} seq  \u00b7  {int(row['goals'])}G  \u00b7  {float(row['share_of_xG']):.0f}% of xG",
-                    color=TEXT, fontsize=7.6, va="center", fontweight="bold")
+            ax.text(
+                float(row["xG"]) + scale_max * 0.02,
+                index,
+                f"{int(row['sequences'])} seq  \u00b7  {int(row['goals'])}G  \u00b7  {float(row['share_of_xG']):.0f}% of xG",
+                color=TEXT,
+                fontsize=7.6,
+                va="center",
+                fontweight="bold",
+            )
 
         if not typology.empty:
             best = typology["xG"].idxmax()
-            fig.text(left, 0.768,
-                     f"Most dangerous route: {labels[best].lower()} ({typology.loc[best, 'share_of_xG']:.0f}% of xG)",
-                     color=MUTED, fontsize=8.5)
+            fig.text(
+                left,
+                0.768,
+                f"Most dangerous route: {labels[best].lower()} ({typology.loc[best, 'share_of_xG']:.0f}% of xG)",
+                color=MUTED,
+                fontsize=8.5,
+            )
 
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "45_sequence_types.png")
 
 
@@ -3890,8 +5805,11 @@ def goal_origins(events):
     top = 0.755
     for x, header in zip(xs, headers):
         fig.text(x, top, header, color=MUTED, fontsize=7.6, fontweight="bold")
-    fig.add_artist(Line2D([0.06, 0.94], [top - 0.018, top - 0.018],
-                          transform=fig.transFigure, color=GRID, lw=1))
+    fig.add_artist(
+        Line2D(
+            [0.06, 0.94], [top - 0.018, top - 0.018], transform=fig.transFigure, color=GRID, lw=1
+        )
+    )
 
     row_height = min(0.055, 0.60 / max(len(chains), 1))
     for index, row in enumerate(chains.itertuples()):
@@ -3907,16 +5825,41 @@ def goal_origins(events):
             str(row.started_from).replace("_", " "),
         ]
         for x, value, is_first in zip(xs, values, [True] + [False] * 6):
-            fig.text(x, y, value, color=color if is_first else TEXT,
-                     fontsize=8.4, fontweight="bold" if is_first else "normal", va="center")
-        fig.add_artist(Line2D([0.06, 0.94], [y - row_height * 0.42, y - row_height * 0.42],
-                              transform=fig.transFigure, color=GRID, lw=0.5, alpha=0.6))
+            fig.text(
+                x,
+                y,
+                value,
+                color=color if is_first else TEXT,
+                fontsize=8.4,
+                fontweight="bold" if is_first else "normal",
+                va="center",
+            )
+        fig.add_artist(
+            Line2D(
+                [0.06, 0.94],
+                [y - row_height * 0.42, y - row_height * 0.42],
+                transform=fig.transFigure,
+                color=GRID,
+                lw=0.5,
+                alpha=0.6,
+            )
+        )
 
-    fig.text(0.06, 0.075,
-             "Route is read from the possession the goal ended, so a first-time finish from a regain shows as a counter with few passes.",
-             color=NEUTRAL, fontsize=7)
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.06,
+        0.075,
+        "Route is read from the possession the goal ended, so a first-time finish from a regain shows as a counter with few passes.",
+        color=NEUTRAL,
+        fontsize=7,
+    )
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "46_goal_origins.png")
 
 
@@ -3935,42 +5878,92 @@ def unlocking_the_block(events, team_id, opponent_id, number):
 
     if not pockets.empty:
         px, py = attack_xy(pockets["x"], pockets["y"])
-        pitch.scatter(px, py, s=52, marker="o", facecolors=team_mark,
-                      edgecolors=BG, linewidths=0.9, alpha=0.9, zorder=6)
+        pitch.scatter(
+            px,
+            py,
+            s=52,
+            marker="o",
+            facecolors=team_mark,
+            edgecolors=BG,
+            linewidths=0.9,
+            alpha=0.9,
+            zorder=6,
+        )
         # The estimated line the receptions were taken behind.
         mean_line = float(pockets["line_height"].mean())
         line_y = mean_line * PITCH_LENGTH / 100.0
-        pitch.plot([-PITCH_WIDTH / 2, PITCH_WIDTH / 2], [line_y, line_y],
-                   color=EVENT_NEUTRAL, lw=1.1, ls=(0, (5, 4)), alpha=0.7, zorder=3)
-        pitch.text(PITCH_WIDTH / 2, line_y + 0.8, "avg line", color=MUTED,
-                   fontsize=6.4, ha="right", va="bottom")
+        pitch.plot(
+            [-PITCH_WIDTH / 2, PITCH_WIDTH / 2],
+            [line_y, line_y],
+            color=EVENT_NEUTRAL,
+            lw=1.1,
+            ls=(0, (5, 4)),
+            alpha=0.7,
+            zorder=3,
+        )
+        pitch.text(
+            PITCH_WIDTH / 2,
+            line_y + 0.8,
+            "avg line",
+            color=MUTED,
+            fontsize=6.4,
+            ha="right",
+            va="bottom",
+        )
         # Neither mark said what it was: one dot is a single reception, and
         # "avg line" alone does not tell the reader whose line it is.
-        pitch_legend(pitch, [
-            ("o", team_mark, "Reception in the pocket"),
-            ("_", EVENT_NEUTRAL, f"{TEAM_NAME[opponent_id]} average defensive line"),
-        ], ncol=2)
+        pitch_legend(
+            pitch,
+            [
+                ("o", team_mark, "Reception in the pocket"),
+                ("_", EVENT_NEUTRAL, f"{TEAM_NAME[opponent_id]} average defensive line"),
+            ],
+            ncol=2,
+        )
 
     side_title(side, "PLAYING THROUGH")
-    side_kpis(side, [
-        ("Receptions in pocket", f"{len(pockets)}"),
-        ("Switches of play", f"{len(switches)}"),
-        ("Reached final third", f"{tempo['reach_rate']:.0f}%"),
-    ], start=0.82, gap=0.13)
+    side_kpis(
+        side,
+        [
+            ("Receptions in pocket", f"{len(pockets)}"),
+            ("Switches of play", f"{len(switches)}"),
+            ("Reached final third", f"{tempo['reach_rate']:.0f}%"),
+        ],
+        start=0.82,
+        gap=0.13,
+    )
 
     side.text(0.08, 0.40, "TEMPO", color=MUTED, fontsize=7.5, fontweight="bold")
     side.text(0.08, 0.355, "Median regain to final third", color=TEXT, fontsize=8, va="center")
-    side.text(0.92, 0.355, f"{tempo['median_seconds']:.1f}s", color=TEXT, fontsize=8.5,
-              fontweight="bold", ha="right", va="center")
+    side.text(
+        0.92,
+        0.355,
+        f"{tempo['median_seconds']:.1f}s",
+        color=TEXT,
+        fontsize=8.5,
+        fontweight="bold",
+        ha="right",
+        va="center",
+    )
 
     if not pockets.empty:
         receivers = pockets[pockets["player"] != ""]["player"].value_counts().head(4)
-        side.text(0.08, 0.28, "MOST OFTEN IN THE POCKET", color=MUTED, fontsize=7.5, fontweight="bold")
+        side.text(
+            0.08, 0.28, "MOST OFTEN IN THE POCKET", color=MUTED, fontsize=7.5, fontweight="bold"
+        )
         for index, (name, count) in enumerate(receivers.items()):
             y = 0.235 - index * 0.048
             side.text(0.08, y, _surname(name)[:14], color=TEXT, fontsize=8, va="center")
-            side.text(0.92, y, str(int(count)), color=TEXT, fontsize=8.5,
-                      fontweight="bold", ha="right", va="center")
+            side.text(
+                0.92,
+                y,
+                str(int(count)),
+                color=TEXT,
+                fontsize=8.5,
+                fontweight="bold",
+                ha="right",
+                va="center",
+            )
     return save(fig, f"{number:02d}_unlocking_{_team_slug(team_id)}.png")
 
 
@@ -4015,25 +6008,42 @@ def press_and_rest(events):
             ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v)}"))
 
             for index, (count, share) in enumerate(zip(counts, triggers["share"])):
-                ax.text(count + top * 0.045, index, f"{count}  ({share:.0f}%)",
-                        color=TEXT, fontsize=7.8, va="center", fontweight="bold")
+                ax.text(
+                    count + top * 0.045,
+                    index,
+                    f"{count}  ({share:.0f}%)",
+                    color=TEXT,
+                    fontsize=7.8,
+                    va="center",
+                    fontweight="bold",
+                )
 
         losses = turnover_events(events, team_id)
         second = second_ball_recovery(events, team_id)
         rows = [
             ("Open-play losses", f"{len(losses)}"),
             ("Opponent shot within 12 seconds", f"{int(losses['punished'].sum())}/{len(losses)}"),
-            ("Second balls won", f"{second['won']}/{second['contests']} ({second['win_rate']:.0f}%)"),
+            (
+                "Second balls won",
+                f"{second['won']}/{second['contests']} ({second['win_rate']:.0f}%)",
+            ),
         ]
-        fig.text(left, 0.30, "REST DEFENCE & SECOND BALLS", color=MUTED, fontsize=7.8, fontweight="bold")
+        fig.text(
+            left, 0.30, "REST DEFENCE & SECOND BALLS", color=MUTED, fontsize=7.8, fontweight="bold"
+        )
         for index, (label, value) in enumerate(rows):
             y = 0.255 - index * 0.045
             fig.text(left, y, label, color=TEXT, fontsize=8.4)
-            fig.text(left + 0.39, y, value, color=TEXT, fontsize=8.6,
-                     fontweight="bold", ha="right")
+            fig.text(left + 0.39, y, value, color=TEXT, fontsize=8.6, fontweight="bold", ha="right")
 
-    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
-             ha="right", fontsize=8, color=NEUTRAL)
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
+    )
     return save(fig, "49_press_triggers.png")
 
 
@@ -4092,12 +6102,20 @@ def build_pdf(
             "home_color": HOME,
             "away_color": AWAY,
             "score": MATCH_SCORE,
-            "date": events.attrs.get('match_date', ''),
+            "date": events.attrs.get("match_date", ""),
             # What the cover names beyond the scoreline. Read with defaults, so
             # a renderer configured before these existed still builds a report.
-            **{key: globals().get("_MATCH_INFO", {}).get(key)
-               for key in ("venue", "managers", "formations", "round_name",
-                           "home_form", "away_form")},
+            **{
+                key: globals().get("_MATCH_INFO", {}).get(key)
+                for key in (
+                    "venue",
+                    "managers",
+                    "formations",
+                    "round_name",
+                    "home_form",
+                    "away_form",
+                )
+            },
             "home_kit": (globals().get("_KIT_COLORS") or (None, None))[0],
             "away_kit": (globals().get("_KIT_COLORS") or (None, None))[1],
         },
@@ -4200,8 +6218,7 @@ def player_pizzas(events: pd.DataFrame, players: pd.DataFrame | None = None) -> 
                 exported.append(candidate)
                 continue
             wanted = str(name).replace(" ", "_").lower()
-            match = next((f for f in team_dir.glob("*.png")
-                          if f.stem.lower() == wanted), None)
+            match = next((f for f in team_dir.glob("*.png") if f.stem.lower() == wanted), None)
             if match is not None:
                 exported.append(match)
     return exported
@@ -4344,17 +6361,24 @@ def generate_match_package(
     ]
     # Role profiles supersede the old pizza/radar export in new packages.
     from insight_visuals import build_insight_visuals
+
     new_paths, _insights = build_insight_visuals(events, players, match_info, OUT)
     paths.extend(new_paths)
-    events.attrs['match_date'] = match_info.get('date', '')
+    events.attrs["match_date"] = match_info.get("date", "")
     paths = sorted({path.resolve() for path in paths}, key=lambda path: path.name)
     from visual_numbering import number_visuals
-    paths = number_visuals(paths, OUT, events.attrs.get('chart_contracts', {}))
+
+    paths = number_visuals(paths, OUT, events.attrs.get("chart_contracts", {}))
     catalog = build_catalog(paths)
     pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
     from poster_dashboard import build_match_posters
+
     posters = build_match_posters(
-        events, xg, team_metrics, player_metrics, players,
+        events,
+        xg,
+        team_metrics,
+        player_metrics,
+        players,
         out_dir=OUT,
         home_id=HOME_ID,
         away_id=AWAY_ID,
@@ -4370,8 +6394,10 @@ def generate_match_package(
     # The publishable read, beside the reference report. Never fatal: a package
     # that cannot write its article still has every visual and the PDF.
     from match_article import build_match_article
-    article = build_match_article(events, xg, team_metrics, player_metrics,
-                                  match_info, OUT, players)
+
+    article = build_match_article(
+        events, xg, team_metrics, player_metrics, match_info, OUT, players
+    )
 
     print(f"Generated {len(paths)} full redesigned visuals")
     print(f"Pitch visuals: {int(catalog['has_pitch'].sum())}")
@@ -4399,7 +6425,10 @@ def generate_match_package(
     # Normal renders always publish both themes.  The light child sets this to
     # 0 so it does not recursively launch another child process.
     if os.environ.get("MATCH_ANALYSIS_LIGHT_COPY", "1").strip().lower() not in {
-        "0", "false", "no", "off"
+        "0",
+        "false",
+        "no",
+        "off",
     }:
         # Release the dark render before the light one starts.
         #

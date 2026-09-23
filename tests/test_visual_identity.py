@@ -158,23 +158,23 @@ def test_team_palette_database_covers_every_competition_tier():
     # Champions League / Europa League / Conference League regulars, the
     # non-UEFA continental competitions, and national teams.
     for team in (
-        "Arsenal",           # Premier League
-        "Real Madrid",       # LaLiga
-        "Inter Milan",       # Serie A
-        "Bayern Munich",     # Bundesliga
-        "PSG",               # Ligue 1
-        "Sporting CP",       # Primeira Liga
-        "Qarabag",           # UCL league phase, outside the big leagues
-        "Pafos",             # UCL league phase, outside the big leagues
-        "Bodo/Glimt",        # Eliteserien
-        "Ferencvaros",       # NB I
-        "Al Ahly",           # CAF Champions League
-        "Al Hilal",          # AFC Champions League Elite
-        "Flamengo",          # Copa Libertadores
-        "Club America",      # CONCACAF Champions Cup
-        "Brazil",            # CONMEBOL national team
-        "Uganda",            # CAF national team
-        "Vanuatu",           # OFC national team
+        "Arsenal",  # Premier League
+        "Real Madrid",  # LaLiga
+        "Inter Milan",  # Serie A
+        "Bayern Munich",  # Bundesliga
+        "PSG",  # Ligue 1
+        "Sporting CP",  # Primeira Liga
+        "Qarabag",  # UCL league phase, outside the big leagues
+        "Pafos",  # UCL league phase, outside the big leagues
+        "Bodo/Glimt",  # Eliteserien
+        "Ferencvaros",  # NB I
+        "Al Ahly",  # CAF Champions League
+        "Al Hilal",  # AFC Champions League Elite
+        "Flamengo",  # Copa Libertadores
+        "Club America",  # CONCACAF Champions Cup
+        "Brazil",  # CONMEBOL national team
+        "Uganda",  # CAF national team
+        "Vanuatu",  # OFC national team
     ):
         assert team in palettes, team
         assert analysis._team_palette(team, "#999999")[0].startswith("#")
@@ -327,9 +327,7 @@ def test_single_team_visuals_resolve_identity_from_fixture_role():
     info = {"home_id": 10, "away_id": 20}
     assert _team_identity_color(info, 10, "#FFFFFF") == C_HOME
     assert _team_identity_color(info, 20, "#FFFFFF") == C_AWAY
-    assert _team_identity_color(info, 10, C_AWAY) != _team_identity_color(
-        info, 20, C_HOME
-    )
+    assert _team_identity_color(info, 10, C_AWAY) != _team_identity_color(info, 20, C_HOME)
 
 
 def test_team_density_maps_use_distinct_fixture_colours():

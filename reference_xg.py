@@ -61,15 +61,36 @@ LEAGUES = {
 # Words that name a club's form rather than the club, so "Brighton & Hove
 # Albion" and "Brighton" or "Borussia M.Gladbach" and "Borussia
 # Mönchengladbach" compare on what they share.
-_NOISE = {"fc", "cf", "ac", "as", "sc", "ss", "ssc", "afc", "club", "de", "and",
-          "calcio", "1913", "1907", "hove", "albion", "united", "city", "town"}
+_NOISE = {
+    "fc",
+    "cf",
+    "ac",
+    "as",
+    "sc",
+    "ss",
+    "ssc",
+    "afc",
+    "club",
+    "de",
+    "and",
+    "calcio",
+    "1913",
+    "1907",
+    "hove",
+    "albion",
+    "united",
+    "city",
+    "town",
+}
 
 # Short names the packages carry that share no word with the long form. The two
 # Manchester clubs get tokens of their own, because "united" and "city" are
 # noise above and both would otherwise read as "manchester".
 _ALIASES = {
-    "man utd": "manutd", "manchester united": "manutd",
-    "man city": "mancity", "manchester city": "mancity",
+    "man utd": "manutd",
+    "manchester united": "manutd",
+    "man city": "mancity",
+    "manchester city": "mancity",
     "psg": "paris saint germain",
     "rbl": "rb leipzig",
 }
@@ -126,11 +147,18 @@ def league_fixtures(session, competition: str) -> list[dict]:
     if not data:
         return []
     matches = (data["props"]["pageProps"].get("fixtures") or {}).get("allMatches") or []
-    return [{"id": str(m["id"]), "url": m["pageUrl"].split("#")[0],
-             "home": m["home"]["name"], "away": m["away"]["name"],
-             "utc": (m.get("status") or {}).get("utcTime", "")[:10],
-             "score": (m.get("status") or {}).get("scoreStr", "")}
-            for m in matches if (m.get("status") or {}).get("finished")]
+    return [
+        {
+            "id": str(m["id"]),
+            "url": m["pageUrl"].split("#")[0],
+            "home": m["home"]["name"],
+            "away": m["away"]["name"],
+            "utc": (m.get("status") or {}).get("utcTime", "")[:10],
+            "score": (m.get("status") or {}).get("scoreStr", ""),
+        }
+        for m in matches
+        if (m.get("status") or {}).get("finished")
+    ]
 
 
 def match_fixture(ours: dict, fixtures: list[dict]) -> dict | None:
@@ -168,8 +196,10 @@ def fetch_shotmap(session, fixture: dict) -> dict | None:
         if str((props.get("general") or {}).get("matchId")) != fixture["id"]:
             continue
         shots = ((props.get("content") or {}).get("shotmap") or {}).get("shots")
-        teams = [{"id": t.get("id"), "name": t.get("name"), "score": t.get("score")}
-                 for t in (props.get("header") or {}).get("teams", [])]
+        teams = [
+            {"id": t.get("id"), "name": t.get("name"), "score": t.get("score")}
+            for t in (props.get("header") or {}).get("teams", [])
+        ]
         return {"fixture": fixture, "teams": teams, "shots": shots or []}
     return None
 
@@ -189,30 +219,45 @@ def their_shots(payload: dict) -> list[dict]:
         # the keeper or the net has that value; a block or a miss has none.
         framed = shot.get("isOnTarget") and not shot.get("isBlocked")
         xgot = shot.get("expectedGoalsOnTarget") if framed else None
-        out.append({"side": side.get(shot.get("teamId")),
-                    "minute": int(shot.get("min") or 0) + int(shot.get("minAdded") or 0),
-                    "period": str(shot.get("period") or ""),
-                    "sur": surname(shot.get("playerName") or shot.get("fullName") or ""),
-                    "x": float(shot.get("x") or 0), "y": float(shot.get("y") or 0),
-                    "xg": float(shot["expectedGoals"]),
-                    "xgot": None if xgot is None else float(xgot)})
+        out.append(
+            {
+                "side": side.get(shot.get("teamId")),
+                "minute": int(shot.get("min") or 0) + int(shot.get("minAdded") or 0),
+                "period": str(shot.get("period") or ""),
+                "sur": surname(shot.get("playerName") or shot.get("fullName") or ""),
+                "x": float(shot.get("x") or 0),
+                "y": float(shot.get("y") or 0),
+                "xg": float(shot["expectedGoals"]),
+                "xgot": None if xgot is None else float(xgot),
+            }
+        )
     return out
 
 
 def our_shots(events: pd.DataFrame, info: dict) -> list[dict]:
     """Our non-penalty, non-own-goal shots in the same shape, with their index."""
     side_of = {info.get("home_id"): "home", info.get("away_id"): "away"}
-    flag = lambda column: (events[column].fillna(False).astype(bool)  # noqa: E731
-                           if column in events else pd.Series(False, index=events.index))
-    mask = flag("is_shot") & ~flag("is_own_goal") & ~flag("is_penalty") & ~flag("is_penalty_shootout")
+    flag = lambda column: (
+        events[column].fillna(False).astype(bool)  # noqa: E731
+        if column in events
+        else pd.Series(False, index=events.index)
+    )
+    mask = (
+        flag("is_shot") & ~flag("is_own_goal") & ~flag("is_penalty") & ~flag("is_penalty_shootout")
+    )
     out = []
     for index, shot in events[mask].iterrows():
-        out.append({"index": index, "side": side_of.get(shot.get("team_id")),
-                    "minute": int(shot.get("minute") or 0),
-                    "period": str(shot.get("period") or ""),
-                    "sur": surname(shot.get("player") or ""),
-                    "x": float(shot.get("x") or 0) * 1.05,
-                    "y": float(shot.get("y") or 0) * 0.68})
+        out.append(
+            {
+                "index": index,
+                "side": side_of.get(shot.get("team_id")),
+                "minute": int(shot.get("minute") or 0),
+                "period": str(shot.get("period") or ""),
+                "sur": surname(shot.get("player") or ""),
+                "x": float(shot.get("x") or 0) * 1.05,
+                "y": float(shot.get("y") or 0) * 0.68,
+            }
+        )
     return out
 
 
@@ -283,8 +328,12 @@ def save(payload: dict, package: str | None = None) -> None:
 
 def _find_cached(info: dict) -> dict | None:
     """A stored shot map for this fixture, found without the network."""
-    ours = {"date": info.get("date"), "home": info.get("home_name"),
-            "away": info.get("away_name"), "score": info.get("score")}
+    ours = {
+        "date": info.get("date"),
+        "home": info.get("home_name"),
+        "away": info.get("away_name"),
+        "score": info.get("score"),
+    }
     fixture = match_fixture(ours, _index())
     return cached(fixture["id"]) if fixture else None
 
@@ -301,9 +350,15 @@ def reference_payload(info: dict, session=None) -> tuple[dict | None, str]:
         from curl_cffi import requests as cr
 
         session = cr.Session()
-    fixture = match_fixture({"date": info.get("date"), "home": info.get("home_name"),
-                             "away": info.get("away_name"), "score": info.get("score")},
-                            league_fixtures(session, competition))
+    fixture = match_fixture(
+        {
+            "date": info.get("date"),
+            "home": info.get("home_name"),
+            "away": info.get("away_name"),
+            "score": info.get("score"),
+        },
+        league_fixtures(session, competition),
+    )
     if fixture is None:
         return None, "fixture not found on FotMob"
     payload = fetch_shotmap(session, fixture)
@@ -312,8 +367,9 @@ def reference_payload(info: dict, session=None) -> tuple[dict | None, str]:
     return payload, "fetched from FotMob"
 
 
-def apply_reference_xg(events: pd.DataFrame, info: dict, payload: dict | None = None,
-                       package: str | None = None) -> tuple[pd.DataFrame, str]:
+def apply_reference_xg(
+    events: pd.DataFrame, info: dict, payload: dict | None = None, package: str | None = None
+) -> tuple[pd.DataFrame, str]:
     """Events with Opta's value on every shot it can be paired to.
 
     Never raises. Returns the events untouched, and why, when anything is
@@ -334,8 +390,10 @@ def apply_reference_xg(events: pd.DataFrame, info: dict, payload: dict | None = 
         if not publish:
             # Collected for the next fit; the published numbers stay ours.
             shots = len(their_shots(payload))
-            return events, (f"Opta shot map stored for training ({shots} shots, {how}); "
-                            "our model's values published")
+            return events, (
+                f"Opta shot map stored for training ({shots} shots, {how}); "
+                "our model's values published"
+            )
         ours, theirs = our_shots(events, info), their_shots(payload)
         pairs = pair(ours, theirs)
         if not pairs:
@@ -352,9 +410,15 @@ def apply_reference_xg(events: pd.DataFrame, info: dict, payload: dict | None = 
             out.at[ours[i]["index"], "xg_source"] = SOURCE
             if theirs[j]["xgot"] is not None:
                 out.at[ours[i]["index"], "xgot_reference"] = round(theirs[j]["xgot"], 4)
-        info["xg_reference_source"] = (f"Opta via FotMob for {len(pairs)} of {len(ours)} shots, "
-                                       "internal model for the rest")
-        return out, (f"Opta xG on {len(pairs)} of {len(ours)} shots ({how}); "
-                     f"{len(theirs) - len(pairs)} FotMob shot(s) not in the event feed")
+        info["xg_reference_source"] = (
+            f"Opta via FotMob for {len(pairs)} of {len(ours)} shots, internal model for the rest"
+        )
+        return out, (
+            f"Opta xG on {len(pairs)} of {len(ours)} shots ({how}); "
+            f"{len(theirs) - len(pairs)} FotMob shot(s) not in the event feed"
+        )
     except Exception as error:  # the render must never wait on this
-        return events, f"reference xG failed ({type(error).__name__}: {error}); our model's values kept"
+        return (
+            events,
+            f"reference xG failed ({type(error).__name__}: {error}); our model's values kept",
+        )

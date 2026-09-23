@@ -37,7 +37,7 @@ def _channel(value: float) -> float:
 
 def _luminance(colour) -> float:
     r, g, b = colour.red * 255, colour.green * 255, colour.blue * 255
-    return (0.2126 * _channel(r) + 0.7152 * _channel(g) + 0.0722 * _channel(b))
+    return 0.2126 * _channel(r) + 0.7152 * _channel(g) + 0.0722 * _channel(b)
 
 
 def contrast(a, b) -> float:
@@ -75,14 +75,14 @@ def test_nothing_on_the_cover_is_drawn_in_the_faintest_grey():
     """
     import inspect
 
-    source = "".join(inspect.getsource(fn) for fn in (
-        pdf.TacticalPDF.cover, pdf.TacticalPDF._cover_row,
-        pdf.TacticalPDF._finish))
+    source = "".join(
+        inspect.getsource(fn)
+        for fn in (pdf.TacticalPDF.cover, pdf.TacticalPDF._cover_row, pdf.TacticalPDF._finish)
+    )
     # Comments stripped: the note explaining why the colour was replaced names
     # it, and a test that reads that as a use would forbid saying why.
     code = "\n".join(line.split("#", 1)[0] for line in source.splitlines())
-    assert "NEUTRAL" not in code, (
-        "the cover sets NEUTRAL, which is 3.0:1 against the black page")
+    assert "NEUTRAL" not in code, "the cover sets NEUTRAL, which is 3.0:1 against the black page"
 
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
@@ -108,10 +108,13 @@ def test_both_themes_clear_the_floor(theme):
         print("OK")
     """)
     completed = subprocess.run(
-        [sys.executable, "-c", script], cwd=ROOT,
-        env={**os.environ, "MATCH_ANALYSIS_THEME": theme,
-             "PYTHONIOENCODING": "utf-8"},
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env={**os.environ, "MATCH_ANALYSIS_THEME": theme, "PYTHONIOENCODING": "utf-8"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
@@ -145,12 +148,19 @@ def test_the_cover_is_set_in_the_two_faces_it_declares():
     """
     import inspect
 
-    source = "".join(inspect.getsource(fn) for fn in (
-        pdf.TacticalPDF.cover, pdf.TacticalPDF._cover_row,
-        pdf.TacticalPDF._cover_badges, pdf.TacticalPDF._finish))
+    source = "".join(
+        inspect.getsource(fn)
+        for fn in (
+            pdf.TacticalPDF.cover,
+            pdf.TacticalPDF._cover_row,
+            pdf.TacticalPDF._cover_badges,
+            pdf.TacticalPDF._finish,
+        )
+    )
     code = "\n".join(line.split("#", 1)[0] for line in source.splitlines())
     assert '"Helvetica' not in code, (
-        "the cover names Helvetica directly instead of COVER_DISPLAY/COVER_TEXT")
+        "the cover names Helvetica directly instead of COVER_DISPLAY/COVER_TEXT"
+    )
 
     for name in ("COVER_DISPLAY", "COVER_TEXT"):
         assert getattr(pdf, name), name
@@ -159,8 +169,10 @@ def test_the_cover_is_set_in_the_two_faces_it_declares():
 def test_the_registration_chain_ends_somewhere_that_always_exists():
     """A machine with none of the candidates still has to build the report."""
     assert pdf._register_first((), "Helvetica-Bold") == "Helvetica-Bold"
-    assert pdf._register_first(
-        (("NotAFace", "definitely-not-a-font.ttf"),), "Helvetica") == "Helvetica"
+    assert (
+        pdf._register_first((("NotAFace", "definitely-not-a-font.ttf"),), "Helvetica")
+        == "Helvetica"
+    )
 
 
 def test_the_trailing_figure_is_quieter_than_the_leader_and_still_readable():

@@ -98,8 +98,7 @@ def test_no_published_column_disappeared(computed, golden_team):
     team_frame, _ = computed
     published = set(golden_team.columns) - IDENTITY_COLUMNS
     assert published <= set(team_frame.columns), (
-        f"dropped since the reference was frozen: "
-        f"{sorted(published - set(team_frame.columns))}"
+        f"dropped since the reference was frozen: {sorted(published - set(team_frame.columns))}"
     )
 
 
@@ -148,9 +147,7 @@ def test_game_states_still_partition_every_possession(computed):
 
 def test_every_player_metric_matches_the_reference(computed, golden_player):
     _, player_frame = computed
-    merged = golden_player.merge(
-        player_frame, on=["player", "team_id"], suffixes=("_was", "_now")
-    )
+    merged = golden_player.merge(player_frame, on=["player", "team_id"], suffixes=("_was", "_now"))
     assert len(merged) == len(golden_player), (
         "players in the reference are missing from the output: "
         f"{sorted(set(golden_player['player']) - set(player_frame['player']))}"
@@ -164,6 +161,4 @@ def test_every_player_metric_matches_the_reference(computed, golden_player):
                 f"{merged.loc[index, f'{column}_was']} -> "
                 f"{merged.loc[index, f'{column}_now']}"
             )
-    assert not drifted, "player metrics moved without a re-freeze:\n  " + "\n  ".join(
-        drifted
-    )
+    assert not drifted, "player metrics moved without a re-freeze:\n  " + "\n  ".join(drifted)

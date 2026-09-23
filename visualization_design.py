@@ -158,9 +158,7 @@ def apply_unified_frame(
             family=FONT_SANS,
         )
     if subtitle:
-        fig.text(
-            0.030, 0.895, subtitle, color=TEXT_DIM, fontsize=10.5, family=FONT_SANS
-        )
+        fig.text(0.030, 0.895, subtitle, color=TEXT_DIM, fontsize=10.5, family=FONT_SANS)
 
     # ── Footer: hairline rule + score / report tag / note ──
     fig.add_artist(
@@ -320,15 +318,9 @@ def themed_pitch(
 
     for x0 in (0, 100):
         sign = 1 if x0 == 0 else -1
-        ax.plot(
-            [x0, x0 + sign * 16.5, x0 + sign * 16.5, x0], [21.1, 21.1, 78.9, 78.9], **lc
-        )
-        ax.plot(
-            [x0, x0 + sign * 5.5, x0 + sign * 5.5, x0], [36.8, 36.8, 63.2, 63.2], **lc
-        )
-        ax.scatter(
-            [x0 + sign * 11], [50], color=line_color, s=6, alpha=line_alpha, zorder=2
-        )
+        ax.plot([x0, x0 + sign * 16.5, x0 + sign * 16.5, x0], [21.1, 21.1, 78.9, 78.9], **lc)
+        ax.plot([x0, x0 + sign * 5.5, x0 + sign * 5.5, x0], [36.8, 36.8, 63.2, 63.2], **lc)
+        ax.scatter([x0 + sign * 11], [50], color=line_color, s=6, alpha=line_alpha, zorder=2)
 
     for x0 in (0, 100):
         sign = 1 if x0 == 0 else -1
@@ -451,9 +443,7 @@ def tagline_card(
 # ═════════════════════════════════════════════════════════════════════════════
 # 4) Legend chips — unified
 # ═════════════════════════════════════════════════════════════════════════════
-def legend_chips(
-    ax, items: list[tuple[str, str, str]], y: float = -0.06, fontsize: float = 9
-):
+def legend_chips(ax, items: list[tuple[str, str, str]], y: float = -0.06, fontsize: float = 9):
     """
     items: list of (label, color, marker) — marker ∈ {'o','s','*','D','X','—'}
     """

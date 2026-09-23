@@ -32,11 +32,11 @@ import player_radar as pr
 # Kits chosen to break it rather than to pass: two shades of red, two identical
 # colours, a white shirt with no hue at all, and a pair already far apart.
 FIXTURES = [
-    ("#F5A12D", "#DA291C"),   # Hull amber vs Manchester United red — 31° apart
-    ("#DA291C", "#D01317"),   # two reds, all but the same
-    ("#FFFFFF", "#FEFEFE"),   # two white shirts: no hue to read
-    ("#EF0107", "#6CABDD"),   # Arsenal vs Manchester City — already far apart
-    ("#004170", "#7A003C"),   # PSG vs Aston Villa
+    ("#F5A12D", "#DA291C"),  # Hull amber vs Manchester United red — 31° apart
+    ("#DA291C", "#D01317"),  # two reds, all but the same
+    ("#FFFFFF", "#FEFEFE"),  # two white shirts: no hue to read
+    ("#EF0107", "#6CABDD"),  # Arsenal vs Manchester City — already far apart
+    ("#004170", "#7A003C"),  # PSG vs Aston Villa
 ]
 IDS = ["amber-red", "red-red", "white-white", "red-blue", "navy-claret"]
 
@@ -57,6 +57,7 @@ def _hue_gap(a: str, b: str) -> float:
 # one fixture, two palettes
 # --------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("home,away", FIXTURES, ids=IDS)
 def test_the_two_sides_never_share_a_group_colour(home, away):
     """The whole point: a Hull radar must not look like a United one."""
@@ -74,11 +75,10 @@ def test_every_group_is_visibly_different_across_the_two_sides(home, away):
     a reader compares: this side's defence against the other side's.
     """
     palettes = pr.fixture_group_palettes(home, away, len(pr.GROUPS))
-    for index, (mine, theirs) in enumerate(
-            zip(palettes["home"], palettes["away"])):
+    for index, (mine, theirs) in enumerate(zip(palettes["home"], palettes["away"])):
         assert _hue_gap(mine, theirs) >= 25.0, (
-            f"group {index}: {mine} and {theirs} are "
-            f"{_hue_gap(mine, theirs):.0f}° apart")
+            f"group {index}: {mine} and {theirs} are {_hue_gap(mine, theirs):.0f}° apart"
+        )
 
 
 @pytest.mark.parametrize("home,away", FIXTURES, ids=IDS)
@@ -133,7 +133,8 @@ def test_the_radar_itself_picks_the_palette_for_its_own_side(home, away):
         away_kit = mine if side == "away" else theirs
         pair = pr.fixture_hue_offsets(home_kit, away_kit)
         drawn[side] = pr.group_palette_for(
-            pair[1] if side == "away" else pair[0], mine, len(pr.GROUPS))
+            pair[1] if side == "away" else pair[0], mine, len(pr.GROUPS)
+        )
 
     assert drawn["home"] == pr.group_palette_for(offsets[0], home, len(pr.GROUPS))
     assert drawn["away"] == pr.group_palette_for(offsets[1], away, len(pr.GROUPS))
@@ -151,6 +152,7 @@ def test_a_kit_with_no_hue_does_not_tint_at_random():
 # the rings
 # --------------------------------------------------------------------------
 
+
 def test_the_rings_are_ordered_and_separated():
     """Bars, then numbers, then labels, then the arc — each clear of the last.
 
@@ -162,11 +164,9 @@ def test_the_rings_are_ordered_and_separated():
     import re
 
     source = inspect.getsource(pr.make_player_pizza)
-    found = re.search(
-        r"R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = ([\d, ]+)", source)
+    found = re.search(r"R0, RMAX, RVAL, RLAB, RARC, OUT_LIM = ([\d, ]+)", source)
     assert found, "the radii are no longer declared on one line"
-    r0, rmax, rval, rlab, rarc, out = [
-        float(v) for v in found.group(1).split(",")]
+    r0, rmax, rval, rlab, rarc, out = [float(v) for v in found.group(1).split(",")]
 
     assert r0 < rmax, "the bars need somewhere to grow"
     assert rval > rmax, "a value sits outside the bar it belongs to"
@@ -202,10 +202,12 @@ def test_the_labels_are_rotated_and_read_the_right_way_up():
     # Just off each quadrant, not on it: straight up and straight down are the
     # boundary, where either orientation is equally sideways and which one the
     # rule picks says nothing about whether the rule is right.
-    for angle, expect_flip in ((np.radians(10), False),    # upper right
-                               (np.radians(100), False),   # lower right
-                               (np.radians(190), True),    # lower left
-                               (np.radians(280), True)):   # upper left
+    for angle, expect_flip in (
+        (np.radians(10), False),  # upper right
+        (np.radians(100), False),  # lower right
+        (np.radians(190), True),  # lower left
+        (np.radians(280), True),
+    ):  # upper left
         spin, flipped = pr._spoke_rotation(angle)
         assert flipped is expect_flip, (np.degrees(angle), spin, flipped)
         assert -180.0 <= spin <= 180.0, spin
@@ -223,18 +225,18 @@ def test_no_label_is_drawn_across_two_lines():
 
 
 def test_the_longest_label_is_short_enough_to_clear_the_numbers():
-    """"BIG CH. CREATED", "FINAL 3RD PASSES" and "SHOT-CR. ACTIONS" reached
+    """ "BIG CH. CREATED", "FINAL 3RD PASSES" and "SHOT-CR. ACTIONS" reached
     back from the arc far enough to sit on their own values."""
     longest = max(
-        (pr._spoke_label(metric)
-         for _g, _c, metrics in pr.GROUPS for metric in metrics),
-        key=len)
+        (pr._spoke_label(metric) for _g, _c, metrics in pr.GROUPS for metric in metrics), key=len
+    )
     assert len(longest) <= 13, longest
 
 
 # --------------------------------------------------------------------------
 # the ring of numbers
 # --------------------------------------------------------------------------
+
 
 def test_every_tile_is_the_same_width():
     """The figures run from one character to seven — "5" against "27 / 58" —

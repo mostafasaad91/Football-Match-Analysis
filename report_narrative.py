@@ -11,6 +11,7 @@ unrecognised falls back to the reading stored in the package manifest. A new
 chart in a later release therefore appears in the document with its own words
 rather than being silently dropped.
 """
+
 from __future__ import annotations
 
 import re
@@ -44,12 +45,19 @@ def ratio(part: float, whole: float, places: int = 1) -> str:
 
 
 def times(bigger: float, smaller: float) -> str:
-    """"three times" reads better than "3.0x" in a sentence."""
+    """ "three times" reads better than "3.0x" in a sentence."""
     if not smaller:
         return "with no comparison possible"
     factor = bigger / smaller
-    words = {2: "twice", 3: "three times", 4: "four times", 5: "five times",
-             6: "six times", 7: "seven times", 8: "eight times"}
+    words = {
+        2: "twice",
+        3: "three times",
+        4: "four times",
+        5: "five times",
+        6: "six times",
+        7: "seven times",
+        8: "eight times",
+    }
     nearest = round(factor)
     if nearest in words and abs(factor - nearest) < 0.35:
         return words[nearest]
@@ -59,8 +67,19 @@ def times(bigger: float, smaller: float) -> str:
 def _spelled(count: int) -> str:
     """Small numbers read better as words, and "the three finishes" was written
     into the sentence whatever the score."""
-    words = {0: "no", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
-             6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+    words = {
+        0: "no",
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+        5: "five",
+        6: "six",
+        7: "seven",
+        8: "eight",
+        9: "nine",
+        10: "ten",
+    }
     return words.get(count, str(count))
 
 
@@ -87,11 +106,12 @@ def minute(value: int) -> str:
 @dataclass
 class Visual:
     """One exported PNG, resolved to what it is a picture of."""
+
     path: Path
     number: str
-    slug: str            # "shot_map", "pass_network", ...
+    slug: str  # "shot_map", "pass_network", ...
     side: Side | None
-    half: str | None     # "first" / "second"
+    half: str | None  # "first" / "second"
     title: str
 
     @property
@@ -187,16 +207,23 @@ def writes(slug: str, handoff: str = ""):
         if handoff:
             HANDOFFS[slug] = handoff
         return function
+
     return register
 
 
 def _sides_by(facts: MatchFacts, attribute: str) -> tuple[Side, Side]:
     """The two sides ordered by one attribute, larger first."""
     first, second = facts.sides
-    return (first, second) if getattr(first, attribute) >= getattr(second, attribute) else (second, first)
+    return (
+        (first, second)
+        if getattr(first, attribute) >= getattr(second, attribute)
+        else (second, first)
+    )
 
 
-@writes("xg_flow", "Where those chances were taken from is the next question, and {next} answers it.")
+@writes(
+    "xg_flow", "Where those chances were taken from is the next question, and {next} answers it."
+)
 def _xg_flow(v: Visual, f: MatchFacts) -> list[str]:
     lead, trail = _sides_by(f, "xg")
     opener = f.goals[0] if f.goals else None
@@ -213,9 +240,12 @@ def _xg_flow(v: Visual, f: MatchFacts) -> list[str]:
             f"The curve also shows how the match was framed. {opener['player']} scored for "
             f"{scorer_side.name} on {minute(opener['minute'])} from a chance worth "
             f"{n2(opener['xG'])} expected goals"
-            + (" — a set piece, so from a position the run of play was not producing"
-               if opener["set_piece"] else " — a low-value chance taken early")
-            + f". Everything after that was played at a scoreline neither side had earned yet."
+            + (
+                " — a set piece, so from a position the run of play was not producing"
+                if opener["set_piece"]
+                else " — a low-value chance taken early"
+            )
+            + ". Everything after that was played at a scoreline neither side had earned yet."
         )
     if f.goals:
         line = listed([f"{g['player']} {minute(g['minute'])} ({g['team']})" for g in f.goals])
@@ -226,11 +256,14 @@ def _xg_flow(v: Visual, f: MatchFacts) -> list[str]:
         home_goals, _, away_goals = str(f.score).partition(":")
         out.append(
             f"Goals in order: {line}. It finished {f.home.name} "
-            f"{home_goals.strip()}, {f.away.name} {away_goals.strip()}.")
+            f"{home_goals.strip()}, {f.away.name} {away_goals.strip()}."
+        )
     return out
 
 
-@writes("shot_map", "The other side's attempts are the necessary comparison, and {next} carries them.")
+@writes(
+    "shot_map", "The other side's attempts are the necessary comparison, and {next} carries them."
+)
 def _shot_map(v: Visual, f: MatchFacts) -> list[str]:
     s = v.side
     other = f.other(s)
@@ -264,7 +297,10 @@ def _shot_map(v: Visual, f: MatchFacts) -> list[str]:
     return out
 
 
-@writes("pass_network", "Whether the shape held after the interval is the next thing to check, in {next}.")
+@writes(
+    "pass_network",
+    "Whether the shape held after the interval is the next thing to check, in {next}.",
+)
 def _pass_network(v: Visual, f: MatchFacts) -> list[str]:
     s, half = v.side, v.half or "first"
     data = s.half.get(half, {})
@@ -277,8 +313,10 @@ def _pass_network(v: Visual, f: MatchFacts) -> list[str]:
         f"which flank it leans towards is the shape {s.manager or 'the side'} actually used, as "
         f"opposed to the one on the team sheet ({s.formation})."
     ]
-    produced = (f"{n0(data.get('shots', 0))} shots worth {n2(data.get('xG', 0.0))} expected goals "
-                f"and {n0(data.get('box_entries', 0))} entries into the box")
+    produced = (
+        f"{n0(data.get('shots', 0))} shots worth {n2(data.get('xG', 0.0))} expected goals "
+        f"and {n0(data.get('box_entries', 0))} entries into the box"
+    )
     if half == "first":
         out.append(f"That structure produced {produced}.")
     else:
@@ -297,8 +335,10 @@ def _pass_network(v: Visual, f: MatchFacts) -> list[str]:
 def _xt_map(v: Visual, f: MatchFacts) -> list[str]:
     s, other = v.side, f.other(v.side)
     lanes = s.lane_left + s.lane_centre + s.lane_right
-    dominant = max((("left", s.lane_left), ("centre", s.lane_centre), ("right", s.lane_right)),
-                   key=lambda pair: pair[1])
+    dominant = max(
+        (("left", s.lane_left), ("centre", s.lane_centre), ("right", s.lane_right)),
+        key=lambda pair: pair[1],
+    )
     out = [
         f"{possessive(s.name)} sequence threat totalled {n2(s.sequence_xt)} against "
         f"{n2(other.sequence_xt)}, or {n2(s.xt_per_possession)} per possession against "
@@ -344,8 +384,13 @@ def _goalkeeper_saves(v: Visual, f: MatchFacts) -> list[str]:
     for keeper_side in f.sides:
         attacker = f.other(keeper_side)
         prevented = attacker.xgot - attacker.goals
-        verdict = ("above what the shots were worth" if prevented > 0.35 else
-                   "below it" if prevented < -0.35 else "at roughly what the shots were worth")
+        verdict = (
+            "above what the shots were worth"
+            if prevented > 0.35
+            else "below it"
+            if prevented < -0.35
+            else "at roughly what the shots were worth"
+        )
         out.append(
             f"{possessive(keeper_side.name)} goalkeeper made {keeper_side.gk_saves} saves. "
             f"{attacker.name} put {n2(attacker.xgot)} of on-target value behind them and scored "
@@ -363,7 +408,9 @@ def _goalkeeper_saves(v: Visual, f: MatchFacts) -> list[str]:
     return out
 
 
-@writes("zone14", "The same box for the other side tells the more revealing half of the story: {next}.")
+@writes(
+    "zone14", "The same box for the other side tells the more revealing half of the story: {next}."
+)
 def _zone14(v: Visual, f: MatchFacts) -> list[str]:
     s, other = v.side, f.other(v.side)
     out = [
@@ -398,13 +445,17 @@ def _xt_per_minute(v: Visual, f: MatchFacts) -> list[str]:
             if bucket.get("minutes"):
                 states.append(
                     f"{s.name} {label} for {n0(bucket['minutes'])} minutes produced "
-                    f"{n2(bucket.get('spell_xG', 0.0))} expected goals")
+                    f"{n2(bucket.get('spell_xG', 0.0))} expected goals"
+                )
     if states:
         out.append("Read against the scoreline: " + "; ".join(states) + ".")
     return out
 
 
-@writes("progressive", "Whoever had to stop that progression is the other half of the exchange, in {next}.")
+@writes(
+    "progressive",
+    "Whoever had to stop that progression is the other half of the exchange, in {next}.",
+)
 def _progressive(v: Visual, f: MatchFacts) -> list[str]:
     s, other = v.side, f.other(v.side)
     ranked = sorted(s.players, key=lambda p: p["progressive_passes"], reverse=True)[:3]
@@ -416,7 +467,9 @@ def _progressive(v: Visual, f: MatchFacts) -> list[str]:
     ]
     if lead:
         rest = listed([f"{p['name']} {p['progressive_passes']}" for p in ranked[1:]])
-        gap = lead["progressive_passes"] - (ranked[1]["progressive_passes"] if len(ranked) > 1 else 0)
+        gap = lead["progressive_passes"] - (
+            ranked[1]["progressive_passes"] if len(ranked) > 1 else 0
+        )
         out.append(
             f"{lead['name']} played {lead['progressive_passes']} of them"
             + (f", {gap} more than anyone else in the side ({rest})." if gap > 0 else f" ({rest}).")
@@ -434,22 +487,33 @@ def _progressive(v: Visual, f: MatchFacts) -> list[str]:
 @writes("defensive_activity", "What that defending cost, and where, is the point of {next}.")
 def _defensive_activity(v: Visual, f: MatchFacts) -> list[str]:
     s, other = v.side, f.other(v.side)
-    stoppers = sorted(s.players,
-                      key=lambda p: p["clearances"] + p["tackles_won"] + p["interceptions"],
-                      reverse=True)[:2]
+    stoppers = sorted(
+        s.players,
+        key=lambda p: p["clearances"] + p["tackles_won"] + p["interceptions"],
+        reverse=True,
+    )[:2]
     out = [
         f"{s.name} made {s.def_actions} defensive actions at an average height of "
         f"{n1(s.def_action_avg_x)} up the pitch: {s.def_actions_high} in the attacking third, "
         f"{s.def_actions_mid} in the middle and {s.def_actions_low} in its own. That distribution "
         f"describes a "
-        + ("high press" if s.def_action_avg_x >= 45 else
-           "mid block" if s.def_action_avg_x >= 35 else "low-to-mid block")
-        + f", not a side chasing the ball everywhere."
+        + (
+            "high press"
+            if s.def_action_avg_x >= 45
+            else "mid block"
+            if s.def_action_avg_x >= 35
+            else "low-to-mid block"
+        )
+        + ", not a side chasing the ball everywhere."
     ]
     if stoppers:
-        detail = listed([
-            f"{p['name']} ({p['clearances']} clearances, {p['tackles_won']} tackles won, "
-            f"{p['interceptions']} interceptions)" for p in stoppers])
+        detail = listed(
+            [
+                f"{p['name']} ({p['clearances']} clearances, {p['tackles_won']} tackles won, "
+                f"{p['interceptions']} interceptions)"
+                for p in stoppers
+            ]
+        )
         out.append(f"The load was carried by {detail}.")
     out.append(
         f"Defending well is only half of it. {s.name} lost the ball {s.losses} times in open "
@@ -461,7 +525,10 @@ def _defensive_activity(v: Visual, f: MatchFacts) -> list[str]:
     return out
 
 
-@writes("dominating_zones", "The next chapter takes that territory apart entry by entry, starting with {next}.")
+@writes(
+    "dominating_zones",
+    "The next chapter takes that territory apart entry by entry, starting with {next}.",
+)
 def _dominating_zones(v: Visual, f: MatchFacts) -> list[str]:
     tilt_lead, tilt_trail = _sides_by(f, "field_tilt")
     poss_lead, _ = _sides_by(f, "possession_share")
@@ -487,7 +554,10 @@ def _dominating_zones(v: Visual, f: MatchFacts) -> list[str]:
     return out
 
 
-@writes("box_entries", "Entries have to start from a regain, and {next} shows where those regains happened.")
+@writes(
+    "box_entries",
+    "Entries have to start from a regain, and {next} shows where those regains happened.",
+)
 def _box_entries(v: Visual, f: MatchFacts) -> list[str]:
     s, other = v.side, f.other(v.side)
     first = s.half.get("first", {}).get("box_entries", 0)
@@ -499,8 +569,11 @@ def _box_entries(v: Visual, f: MatchFacts) -> list[str]:
         f"{n0(second)} after."
     ]
     if creators and creators[0]["box_entries"]:
-        out.append("Carried by " + listed([f"{p['name']} {p['box_entries']}" for p in creators
-                                           if p["box_entries"]]) + ".")
+        out.append(
+            "Carried by "
+            + listed([f"{p['name']} {p['box_entries']}" for p in creators if p["box_entries"]])
+            + "."
+        )
     out.append(
         f"The comparison is stark: {other.name} entered {other.box_entries} times at "
         f"{pct(other.box_entry_to_shot_rate)}. That is "
@@ -522,12 +595,14 @@ def _high_regains(v: Visual, f: MatchFacts) -> list[str]:
     same = abs(s.counterpress_success_rate - other.counterpress_success_rate) < 1.5
     out.append(
         f"{other.name} pressed at {pct(other.counterpress_success_rate)} for {n2(other.regain_xg)}. "
-        + ("Identical success rates with different returns means the difference is not how well "
-           "either side pressed but where: a regain with players ahead of the ball is a chance, "
-           "and the same regain against a set block is a restart."
-           if same else
-           "The gap in return is larger than the gap in success rate, which points at the "
-           "position of the regain rather than the act of winning it.")
+        + (
+            "Identical success rates with different returns means the difference is not how well "
+            "either side pressed but where: a regain with players ahead of the ball is a chance, "
+            "and the same regain against a set block is a restart."
+            if same
+            else "The gap in return is larger than the gap in success rate, which points at the "
+            "position of the regain rather than the act of winning it."
+        )
     )
     return out
 
@@ -541,9 +616,8 @@ def _pass_targets(v: Visual, f: MatchFacts) -> list[str]:
     named = listed([f"{p['name']} ({p['touches']} touches)" for p in receivers])
     lead = f"Most-used targets: {named}. " if named else ""
     out = [
-        lead
-        + f"{s.name} attempted {s.crosses} crosses and completed {s.completed_crosses} "
-          f"({ratio(s.completed_crosses, s.crosses)})."
+        lead + f"{s.name} attempted {s.crosses} crosses and completed {s.completed_crosses} "
+        f"({ratio(s.completed_crosses, s.crosses)})."
     ]
     if receivers and receivers[0]["role"] in ("DC", "DR", "DL", "GK", "DMC", "MC"):
         out.append(
@@ -554,8 +628,8 @@ def _pass_targets(v: Visual, f: MatchFacts) -> list[str]:
         )
     else:
         out.append(
-            f"The reception map sits high and wide, which is what allows a cross to be a delivery "
-            f"rather than a clearance in the other direction."
+            "The reception map sits high and wide, which is what allows a cross to be a delivery "
+            "rather than a clearance in the other direction."
         )
     return out
 
@@ -579,7 +653,10 @@ def _ppda(v: Visual, f: MatchFacts) -> list[str]:
     ]
 
 
-@writes("transition_outcomes", "The scoreline changed what both sides were trying to do, which {next} separates.")
+@writes(
+    "transition_outcomes",
+    "The scoreline changed what both sides were trying to do, which {next} separates.",
+)
 def _transitions(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
@@ -613,14 +690,17 @@ def _game_state(v: Visual, f: MatchFacts) -> list[str]:
                 f"{s.name} {label} ({n0(bucket['minutes'])} min): "
                 f"{n0(bucket.get('spell_shots', 0))} shots, "
                 f"{n2(bucket.get('spell_xG', 0.0))} xG, "
-                f"{n0(bucket.get('spell_box_entries', 0))} box entries")
+                f"{n0(bucket.get('spell_box_entries', 0))} box entries"
+            )
     if not lines:
         # No spell long enough to split. The lead-in shipped on its own as
         # "Output held against the scoreline at the time:" -- a colon with
         # nothing after it.
-        return ["No score state lasted long enough to hold output against it, so "
-                "this board has nothing to separate: the match was played at one "
-                "scoreline for effectively all of it."]
+        return [
+            "No score state lasted long enough to hold output against it, so "
+            "this board has nothing to separate: the match was played at one "
+            "scoreline for effectively all of it."
+        ]
     out = ["Output held against the scoreline at the time:"] + [f"• {line}" for line in lines]
     best = None
     for s in f.sides:
@@ -645,7 +725,9 @@ def _sequence_leaders(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
         ranked = sorted(s.players, key=lambda p: p["xGChain"], reverse=True)[:5]
-        out.append(f"{s.name}: " + listed([f"{p['name']} {n2(p['xGChain'])}" for p in ranked]) + ".")
+        out.append(
+            f"{s.name}: " + listed([f"{p['name']} {n2(p['xGChain'])}" for p in ranked]) + "."
+        )
     high, low = _sides_by(f, "xg")
     best_low = max(low.players, key=lambda p: p["xGChain"], default=None)
     ranked_high = sorted(high.players, key=lambda p: p["xGChain"], reverse=True)
@@ -671,16 +753,21 @@ def _momentum(v: Visual, f: MatchFacts) -> list[str]:
                 f"{n2(goal['xG'])} xG"
                 + (", set piece" if goal["set_piece"] else "")
                 + (", clear chance" if goal["big_chance"] else "")
-                + ".")
+                + "."
+            )
     post = [x for x in f.shots if x["type"] == "ShotOnPost"]
     if post:
         hit = post[0]
         out.append(
             f"The nearest miss belonged to {hit['team']}: {hit['player']} hit the frame on "
-            f"{minute(hit['minute'])} from a chance worth {n2(hit['xG'])}.")
+            f"{minute(hit['minute'])} from a chance worth {n2(hit['xG'])}."
+        )
     if f.errors:
-        out.append("Recorded errors: " + listed(
-            [f"{e['player']} ({e['team']}) {minute(e['minute'])}" for e in f.errors]) + ".")
+        out.append(
+            "Recorded errors: "
+            + listed([f"{e['player']} ({e['team']}) {minute(e['minute'])}" for e in f.errors])
+            + "."
+        )
     return out or ["The momentum trace follows the shot timeline above."]
 
 
@@ -729,8 +816,11 @@ def _defensive_shape(v: Visual, f: MatchFacts) -> list[str]:
 def _playing_through(v: Visual, f: MatchFacts) -> list[str]:
     s, other = v.side, f.other(v.side)
     total = s.lane_left + s.lane_centre + s.lane_right
-    ranked = sorted((("left", s.lane_left), ("centre", s.lane_centre), ("right", s.lane_right)),
-                    key=lambda pair: pair[1], reverse=True)
+    ranked = sorted(
+        (("left", s.lane_left), ("centre", s.lane_centre), ("right", s.lane_right)),
+        key=lambda pair: pair[1],
+        reverse=True,
+    )
     out = [
         f"{s.name} entered the final third {total} times through the lanes: "
         f"{s.lane_left} left, {s.lane_centre} centre, {s.lane_right} right. The heaviest lane was "
@@ -739,9 +829,9 @@ def _playing_through(v: Visual, f: MatchFacts) -> list[str]:
     concentration = ratio(ranked[0][1], total)
     if total and ranked[0][1] / total >= 0.45:
         out.append(
-            f"Loading one side that heavily is a choice to create an overload rather than to "
-            f"attack everywhere at once. It also pulls the opposing block across, which is what "
-            f"makes the opposite flank worth using later."
+            "Loading one side that heavily is a choice to create an overload rather than to "
+            "attack everywhere at once. It also pulls the opposing block across, which is what "
+            "makes the opposite flank worth using later."
         )
     elif total:
         out.append(
@@ -762,8 +852,11 @@ def _playing_through(v: Visual, f: MatchFacts) -> list[str]:
 def _action_value(v: Visual, f: MatchFacts) -> list[str]:
     everyone = [(p, s) for s in f.sides for p in s.players]
     ranked = sorted(everyone, key=lambda pair: pair[0]["positive_xT"], reverse=True)[:6]
-    out = ["Highest positive expected threat on the pitch: " + listed(
-        [f"{p['name']} {n2(p['positive_xT'])} ({s.name})" for p, s in ranked]) + "."]
+    out = [
+        "Highest positive expected threat on the pitch: "
+        + listed([f"{p['name']} {n2(p['positive_xT'])} ({s.name})" for p, s in ranked])
+        + "."
+    ]
     leading_side = ranked[0][1] if ranked else None
     if leading_side:
         own = [pair for pair in ranked if pair[1] is leading_side]
@@ -805,9 +898,9 @@ def _finishing_quality(v: Visual, f: MatchFacts) -> list[str]:
     if over:
         out.append(
             listed([s.name for s in over])
-            + f" finished above the post-shot model, which is the part of a result that does not "
-              f"repeat. It is worth saying plainly rather than folding into a verdict about "
-              f"quality."
+            + " finished above the post-shot model, which is the part of a result that does not "
+            "repeat. It is worth saying plainly rather than folding into a verdict about "
+            "quality."
         )
     return out
 
@@ -882,7 +975,9 @@ def _goal_origins(v: Visual, f: MatchFacts) -> list[str]:
     return out
 
 
-@writes("press_triggers", "From the team the report now turns to the individuals, starting with {next}.")
+@writes(
+    "press_triggers", "From the team the report now turns to the individuals, starting with {next}."
+)
 def _press_triggers(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
@@ -892,14 +987,17 @@ def _press_triggers(v: Visual, f: MatchFacts) -> list[str]:
             f"({pct(s.counterpress_success_rate)}), returning {n2(s.regain_xg)} expected goals."
         )
     if f.errors:
-        out.append("Errors under pressure: " + listed(
-            [f"{e['player']} ({e['team']}) {minute(e['minute'])}" for e in f.errors]) + ".")
+        out.append(
+            "Errors under pressure: "
+            + listed([f"{e['player']} ({e['team']}) {minute(e['minute'])}" for e in f.errors])
+            + "."
+        )
     return out
 
 
 def _scatter(v: Visual, f: MatchFacts, fallback: str) -> list[str]:
     """The three player scatters ship their own reading in the manifest."""
-    stored = (f.chart_readings.get(v.path.name) or {})
+    stored = f.chart_readings.get(v.path.name) or {}
     reading = str(stored.get("reading") or "").strip()
     method = str(stored.get("method") or "").strip()
     out = [reading] if reading else [fallback]
@@ -908,22 +1006,34 @@ def _scatter(v: Visual, f: MatchFacts, fallback: str) -> list[str]:
     return out
 
 
-@writes("player_progression_creation", "The same players measured on involvement rather than progression appear in {next}.")
+@writes(
+    "player_progression_creation",
+    "The same players measured on involvement rather than progression appear in {next}.",
+)
 def _progression_creation(v: Visual, f: MatchFacts) -> list[str]:
     return _scatter(v, f, "Progressive actions on one axis, the value they created on the other.")
 
 
-@writes("player_involvement_value", "Volume and quality of shooting is the third of these comparisons, in {next}.")
+@writes(
+    "player_involvement_value",
+    "Volume and quality of shooting is the third of these comparisons, in {next}.",
+)
 def _involvement_value(v: Visual, f: MatchFacts) -> list[str]:
     return _scatter(v, f, "Touches on one axis, added threat on the other.")
 
 
-@writes("player_shot_quality", "From the players the report returns to the possessions themselves, in {next}.")
+@writes(
+    "player_shot_quality",
+    "From the players the report returns to the possessions themselves, in {next}.",
+)
 def _shot_quality(v: Visual, f: MatchFacts) -> list[str]:
     return _scatter(v, f, "Shot volume on one axis, average chance quality on the other.")
 
 
-@writes("possession_speed_value", "How quickly each side moved after winning the ball is measured in {next}.")
+@writes(
+    "possession_speed_value",
+    "How quickly each side moved after winning the ball is measured in {next}.",
+)
 def _possession_speed(v: Visual, f: MatchFacts) -> list[str]:
     return [
         f"Short possessions of two passes or fewer numbered {f.home.short_sequences} for "
@@ -935,7 +1045,10 @@ def _possession_speed(v: Visual, f: MatchFacts) -> list[str]:
     ]
 
 
-@writes("regain_speed", "Where those moves stopped is the question the final chapter answers, beginning with {next}.")
+@writes(
+    "regain_speed",
+    "Where those moves stopped is the question the final chapter answers, beginning with {next}.",
+)
 def _regain_speed(v: Visual, f: MatchFacts) -> list[str]:
     fast = min(f.sides, key=lambda s: s.avg_seconds_to_third if s.avg_seconds_to_third else 999)
     slow = f.other(fast)
@@ -958,8 +1071,11 @@ def _funnel(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
         if s.funnel:
-            out.append(f"{s.name}: " + " → ".join(n0(x) for x in s.funnel)
-                       + " (possessions, final third, box, shot, on target).")
+            out.append(
+                f"{s.name}: "
+                + " → ".join(n0(x) for x in s.funnel)
+                + " (possessions, final third, box, shot, on target)."
+            )
     drops = []
     for s in f.sides:
         if len(s.funnel) >= 3 and s.funnel[1]:
@@ -969,7 +1085,7 @@ def _funnel(v: Visual, f: MatchFacts) -> list[str]:
             "The largest fall for both sides is the same one — final third to box ("
             + listed([f"{s.name} {pct(100 * d, 0)}" for s, d in drops])
             + "). A shared bottleneck means the difference between them is not where attacks "
-              "stop but how many arrived at the bottleneck in the first place."
+            "stop but how many arrived at the bottleneck in the first place."
         )
     return out
 
@@ -1003,7 +1119,9 @@ def _entry_routes(v: Visual, f: MatchFacts) -> list[str]:
     return out
 
 
-@writes("loss_consequences", "The last thing to check is whether the changes moved any of it: {next}.")
+@writes(
+    "loss_consequences", "The last thing to check is whether the changes moved any of it: {next}."
+)
 def _loss_consequences(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
@@ -1041,8 +1159,11 @@ def _substitution_windows(v: Visual, f: MatchFacts) -> list[str]:
         out.append("No substitution cluster had a comparable window either side of it.")
     changes = [s for s in f.substitutions if s["direction"] == "on"]
     if changes:
-        out.append("Changes made: " + listed(
-            [f"{c['player']} {minute(c['minute'])} ({c['team']})" for c in changes]) + ".")
+        out.append(
+            "Changes made: "
+            + listed([f"{c['player']} {minute(c['minute'])} ({c['team']})" for c in changes])
+            + "."
+        )
     out.append(
         "A change in output either side of a substitution is not a measured substitution effect. "
         "Score state moves at the same time, and in a match settled early the changes are usually "
@@ -1100,19 +1221,26 @@ def paragraphs_for(visual: Visual, facts: MatchFacts, next_visual: Visual | None
     if writer is not None:
         body = writer(visual, facts)
     else:
-        stored = (facts.chart_readings.get(visual.path.name) or {})
+        stored = facts.chart_readings.get(visual.path.name) or {}
         reading = str(stored.get("reading") or "").strip()
         method = str(stored.get("method") or "").strip()
-        body = [reading] if reading else [
-            f"{visual.title} is exported with the package; the figure carries its own title, "
-            f"subtitle and footer, which state the denominator and the limitation."]
+        body = (
+            [reading]
+            if reading
+            else [
+                f"{visual.title} is exported with the package; the figure carries its own title, "
+                f"subtitle and footer, which state the denominator and the limitation."
+            ]
+        )
         if method:
             body.append(f"Method: {method}")
-    body = [one_reads_singular(text) for text in body
-            if text and not _carries_nothing(str(text))]
+    body = [one_reads_singular(text) for text in body if text and not _carries_nothing(str(text))]
     if next_visual is not None:
         template = HANDOFFS.get(visual.slug, DEFAULT_HANDOFF)
-        label = f"figure {next_visual.number}, {next_visual.title.lower()}" if next_visual.number \
+        label = (
+            f"figure {next_visual.number}, {next_visual.title.lower()}"
+            if next_visual.number
             else next_visual.title.lower()
+        )
         body.append(template.format(next=label))
     return body

@@ -79,8 +79,7 @@ def test_press_triggers_are_counted_in_whole_numbers(rendered):
         for ax in figure.axes:
             if ax.get_xlabel() != "High regains":
                 continue
-            ticks = [t for t in ax.get_xticks()
-                     if ax.get_xlim()[0] <= t <= ax.get_xlim()[1]]
+            ticks = [t for t in ax.get_xticks() if ax.get_xlim()[0] <= t <= ax.get_xlim()[1]]
             assert all(abs(t - round(t)) < 1e-9 for t in ticks), ticks
     plt.close("all")
 

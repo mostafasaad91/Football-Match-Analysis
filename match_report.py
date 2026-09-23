@@ -31,7 +31,14 @@ from match_metrics import defensive_blocks_count, team_advanced_metrics
 
 # Unified design system (AMOLED pure-black frame, fonts, palette)
 try:
-    from visualization_design import apply_unified_frame, rebrand_figure, _neon_backdrop, readable_on, readable_team_text, ACCENT_TEXT  # type: ignore
+    from visualization_design import (
+        apply_unified_frame,
+        rebrand_figure,
+        _neon_backdrop,
+        readable_on,
+        readable_team_text,
+        ACCENT_TEXT,
+    )  # type: ignore
 except Exception:  # pragma: no cover
     apply_unified_frame = None  # graceful fallback
     rebrand_figure = None
@@ -81,7 +88,18 @@ _register_fonts()
 # before calling this module.
 # ─────────────────────────────────────────────────────────────────────────────
 def configure_theme(theme: str | None = None) -> None:
-    global BG_DARK, BG_MID, BG_PANEL, BG_HEADER, GRID_COL, TEXT_MAIN, TEXT_BRIGHT, TEXT_DIM, TEXT_FADED, C_GOLD, RATING_CMAP
+    global \
+        BG_DARK, \
+        BG_MID, \
+        BG_PANEL, \
+        BG_HEADER, \
+        GRID_COL, \
+        TEXT_MAIN, \
+        TEXT_BRIGHT, \
+        TEXT_DIM, \
+        TEXT_FADED, \
+        C_GOLD, \
+        RATING_CMAP
     theme = (theme or os.environ.get("MATCH_ANALYSIS_THEME", "dark")).strip().lower()
     if theme == "light":
         # Mirrors LIGHT_PALETTE in visualization_components: #F5F5F5 page,
@@ -363,8 +381,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict, save_path: str | None = None):
             fig,
             section="PRESSING · PPDA",
             title="Pressing Analysis — Passes Per Defensive Action",
-            subtitle="Lower PPDA = more aggressive press in the opponent's "
-            "60% of the pitch",
+            subtitle="Lower PPDA = more aggressive press in the opponent's 60% of the pitch",
             accent=C_GOLD,
             home_name=home_name,
             away_name=away_name,
@@ -604,9 +621,7 @@ def draw_ppda_gauge(ppda_data: dict, info: dict, save_path: str | None = None):
 
     pitch_ax.axvline(60, color="#facc15", lw=1.2, alpha=0.7, ls="--")
 
-    pitch_ax.add_patch(
-        mpatches.Rectangle((60, 0), 40, 30, facecolor="#facc15", alpha=0.15, lw=0)
-    )
+    pitch_ax.add_patch(mpatches.Rectangle((60, 0), 40, 30, facecolor="#facc15", alpha=0.15, lw=0))
     pitch_ax.text(
         80,
         15,
@@ -739,9 +754,7 @@ def _set_piece_subtype_from_event(row: pd.Series) -> str | None:
 SET_PIECE_LOOKBACK = 3
 
 
-def _previous_restart_subtype(
-    row: pd.Series, events: pd.DataFrame | None = None
-) -> str | None:
+def _previous_restart_subtype(row: pd.Series, events: pd.DataFrame | None = None) -> str | None:
     if events is None or getattr(events, "empty", True):
         return None
     try:
@@ -763,9 +776,7 @@ def _previous_restart_subtype(
     if prior is None or prior.empty:
         return None
     team_id = row.get("team_id")
-    same_team = (
-        prior[prior.get("team_id") == team_id] if "team_id" in prior.columns else prior
-    )
+    same_team = prior[prior.get("team_id") == team_id] if "team_id" in prior.columns else prior
     if same_team.empty:
         same_team = prior
 
@@ -805,9 +816,7 @@ def goal_body_part_label(row: pd.Series) -> str:
     return "Unknown Body Part"
 
 
-def classify_goal_type(
-    row: pd.Series, events: pd.DataFrame | None = None
-) -> tuple[str, str]:
+def classify_goal_type(row: pd.Series, events: pd.DataFrame | None = None) -> tuple[str, str]:
     """Classify a goal as Penalty, Set Piece or Open Play."""
     qset = _goal_qualifiers(row)
     if _truthy_flag(row.get("is_own_goal", False)):
@@ -935,9 +944,7 @@ GROUP_HEADER_COLORS_LIGHT = {
 # ═════════════════════════════════════════════════════════════════════════════
 # UPGRADE 4 — Unified PDF + dark-themed pages
 # ═════════════════════════════════════════════════════════════════════════════
-def _draw_section_divider(
-    pdf, num: str, title: str, subtitle: str, accent: str = C_GOLD
-):
+def _draw_section_divider(pdf, num: str, title: str, subtitle: str, accent: str = C_GOLD):
     """Create a divider page for a report section."""
     fig = _new_dark_fig(11.7, 8.27)
     fig.patch.set_facecolor(BG_DARK)
@@ -1097,9 +1104,7 @@ def _draw_player_radar_page(
         family="monospace",
     )
     wrapped = "\n\n".join(
-        _tw.fill(p.strip(), width=104)
-        for p in str(commentary).split("\n\n")
-        if p.strip()
+        _tw.fill(p.strip(), width=104) for p in str(commentary).split("\n\n") if p.strip()
     )
     ax_t.text(
         0.0,
@@ -1142,9 +1147,7 @@ def _draw_closing_page(pdf, info, events=None, ppda=None):
     veil.set_axis_off()
     veil.set_xlim(0, 1)
     veil.set_ylim(0, 1)
-    veil.add_patch(
-        mpatches.Rectangle((0, 0), 1, 1, facecolor=BG_DARK, alpha=0.42, lw=0, zorder=1)
-    )
+    veil.add_patch(mpatches.Rectangle((0, 0), 1, 1, facecolor=BG_DARK, alpha=0.42, lw=0, zorder=1))
     veil.add_patch(
         mpatches.Rectangle(
             (0.02, 0.026),
@@ -1163,9 +1166,7 @@ def _draw_closing_page(pdf, info, events=None, ppda=None):
         (0.035, 0.042, 1, 1),
         (0.965, 0.042, -1, 1),
     ]:
-        veil.plot(
-            [x, x + dx * 0.028], [y, y], color=C_GOLD, lw=1.8, alpha=0.8, zorder=2
-        )
+        veil.plot([x, x + dx * 0.028], [y, y], color=C_GOLD, lw=1.8, alpha=0.8, zorder=2)
         veil.plot([x, x], [y, y + dy * 0.04], color=C_GOLD, lw=1.8, alpha=0.8, zorder=2)
 
     # Result recap ------------------------------------------------------
@@ -1352,18 +1353,12 @@ def _match_kpis(events, info, ppda):
                 sh = te[te["is_shot"].fillna(False) == True]  # noqa: E712
                 # exclude own goals (logged on scorer's own team)
                 if "is_goal" in sh.columns and "scoring_team" in sh.columns:
-                    sh = sh[
-                        ~(sh["is_goal"].fillna(False) & (sh["scoring_team"] != tid))
-                    ]
+                    sh = sh[~(sh["is_goal"].fillna(False) & (sh["scoring_team"] != tid))]
                 out["shots"][j] = int(len(sh))
                 if "big_chance" in sh.columns:
-                    out["big"][j] = int(
-                        sh["big_chance"].fillna(False).astype(bool).sum()
-                    )
+                    out["big"][j] = int(sh["big_chance"].fillna(False).astype(bool).sum())
             if "shot_whoscored_type" in te.columns:
-                out["sot"][j] = int(
-                    te["shot_whoscored_type"].isin(["Goal", "SavedShot"]).sum()
-                )
+                out["sot"][j] = int(te["shot_whoscored_type"].isin(["Goal", "SavedShot"]).sum())
         # goals by scoring_team (own goals credited correctly, shootout excluded)
         if "is_goal" in events.columns and "scoring_team" in events.columns:
             g = events[events["is_goal"].fillna(False)]
@@ -1372,12 +1367,8 @@ def _match_kpis(events, info, ppda):
             out["goals"][0] = int((g["scoring_team"] == hid).sum())
             out["goals"][1] = int((g["scoring_team"] == aid).sum())
         if "is_pass" in events.columns:
-            ph = int(
-                ((events["team_id"] == hid) & (events["is_pass"] == True)).sum()
-            )  # noqa: E712
-            pa = int(
-                ((events["team_id"] == aid) & (events["is_pass"] == True)).sum()
-            )  # noqa: E712
+            ph = int(((events["team_id"] == hid) & (events["is_pass"] == True)).sum())  # noqa: E712
+            pa = int(((events["team_id"] == aid) & (events["is_pass"] == True)).sum())  # noqa: E712
             if ph + pa:
                 out["poss"] = [
                     round(100 * ph / (ph + pa), 1),
@@ -1640,9 +1631,7 @@ def _draw_executive_summary_page(pdf, info, events, ppda, goals_df):
                 fontweight="bold",
                 family="monospace",
             )
-            fig.text(
-                0.11, my, scorer, color=TEXT_BRIGHT, fontsize=11, fontweight="bold"
-            )
+            fig.text(0.11, my, scorer, color=TEXT_BRIGHT, fontsize=11, fontweight="bold")
             fig.text(0.27, my, f"{team}", color=col, fontsize=10, fontweight="bold")
             fig.text(0.45, my, tag, color=TEXT_DIM, fontsize=9, style="italic")
             my -= 0.038
@@ -1754,12 +1743,10 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
         )
     who_big = hn if bh > ba else (an if ba > bh else None)
     if who_big:
-        deserved += f" {who_big} also fashioned the clearer openings ({max(bh,ba)} vs {min(bh,ba)} big chances)."
+        deserved += f" {who_big} also fashioned the clearer openings ({max(bh, ba)} vs {min(bh, ba)} big chances)."
     if pens is not None:
         pen_win = hn if pens[0] > pens[1] else an
-        deserved += (
-            f" With normal play level, {pen_win} held their nerve from the spot."
-        )
+        deserved += f" With normal play level, {pen_win} held their nerve from the spot."
 
     # ── Finishing efficiency ──
     finishing = (
@@ -1773,15 +1760,15 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
     xt_leader = hn if xth >= xta else an
     if poss_leader == xt_leader:
         control = (
-            f"{poss_leader} controlled the ball ({max(ph,pa):.0f}%) and converted that "
-            f"control into territory and threat (xT {max(xth,xta):.2f} vs {min(xth,xta):.2f}) — "
+            f"{poss_leader} controlled the ball ({max(ph, pa):.0f}%) and converted that "
+            f"control into territory and threat (xT {max(xth, xta):.2f} vs {min(xth, xta):.2f}) — "
             f"dominance that actually reached the opponent's goal."
         )
     else:
         control = (
-            f"{poss_leader} saw more of the ball ({max(ph,pa):.0f}%), but it was "
+            f"{poss_leader} saw more of the ball ({max(ph, pa):.0f}%), but it was "
             f"{xt_leader} who moved possession into dangerous areas more efficiently "
-            f"(xT {max(xth,xta):.2f} vs {min(xth,xta):.2f}) — possession without penetration "
+            f"(xT {max(xth, xta):.2f} vs {min(xth, xta):.2f}) — possession without penetration "
             f"for the side on top."
         )
 
@@ -1790,25 +1777,23 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
         press_leader = hn if pph < ppa else an
         press = (
             f"Out of possession, {press_leader} pressed more aggressively "
-            f"(PPDA {min(pph,ppa):.1f} vs {max(pph,ppa):.1f}), engaging earlier and "
+            f"(PPDA {min(pph, ppa):.1f} vs {max(pph, ppa):.1f}), engaging earlier and "
             f"forcing the play back sooner."
         )
     else:
         press = (
-            f"Both sides picked their pressing moments rather than committing to a "
-            f"sustained high press."
+            "Both sides picked their pressing moments rather than committing to a "
+            "sustained high press."
         )
 
     # ── How it was decided ──
     moments = _key_moments(events, info, goals_df)
     if pens is not None:
-        decided = (
-            "Level after 120 minutes, the tie was ultimately settled on penalties."
-        )
+        decided = "Level after 120 minutes, the tie was ultimately settled on penalties."
     elif gh == ga:
         decided = (
-            f"The sides could not be separated, the scoreline reflecting how evenly the "
-            f"key phases were shared."
+            "The sides could not be separated, the scoreline reflecting how evenly the "
+            "key phases were shared."
         )
     else:
         win = hn if gh > ga else an
@@ -1816,7 +1801,9 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
         first = moments[0] if moments else None
         decided = f"{win} won by a {margin}-goal margin"
         if first:
-            decided += f", the game turning on the {first[0]}' goal ({first[1]}, {first[3].lower()})"
+            decided += (
+                f", the game turning on the {first[0]}' goal ({first[1]}, {first[3].lower()})"
+            )
         decided += "."
 
     # ── Layout: two columns ──
@@ -1971,9 +1958,7 @@ def _draw_glance_page(pdf, info, events, ppda, goals_df):
             if "xG" in te.columns:
                 xg[j] = float(te["xG"].fillna(0).sum())
             if "shot_whoscored_type" in te.columns:
-                sot[j] = int(
-                    te["shot_whoscored_type"].isin(["Goal", "SavedShot"]).sum()
-                )
+                sot[j] = int(te["shot_whoscored_type"].isin(["Goal", "SavedShot"]).sum())
         if "is_pass" in events.columns:
             ph = int(((events["team_id"] == hid) & (events["is_pass"] == True)).sum())
             pa = int(((events["team_id"] == aid) & (events["is_pass"] == True)).sum())
@@ -2118,9 +2103,7 @@ def _draw_toc_page(pdf, entries):
             ha="right",
             family="monospace",
         )
-        fig.text(
-            0.50, y, "." * 70, color=TEXT_FADED, fontsize=8, va="center", ha="center"
-        )
+        fig.text(0.50, y, "." * 70, color=TEXT_FADED, fontsize=8, va="center", ha="center")
         y -= 0.062
     _page_rail(fig, C_GOLD, label="Contents", page_no=4)
     pdf.savefig(fig, dpi=PDF_PAGE_DPI, facecolor=BG_DARK)
@@ -2248,9 +2231,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda, events=None):
     veil.set_axis_off()
     veil.set_xlim(0, 1)
     veil.set_ylim(0, 1)
-    veil.add_patch(
-        mpatches.Rectangle((0, 0), 1, 1, facecolor=BG_DARK, alpha=0.30, lw=0, zorder=1)
-    )
+    veil.add_patch(mpatches.Rectangle((0, 0), 1, 1, facecolor=BG_DARK, alpha=0.30, lw=0, zorder=1))
     # gold poster frame + corner brackets
     veil.add_patch(
         mpatches.Rectangle(
@@ -2270,9 +2251,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda, events=None):
         (0.035, 0.042, 1, 1),
         (0.965, 0.042, -1, 1),
     ]:
-        veil.plot(
-            [x, x + dx * 0.028], [y, y], color=C_GOLD, lw=1.8, alpha=0.8, zorder=2
-        )
+        veil.plot([x, x + dx * 0.028], [y, y], color=C_GOLD, lw=1.8, alpha=0.8, zorder=2)
         veil.plot([x, x], [y, y + dy * 0.04], color=C_GOLD, lw=1.8, alpha=0.8, zorder=2)
 
     # ── Eyebrow ─────────────────────────────────────────────────────────
@@ -2478,8 +2457,7 @@ def _draw_match_summary_page(pdf, info, goals_df, ppda, events=None):
     fig.text(
         0.5,
         0.075,
-        "Executive Summary · The Match Story · Chance Creation · "
-        "Build-up · Defence · The Verdict",
+        "Executive Summary · The Match Story · Chance Creation · Build-up · Defence · The Verdict",
         ha="center",
         color=TEXT_FADED,
         fontsize=8.5,
@@ -2508,9 +2486,7 @@ def _shape_read(events, tid):
     which channel the play leaned through. Not a formation number; a description
     of how the side actually set up across the match."""
     try:
-        d = events[
-            (events["team_id"] == tid) & events["x"].notna() & events["y"].notna()
-        ]
+        d = events[(events["team_id"] == tid) & events["x"].notna() & events["y"].notna()]
         if len(d) < 40:
             return ""
         mx = float(d["x"].mean())
@@ -2522,16 +2498,14 @@ def _shape_read(events, tid):
         height = (
             "high up the pitch"
             if mx >= 55
-            else "deep in its own half" if mx <= 44 else "around the middle third"
+            else "deep in its own half"
+            if mx <= 44
+            else "around the middle third"
         )
         comp = (
             "vertically compact between its lines"
             if sx <= 17
-            else (
-                "stretched vertically"
-                if sx >= 25
-                else "moderately spread from back to front"
-            )
+            else ("stretched vertically" if sx >= 25 else "moderately spread from back to front")
         )
         width = "narrow" if sy <= 22 else "wide" if sy >= 30 else "balanced in width"
         if abs(left - right) < 0.06:
@@ -2616,10 +2590,7 @@ def _ctx_for(events, info, ppda):
             te = events[events["team_id"] == tid]
             ty = te.get("type", pd.Series("", index=te.index)).astype(str)
             oc = te.get("outcome", pd.Series("", index=te.index)).astype(str)
-            isp = (
-                te.get("is_pass", pd.Series(False, index=te.index)).fillna(False)
-                == True
-            )
+            isp = te.get("is_pass", pd.Series(False, index=te.index)).fillna(False) == True
             tot = int(isp.sum())
             comp = int((isp & (oc == "Successful")).sum())
             passes[j] = tot
@@ -2635,23 +2606,15 @@ def _ctx_for(events, info, ppda):
                     gg = pxt.groupby("player")["xT"].sum().sort_values(ascending=False)
                     topxt[j] = (_last(gg.index[0]), round(float(gg.iloc[0]), 2))
             # creator (key passes), shooter, defender, defensive counts
-            kp = (
-                te.get("is_key_pass", pd.Series(False, index=te.index)).fillna(False)
-                == True
-            )
+            kp = te.get("is_key_pass", pd.Series(False, index=te.index)).fillna(False) == True
             keyp[j] = int(kp.sum())
             if kp.sum():
                 gc = te[kp].groupby("player").size().sort_values(ascending=False)
                 topcreator[j] = (_last(gc.index[0]), int(gc.iloc[0]))
-            issh = (
-                te.get("is_shot", pd.Series(False, index=te.index)).fillna(False)
-                == True
-            )
+            issh = te.get("is_shot", pd.Series(False, index=te.index)).fillna(False) == True
             if issh.sum():
                 sg = (
-                    te[issh]
-                    .groupby("player")
-                    .agg(sh=("is_shot", "size"), xg=("xG", "sum"))
+                    te[issh].groupby("player").agg(sh=("is_shot", "size"), xg=("xG", "sum"))
                     if "xG" in te
                     else None
                 )
@@ -2779,7 +2742,7 @@ def _analyst_commentary(fname, hn, an, ctx):
         real = leader(gh, ga)
         sh_l = tsh_l[0] if (xgh >= xga) else tsh_l[1]
         who = (
-            f"{lead} shaped the stronger body of chances ({max(xgh,xga):.2f} to {min(xgh,xga):.2f} xG)"
+            f"{lead} shaped the stronger body of chances ({max(xgh, xga):.2f} to {min(xgh, xga):.2f} xG)"
             if lead
             else f"the expected-goals split finished level ({xgh:.2f} to {xga:.2f})"
         )
@@ -2867,9 +2830,7 @@ def _analyst_commentary(fname, hn, an, ctx):
             if carrier and carrier[0]
             else ""
         )
-        eff = (
-            "far more" if oxt and xt > oxt * 1.4 else ("more" if xt >= oxt else "less")
-        )
+        eff = "far more" if oxt and xt > oxt * 1.4 else ("more" if xt >= oxt else "less")
         conc = (
             "a team leaning on one progressor to unlock the block"
             if (carrier and carrier[1] and xt and carrier[1] > 0.2 * xt)
@@ -2936,7 +2897,7 @@ def _analyst_commentary(fname, hn, an, ctx):
         press = leader(-(pph or 99), -(ppa or 99)) if (pph and ppa) else None
         pline = (
             (
-                f"{press} pressed the more aggressively (PPDA {min(pph,ppa):.1f} to {max(pph,ppa):.1f}), engaging after "
+                f"{press} pressed the more aggressively (PPDA {min(pph, ppa):.1f} to {max(pph, ppa):.1f}), engaging after "
                 f"fewer opponent passes. "
             )
             if (pph and ppa and press)
@@ -2957,16 +2918,16 @@ def _analyst_commentary(fname, hn, an, ctx):
         lead = leader(ph, pa)
         xlead = leader(xth, xta)
         pl = (
-            (f"{lead} owned the ball ({max(ph,pa):.0f}% to {min(ph,pa):.0f}%)")
+            (f"{lead} owned the ball ({max(ph, pa):.0f}% to {min(ph, pa):.0f}%)")
             if lead
             else f"possession finished near-level ({ph:.0f}% to {pa:.0f}%)"
         )
         tie = (
-            f" And it translated: {xlead} also led the ball-progression value ({max(xth,xta):.2f} to {min(xth,xta):.2f} xT)."
+            f" And it translated: {xlead} also led the ball-progression value ({max(xth, xta):.2f} to {min(xth, xta):.2f} xT)."
             if (lead and xlead and lead == xlead)
             else (
-                f" But it did not fully translate — {xlead} generated the greater threat ({max(xth,xta):.2f} to "
-                f"{min(xth,xta):.2f} xT), a sign of possession without penetration for the side on top."
+                f" But it did not fully translate — {xlead} generated the greater threat ({max(xth, xta):.2f} to "
+                f"{min(xth, xta):.2f} xT), a sign of possession without penetration for the side on top."
                 if (lead and xlead and lead != xlead)
                 else ""
             )
@@ -3035,12 +2996,12 @@ def _commentary_for_filename(fname: str, hn: str, an: str):
     if "xg_flow" in f:
         return (
             "When did the chances actually come?",
-            f"The xG Flow plots cumulative Expected Goals minute by minute "
-            f"as a staircase, with every step marking a shot whose height "
-            f"equals its chance quality. Stars sit on goals; the shaded "
-            f"territory under each curve is total chance creation. A team "
-            f"that pulls clearly above the other built the stronger shot "
-            f"profile, even if the scoreline says otherwise.",
+            "The xG Flow plots cumulative Expected Goals minute by minute "
+            "as a staircase, with every step marking a shot whose height "
+            "equals its chance quality. Stars sit on goals; the shaded "
+            "territory under each curve is total chance creation. A team "
+            "that pulls clearly above the other built the stronger shot "
+            "profile, even if the scoreline says otherwise.",
         )
     if "shot_map" in f:
         return (
@@ -3200,11 +3161,11 @@ def _commentary_for_filename(fname: str, hn: str, an: str):
     if "avg_position" in f:
         return (
             f"What shape did {team} hold?",
-            f"Each player placed at their mean touch position, with node "
-            f"size scaled to total touches. Faint lines connect every "
-            f"node to the team centroid so the overall shape pops out: a "
-            f"high, narrow shape signals an aggressive pressing block; a "
-            f"deep, wide shape points to a low-block defensive setup.",
+            "Each player placed at their mean touch position, with node "
+            "size scaled to total touches. Faint lines connect every "
+            "node to the team centroid so the overall shape pops out: a "
+            "high, narrow shape signals an aggressive pressing block; a "
+            "deep, wide shape points to a low-block defensive setup.",
         )
     if "dominating_zone" in f:
         return (
@@ -3252,11 +3213,11 @@ def _commentary_for_filename(fname: str, hn: str, an: str):
         )
     if "player_stats" in f:
         return (
-            f"How did the players rate?",
-            f"Per-player totals across the match — minutes, touches, "
-            f"shots, passes attempted/completed, key passes, defensive "
-            f"actions, and a colour-coded performance rating. Starters "
-            f"appear first, substitutes follow.",
+            "How did the players rate?",
+            "Per-player totals across the match — minutes, touches, "
+            "shots, passes attempted/completed, key passes, defensive "
+            "actions, and a colour-coded performance rating. Starters "
+            "appear first, substitutes follow.",
         )
     return (
         "What does this visual add?",
@@ -3267,9 +3228,7 @@ def _commentary_for_filename(fname: str, hn: str, an: str):
     )
 
 
-def _professional_tactical_commentary(
-    fname: str, heading: str, body: str, hn: str, an: str
-) -> str:
+def _professional_tactical_commentary(fname: str, heading: str, body: str, hn: str, an: str) -> str:
     """Turn a chart description into a fuller human tactical read."""
     f = (fname or "").lower()
     detected_side = _filename_team_side(fname)
@@ -3347,12 +3306,7 @@ def _professional_tactical_commentary(
             "This is the report's control panel. The attacking rows explain output, the defensive rows explain resistance, and the PPDA view explains how aggressively each side tried to win the ball back.",
             "Read the categories together rather than separately. High passes with low box threat can mean sterile possession. High defensive actions with low possession can mean a team spent too long reacting. The strongest performances usually connect territory, pressure and chance quality.",
         )
-    if (
-        "territorial" in f
-        or "possession" in f
-        or "ball_touches" in f
-        or "dominating_zone" in f
-    ):
+    if "territorial" in f or "possession" in f or "ball_touches" in f or "dominating_zone" in f:
         return _join(
             opening,
             "Territory is not the same as possession, but it tells us where the match was played. A team controlling advanced zones forced the opponent to defend closer to goal. A team with touches mostly in its own half may have had the ball without changing the opponent's shape.",
@@ -3912,9 +3866,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
     went_to_et, pens = _extra_time_and_pens(events, info)
     et_note = ""
     if pens is not None:
-        et_note = (
-            f" · AET, {pens[0]}-{pens[1]} pens — every row below includes extra time"
-        )
+        et_note = f" · AET, {pens[0]}-{pens[1]} pens — every row below includes extra time"
     elif went_to_et:
         et_note = " · AET — every row below includes extra time"
 
@@ -3989,10 +3941,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         if events is None or events.empty or "is_shot" not in events.columns:
             return 0
         try:
-            s = events[
-                (events["team_id"] == team_id)
-                & (events["is_shot"].fillna(False) == True)
-            ]  # noqa: E712
+            s = events[(events["team_id"] == team_id) & (events["is_shot"].fillna(False) == True)]  # noqa: E712
             if "is_goal" in s.columns and "scoring_team" in s.columns:
                 og = s["is_goal"].fillna(False) & (s["scoring_team"] != team_id)
                 s = s[~og]
@@ -4007,9 +3956,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
     def _xg_for(team_id):
         if events is None or events.empty or "xG" not in events.columns:
             return 0.0
-        return round(
-            float(events.loc[events["team_id"] == team_id, "xG"].fillna(0).sum()), 2
-        )
+        return round(float(events.loc[events["team_id"] == team_id, "xG"].fillna(0).sum()), 2)
 
     def _xt_for(team_id):
         # Match the xT map's "total xT": threat CREATED by positive successful
@@ -4047,9 +3994,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         ),  # noqa: E712
         (
             "Key passes",
-            _count(
-                home_id, lambda d: d.get("is_key_pass", False) == True
-            ),  # noqa: E712
+            _count(home_id, lambda d: d.get("is_key_pass", False) == True),  # noqa: E712
             _count(away_id, lambda d: d.get("is_key_pass", False) == True),
         ),  # noqa: E712
         (
@@ -4122,9 +4067,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         tm = events["team_id"] == team_id
         _others = [t for t in events["team_id"].dropna().unique() if t != team_id]
         opp_id = (
-            max(_others, key=lambda t: int((events["team_id"] == t).sum()))
-            if _others
-            else None
+            max(_others, key=lambda t: int((events["team_id"] == t).sum())) if _others else None
         )
         om = events["team_id"] == opp_id if opp_id is not None else (tm & False)
 
@@ -4138,11 +4081,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         to_self = _c(tm, "TakeOn")
         to_opp = _c(om, "TakeOn")
         gt = to_self + to_opp
-        gw = (
-            (_c(tm, "TakeOn", True) + (to_opp - _c(om, "TakeOn", True)))
-            if has_out
-            else 0
-        )
+        gw = (_c(tm, "TakeOn", True) + (to_opp - _c(om, "TakeOn", True))) if has_out else 0
         return (aw, f"{aw}/{at}"), (gw, f"{gw}/{gt}")
 
     _h_aer, _h_grd = _duels(home_id)
@@ -4256,9 +4195,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             transform=ax.transAxes,
         )
         # subtle divider under team labels
-        ax.plot(
-            [0.02, 0.98], [0.85, 0.85], color=GRID_COL, lw=1.0, transform=ax.transAxes
-        )
+        ax.plot([0.02, 0.98], [0.85, 0.85], color=GRID_COL, lw=1.0, transform=ax.transAxes)
 
         n = len(rows_list)
         if n == 0:
@@ -4661,9 +4598,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         family=FONT_MONO,
         transform=com_ax.transAxes,
     )
-    com_ax.plot(
-        [0, 1], [0.90, 0.90], color=GRID_COL, lw=1.0, transform=com_ax.transAxes
-    )
+    com_ax.plot([0, 1], [0.90, 0.90], color=GRID_COL, lw=1.0, transform=com_ax.transAxes)
 
     # Three structured sections — heading + body, side by side in columns.
     sections = [
@@ -4788,9 +4723,7 @@ def run_analysis(
     Every visual and the final PDF are saved in the match directory.
     """
     if parse_all_fn is None:
-        raise ValueError(
-            "run_analysis requires parse_all_fn (e.g. parse_all_fn=parse_all)."
-        )
+        raise ValueError("run_analysis requires parse_all_fn (e.g. parse_all_fn=parse_all).")
 
     global OUTPUT_DIR, VISUALS_DIR
     output_dir = os.environ.get("MATCH_ANALYSIS_OUTPUT_DIR")
@@ -4846,13 +4779,9 @@ def run_analysis(
             )
         ):
             return 1  # the match story
-        if any(
-            k in f for k in ("territorial", "possession", "ball_touches", "dominating")
-        ):
+        if any(k in f for k in ("territorial", "possession", "ball_touches", "dominating")):
             return 2  # territory & control
-        if any(
-            k in f for k in ("shot_map", "danger", "zone14", "box_entries", "crosses")
-        ):
+        if any(k in f for k in ("shot_map", "danger", "zone14", "box_entries", "crosses")):
             return 3  # chance creation
         if any(
             k in f
@@ -4866,10 +4795,7 @@ def run_analysis(
             )
         ):
             return 4  # build-up & progression
-        if any(
-            k in f
-            for k in ("defensive_hm", "defensive_summary", "high_turnovers", "ppda")
-        ):
+        if any(k in f for k in ("defensive_hm", "defensive_summary", "high_turnovers", "ppda")):
             return 5  # defence & pressing
         return 1
 
@@ -4882,8 +4808,7 @@ def run_analysis(
         ),
         2: (
             "TERRITORY & CONTROL",
-            "Who owned the ball and the space, and where on the pitch the "
-            "game was really played.",
+            "Who owned the ball and the space, and where on the pitch the game was really played.",
             "#A78BFA",
         ),
         3: (
@@ -4900,8 +4825,7 @@ def run_analysis(
         ),
         5: (
             "DEFENCE & PRESSING",
-            "How each side defended its goal, pressed the opponent and won "
-            "the ball back.",
+            "How each side defended its goal, pressed the opponent and won the ball back.",
             "#F87171",
         ),
     }
@@ -4989,9 +4913,7 @@ def run_analysis(
         is_disk_visual = isinstance(fig, (str, os.PathLike))
         if not is_disk_visual and rebrand_figure is not None:
             try:
-                rebrand_figure(
-                    fig, home_name=hn, away_name=an, score=str(score), accent=C_GOLD
-                )
+                rebrand_figure(fig, home_name=hn, away_name=an, score=str(score), accent=C_GOLD)
             except Exception:
                 pass
         # Prefer the data-driven, connected analyst read; fall back to the
@@ -5120,9 +5042,7 @@ def run_analysis(
                     _home_col, _away_col = _fixture_colors(info)
                     accent = _home_col if side == "home" else _away_col
                     tname = radar_data.get(side, {}).get("name", "")
-                    for player, pfig, prole, note in radar_data.get(side, {}).get(
-                        "figs", []
-                    ):
+                    for player, pfig, prole, note in radar_data.get(side, {}).get("figs", []):
                         pg += 1
                         _draw_player_radar_page(
                             pdf,

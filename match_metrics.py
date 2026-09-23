@@ -182,9 +182,7 @@ def is_restart_event(row: pd.Series | dict[str, Any]) -> bool:
 
 
 def live_event_mask(events: pd.DataFrame) -> pd.Series:
-    periods = events.get("period_code", pd.Series("", index=events.index)).map(
-        _normalise_period
-    )
+    periods = events.get("period_code", pd.Series("", index=events.index)).map(_normalise_period)
     types = events.get("type", pd.Series("", index=events.index)).fillna("").astype(str)
     shootout = _bool_series(events, "is_penalty_shootout")
     return ~periods.isin(NON_LIVE_PERIODS) & ~types.isin(MARKER_TYPES) & ~shootout
@@ -199,10 +197,7 @@ def fouls_committed_mask(events: pd.DataFrame) -> pd.Series:
     counted. Single-sided feeds retain all foul rows as a safe fallback.
     """
     types = (
-        events.get("type", pd.Series("", index=events.index))
-        .fillna("")
-        .astype(str)
-        .str.casefold()
+        events.get("type", pd.Series("", index=events.index)).fillna("").astype(str).str.casefold()
     )
     foul_rows = types.eq("foul") & live_event_mask(events)
     outcomes = (
@@ -212,9 +207,7 @@ def fouls_committed_mask(events: pd.DataFrame) -> pd.Series:
         .str.casefold()
     )
     foul_outcomes = outcomes[foul_rows]
-    paired_feed = foul_outcomes.eq("unsuccessful").any() and foul_outcomes.eq(
-        "successful"
-    ).any()
+    paired_feed = foul_outcomes.eq("unsuccessful").any() and foul_outcomes.eq("successful").any()
     return foul_rows & outcomes.eq("unsuccessful") if paired_feed else foul_rows
 
 
@@ -291,19 +284,12 @@ def cross_mask(events: pd.DataFrame, successful_only: bool = False) -> pd.Series
     """Canonical cross mask: passes carrying the provider Cross qualifier."""
     mask = _bool_series(events, "is_cross")
     if "qualifier_names" in events.columns:
-        mask |= events["qualifier_names"].map(
-            lambda value: "cross" in _qualifier_tokens(value)
-        )
+        mask |= events["qualifier_names"].map(lambda value: "cross" in _qualifier_tokens(value))
     if "is_cross" not in events.columns and "qualifier_names" not in events.columns:
         x = _numeric_series(events, "x", np.nan)
         y = _numeric_series(events, "y", np.nan)
         end_x = _numeric_series(events, "end_x", np.nan)
-        mask = (
-            _bool_series(events, "is_pass")
-            & (x >= 60)
-            & ((y <= 22) | (y >= 78))
-            & (end_x >= 80)
-        )
+        mask = _bool_series(events, "is_pass") & (x >= 60) & ((y <= 22) | (y >= 78)) & (end_x >= 80)
     if successful_only:
         successful = events.get("outcome", pd.Series("", index=events.index)).map(
             _outcome_is_successful
@@ -463,9 +449,7 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
 
     work = events.copy()
     work["_source_index"] = np.arange(len(work))
-    period_codes = work.get("period_code", pd.Series("", index=work.index)).map(
-        _normalise_period
-    )
+    period_codes = work.get("period_code", pd.Series("", index=work.index)).map(_normalise_period)
     work["_period_code"] = period_codes
     work["_period_order"] = period_codes.map(PERIOD_ORDER).fillna(99).astype(int)
     work["_minute"] = _numeric_series(work, "minute")
@@ -485,21 +469,17 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
     work["_xT"] = _numeric_series(work, "xT")
     work["_xG"] = _numeric_series(work, "xG")
     work["_is_restart"] = work.apply(is_restart_event, axis=1)
-    work["_provider_fastbreak"] = work.get(
-        "qualifier_names", pd.Series("", index=work.index)
-    ).map(lambda value: bool(_qualifier_tokens(value) & {"fastbreak", "counterattack"}))
-    starts_in_box = (work["_x"] >= BOX_X) & work["_y"].between(BOX_Y_MIN, BOX_Y_MAX)
-    ends_in_box = (work["_end_x"] >= BOX_X) & work["_end_y"].between(
-        BOX_Y_MIN, BOX_Y_MAX
+    work["_provider_fastbreak"] = work.get("qualifier_names", pd.Series("", index=work.index)).map(
+        lambda value: bool(_qualifier_tokens(value) & {"fastbreak", "counterattack"})
     )
+    starts_in_box = (work["_x"] >= BOX_X) & work["_y"].between(BOX_Y_MIN, BOX_Y_MAX)
+    ends_in_box = (work["_end_x"] >= BOX_X) & work["_end_y"].between(BOX_Y_MIN, BOX_Y_MAX)
     controlled_move = (
         work["_is_pass"] | work.get("type", pd.Series("", index=work.index)).eq("Carry")
     ) & work["_successful"]
     work["_box_entry"] = controlled_move & ~starts_in_box & ends_in_box
     work["_final_third_entry"] = (
-        controlled_move
-        & (work["_x"] < FINAL_THIRD_X)
-        & (work["_end_x"] >= FINAL_THIRD_X)
+        controlled_move & (work["_x"] < FINAL_THIRD_X) & (work["_end_x"] >= FINAL_THIRD_X)
     )
     work = work.sort_values(
         ["_period_order", "_clock_seconds", "_source_index"], kind="stable"
@@ -516,9 +496,7 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
     for idx, row in work.iterrows():
         period = row["_period_code"]
         event_type = str(row.get("type") or "")
-        if period in NON_LIVE_PERIODS or _is_true(
-            row.get("is_penalty_shootout", False)
-        ):
+        if period in NON_LIVE_PERIODS or _is_true(row.get("is_penalty_shootout", False)):
             continue
         if period != current_period:
             current_period = period
@@ -535,14 +513,10 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
                 reason = "restart"
             elif current_team is None:
                 starts_new = True
-                reason = (
-                    "period_start" if last_control_team is None else "opponent_turnover"
-                )
+                reason = "period_start" if last_control_team is None else "opponent_turnover"
             elif candidate != current_team:
                 starts_new = True
-                reason = (
-                    "recovery" if event_type in REGAIN_TYPES else "opponent_turnover"
-                )
+                reason = "recovery" if event_type in REGAIN_TYPES else "opponent_turnover"
 
         if starts_new:
             possession_id += 1
@@ -580,19 +554,13 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
             start_y = 50.0
         end_x, end_y = _event_xy(last)
 
-        x_values = pd.concat(
-            [team_events["_x"], team_events["_end_x"]], ignore_index=True
-        ).dropna()
+        x_values = pd.concat([team_events["_x"], team_events["_end_x"]], ignore_index=True).dropna()
         max_x = float(x_values.max()) if not x_values.empty else float(start_x)
         window = team_events[
             team_events["_clock_seconds"] <= start_time + TRANSITION_WINDOW_SECONDS
         ]
-        window_x = pd.concat(
-            [window["_x"], window["_end_x"]], ignore_index=True
-        ).dropna()
-        transition_max_x = (
-            float(window_x.max()) if not window_x.empty else float(start_x)
-        )
+        window_x = pd.concat([window["_x"], window["_end_x"]], ignore_index=True).dropna()
+        transition_max_x = float(window_x.max()) if not window_x.empty else float(start_x)
         transition_progress = max(transition_max_x - float(start_x), 0.0)
         shot_mask = team_events["_is_shot"]
         goal_mask = team_events["_is_goal"]
@@ -623,20 +591,13 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
         passes = team_events["_is_pass"]
         successful = team_events["_successful"]
         movement_mask = (
-            (
-                passes
-                | team_events.get("type", pd.Series("", index=team_events.index)).eq(
-                    "Carry"
-                )
-            )
+            (passes | team_events.get("type", pd.Series("", index=team_events.index)).eq("Carry"))
             & successful
             & team_events[["_x", "_y", "_end_x", "_end_y"]].notna().all(axis=1)
         )
         movement_distance = np.hypot(
-            team_events.loc[movement_mask, "_end_x"]
-            - team_events.loc[movement_mask, "_x"],
-            team_events.loc[movement_mask, "_end_y"]
-            - team_events.loc[movement_mask, "_y"],
+            team_events.loc[movement_mask, "_end_x"] - team_events.loc[movement_mask, "_x"],
+            team_events.loc[movement_mask, "_end_y"] - team_events.loc[movement_mask, "_y"],
         )
         summaries.append(
             {
@@ -675,9 +636,7 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
                 "transition_xT": float(window.loc[window["_xT"] > 0, "_xT"].sum()),
                 "transition_box_entries": int(window["_box_entry"].sum()),
                 "transition_duration": min(duration, TRANSITION_WINDOW_SECONDS),
-                "is_high_regain": bool(
-                    transition_candidate and float(start_x) >= HIGH_REGAIN_X
-                ),
+                "is_high_regain": bool(transition_candidate and float(start_x) >= HIGH_REGAIN_X),
                 "counterpress_regain": False,
             }
         )
@@ -723,12 +682,11 @@ def high_regain_events(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
     annotated, possessions = build_possessions(events)
     if possessions.empty:
         return events.iloc[0:0].copy()
-    ids = possessions[
-        (possessions["team_id"] == team_id) & possessions["is_high_regain"]
-    ]["possession_id"]
+    ids = possessions[(possessions["team_id"] == team_id) & possessions["is_high_regain"]][
+        "possession_id"
+    ]
     return annotated[
-        annotated["possession_id"].isin(ids)
-        & annotated["possession_start_reason"].ne("")
+        annotated["possession_id"].isin(ids) & annotated["possession_start_reason"].ne("")
     ].copy()
 
 
@@ -747,9 +705,7 @@ def _possessions_with_game_state(
         "scoring_team", annotated.get("team_id", pd.Series(index=annotated.index))
     )
     goals = annotated[
-        annotated["_is_goal"]
-        & ~_bool_series(annotated, "is_penalty_shootout")
-        & scored_for.notna()
+        annotated["_is_goal"] & ~_bool_series(annotated, "is_penalty_shootout") & scored_for.notna()
     ].copy()
     goals["_scoring_team"] = scored_for.loc[goals.index]
     goal_rows = [
@@ -784,7 +740,9 @@ def _possessions_with_game_state(
         states.append(
             "leading"
             if own_score > opponent_score
-            else "trailing" if own_score < opponent_score else "drawing"
+            else "trailing"
+            if own_score < opponent_score
+            else "drawing"
         )
         score_for.append(own_score)
         score_against.append(opponent_score)
@@ -824,9 +782,9 @@ def player_sequence_metrics(events: pd.DataFrame) -> dict[str, dict[str, float]]
     )
     sequence_groups = {
         int(possession_id): group
-        for possession_id, group in annotated[
-            annotated["possession_id"].notna()
-        ].groupby("possession_id", sort=False)
+        for possession_id, group in annotated[annotated["possession_id"].notna()].groupby(
+            "possession_id", sort=False
+        )
     }
     for _, possession in possessions.iterrows():
         possession_id = int(possession["possession_id"])
@@ -836,9 +794,7 @@ def player_sequence_metrics(events: pd.DataFrame) -> dict[str, dict[str, float]]
         if sequence_events.empty or "player" not in sequence_events.columns:
             continue
         player_names = sequence_events["player"].dropna().astype(str).str.strip()
-        participants = {
-            player for player in player_names if player and player.lower() != "nan"
-        }
+        participants = {player for player in player_names if player and player.lower() != "nan"}
         shot_players = set(
             sequence_events.loc[sequence_events["_is_shot"], "player"]
             .dropna()
@@ -847,10 +803,7 @@ def player_sequence_metrics(events: pd.DataFrame) -> dict[str, dict[str, float]]
         )
         key_pass_mask = _bool_series(sequence_events, "is_key_pass")
         key_pass_players = set(
-            sequence_events.loc[key_pass_mask, "player"]
-            .dropna()
-            .astype(str)
-            .str.strip()
+            sequence_events.loc[key_pass_mask, "player"].dropna().astype(str).str.strip()
         )
         sequence_xg = float(possession.get("npxG", 0.0) or 0.0)
         sequence_xt = float(possession.get("xT", 0.0) or 0.0)
@@ -873,9 +826,7 @@ def player_sequence_metrics(events: pd.DataFrame) -> dict[str, dict[str, float]]
     return result
 
 
-def team_advanced_metrics(
-    events: pd.DataFrame, info: dict[str, Any]
-) -> dict[str, dict[str, Any]]:
+def team_advanced_metrics(events: pd.DataFrame, info: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Return canonical team metrics for report and visualization consumers."""
     cache_key = (
         len(events),
@@ -942,9 +893,7 @@ def team_advanced_metrics(
             else pd.DataFrame()
         )
         successful_build_ups = (
-            int((build_ups["max_x"] >= FINAL_THIRD_X).sum())
-            if not build_ups.empty
-            else 0
+            int((build_ups["max_x"] >= FINAL_THIRD_X).sum()) if not build_ups.empty else 0
         )
         box_possessions = (
             team_possessions[team_possessions["box_entries"] > 0]
@@ -960,9 +909,7 @@ def team_advanced_metrics(
         counterpress_successes = 0
         rest_defence_exposures = 0
         rest_defence_dangerous_counters = 0
-        ordered_possessions = possessions.sort_values("possession_id").reset_index(
-            drop=True
-        )
+        ordered_possessions = possessions.sort_values("possession_id").reset_index(drop=True)
         for possession_index in range(max(len(ordered_possessions) - 1, 0)):
             lost = ordered_possessions.iloc[possession_index]
             opponent = ordered_possessions.iloc[possession_index + 1]
@@ -976,23 +923,19 @@ def team_advanced_metrics(
             counterpress_attempts += 1
             if possession_index + 2 < len(ordered_possessions):
                 regained = ordered_possessions.iloc[possession_index + 2]
-                if regained["team_id"] == team_id and bool(
-                    regained["counterpress_regain"]
-                ):
+                if regained["team_id"] == team_id and bool(regained["counterpress_regain"]):
                     counterpress_successes += 1
             if float(lost["max_x"]) >= FINAL_THIRD_X:
                 rest_defence_exposures += 1
                 reached_final_third_in_window = (
-                    float(opponent["start_x"])
-                    + float(opponent["transition_progress"])
+                    float(opponent["start_x"]) + float(opponent["transition_progress"])
                     >= FINAL_THIRD_X
                 )
                 dangerous_counter = bool(opponent["is_transition"]) and (
                     int(opponent["transition_shots"]) > 0
                     or int(opponent["transition_box_entries"]) > 0
                     or (
-                        float(opponent["transition_progress"])
-                        >= DANGEROUS_COUNTER_MIN_PROGRESS
+                        float(opponent["transition_progress"]) >= DANGEROUS_COUNTER_MIN_PROGRESS
                         and reached_final_third_in_window
                     )
                 )
@@ -1014,9 +957,7 @@ def team_advanced_metrics(
                     else 0
                 ),
                 "shots": (
-                    int(state_possessions["shots"].sum())
-                    if not state_possessions.empty
-                    else 0
+                    int(state_possessions["shots"].sum()) if not state_possessions.empty else 0
                 ),
                 "xG": (
                     round(float(state_possessions["xG"].sum()), 2)
@@ -1049,20 +990,14 @@ def team_advanced_metrics(
             "possession_regains": len(regains),
             "high_regains": len(high_regains),
             "regain_to_shot_rate": round(
-                100
-                * int((regains["transition_shots"] > 0).sum())
-                / max(len(regains), 1),
+                100 * int((regains["transition_shots"] > 0).sum()) / max(len(regains), 1),
                 1,
             ),
             "regain_xT": (
-                round(float(regains["transition_xT"].sum()), 2)
-                if not regains.empty
-                else 0.0
+                round(float(regains["transition_xT"].sum()), 2) if not regains.empty else 0.0
             ),
             "regain_xG": (
-                round(float(regains["transition_xG"].sum()), 2)
-                if not regains.empty
-                else 0.0
+                round(float(regains["transition_xG"].sum()), 2) if not regains.empty else 0.0
             ),
             "transitions": transition_count,
             "transition_shots": (
@@ -1072,24 +1007,16 @@ def team_advanced_metrics(
                 int(transitions["transition_goals"].sum()) if transition_count else 0
             ),
             "transition_xG": (
-                round(float(transitions["transition_xG"].sum()), 2)
-                if transition_count
-                else 0.0
+                round(float(transitions["transition_xG"].sum()), 2) if transition_count else 0.0
             ),
             "transition_xT": (
-                round(float(transitions["transition_xT"].sum()), 2)
-                if transition_count
-                else 0.0
+                round(float(transitions["transition_xT"].sum()), 2) if transition_count else 0.0
             ),
             "transition_box_entries": (
-                int(transitions["transition_box_entries"].sum())
-                if transition_count
-                else 0
+                int(transitions["transition_box_entries"].sum()) if transition_count else 0
             ),
             "transition_shot_rate": round(
-                100
-                * int((transitions["transition_shots"] > 0).sum())
-                / max(transition_count, 1),
+                100 * int((transitions["transition_shots"] > 0).sum()) / max(transition_count, 1),
                 1,
             ),
             "avg_transition_duration": (
@@ -1109,24 +1036,18 @@ def team_advanced_metrics(
             ),
             "progressive_passes": int(progressive_pass_mask(team_events).sum()),
             "crosses": int(cross_mask(team_events).sum()),
-            "completed_crosses": int(
-                cross_mask(team_events, successful_only=True).sum()
-            ),
+            "completed_crosses": int(cross_mask(team_events, successful_only=True).sum()),
             "touches": touches,
             "touch_def_pct": round(
                 100 * int((team_touch_mask & (touch_x < 33)).sum()) / max(touches, 1)
             ),
             "touch_mid_pct": round(
-                100
-                * int((team_touch_mask & touch_x.between(33, 67)).sum())
-                / max(touches, 1)
+                100 * int((team_touch_mask & touch_x.between(33, 67)).sum()) / max(touches, 1)
             ),
             "touch_att_pct": round(
                 100 * int((team_touch_mask & (touch_x > 67)).sum()) / max(touches, 1)
             ),
-            "field_tilt": round(
-                100 * final_third_passes[side] / max(field_tilt_total, 1), 1
-            ),
+            "field_tilt": round(100 * final_third_passes[side] / max(field_tilt_total, 1), 1),
             "deep_completions": int(deep_completion_mask(team_events).sum()),
             "final_third_entries": int(final_third_entry_mask(team_events).sum()),
             "final_third_entry_possessions": len(final_third_possessions),
@@ -1142,20 +1063,14 @@ def team_advanced_metrics(
             ),
             "box_entries": int(box_entry_mask(team_events).sum()),
             "box_entry_to_shot_rate": round(
-                100
-                * int((box_possessions["shots"] > 0).sum())
-                / max(len(box_possessions), 1),
+                100 * int((box_possessions["shots"] > 0).sum()) / max(len(box_possessions), 1),
                 1,
             ),
             "build_up_attempts": len(build_ups),
             "build_up_successes": successful_build_ups,
-            "build_up_success_rate": round(
-                100 * successful_build_ups / max(len(build_ups), 1), 1
-            ),
+            "build_up_success_rate": round(100 * successful_build_ups / max(len(build_ups), 1), 1),
             "sequence_xT": (
-                round(float(team_possessions["xT"].sum()), 2)
-                if not team_possessions.empty
-                else 0.0
+                round(float(team_possessions["xT"].sum()), 2) if not team_possessions.empty else 0.0
             ),
             "sequence_xT_per_possession": (
                 round(
@@ -1196,17 +1111,11 @@ def team_advanced_metrics(
             "possession_count": len(team_possessions),
             "possession_share": round(
                 100
-                * (
-                    float(team_possessions["duration"].sum())
-                    if not team_possessions.empty
-                    else 0.0
-                )
+                * (float(team_possessions["duration"].sum()) if not team_possessions.empty else 0.0)
                 / max(possession_duration_total, 1.0),
                 1,
             ),
-            "pass_share": round(
-                100 * int(team_pass_mask.sum()) / max(int(passes.sum()), 1), 1
-            ),
+            "pass_share": round(100 * int(team_pass_mask.sum()) / max(int(passes.sum()), 1), 1),
         }
 
     _TEAM_METRIC_CACHE[id(events)] = (
@@ -1252,7 +1161,9 @@ def advanced_metrics_frames(
         team_name = (
             info.get("home_name")
             if team_id == info.get("home_id")
-            else info.get("away_name") if team_id == info.get("away_id") else None
+            else info.get("away_name")
+            if team_id == info.get("away_id")
+            else None
         )
         player_rows.append(
             {
@@ -1264,11 +1175,8 @@ def advanced_metrics_frames(
         )
     player_frame = pd.DataFrame(player_rows)
     if not player_frame.empty:
-        player_frame = player_frame.sort_values(
-            "xGChain", ascending=False, ignore_index=True
-        )
+        player_frame = player_frame.sort_values("xGChain", ascending=False, ignore_index=True)
     return pd.DataFrame(team_rows), player_frame
-
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1339,7 +1247,7 @@ def placement_difficulty(px: float, py: float) -> float:
     lateral = min(abs(float(px)), 1.0)
     vertical = min(max(float(py), 0.0), 1.0)
     # Keeper's reachable envelope is widest at mid height; corners cost most.
-    return float(min((lateral ** 1.35) * 0.62 + (vertical ** 1.25) * 0.38, 1.0))
+    return float(min((lateral**1.35) * 0.62 + (vertical**1.25) * 0.38, 1.0))
 
 
 def post_shot_xg(events: pd.DataFrame) -> pd.Series:
@@ -1406,7 +1314,6 @@ def team_post_shot_xg(events: pd.DataFrame, team_id: Any) -> float:
     return round(float(post_shot_xg(shots).sum()), 2)
 
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Set pieces
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1471,7 +1378,9 @@ def shot_origin(events: pd.DataFrame, index: Any, lookback: int = SET_PIECE_LOOK
 def set_piece_breakdown(events: pd.DataFrame, team_id: Any) -> dict[str, dict[str, float]]:
     """Return shots, goals and xG for one team split by how the shot originated."""
     empty = {"shots": 0, "goals": 0, "xG": 0.0, "xG_per_shot": 0.0}
-    result = {key: dict(empty) for key in ("open_play", "corner", "free_kick", "throw_in", "penalty")}
+    result = {
+        key: dict(empty) for key in ("open_play", "corner", "free_kick", "throw_in", "penalty")
+    }
     if events is None or events.empty:
         return result
 
@@ -1502,8 +1411,14 @@ def set_piece_breakdown(events: pd.DataFrame, team_id: Any) -> dict[str, dict[st
 # Momentum, line height and compactness — all sampled in equal time windows
 # ═════════════════════════════════════════════════════════════════════════════
 DEFENSIVE_ACTION_TYPES = {
-    "Tackle", "Interception", "Clearance", "BallRecovery", "Challenge",
-    "BlockedPass", "Foul", "Aerial",
+    "Tackle",
+    "Interception",
+    "Clearance",
+    "BallRecovery",
+    "Challenge",
+    "BlockedPass",
+    "Foul",
+    "Aerial",
 }
 
 
@@ -1523,7 +1438,9 @@ def xg_momentum(events: pd.DataFrame, home_id: Any, away_id: Any, window: int = 
     if events is None or events.empty:
         return pd.DataFrame(columns=columns)
 
-    shots = events[_bool_series(events, "is_shot") & ~_bool_series(events, "is_penalty_shootout")].copy()
+    shots = events[
+        _bool_series(events, "is_shot") & ~_bool_series(events, "is_penalty_shootout")
+    ].copy()
     if shots.empty:
         return pd.DataFrame(columns=columns)
 
@@ -1620,11 +1537,12 @@ def team_compactness(events: pd.DataFrame, team_id: Any, window: int = 5) -> pd.
     return pd.DataFrame(rows, columns=columns)
 
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Pass-network centrality
 # ═════════════════════════════════════════════════════════════════════════════
-def pass_links(events: pd.DataFrame, team_id: Any, max_gap_seconds: float = 20.0) -> dict[tuple[str, str], int]:
+def pass_links(
+    events: pd.DataFrame, team_id: Any, max_gap_seconds: float = 20.0
+) -> dict[tuple[str, str], int]:
     """Return completed pass counts between team-mates as {(from, to): count}.
 
     A pass is credited to a pair when the next event belongs to the same team,
@@ -1634,7 +1552,9 @@ def pass_links(events: pd.DataFrame, team_id: Any, max_gap_seconds: float = 20.0
         return {}
 
     work = events.sort_values(["minute", "second"], kind="stable").copy()
-    work["_clock"] = _numeric_series(work, "minute", 0.0) * 60 + _numeric_series(work, "second", 0.0)
+    work["_clock"] = _numeric_series(work, "minute", 0.0) * 60 + _numeric_series(
+        work, "second", 0.0
+    )
     work["_next_team"] = work.get("team_id").shift(-1)
     work["_next_player"] = work.get("player").shift(-1)
     work["_next_clock"] = work["_clock"].shift(-1)
@@ -1763,20 +1683,25 @@ def turnover_events(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
     if possessions.empty:
         return pd.DataFrame(columns=columns)
 
-    ordered = possessions.sort_values(["period_order", "start_time"], kind="stable").reset_index(drop=True)
+    ordered = possessions.sort_values(["period_order", "start_time"], kind="stable").reset_index(
+        drop=True
+    )
     rows = []
     for position in range(len(ordered) - 1):
         current = ordered.iloc[position]
         following = ordered.iloc[position + 1]
         if current["team_id"] != team_id or following["team_id"] == team_id:
             continue
-        if current['period_order'] != following['period_order']:
+        if current["period_order"] != following["period_order"]:
             continue
         if str(following["start_reason"]) not in {"opponent_turnover", "recovery"}:
             continue
-        opponent = _annotated[_annotated['possession_id'].eq(following['possession_id']) & _annotated['team_id'].eq(following['team_id'])]
-        shots = opponent[_bool_series(opponent, 'is_shot')]
-        deltas = shots['_clock_seconds'] - float(current['end_time'])
+        opponent = _annotated[
+            _annotated["possession_id"].eq(following["possession_id"])
+            & _annotated["team_id"].eq(following["team_id"])
+        ]
+        shots = opponent[_bool_series(opponent, "is_shot")]
+        deltas = shots["_clock_seconds"] - float(current["end_time"])
         quick = shots[deltas.between(0, TURNOVER_PUNISH_SECONDS)]
         gap = float(deltas.min()) if not quick.empty else np.nan
         punished = not quick.empty
@@ -1786,7 +1711,9 @@ def turnover_events(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
                 "x": float(current["end_x"]),
                 "y": float(current["end_y"]),
                 "punished": punished,
-                "conceded_xG": round(float(_numeric_series(quick,'xG').sum()), 3) if punished else 0.0,
+                "conceded_xG": round(float(_numeric_series(quick, "xG").sum()), 3)
+                if punished
+                else 0.0,
                 "seconds_to_shot": round(gap, 1) if punished else np.nan,
             }
         )
@@ -1862,7 +1789,6 @@ def shot_placement_zones(events: pd.DataFrame, team_id: Any) -> dict[str, int]:
     return zones
 
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Pass geometry and goalkeeper distribution
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1936,7 +1862,9 @@ def pass_length_profile(events: pd.DataFrame, team_id: Any) -> dict[str, float]:
         return empty
 
     geometry = pass_geometry(passes)
-    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(_outcome_is_successful)
+    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(
+        _outcome_is_successful
+    )
     long_balls = geometry["is_long"]
     return {
         "passes": int(len(passes)),
@@ -1953,7 +1881,9 @@ def pass_length_profile(events: pd.DataFrame, team_id: Any) -> dict[str, float]:
 GK_LAUNCH_METRES = 40.0
 
 
-def goalkeeper_distribution(events: pd.DataFrame, team_id: Any, keeper: str | None = None) -> dict[str, float]:
+def goalkeeper_distribution(
+    events: pd.DataFrame, team_id: Any, keeper: str | None = None
+) -> dict[str, float]:
     """Return how a goalkeeper used the ball: launch rate, length, completion.
 
     A keeper who plays 40 short passes and one hopeful clearance is doing a
@@ -1993,7 +1923,11 @@ def goalkeeper_distribution(events: pd.DataFrame, team_id: Any, keeper: str | No
     successful = frame.get("outcome", pd.Series("", index=frame.index)).map(_outcome_is_successful)
     launched = geometry["length_m"] >= GK_LAUNCH_METRES
     goal_kicks = int(
-        sum(1 for _, row in frame.iterrows() if "goalkick" in _qualifier_tokens(row.get("qualifier_names")))
+        sum(
+            1
+            for _, row in frame.iterrows()
+            if "goalkick" in _qualifier_tokens(row.get("qualifier_names"))
+        )
     )
     return {
         "distributions": int(len(frame)),
@@ -2007,7 +1941,6 @@ def goalkeeper_distribution(events: pd.DataFrame, team_id: Any, keeper: str | No
     }
 
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Press resistance
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2015,7 +1948,13 @@ PRESSURE_WINDOW_SECONDS = 4.0
 PRESSURE_RADIUS = 14.0
 
 PRESSURE_ACTION_TYPES = {
-    "Tackle", "Challenge", "Interception", "BallRecovery", "Foul", "Aerial", "BlockedPass",
+    "Tackle",
+    "Challenge",
+    "Interception",
+    "BallRecovery",
+    "Foul",
+    "Aerial",
+    "BlockedPass",
 }
 
 
@@ -2033,7 +1972,9 @@ def pressure_mask(events: pd.DataFrame, team_id: Any) -> pd.Series:
         return empty
 
     work = events.copy()
-    work["_clock"] = _numeric_series(work, "minute", 0.0) * 60 + _numeric_series(work, "second", 0.0)
+    work["_clock"] = _numeric_series(work, "minute", 0.0) * 60 + _numeric_series(
+        work, "second", 0.0
+    )
     work["_x"] = _numeric_series(work, "x", np.nan)
     work["_y"] = _numeric_series(work, "y", np.nan)
 
@@ -2092,7 +2033,9 @@ def press_resistance(events: pd.DataFrame, team_id: Any) -> dict[str, float]:
         return empty
 
     pressed = pressure_mask(events, team_id).reindex(passes.index).fillna(False)
-    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(_outcome_is_successful)
+    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(
+        _outcome_is_successful
+    )
     pressed_completion = 100 * float(successful[pressed].mean()) if bool(pressed.any()) else 0.0
     free_completion = 100 * float(successful[~pressed].mean()) if bool((~pressed).any()) else 0.0
     return {
@@ -2107,7 +2050,9 @@ def press_resistance(events: pd.DataFrame, team_id: Any) -> dict[str, float]:
 # ═════════════════════════════════════════════════════════════════════════════
 # Line-breaking passes
 # ═════════════════════════════════════════════════════════════════════════════
-def line_breaking_passes(events: pd.DataFrame, team_id: Any, opponent_id: Any, window: int = 5) -> pd.DataFrame:
+def line_breaking_passes(
+    events: pd.DataFrame, team_id: Any, opponent_id: Any, window: int = 5
+) -> pd.DataFrame:
     """Return passes that started behind the opponent's line and ended beyond it.
 
     Without tracking data the opponent's defensive line is estimated from where
@@ -2139,7 +2084,9 @@ def line_breaking_passes(events: pd.DataFrame, team_id: Any, opponent_id: Any, w
     minute = _numeric_series(passes, "minute", 0.0)
     start_x = _numeric_series(passes, "x", np.nan)
     end_x = _numeric_series(passes, "end_x", np.nan)
-    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(_outcome_is_successful)
+    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(
+        _outcome_is_successful
+    )
 
     rows = []
     for idx in passes.index:
@@ -2164,7 +2111,9 @@ def line_breaking_passes(events: pd.DataFrame, team_id: Any, opponent_id: Any, w
 # ═════════════════════════════════════════════════════════════════════════════
 # Win probability
 # ═════════════════════════════════════════════════════════════════════════════
-def win_probability(events: pd.DataFrame, home_id: Any, away_id: Any, window: int = 5) -> pd.DataFrame:
+def win_probability(
+    events: pd.DataFrame, home_id: Any, away_id: Any, window: int = 5
+) -> pd.DataFrame:
     """Return a home win / draw / away win curve across the match.
 
     A logistic on the goal difference and the time still to play, nudged by the
@@ -2231,12 +2180,15 @@ def win_probability(events: pd.DataFrame, home_id: Any, away_id: Any, window: in
             }
         )
     # Terminal outcomes are known only for a completed feed.
-    ends = events[events.get('type', pd.Series('', index=events.index)).eq('End')]
-    if rows and not ends.empty and _numeric_series(ends, 'minute').max() >= 89:
-        difference = rows[-1]['goal_difference']
-        rows[-1].update(home_win=float(difference > 0), draw=float(difference == 0), away_win=float(difference < 0))
+    ends = events[events.get("type", pd.Series("", index=events.index)).eq("End")]
+    if rows and not ends.empty and _numeric_series(ends, "minute").max() >= 89:
+        difference = rows[-1]["goal_difference"]
+        rows[-1].update(
+            home_win=float(difference > 0),
+            draw=float(difference == 0),
+            away_win=float(difference < 0),
+        )
     return pd.DataFrame(rows, columns=columns)
-
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2310,7 +2262,9 @@ def action_values(events: pd.DataFrame) -> pd.Series:
     end_y = _numeric_series(events, "end_y", np.nan)
     xg = _numeric_series(events, "xG", 0.0).fillna(0.0).clip(lower=0.0)
     types = events.get("type", pd.Series("", index=events.index)).astype(str)
-    successful = events.get("outcome", pd.Series("", index=events.index)).map(_outcome_is_successful)
+    successful = events.get("outcome", pd.Series("", index=events.index)).map(
+        _outcome_is_successful
+    )
     is_shot = _bool_series(events, "is_shot")
     live = live_event_mask(events)
 
@@ -2385,7 +2339,6 @@ def player_action_value(events: pd.DataFrame, team_id: Any | None = None) -> pd.
     return out.sort_values("total_value", ascending=False, kind="stable").reset_index(drop=True)
 
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Pitch control
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2404,14 +2357,14 @@ def average_positions(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame(columns=columns)
 
-    grouped = frame.groupby(frame["player"].astype(str)).agg(
-        x=("x", "mean"), y=("y", "mean"), touches=("x", "size")
-    ).reset_index().rename(columns={"player": "player"})
+    grouped = (
+        frame.groupby(frame["player"].astype(str))
+        .agg(x=("x", "mean"), y=("y", "mean"), touches=("x", "size"))
+        .reset_index()
+        .rename(columns={"player": "player"})
+    )
     grouped.columns = columns
     return grouped[grouped["touches"] >= 3].reset_index(drop=True)
-
-
-
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2459,7 +2412,9 @@ def sequence_typology(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
         return pd.DataFrame(columns=columns)
 
     _annotated, possessions = build_possessions(events)
-    team = possessions[possessions["team_id"] == team_id] if not possessions.empty else pd.DataFrame()
+    team = (
+        possessions[possessions["team_id"] == team_id] if not possessions.empty else pd.DataFrame()
+    )
     if team.empty:
         return pd.DataFrame(columns=columns)
 
@@ -2523,7 +2478,9 @@ def receptions_between_lines(
         & (events.get("team_id") == team_id)
         & live_event_mask(events)
     ]
-    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(_outcome_is_successful)
+    successful = passes.get("outcome", pd.Series("", index=passes.index)).map(
+        _outcome_is_successful
+    )
     passes = passes[successful].dropna(subset=["end_x", "end_y"])
     if passes.empty:
         return pd.DataFrame(columns=columns)
@@ -2593,7 +2550,9 @@ def switches_of_play(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
             "end_x": _numeric_series(selected, "end_x", np.nan),
             "end_y": _numeric_series(selected, "end_y", np.nan),
             "width": width[wide].round(1),
-            "successful": selected.get("outcome", pd.Series("", index=selected.index)).map(_outcome_is_successful),
+            "successful": selected.get("outcome", pd.Series("", index=selected.index)).map(
+                _outcome_is_successful
+            ),
         },
         columns=columns,
     ).reset_index(drop=True)
@@ -2606,7 +2565,9 @@ def time_to_progress(events: pd.DataFrame, team_id: Any) -> dict[str, float]:
         return empty
 
     annotated, possessions = build_possessions(events)
-    team = possessions[possessions["team_id"] == team_id] if not possessions.empty else pd.DataFrame()
+    team = (
+        possessions[possessions["team_id"] == team_id] if not possessions.empty else pd.DataFrame()
+    )
     if team.empty:
         return empty
 
@@ -2657,7 +2618,11 @@ def pressing_triggers(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
         return pd.DataFrame(columns=columns)
 
     ordered = events.sort_values(["minute", "second"], kind="stable").reset_index(drop=True)
-    positions = {str(row.event_id): index for index, row in enumerate(ordered.itertuples()) if hasattr(row, "event_id")}
+    positions = {
+        str(row.event_id): index
+        for index, row in enumerate(ordered.itertuples())
+        if hasattr(row, "event_id")
+    }
 
     counts: defaultdict[str, int] = defaultdict(int)
     for row in regains.itertuples():
@@ -2672,10 +2637,14 @@ def pressing_triggers(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
             label = "throw-in"
         elif "goalkick" in tokens:
             label = "goal kick"
-        elif str(previous.get("type")) == "Pass" and float(_numeric_series(ordered, "end_x", np.nan).iloc[index - 1] or 50) < float(_numeric_series(ordered, "x", np.nan).iloc[index - 1] or 50):
+        elif str(previous.get("type")) == "Pass" and float(
+            _numeric_series(ordered, "end_x", np.nan).iloc[index - 1] or 50
+        ) < float(_numeric_series(ordered, "x", np.nan).iloc[index - 1] or 50):
             label = "backward pass"
         else:
-            label = TRIGGER_LABELS.get(str(previous.get("type")), str(previous.get("type") or "other").lower())
+            label = TRIGGER_LABELS.get(
+                str(previous.get("type")), str(previous.get("type") or "other").lower()
+            )
         counts[label] += 1
 
     total = sum(counts.values())
@@ -2730,7 +2699,6 @@ def rest_defence_structure(events: pd.DataFrame, team_id: Any) -> dict[str, floa
     }
 
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Goal origin, substitution impact, combinations, second balls, tilt timeline
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2741,8 +2709,16 @@ def goal_origin_chains(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.D
     halfway, four players involved" is the thing an analyst actually writes.
     """
     columns = [
-        "minute", "scorer", "team_id", "sequence_type", "passes",
-        "duration", "start_x", "start_y", "players", "started_from",
+        "minute",
+        "scorer",
+        "team_id",
+        "sequence_type",
+        "passes",
+        "duration",
+        "start_x",
+        "start_y",
+        "players",
+        "started_from",
     ]
     if events is None or events.empty:
         return pd.DataFrame(columns=columns)
@@ -2778,7 +2754,11 @@ def goal_origin_chains(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.D
                 "started_from": str(possession.start_reason),
             }
         )
-    return pd.DataFrame(rows, columns=columns).sort_values("minute", kind="stable").reset_index(drop=True)
+    return (
+        pd.DataFrame(rows, columns=columns)
+        .sort_values("minute", kind="stable")
+        .reset_index(drop=True)
+    )
 
 
 def substitution_impact(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.DataFrame:
@@ -2788,8 +2768,17 @@ def substitution_impact(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.
     twenty minutes before and after gives it a number — with the caveat that a
     substitution is never the only thing that changed.
     """
-    columns = ["minute", "team_id", "player_on", "player_off", "window",
-               "xg_before", "xg_after", "tilt_before", "tilt_after"]
+    columns = [
+        "minute",
+        "team_id",
+        "player_on",
+        "player_off",
+        "window",
+        "xg_before",
+        "xg_after",
+        "tilt_before",
+        "tilt_after",
+    ]
     if events is None or events.empty:
         return pd.DataFrame(columns=columns)
 
@@ -2802,7 +2791,9 @@ def substitution_impact(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.
     xg = _numeric_series(events, "xG", 0.0).fillna(0.0).clip(lower=0.0)
     end_x = _numeric_series(events, "end_x", np.nan)
     passes = _bool_series(events, "is_pass")
-    successful = events.get("outcome", pd.Series("", index=events.index)).map(_outcome_is_successful)
+    successful = events.get("outcome", pd.Series("", index=events.index)).map(
+        _outcome_is_successful
+    )
     final_third = passes & successful & (end_x >= FINAL_THIRD_X)
 
     def tilt(team: Any, low: float, high: float) -> float:
@@ -2817,7 +2808,10 @@ def substitution_impact(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.
     departures: defaultdict[tuple[Any, int], list[str]] = defaultdict(list)
     off_rows = events[types.eq("SubstitutionOff")]
     for off in off_rows.itertuples():
-        key = (getattr(off, "team_id", None), int(float(_numeric_series(off_rows, "minute", 0.0).loc[off.Index])))
+        key = (
+            getattr(off, "team_id", None),
+            int(float(_numeric_series(off_rows, "minute", 0.0).loc[off.Index])),
+        )
         departures[key].append(str(getattr(off, "player", "") or ""))
     used: defaultdict[tuple[Any, int], int] = defaultdict(int)
 
@@ -2845,7 +2839,11 @@ def substitution_impact(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.
                 "tilt_after": tilt(team, at, at + span),
             }
         )
-    return pd.DataFrame(rows, columns=columns).sort_values("minute", kind="stable").reset_index(drop=True)
+    return (
+        pd.DataFrame(rows, columns=columns)
+        .sort_values("minute", kind="stable")
+        .reset_index(drop=True)
+    )
 
 
 COMBINATION_WINDOW_SECONDS = 6.0
@@ -2863,7 +2861,9 @@ def third_man_combinations(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
         return pd.DataFrame(columns=columns)
 
     work = events.sort_values(["minute", "second"], kind="stable").reset_index(drop=True)
-    work["_clock"] = _numeric_series(work, "minute", 0.0) * 60 + _numeric_series(work, "second", 0.0)
+    work["_clock"] = _numeric_series(work, "minute", 0.0) * 60 + _numeric_series(
+        work, "second", 0.0
+    )
     successful = work.get("outcome", pd.Series("", index=work.index)).map(_outcome_is_successful)
     is_pass = work.get("type", pd.Series("", index=work.index)).astype(str).eq("Pass")
     own = work.get("team_id").eq(team_id)
@@ -2917,7 +2917,13 @@ def second_ball_recovery(events: pd.DataFrame, team_id: Any) -> dict[str, float]
         if not (is_long or is_dead_ball):
             continue
         nxt = work.iloc[index + 1]
-        if str(nxt.get("type")) not in {"Aerial", "BallRecovery", "Challenge", "Tackle", "BallTouch"}:
+        if str(nxt.get("type")) not in {
+            "Aerial",
+            "BallRecovery",
+            "Challenge",
+            "Tackle",
+            "BallTouch",
+        }:
             continue
         contests += 1
         if nxt.get("team_id") == team_id and _outcome_is_successful(nxt.get("outcome")):
@@ -2930,7 +2936,9 @@ def second_ball_recovery(events: pd.DataFrame, team_id: Any) -> dict[str, float]
     }
 
 
-def field_tilt_timeline(events: pd.DataFrame, home_id: Any, away_id: Any, window: int = 5) -> pd.DataFrame:
+def field_tilt_timeline(
+    events: pd.DataFrame, home_id: Any, away_id: Any, window: int = 5
+) -> pd.DataFrame:
     """Return each side's share of final-third passes per time window.
 
     Field tilt as one number hides the swing. Over time it shows the spells
@@ -2941,7 +2949,9 @@ def field_tilt_timeline(events: pd.DataFrame, home_id: Any, away_id: Any, window
         return pd.DataFrame(columns=columns)
 
     passes = _bool_series(events, "is_pass") & live_event_mask(events)
-    successful = events.get("outcome", pd.Series("", index=events.index)).map(_outcome_is_successful)
+    successful = events.get("outcome", pd.Series("", index=events.index)).map(
+        _outcome_is_successful
+    )
     end_x = _numeric_series(events, "end_x", np.nan)
     final_third = passes & successful & (end_x >= FINAL_THIRD_X)
     if not bool(final_third.any()):
