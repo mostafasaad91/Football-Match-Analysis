@@ -1,6 +1,6 @@
 import pytest
 
-from fixtures import (
+from football_analysis.pipeline.fixtures import (
     known_teams,
     load_fixtures,
     resolve_team,

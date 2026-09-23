@@ -2,7 +2,7 @@
 
 import pytest
 
-from player_advanced import line_of
+from football_analysis.metrics.player_advanced import line_of
 
 
 @pytest.mark.parametrize(

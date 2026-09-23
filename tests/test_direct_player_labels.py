@@ -3,10 +3,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
-from scatter_labels import label_players
-from match_insights import player_observations, possession_observations, stage_counts
+from football_analysis.visuals.scatter_labels import label_players
+from football_analysis.metrics.match_insights import (
+    player_observations,
+    possession_observations,
+    stage_counts,
+)
 from test_match_metrics import event
-from insight_visuals import role_group
+from football_analysis.visuals.insight_visuals import role_group
 
 
 def test_names_are_at_points_without_label_collisions_even_for_identical_values():

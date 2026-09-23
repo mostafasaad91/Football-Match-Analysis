@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from poster_dashboard import Poster, _display_number, _pair_scale
+from football_analysis.visuals.poster_dashboard import Poster, _display_number, _pair_scale
 
 
 def test_percent_tracks_keep_their_own_denominator():
@@ -20,7 +20,7 @@ def test_counts_share_a_scale_and_missing_is_not_zero():
 
 
 def test_percent_bars_encode_quarter_and_half_not_pair_share(monkeypatch):
-    import crests
+    from football_analysis.visuals import crests
 
     monkeypatch.setattr(crests, "place_crest", lambda *a, **kw: False)
     info = dict(

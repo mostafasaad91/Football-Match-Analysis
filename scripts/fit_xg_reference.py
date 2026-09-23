@@ -40,8 +40,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import reference_xg as RX  # noqa: E402
-import xg_alignment as XA  # noqa: E402
+from football_analysis.paths import MODELS_DIR  # noqa: E402
+from football_analysis.xg import reference_xg as RX  # noqa: E402
+from football_analysis.xg import xg_alignment as XA  # noqa: E402
 from fit_xg_alignment import _log_loss, _sigmoid  # noqa: E402
 
 FOLDS = 5
@@ -56,7 +57,7 @@ def _cross_entropy(predicted, target) -> float:
 
 
 def build_table() -> pd.DataFrame:
-    import football_match_analysis as F
+    from football_analysis.pipeline import football_match_analysis as F
 
     # The engine's own number is what this layer sits on, so the stored layer
     # is switched off while it is read.
@@ -261,7 +262,7 @@ def main() -> int:
     if args.dry_run:
         print("\n--dry-run: not written")
         return 0
-    path = ROOT / XA.ALIGNMENT_FILE
+    path = MODELS_DIR / XA.ALIGNMENT_FILE
     if path.is_file():
         keep = ROOT / "logs" / f"xg_alignment.before_reference.{datetime.now():%Y%m%d-%H%M%S}.json"
         keep.parent.mkdir(exist_ok=True)

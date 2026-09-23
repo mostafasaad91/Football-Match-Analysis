@@ -10,7 +10,7 @@ import colorsys
 import pytest
 from matplotlib import colors as mcolors
 
-from visual_redesign_full import (
+from football_analysis.visuals.visual_redesign_full import (
     MARK_CONTRAST_FLOOR,
     _contrast_on_bg,
     lift_to_floor,

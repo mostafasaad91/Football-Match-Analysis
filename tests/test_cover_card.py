@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import tactical_pdf_report as tp
+from football_analysis.reports import tactical_pdf_report as tp
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent

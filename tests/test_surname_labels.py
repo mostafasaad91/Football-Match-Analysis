@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from frame_values import surname
+from football_analysis.metrics.frame_values import surname
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -26,12 +26,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # match_report are excluded: nothing in the published package imports them, and
 # their calls carry their own `if name else "—"` guards.
 RENDERERS = [
-    "visual_redesign_full.py",
-    "visual_redesign_preview.py",
-    "player_radar.py",
-    "match_posters.py",
-    "tactical_pdf_report.py",
-    "match_article.py",
+    "football_analysis/visuals/visual_redesign_full.py",
+    "football_analysis/visuals/visual_redesign_preview.py",
+    "football_analysis/visuals/player_radar.py",
+    "football_analysis/visuals/match_posters.py",
+    "football_analysis/reports/tactical_pdf_report.py",
+    "football_analysis/prose/match_article.py",
 ]
 
 
@@ -73,7 +73,7 @@ def test_surname_returns_the_last_word():
 
 def test_the_chart_that_crashed_labels_a_nameless_row():
     """action_value_leaders, with the row that took the run down."""
-    import visual_redesign_full as v
+    from football_analysis.visuals import visual_redesign_full as v
 
     names = pd.Series(["Ana Silva", "", None, "Beto"])
     assert [v._surname(n) for n in names] == ["Silva", "", "", "Beto"]
@@ -91,7 +91,7 @@ def test_every_renderer_that_uses_the_helper_imports_it(module):
     tree = ast.parse(source)
     imported = any(
         isinstance(node, ast.ImportFrom)
-        and node.module == "frame_values"
+        and node.module in {"frame_values", "football_analysis.metrics.frame_values"}
         and any(alias.asname == "_surname" or alias.name == "surname" for alias in node.names)
         for node in ast.walk(tree)
     )

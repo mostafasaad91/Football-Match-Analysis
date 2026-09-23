@@ -29,7 +29,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import reference_xg as RX  # noqa: E402
+from football_analysis.xg import reference_xg as RX  # noqa: E402
 
 OUTPUT = ROOT / "output"
 STORE = OUTPUT / "reference_xg"

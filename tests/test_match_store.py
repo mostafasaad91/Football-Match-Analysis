@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from match_store import (
+from football_analysis.pipeline.match_store import (
     list_matches,
     match_identity,
     metric_percentile,
@@ -155,7 +155,11 @@ def test_match_key_survives_a_reschedule(db):
 
 
 def test_raw_snapshot_round_trips_and_is_replayable(db, tmp_path):
-    from match_store import load_snapshot, save_snapshot, stored_snapshots
+    from football_analysis.pipeline.match_store import (
+        load_snapshot,
+        save_snapshot,
+        stored_snapshots,
+    )
 
     payload = {"events": [{"id": 1, "type": "Pass"}], "home": {"name": "Arsenal"}}
     save_match(

@@ -12,8 +12,8 @@ nominal minimum, and the group's colour moves to the tile's border.
 
 import pytest
 
-import player_radar as pr
-from player_radar import (
+from football_analysis.visuals import player_radar as pr
+from football_analysis.visuals.player_radar import (
     CHIP_CONTRAST_FLOOR,
     CHIP_SEPARATION,
     GROUPS,
@@ -22,7 +22,7 @@ from player_radar import (
     chip_fills,
     team_group_colors,
 )
-from visualization_components import contrast_ratio
+from football_analysis.visuals.visualization_components import contrast_ratio
 
 # Real kits, chosen for the hues that break a luminance-only judgement.
 KITS = {

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-import render_light
+from football_analysis.render import render_light
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -54,7 +54,7 @@ DARK_KITS = {"PSG navy": "#004170", "Aston Villa claret": "#7A003C", "near-black
 _LIFT_PROBE = """
     import json
     from matplotlib import colors as mcolors
-    import visual_redesign_full as v
+    from football_analysis.visuals import visual_redesign_full as v
 
     kits = %r
     out = {}
@@ -115,8 +115,8 @@ _POSTER_PROBE = """
     # pixel used: its drawing code was unreachable. poster_dashboard is what
     # renders both poster sets, so its palette is the one worth a contrast
     # guarantee.
-    import poster_dashboard as mp
-    from visualization_components import contrast_ratio, TEXT_MAIN, TEXT_DIM, BG_DARK
+    from football_analysis.visuals import poster_dashboard as mp
+    from football_analysis.visuals.visualization_components import contrast_ratio, TEXT_MAIN, TEXT_DIM, BG_DARK
     print(json.dumps({
         "bg": BG_DARK,
         "ink": TEXT_MAIN,
@@ -157,7 +157,7 @@ def test_the_plate_opposes_the_page_not_the_crest():
     """A silver crest on paper needs a dark plate, not another light one."""
     import numpy as np
 
-    import crests
+    from football_analysis.visuals import crests
 
     silver = np.full((8, 8, 4), 230, dtype=np.uint8)
     silver[..., 3] = 255
@@ -172,7 +172,7 @@ def test_the_plate_opposes_the_page_not_the_crest():
 def test_a_crest_that_reads_on_its_page_gets_no_plate():
     import numpy as np
 
-    import crests
+    from football_analysis.visuals import crests
 
     silver = np.full((8, 8, 4), 230, dtype=np.uint8)
     silver[..., 3] = 255
@@ -184,7 +184,7 @@ def test_the_plate_is_decided_per_pixel_not_on_the_crest_mean():
     """A crest can average light and still separate: Villa's claret border."""
     import numpy as np
 
-    import crests
+    from football_analysis.visuals import crests
 
     # Half near-white, half deep claret. The mean is light enough to look
     # unreadable on paper; half the crest reads perfectly.
@@ -252,7 +252,7 @@ def test_the_child_refuses_to_render_under_the_dark_theme():
             sys.executable,
             "-c",
             textwrap.dedent("""
-            import render_light, pathlib, sys
+            from football_analysis.render import render_light; import pathlib, sys
             try:
                 render_light._render_here(pathlib.Path("."))
             except RuntimeError as error:
@@ -279,8 +279,8 @@ def test_the_child_refuses_to_render_under_the_dark_theme():
 
 _PDF_PROBE = """
     import json
-    import tactical_pdf_report as pdf
-    from visualization_components import contrast_ratio
+    from football_analysis.reports import tactical_pdf_report as pdf
+    from football_analysis.visuals.visualization_components import contrast_ratio
     print(json.dumps({
         "bg": pdf.BG.hexval()[2:],
         "panel": pdf.PANEL.hexval()[2:],
@@ -350,8 +350,8 @@ def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
     import sys
 
     probe = (
-        "import player_radar as pr;"
-        "from visualization_components import BG_DARK, contrast_ratio;"
+        "from football_analysis.visuals import player_radar as pr;"
+        "from football_analysis.visuals.visualization_components import BG_DARK, contrast_ratio;"
         "g = pr.group_palette(5);"
         "print([(round(contrast_ratio(c, BG_DARK), 2),"
         " round(contrast_ratio(pr._chip_text_color(c), c), 2)) for c in pr.chip_fills(g)])"
@@ -376,7 +376,7 @@ def test_the_light_package_carries_the_squad_for_advanced_profiles():
     """Both themes keep the squad frame for the role-aware profile renderer."""
     import inspect
 
-    import visual_redesign_full as vrf
+    from football_analysis.visuals import visual_redesign_full as vrf
 
     source = inspect.getsource(vrf.generate_match_package)
     assert "players.csv" in source, "the squad is not written beside the frames"

@@ -55,7 +55,7 @@ def packages(patterns: list[str]) -> list[Path]:
 
 def refresh(folder: Path, write: bool) -> tuple[float, float]:
     """Re-price one package. Returns the team xG total before and after."""
-    import football_match_analysis as F
+    from football_analysis.pipeline import football_match_analysis as F
 
     info = json.loads((folder / "match_info.json").read_text(encoding="utf-8-sig"))
     events = pd.read_csv(folder / "events.csv", low_memory=False)
@@ -73,7 +73,7 @@ def refresh(folder: Path, write: bool) -> tuple[float, float]:
     events = F.apply_best_open_source_xg(events, info)
     # The same Opta values a fresh render would take, from the stored shot map
     # when there is one, so a re-price does not undo them.
-    from reference_xg import apply_reference_xg
+    from football_analysis.xg.reference_xg import apply_reference_xg
 
     events, _ = apply_reference_xg(events, info, package=str(folder.relative_to(OUTPUT)))
     after = (

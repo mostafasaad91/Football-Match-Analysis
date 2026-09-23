@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from match_metrics import (
+from football_analysis.metrics.match_metrics import (
     advanced_metrics_frames,
     blocked_shot_mask,
     build_possessions,
@@ -345,7 +345,7 @@ def _sample_events():
 
 
 def test_post_shot_xg_only_counts_shots_that_reached_the_target():
-    from match_metrics import post_shot_xg
+    from football_analysis.metrics.match_metrics import post_shot_xg
 
     events = _sample_events()
     shots = events[events["is_shot"] == True]  # noqa: E712
@@ -362,7 +362,7 @@ def test_post_shot_xg_only_counts_shots_that_reached_the_target():
 def test_post_shot_xg_does_not_hard_code_goals_to_one():
     """A goal must keep its modelled value, otherwise 'goals prevented' is
     positive for every keeper in every match and measures nothing."""
-    from match_metrics import post_shot_xg
+    from football_analysis.metrics.match_metrics import post_shot_xg
 
     events = _sample_events()
     goals = events[(events["is_shot"] == True) & (events["is_goal"] == True)]  # noqa: E712
@@ -371,7 +371,7 @@ def test_post_shot_xg_does_not_hard_code_goals_to_one():
 
 
 def test_placement_difficulty_rises_from_the_keeper_to_the_corner():
-    from match_metrics import placement_difficulty
+    from football_analysis.metrics.match_metrics import placement_difficulty
 
     at_keeper = placement_difficulty(0.0, 0.15)
     low_post = placement_difficulty(0.9, 0.15)
@@ -383,7 +383,7 @@ def test_placement_difficulty_rises_from_the_keeper_to_the_corner():
 def test_set_piece_breakdown_reads_the_source_off_the_delivery():
     """The feed tags the corner/free kick on the delivery, not on the shot, so
     a shot-row-only reading reports every set piece as open play."""
-    from match_metrics import set_piece_breakdown
+    from football_analysis.metrics.match_metrics import set_piece_breakdown
 
     events = _sample_events()
     england = set_piece_breakdown(events, 345)
@@ -394,7 +394,11 @@ def test_set_piece_breakdown_reads_the_source_off_the_delivery():
 
 
 def test_windowed_metrics_cover_the_match():
-    from match_metrics import defensive_line_height, team_compactness, xg_momentum
+    from football_analysis.metrics.match_metrics import (
+        defensive_line_height,
+        team_compactness,
+        xg_momentum,
+    )
 
     events = _sample_events()
     import numpy as np
@@ -419,7 +423,7 @@ def test_windowed_metrics_cover_the_match():
 
 
 def test_network_centrality_names_the_connectors():
-    from match_metrics import network_centrality
+    from football_analysis.metrics.match_metrics import network_centrality
 
     centrality = network_centrality(_sample_events(), 341)
     assert not centrality.empty
@@ -431,7 +435,7 @@ def test_network_centrality_names_the_connectors():
 
 
 def test_turnovers_separate_losses_from_punished_losses():
-    from match_metrics import turnover_events
+    from football_analysis.metrics.match_metrics import turnover_events
 
     turnovers = turnover_events(_sample_events(), 341)
     assert not turnovers.empty
@@ -443,7 +447,7 @@ def test_turnovers_separate_losses_from_punished_losses():
 
 
 def test_duel_map_keeps_location_and_kind():
-    from match_metrics import duel_map
+    from football_analysis.metrics.match_metrics import duel_map
 
     duels = duel_map(_sample_events(), 341)
     assert not duels.empty
@@ -452,7 +456,7 @@ def test_duel_map_keeps_location_and_kind():
 
 
 def test_shot_placement_zones_only_count_on_target_shots():
-    from match_metrics import shot_placement_zones
+    from football_analysis.metrics.match_metrics import shot_placement_zones
 
     events = _sample_events()
     zones = shot_placement_zones(events, 345)
@@ -470,7 +474,7 @@ def test_shot_placement_zones_only_count_on_target_shots():
 def test_pass_geometry_falls_back_to_coordinates():
     """The feed keeps qualifier names but drops their values, so length and
     angle have to be reconstructed from the coordinates."""
-    from match_metrics import pass_geometry
+    from football_analysis.metrics.match_metrics import pass_geometry
 
     events = _sample_events()
     passes = events[events["is_pass"] == True].dropna(subset=["x", "y", "end_x", "end_y"])  # noqa: E712
@@ -484,7 +488,7 @@ def test_pass_geometry_falls_back_to_coordinates():
 
 
 def test_pass_length_profile_separates_long_balls():
-    from match_metrics import pass_length_profile
+    from football_analysis.metrics.match_metrics import pass_length_profile
 
     profile = pass_length_profile(_sample_events(), 341)
     assert profile["passes"] > 0
@@ -495,7 +499,7 @@ def test_pass_length_profile_separates_long_balls():
 
 
 def test_goalkeeper_distribution_reports_launch_behaviour():
-    from match_metrics import goalkeeper_distribution
+    from football_analysis.metrics.match_metrics import goalkeeper_distribution
 
     henderson = goalkeeper_distribution(_sample_events(), 345, "Dean Henderson")
     assert henderson["distributions"] > 0
@@ -505,7 +509,7 @@ def test_goalkeeper_distribution_reports_launch_behaviour():
 
 
 def test_press_resistance_separates_pressed_from_free_passing():
-    from match_metrics import press_resistance
+    from football_analysis.metrics.match_metrics import press_resistance
 
     resistance = press_resistance(_sample_events(), 341)
     assert resistance["passes_under_pressure"] > 0
@@ -517,7 +521,7 @@ def test_press_resistance_separates_pressed_from_free_passing():
 
 
 def test_line_breaking_passes_start_behind_and_end_beyond_the_line():
-    from match_metrics import line_breaking_passes
+    from football_analysis.metrics.match_metrics import line_breaking_passes
 
     breaks = line_breaking_passes(_sample_events(), 341, 345)
     assert not breaks.empty
@@ -526,7 +530,7 @@ def test_line_breaking_passes_start_behind_and_end_beyond_the_line():
 
 
 def test_win_probability_is_a_distribution_that_hardens_over_time():
-    from match_metrics import win_probability
+    from football_analysis.metrics.match_metrics import win_probability
 
     curve = win_probability(_sample_events(), 341, 345)
     assert not curve.empty
@@ -543,7 +547,7 @@ def test_win_probability_is_a_distribution_that_hardens_over_time():
 
 
 def test_zone_value_rises_toward_goal_and_favours_the_centre():
-    from match_metrics import ZONE_VALUE_MAX, zone_value
+    from football_analysis.metrics.match_metrics import ZONE_VALUE_MAX, zone_value
 
     assert zone_value(5, 50) < zone_value(50, 50) < zone_value(75, 50) < zone_value(89, 50)
     # Same depth, pinned wide, is worth less than the same depth centrally.
@@ -552,7 +556,7 @@ def test_zone_value_rises_toward_goal_and_favours_the_centre():
 
 
 def test_action_values_price_gains_losses_and_defensive_work():
-    from match_metrics import action_values
+    from football_analysis.metrics.match_metrics import action_values
 
     events = _sample_events()
     values = action_values(events)
@@ -564,13 +568,13 @@ def test_action_values_price_gains_losses_and_defensive_work():
 def test_defensive_actions_do_not_bank_the_whole_threat():
     """Crediting a clearance with the full mirrored zone value put centre-backs
     at the top of every ranking, which described the model, not the match."""
-    from match_metrics import CLEARANCE_CREDIT, REGAIN_CREDIT
+    from football_analysis.metrics.match_metrics import CLEARANCE_CREDIT, REGAIN_CREDIT
 
     assert 0 < CLEARANCE_CREDIT < REGAIN_CREDIT < 1
 
 
 def test_player_action_value_ranks_the_decisive_players_first():
-    from match_metrics import player_action_value
+    from football_analysis.metrics.match_metrics import player_action_value
 
     ranked = player_action_value(_sample_events())
     assert not ranked.empty
@@ -582,7 +586,7 @@ def test_player_action_value_ranks_the_decisive_players_first():
 
 
 def test_sequence_typology_splits_xg_by_how_it_was_built():
-    from match_metrics import sequence_typology
+    from football_analysis.metrics.match_metrics import sequence_typology
 
     typology = sequence_typology(_sample_events(), 345)
     assert not typology.empty
@@ -599,7 +603,7 @@ def test_sequence_typology_splits_xg_by_how_it_was_built():
 
 
 def test_receptions_between_lines_land_in_the_pocket():
-    from match_metrics import receptions_between_lines
+    from football_analysis.metrics.match_metrics import receptions_between_lines
 
     pockets = receptions_between_lines(_sample_events(), 341, 345)
     assert not pockets.empty
@@ -610,7 +614,7 @@ def test_receptions_between_lines_land_in_the_pocket():
 
 
 def test_switches_cross_the_pitch():
-    from match_metrics import SWITCH_WIDTH, switches_of_play
+    from football_analysis.metrics.match_metrics import SWITCH_WIDTH, switches_of_play
 
     switches = switches_of_play(_sample_events(), 341)
     assert not switches.empty
@@ -618,7 +622,7 @@ def test_switches_cross_the_pitch():
 
 
 def test_goal_origin_chains_describe_every_goal():
-    from match_metrics import goal_origin_chains
+    from football_analysis.metrics.match_metrics import goal_origin_chains
 
     events = _sample_events()
     chains = goal_origin_chains(events, 341, 345)
@@ -633,7 +637,7 @@ def test_goal_origin_chains_describe_every_goal():
 def test_substitution_impact_pairs_each_arrival_with_its_own_departure():
     """A quadruple change at half time used to report the same player leaving
     four times, because the departure was matched by proximity, not in order."""
-    from match_metrics import substitution_impact
+    from football_analysis.metrics.match_metrics import substitution_impact
 
     impact = substitution_impact(_sample_events(), 341, 345)
     assert not impact.empty
@@ -643,7 +647,7 @@ def test_substitution_impact_pairs_each_arrival_with_its_own_departure():
 
 
 def test_field_tilt_timeline_shares_sum_to_one_hundred():
-    from match_metrics import field_tilt_timeline
+    from football_analysis.metrics.match_metrics import field_tilt_timeline
 
     timeline = field_tilt_timeline(_sample_events(), 341, 345)
     assert not timeline.empty
@@ -653,7 +657,7 @@ def test_field_tilt_timeline_shares_sum_to_one_hundred():
 def test_deep_metrics_all_return_something_on_real_data():
     """Smoke cover for the explanatory batch so a schema change cannot quietly
     empty a page."""
-    import match_metrics as m
+    from football_analysis.metrics import match_metrics as m
 
     events = _sample_events()
     assert not m.pressing_triggers(events, 341).empty

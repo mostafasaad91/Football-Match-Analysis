@@ -63,7 +63,7 @@ def redraw(package: Path, theme_dir: Path, function: str, token: str) -> str:
     saved under the name the renderer would choose.
     """
     import json
-    import visual_redesign_full as full
+    from football_analysis.visuals import visual_redesign_full as full
 
     existing = sorted(theme_dir.glob(f"*{token}.png"))
     if not existing:

@@ -2,7 +2,7 @@
 
 This file used to test ``match_posters``: its panel grid, its coordinate
 helpers, its indicator tables. None of that shipped. ``match_posters`` ended
-with ``from poster_dashboard import build_match_posters``, which replaced the
+with ``from football_analysis.visuals.poster_dashboard import build_match_posters``, which replaced the
 name every caller imported, so the module's own eleven hundred lines of
 drawing code had been unreachable since the redesign while the tests around
 them stayed green. The module is gone; what is left here is what still runs.
@@ -17,8 +17,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import crests
-import poster_dashboard as pd_
+from football_analysis.visuals import crests
+from football_analysis.visuals import poster_dashboard as pd_
 from conftest import match_dir
 
 
@@ -97,7 +97,7 @@ def test_a_failed_download_never_poisons_the_cache(tmp_path, monkeypatch):
 
 
 def _render(builder, tmp_path):
-    import visual_redesign_full as visual
+    from football_analysis.visuals import visual_redesign_full as visual
 
     events, players, xg, team_metrics, player_metrics, out = _frames()
     import json

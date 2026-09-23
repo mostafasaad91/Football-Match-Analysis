@@ -25,7 +25,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import player_radar as pr
+from football_analysis.visuals import player_radar as pr
 from conftest import match_dir
 
 MATCH = "Hull_vs_Man_Utd_2-0"
@@ -336,7 +336,7 @@ def test_the_profile_card_does_not_credit_an_own_goal_either():
     Goals row read is_goal directly, so the card printed GOALS 2 beside SHOTS 5
     for the same player in the same match.
     """
-    from match_insights import player_observations
+    from football_analysis.metrics.match_insights import player_observations
 
     out = match_dir("Chelsea_vs_Brighton_4-3")
     if not (out / "players.csv").exists():

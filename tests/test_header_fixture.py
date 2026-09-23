@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pytest
 
-import visual_redesign_preview as base
+from football_analysis.visuals import visual_redesign_preview as base
 
 
 FIGSIZE, DPI = (12, 9), 150

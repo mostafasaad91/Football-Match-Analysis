@@ -48,7 +48,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import xg_alignment as XA  # noqa: E402
+from football_analysis.paths import MODELS_DIR  # noqa: E402
+from football_analysis.xg import xg_alignment as XA  # noqa: E402
 
 REFERENCE_CACHE = ROOT / "logs" / "xg_reference_shots.csv"
 FOLDS = 5
@@ -85,7 +86,7 @@ def packages() -> list[Path]:
 
 def shots_on_disk(folders: list[Path]) -> pd.DataFrame:
     """Every non-penalty shot with its engine value, design row and outcome."""
-    import football_match_analysis as F
+    from football_analysis.pipeline import football_match_analysis as F
 
     rows = []
     for folder in folders:
@@ -257,7 +258,7 @@ def main() -> int:
     if args.dry_run:
         print("\n--dry-run: not written")
         return 0
-    path = ROOT / XA.ALIGNMENT_FILE
+    path = MODELS_DIR / XA.ALIGNMENT_FILE
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"\nwritten: {path}")
     return 0

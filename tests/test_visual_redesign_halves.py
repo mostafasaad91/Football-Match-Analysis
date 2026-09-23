@@ -1,4 +1,4 @@
-import visual_redesign_full as visual
+from football_analysis.visuals import visual_redesign_full as visual
 
 
 def test_interval_substitute_only_appears_in_second_half():

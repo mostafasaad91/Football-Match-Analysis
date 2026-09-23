@@ -77,7 +77,7 @@ def _light_missing(url: str, environment: dict) -> Path | None:
     this process parsed, so the fixture is found by the one thing that is
     certain: it is the newest package under the round it was shelved in.
     """
-    from match_fixture import shelf
+    from football_analysis.pipeline.match_fixture import shelf
 
     where = ROOT / "output"
     for part in shelf(url, environment.get("MATCH_ANALYSIS_ROUND", "")):
@@ -148,7 +148,13 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
         missing = None if dark_only else _light_missing(url, environment)
         if missing is not None:
             retry = subprocess.run(
-                [sys.executable, "render_light.py", str(missing), "--child"],
+                [
+                    sys.executable,
+                    "-m",
+                    "football_analysis.render.render_light",
+                    str(missing),
+                    "--child",
+                ],
                 cwd=ROOT,
                 env={
                     **environment,
@@ -192,7 +198,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from match_fixture import normalise_round, shelf
+    from football_analysis.pipeline.match_fixture import normalise_round, shelf
 
     round_name = normalise_round(args.round) or normalise_round(f"Matchweek {args.round}")
     if not round_name:

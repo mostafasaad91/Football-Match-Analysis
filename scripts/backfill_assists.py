@@ -63,7 +63,10 @@ def snapshot_index() -> dict:
 
 def assists_by_event(data: dict) -> dict:
     """{provider event id: (assist player name, assist kind)} for one match."""
-    from football_match_analysis import _events_by_team_and_id, assist_provider
+    from football_analysis.pipeline.football_match_analysis import (
+        _events_by_team_and_id,
+        assist_provider,
+    )
 
     names = {int(k): v for k, v in (data.get("playerIdNameDictionary") or {}).items()}
     events = data.get("events") or []

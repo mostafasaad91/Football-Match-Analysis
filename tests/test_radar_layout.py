@@ -27,7 +27,7 @@ import colorsys
 
 import pytest
 
-import player_radar as pr
+from football_analysis.visuals import player_radar as pr
 
 # Kits chosen to break it rather than to pass: two shades of red, two identical
 # colours, a white shirt with no hue at all, and a pair already far apart.
@@ -95,7 +95,7 @@ def test_the_five_groups_stay_apart_within_one_side(home, away):
 @pytest.mark.parametrize("home,away", FIXTURES, ids=IDS)
 def test_every_group_colour_carries_on_the_page(home, away):
     """A turned wheel must not turn a hue into one the page swallows."""
-    from visual_redesign_preview import BG
+    from football_analysis.visuals.visual_redesign_preview import BG
 
     for colours in pr.fixture_group_palettes(home, away, len(pr.GROUPS)).values():
         for colour in colours:

@@ -33,7 +33,7 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir  # noqa: F401  (kept for symmetry with siblings)
-from match_article import build_article
+from football_analysis.prose.match_article import build_article
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "output"
@@ -341,7 +341,7 @@ def test_the_report_writers_agree_with_their_own_counts(out):
     every match on disk — which is the only combination that would have caught
     it.
     """
-    from tactical_pdf_report import (
+    from football_analysis.reports.tactical_pdf_report import (
         _section_copy,
         build_context,
         visual_data_read,
@@ -377,7 +377,7 @@ def test_a_percentage_printed_as_a_share_stays_inside_a_hundred(out):
 
 @pytest.mark.parametrize("out", FIXTURES, ids=IDS)
 def test_the_article_reaches_the_length_it_promises(out):
-    from match_article import TARGET_WORDS
+    from football_analysis.prose.match_article import TARGET_WORDS
 
     article, _frames, _info = _article(out)
     words = sum(len(p.split()) for p in _paragraphs(article))
@@ -440,7 +440,7 @@ def test_the_headlines_use_more_than_a_handful_of_sentences():
 def test_a_set_piece_headline_is_only_claimed_when_the_goals_were_dead_balls(out):
     """Hull beat Manchester United with a corner and a free kick and nothing
     in the package could say so. The claim now exists, so it needs a guard."""
-    from match_report import classify_goal_type
+    from football_analysis.reports.match_report import classify_goal_type
 
     article, (events, _xg, _tm, _pm), _info = _article(out)
     if "Dead Ball" not in article.title and "dead ball" not in article.title.lower():
@@ -455,13 +455,13 @@ def test_a_set_piece_headline_is_only_claimed_when_the_goals_were_dead_balls(out
 def test_the_report_and_the_article_open_on_the_same_finding(out):
     """Two documents, one match. The cover carried "MATCH ANALYSIS" while the
     article beside it opened on a sentence drawn from the same frames."""
-    from match_article import cover_headline
+    from football_analysis.prose.match_article import cover_headline
 
     article, frames, info = _article(out)
     assert cover_headline(*frames, info) == article.title
 
 
 def test_a_broken_frame_gives_a_generic_subtitle_rather_than_no_report():
-    from match_article import cover_headline
+    from football_analysis.prose.match_article import cover_headline
 
     assert cover_headline(None, None, None, None, {}) == ""

@@ -18,10 +18,13 @@ import colorsys
 import matplotlib.colors as mcolors
 import pytest
 
-from football_match_analysis import USE_REAL_TEAM_KIT_COLORS, WHITE_KIT_SILVER
+from football_analysis.pipeline.football_match_analysis import (
+    USE_REAL_TEAM_KIT_COLORS,
+    WHITE_KIT_SILVER,
+)
 
-import football_match_analysis as fa
-from visualization_components import contrast_ratio
+from football_analysis.pipeline import football_match_analysis as fa
+from football_analysis.visuals.visualization_components import contrast_ratio
 
 # Clubs the collected fixtures have met that sit outside the top five leagues.
 OUTSIDE_THE_TOP_FIVE = [

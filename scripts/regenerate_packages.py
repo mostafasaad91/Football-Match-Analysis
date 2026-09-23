@@ -60,8 +60,8 @@ def fixtures(patterns: list[str]) -> list[Path]:
 
 def rebuild(out: Path) -> dict:
     """One fixture, rebuilt in place from its own exports."""
-    from football_match_analysis import choose_matchup_colors
-    from visual_redesign_full import generate_match_package
+    from football_analysis.pipeline.football_match_analysis import choose_matchup_colors
+    from football_analysis.visuals.visual_redesign_full import generate_match_package
 
     info_path = out / "match_info.json"
     info = json.loads(info_path.read_text(encoding="utf-8"))
@@ -164,7 +164,15 @@ def main() -> int:
             continue
         if theme != "light":
             light = _run(
-                [sys.executable, str(ROOT / "render_light.py"), str(out), "--child"], "light", "0"
+                [
+                    sys.executable,
+                    "-m",
+                    "football_analysis.render.render_light",
+                    str(out),
+                    "--child",
+                ],
+                "light",
+                "0",
             )
             if light.returncode != 0:
                 failed.append((f"{out.name} (light)", _reason(light)))

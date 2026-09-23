@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from match_metrics import advanced_metrics_frames
+from football_analysis.metrics.match_metrics import advanced_metrics_frames
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EVENTS = REPO_ROOT / "sample_data" / "France_vs_England_4-6" / "events.csv"

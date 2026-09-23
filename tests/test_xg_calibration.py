@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pytest
 
-import xg_calibration as xc
+from football_analysis.xg import xg_calibration as xc
 
 
 def _biased_archive(n=1200, seed=2):
@@ -102,7 +102,7 @@ def test_shipped_calibration_has_the_evidence_and_direction_claimed():
 
 
 def test_main_pipeline_passes_distance_but_leaves_penalties_alone():
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     fa._XG_CALIBRATION = xc.Calibration(0.15, 0.4, 955, 108, 37, 0.311, 0.299)
     close = {
@@ -119,7 +119,7 @@ def test_main_pipeline_passes_distance_but_leaves_penalties_alone():
 
 
 def test_foot_model_still_falls_with_distance_after_calibration():
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     fa._XG_CALIBRATION = "unread"
     values = [
@@ -131,7 +131,7 @@ def test_foot_model_still_falls_with_distance_after_calibration():
 
 
 def test_provider_values_and_fixed_penalties_bypass_local_calibration(monkeypatch):
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     fa._XG_CALIBRATION = xc.Calibration(0.05, 1.0, 955, 108, 37, 0.311, 0.299)
     monkeypatch.setattr(fa, "XG_USE_PROVIDER_SHOT_XG", True)
@@ -143,7 +143,7 @@ def test_provider_values_and_fixed_penalties_bypass_local_calibration(monkeypatc
 
 
 def test_far_tail_remains_in_published_ranges():
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     fa._XG_CALIBRATION = "unread"
 
@@ -161,7 +161,7 @@ def test_far_tail_remains_in_published_ranges():
 
 
 def test_wider_angle_and_headers_keep_their_expected_order():
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     fa._XG_CALIBRATION = "unread"
     central = fa._opta_like_local_xg_from_row(

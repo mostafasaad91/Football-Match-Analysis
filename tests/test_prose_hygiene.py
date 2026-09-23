@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from prose_hygiene import clean, offences, one_reads_singular
+from football_analysis.prose.prose_hygiene import clean, offences, one_reads_singular
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "output"

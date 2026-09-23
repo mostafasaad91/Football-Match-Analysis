@@ -1,6 +1,6 @@
 import pandas as pd
 
-from match_store import rolling_summary
+from football_analysis.pipeline.match_store import rolling_summary
 
 
 def test_recent_form_compares_latest_window_with_previous_window():

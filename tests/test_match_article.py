@@ -20,7 +20,7 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir
-from match_article import (
+from football_analysis.prose.match_article import (
     TARGET_WORDS,
     Article,
     build_article,
@@ -106,7 +106,7 @@ def test_the_article_carries_the_whole_package(match):
 def test_it_shows_five_radars_a_side(match):
     events, _xg, _tm, _pm, _info, _out = _frames(match)
     article = _article(match)
-    from match_article import RADARS_PER_TEAM
+    from football_analysis.prose.match_article import RADARS_PER_TEAM
 
     radars = [Path(v) for s in article.sections for v in s.visuals if "player_radars" in str(v)]
     assert len(radars) == RADARS_PER_TEAM * 2, [r.name for r in radars]
@@ -282,7 +282,7 @@ def test_the_docx_is_built_for_pasting_into_an_editor(tmp_path):
 
 
 def test_a_broken_render_returns_none_rather_than_killing_the_package(tmp_path):
-    from match_article import build_match_article
+    from football_analysis.prose.match_article import build_match_article
 
     assert (
         build_match_article(
@@ -309,7 +309,7 @@ def _titles():
     if _TITLE_CACHE is not None:
         return _TITLE_CACHE
 
-    from match_article import build_article
+    from football_analysis.prose.match_article import build_article
 
     root = Path(__file__).resolve().parent.parent
     rows = []
@@ -357,7 +357,7 @@ def test_the_headline_is_stable_for_the_same_match():
     """
     import json
 
-    from match_article import build_article
+    from football_analysis.prose.match_article import build_article
 
     root = Path(__file__).resolve().parent.parent
     folder = next(iter(sorted((root / "output").glob("*/match_info.json"))), None)

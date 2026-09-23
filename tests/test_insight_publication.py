@@ -2,11 +2,20 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from test_match_metrics import event
-from match_insights import possession_observations, stage_counts, score_spells, verified_receptions
-from match_metrics import turnover_events, win_probability, build_possessions
-from match_editorial import headline, result_read, visual_section, reading
-from player_radar import _creation_credits
-from package_io import transactional_package
+from football_analysis.metrics.match_insights import (
+    possession_observations,
+    stage_counts,
+    score_spells,
+    verified_receptions,
+)
+from football_analysis.metrics.match_metrics import (
+    turnover_events,
+    win_probability,
+    build_possessions,
+)
+from football_analysis.prose.match_editorial import headline, result_read, visual_section, reading
+from football_analysis.visuals.player_radar import _creation_credits
+from football_analysis.pipeline.package_io import transactional_package
 
 
 def test_funnel_is_nested_and_includes_saved_shots():

@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import match_sanity as ms
+from football_analysis.pipeline import match_sanity as ms
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -97,7 +97,7 @@ def test_an_accent_or_spelling_difference_is_not_a_stranger(monkeypatch, tmp_pat
 def test_the_history_check_is_quiet_without_a_database(monkeypatch):
     """It reads the project's own history; absent, it has nothing to say."""
     events, players, info = _fixture()
-    monkeypatch.setattr(ms, "__file__", str(ROOT / "nowhere" / "match_sanity.py"))
+    monkeypatch.setattr(ms, "PROJECT_ROOT", ROOT / "nowhere")
     assert ms.check_no_player_changed_team_since_a_stored_match(events, players, info) == []
 
 

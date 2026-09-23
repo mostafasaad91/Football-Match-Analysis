@@ -25,7 +25,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import xg_calibration as xc  # noqa: E402
+from football_analysis.xg import xg_calibration as xc  # noqa: E402
 
 
 def shots_from_snapshots() -> pd.DataFrame:
@@ -79,7 +79,7 @@ def shots_from_snapshots() -> pd.DataFrame:
 
 
 def main(argv: list[str]) -> int:
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     shots = shots_from_snapshots()
     if shots.empty:

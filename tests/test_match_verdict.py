@@ -21,7 +21,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from match_verdict import CHASING_SHARE, LEVEL_XG_FLOOR, read_match
+from football_analysis.metrics.match_verdict import CHASING_SHARE, LEVEL_XG_FLOOR, read_match
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -187,8 +187,8 @@ def test_villa_is_the_case_this_exists_for():
 
 def test_the_article_and_the_report_reach_the_same_verdict():
     """Two documents, one judgement — the drift this session kept finding."""
-    from match_article import build_article
-    from tactical_pdf_report import _section_copy, build_context
+    from football_analysis.prose.match_article import build_article
+    from football_analysis.reports.tactical_pdf_report import _section_copy, build_context
 
     out = match_dir("PSG_vs_Aston_Villa_2-1")
     if not (out / "match_info.json").exists():

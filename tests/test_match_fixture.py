@@ -9,7 +9,7 @@ and named for what that is.
 
 import pytest
 
-from match_fixture import (
+from football_analysis.pipeline.match_fixture import (
     Fixture,
     describe,
     from_url,
@@ -120,7 +120,7 @@ def test_the_description_reads_as_a_line_not_a_path():
 
 
 def test_the_pipeline_builds_the_shelved_path():
-    import football_match_analysis as fa
+    from football_analysis.pipeline import football_match_analysis as fa
 
     info = {
         "home_name": "Arsenal",

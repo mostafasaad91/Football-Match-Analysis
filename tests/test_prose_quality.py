@@ -26,7 +26,7 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir
-from tactical_pdf_report import (
+from football_analysis.reports.tactical_pdf_report import (
     _section_copy,
     _visual_team,
     build_context,

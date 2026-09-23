@@ -35,7 +35,7 @@ def rendered(tmp_path_factory):
     if not (out / "match_info.json").exists():
         pytest.skip(f"{MATCH} has not been rendered")
 
-    import visual_redesign_full as v
+    from football_analysis.visuals import visual_redesign_full as v
 
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
     target = tmp_path_factory.mktemp("bars")

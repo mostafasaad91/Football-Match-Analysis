@@ -6,8 +6,8 @@ import re
 
 import pytest
 
-import tactical_pdf_report as pdf
-from player_radar import GROUPS, display_label
+from football_analysis.reports import tactical_pdf_report as pdf
+from football_analysis.visuals.player_radar import GROUPS, display_label
 
 
 # ── typography ────────────────────────────────────────────────────────────────
@@ -299,7 +299,7 @@ def test_every_override_key_still_exists_in_the_layout():
 
 
 def pdf_overrides():
-    from player_radar import _LABEL_OVERRIDES
+    from football_analysis.visuals.player_radar import _LABEL_OVERRIDES
 
     return _LABEL_OVERRIDES
 
@@ -316,7 +316,9 @@ def test_no_visual_subtitle_overflows_its_header():
 
     offenders = []
     for name in ("visual_redesign_full.py", "visual_redesign_preview.py"):
-        source = (pdf.Path(pdf.__file__).parent / name).read_text(encoding="utf-8")
+        source = (pdf.Path(pdf.__file__).parent.parent / "visuals" / name).read_text(
+            encoding="utf-8"
+        )
         for title, subtitle in re.findall(
             r'(?:base\.page|pitch_axes|page)\(\s*\n?\s*f?"([^"]*)",\s*\n?\s*"([^"]*)"',
             source,

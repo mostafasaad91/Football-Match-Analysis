@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pytest
 
-from visual_redesign_full import (
+from football_analysis.visuals.visual_redesign_full import (
     _LABEL_HALF_HEIGHT,
     _LABEL_HALF_WIDTH_PER_CHAR,
     _network_node_radius,
@@ -119,7 +119,7 @@ def test_every_label_in_a_congested_network_clears_every_other_node(ax):
 def test_a_wide_player_is_not_labelled_off_the_edge_of_the_pitch(ax):
     """A left-back's name pushed further left gets clipped by the axis, which
     is how "Kostic" rendered as "ostic"."""
-    from visual_redesign_full import PITCH_WIDTH
+    from football_analysis.visuals.visual_redesign_full import PITCH_WIDTH
 
     x = -PITCH_WIDTH / 2 + 2.4  # where the separator clamps a touchline player
     text = placed_label(ax, "Kostic", x, 40.0, radius=3.4, neighbours=((x + 3.0, 44.0, 3.0),))
@@ -131,7 +131,7 @@ def test_a_wide_player_is_not_labelled_off_the_edge_of_the_pitch(ax):
 
 
 def test_a_label_never_leaves_the_pitch_on_either_flank(ax):
-    from visual_redesign_full import PITCH_WIDTH
+    from football_analysis.visuals.visual_redesign_full import PITCH_WIDTH
 
     for x in (-PITCH_WIDTH / 2 + 2.4, PITCH_WIDTH / 2 - 2.4):
         text = placed_label(

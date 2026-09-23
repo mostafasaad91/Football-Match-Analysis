@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from match_fixture import shelf  # noqa: E402
+from football_analysis.pipeline.match_fixture import shelf  # noqa: E402
 
 OUTPUT = ROOT / "output"
 # Not fixtures: the history database, the raw feed archive, and anything the

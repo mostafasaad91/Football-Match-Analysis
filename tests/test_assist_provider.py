@@ -5,7 +5,10 @@ for the player in the value of an ``IntentionalAssist`` qualifier, which the
 feed leaves empty. These pin the rule that replaced it.
 """
 
-from football_match_analysis import _events_by_team_and_id, assist_provider
+from football_analysis.pipeline.football_match_analysis import (
+    _events_by_team_and_id,
+    assist_provider,
+)
 
 
 def _q(name, value=None):

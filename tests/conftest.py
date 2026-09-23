@@ -28,7 +28,10 @@ import importlib
 
 import pytest
 
-_STATEFUL_MODULES = ("visual_redesign_full", "visual_redesign_preview")
+_STATEFUL_MODULES = (
+    "football_analysis.visuals.visual_redesign_full",
+    "football_analysis.visuals.visual_redesign_preview",
+)
 
 
 def _module_constants(module) -> dict:

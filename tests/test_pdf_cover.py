@@ -16,8 +16,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import tactical_pdf_report as report
-from tactical_pdf_report import TacticalPDF, build_context
+from football_analysis.reports import tactical_pdf_report as report
+from football_analysis.reports.tactical_pdf_report import TacticalPDF, build_context
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_article_failure_stops_pdf_instead_of_silent_fallback(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    import match_article
+    from football_analysis.prose import match_article
 
     sections = [
         "Match Story",
@@ -195,7 +195,11 @@ def test_the_card_sits_between_its_rules_with_equal_air(tmp_path):
     fitz = pytest.importorskip("fitz")
     import numpy as np
 
-    from tactical_pdf_report import COVER_FOOT_LIFT, COVER_HEAD_DROP, PAGE_H
+    from football_analysis.reports.tactical_pdf_report import (
+        COVER_FOOT_LIFT,
+        COVER_HEAD_DROP,
+        PAGE_H,
+    )
 
     _cover(tmp_path, _context())
     doc = fitz.open(tmp_path / "cover.pdf")
@@ -264,7 +268,7 @@ def test_the_thesis_wraps_instead_of_touching_both_margins(tmp_path):
 
 _THEME_PROBE = """
     import json
-    import tactical_pdf_report as report
+    from football_analysis.reports import tactical_pdf_report as report
     print(json.dumps({"thesis": report.TYPE_THESIS, "fixture": report.TYPE_FIXTURE}))
 """
 
@@ -282,7 +286,7 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
         from pathlib import Path
         sys.path.insert(0, {str(ROOT)!r})
         import pandas as pd
-        from tactical_pdf_report import TacticalPDF, build_context
+        from football_analysis.reports.tactical_pdf_report import TacticalPDF, build_context
         out = Path({str(fixture)!r})
         info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
         context = build_context(
@@ -328,7 +332,7 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
 
 def test_nothing_reaches_for_the_deleted_artwork(tmp_path):
     """The fallback is gone, so a stale PNG cannot become the article's cover."""
-    from match_article import _cover_image
+    from football_analysis.prose.match_article import _cover_image
 
     (tmp_path / "cover_art.png").write_bytes(b"not a real png")
     assert _cover_image(tmp_path) is None

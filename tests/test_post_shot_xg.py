@@ -22,9 +22,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from match_metrics import post_shot_xg
-from player_radar import player_metrics
-from visual_redesign_full import _corrected_xgot
+from football_analysis.metrics.match_metrics import post_shot_xg
+from football_analysis.visuals.player_radar import player_metrics
+from football_analysis.visuals.visual_redesign_full import _corrected_xgot
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent

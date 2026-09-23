@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from visual_numbering import number_visuals
+from football_analysis.visuals.visual_numbering import number_visuals
 
 
 class VisualNumberingTests(unittest.TestCase):

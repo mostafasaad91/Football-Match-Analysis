@@ -25,8 +25,8 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir
-from match_article import build_article
-from tactical_pdf_report import (
+from football_analysis.prose.match_article import build_article
+from football_analysis.reports.tactical_pdf_report import (
     _section_copy,
     build_context,
     visual_data_read,
@@ -375,7 +375,7 @@ def test_a_goalless_match_does_not_describe_an_opening_goal():
     ],
 )
 def test_a_board_is_attributed_to_the_side_whose_name_ends_it(home, away, filename, owner):
-    from tactical_pdf_report import _visual_team
+    from football_analysis.reports.tactical_pdf_report import _visual_team
 
     team, side = _visual_team(Path(filename), {"home": home, "away": away})
     assert team == owner, (filename, home, away, team)
@@ -393,7 +393,7 @@ def test_a_board_is_attributed_to_the_side_whose_name_ends_it(home, away, filena
 )
 def test_the_article_caption_names_the_same_side(home, away, filename, owner):
     """The caption builder had its own copy of the substring match."""
-    from match_article import _caption
+    from football_analysis.prose.match_article import _caption
 
     # The caption does not always lead with the name — "Where Arsenal's
     # possession added threat" — so check that the chosen side is named, and
@@ -419,7 +419,7 @@ def test_the_whole_package_builds_for_a_hostile_fixture(shape, tmp_path):
 
     events, xg, team_metrics, player_metrics, info, out = _shaped(shape)
     players = pd.read_csv(out / "players.csv")
-    from visual_redesign_full import generate_match_package
+    from football_analysis.visuals.visual_redesign_full import generate_match_package
 
     target = tmp_path / shape
     target.mkdir(parents=True, exist_ok=True)

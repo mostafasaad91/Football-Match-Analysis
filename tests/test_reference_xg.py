@@ -6,8 +6,8 @@ Every test supplies its shot map, so nothing here touches the network.
 import pandas as pd
 import pytest
 
-import reference_xg as RX
-import xg_alignment as XA
+from football_analysis.xg import reference_xg as RX
+from football_analysis.xg import xg_alignment as XA
 
 
 @pytest.fixture(autouse=True)
@@ -144,7 +144,7 @@ def test_post_shot_value_rides_along_only_for_shots_that_reached_the_keeper():
 
 
 def test_post_shot_xg_prefers_opta_and_falls_back_to_placement():
-    from match_metrics import post_shot_xg
+    from football_analysis.metrics.match_metrics import post_shot_xg
 
     shots = pd.DataFrame(
         [

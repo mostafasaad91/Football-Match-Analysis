@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-import tactical_pdf_report as pdf
+from football_analysis.reports import tactical_pdf_report as pdf
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -97,7 +97,7 @@ def test_both_themes_clear_the_floor(theme):
         import sys
         sys.path.insert(0, {str(ROOT)!r})
         sys.path.insert(0, {str(ROOT / "tests")!r})
-        import tactical_pdf_report as pdf
+        from football_analysis.reports import tactical_pdf_report as pdf
         from test_cover_legibility import contrast, COVER_FLOOR, BODY_FLOOR
         for name in ("COVER_LABEL", "COVER_META"):
             ratio = contrast(getattr(pdf, name), pdf.BG)
