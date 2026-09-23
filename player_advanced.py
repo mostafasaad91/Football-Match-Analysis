@@ -271,10 +271,12 @@ def line_of(role):
         return "Goalkeeper"
     if code.startswith("AM") or code in {"FW", "FWL", "FWR", "ST", "SS", "CF"}:
         return "Attack"
-    if code.startswith("D"):
-        return "Defence"
+    # DM before D: a defensive midfielder screens in midfield, and a plain
+    # "starts with D" test filed every DMC, DML and DMR with the back line.
     if code.startswith("M") or code.startswith("DM"):
         return "Midfield"
+    if code.startswith("D"):
+        return "Defence"
     if code.startswith("F"):
         return "Attack"
     return "Unknown"
