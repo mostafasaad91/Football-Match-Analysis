@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # pyright: reportMissingImports=false, reportRedeclaration=false, reportReturnType=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportCallIssue=false, reportPrivateImportUsage=false, reportOptionalMemberAccess=false, reportPossiblyUnboundVariable=false
 """
-WhoScored Post-Match Analyzer  ·  v7 internal xG engine  ·  2026-04-30
+WhoScored Post-Match Analyzer  ·  internal xG engine  ·  2026-04-30
 =======================================================
 ✅ Robust handling for WhoScored blocking
    ├─ Attempt 1: cloudscraper (no browser; fastest)
@@ -271,7 +271,7 @@ OFFICIAL_REPORT_OVERRIDE = {"enabled": False}
 
 STRICT_OFFICIAL_PAGE_XG = False
 
-# xG behaviour — V7 INTERNAL ENGINE
+# xG behaviour — INTERNAL ENGINE
 # No manually pasted public-site totals and no external xG matching.
 # The model computes xG inside the script from the event data and match statistics
 # available in WhoScored/matchCentreData: shot location, angle, distance, body part,
@@ -304,6 +304,16 @@ def _xg_source_name() -> str:
     except Exception:
         pass
     return XG_LOCAL_MODEL_VERSION
+
+
+def xg_model_label() -> str:
+    """The model behind a match's xG, in the one spelling every output uses.
+
+    The per-shot ``xg_source`` column, the match info and the console once
+    named the same engine three ways -- "v5" on every shot, "v7" in the match
+    info -- which read as two models. All of them now print this.
+    """
+    return f"internal model {_xg_source_name()}"
 
 
 XG_SINGLE_SHOT_CAP = 0.95
@@ -2593,7 +2603,7 @@ OPENPLAY_ADVANCED_COLUMNS = [
     "shot_angle_a2",
 ]
 FREEKICK_COLUMNS = ["start_dist_to_goal_a0", "start_angle_to_goal_a0"]
-XG_MODEL_USED = "provider_or_opta_like_v5_calibrated"
+XG_MODEL_USED = XG_LOCAL_MODEL_VERSION
 
 
 def _qnames(row_or_event) -> set[str]:
@@ -2831,7 +2841,7 @@ def _context_flag(q: set[str], row, names: tuple[str, ...]) -> bool:
 
 
 def _shot_geometry_features(row) -> dict:
-    """Build the shot features used by the V7 internal xG engine."""
+    """Build the shot features used by the internal xG engine."""
     q = _qnames(row)
     x_m = _to_mx(row.get("x"))
     y_m = _to_my(row.get("y"))
@@ -3130,7 +3140,7 @@ def apply_best_open_source_xg(events: pd.DataFrame, info: dict) -> pd.DataFrame:
         out.loc[local_mask, "xG"] = out.loc[local_mask].apply(_opta_like_local_xg_from_row, axis=1)
         out.loc[local_mask, "xg_source"] = _xg_source_name()
 
-    XG_MODEL_USED = XG_LOCAL_MODEL_VERSION
+    XG_MODEL_USED = _xg_source_name()
     return out
 
 
@@ -3722,7 +3732,7 @@ def _finalize_official_stats(stats: dict) -> dict:
 
 
 def _strip_external_xg_totals(stats: dict) -> dict:
-    """Remove provider/public team xG totals so V7 remains a fully internal xG model."""
+    """Remove provider/public team xG totals so the xG stays a fully internal model."""
     out = _finalize_official_stats(stats or {})
     for side in ("home", "away"):
         if side in out and isinstance(out[side], dict):
@@ -4381,7 +4391,7 @@ def _build_public_site_fallback_stats(info: dict, events: pd.DataFrame) -> dict:
 
 
 def _fill_missing_xg_with_public_fallback(info: dict, events: pd.DataFrame) -> dict:
-    """Fill xG totals from the V7 internal team-stat target, not from external totals."""
+    """Fill xG totals from the internal team-stat target, not from external totals."""
     current = _finalize_official_stats(info.get("official_stats", {}) or {})
     fallback = _build_public_site_fallback_stats(info, events)
     used = False
@@ -4395,10 +4405,10 @@ def _fill_missing_xg_with_public_fallback(info: dict, events: pd.DataFrame) -> d
             if cur_side.get(k) is None and fb_side.get(k) is not None:
                 cur_side[k] = fb_side.get(k)
     if used:
-        info["xg_reference_source"] = "v7 internal event/team-stat model"
+        info["xg_reference_source"] = xg_model_label()
         try:
             console.print(
-                "[yellow]  Using V7 internal xG team-stat calibration; no external xG total is used.[/yellow]"
+                "[yellow]  Using the internal xG team-stat calibration; no external xG total is used.[/yellow]"
             )
         except Exception:
             pass
@@ -4469,7 +4479,7 @@ def _apply_official_stats_calibration(info: dict, events: pd.DataFrame) -> pd.Da
     """
     Rescale each team's shot values to the chosen team xG target.
 
-    In V7 the target is internal: it is produced from event/match statistics only.
+    The target is internal: it is produced from event/match statistics only.
     Official/provider totals are ignored unless XG_USE_OFFICIAL_TEAM_TOTAL_CALIBRATION
     is deliberately turned back on.
     """
@@ -4507,7 +4517,7 @@ def _apply_official_stats_calibration(info: dict, events: pd.DataFrame) -> pd.Da
         out.loc[idx, "xg_source"] = out.loc[idx, "xg_source"].astype(str).replace(
             "", XG_LOCAL_MODEL_VERSION
         ) + (
-            "__team_total_calibrated_to_internal_v7"
+            "__team_total_calibrated_to_internal"
             if XG_USE_INTERNAL_TEAM_STAT_CALIBRATION and not XG_USE_OFFICIAL_TEAM_TOTAL_CALIBRATION
             else "__team_total_calibrated_to_official_opta"
         )
@@ -4906,7 +4916,7 @@ def xg_stats(events: pd.DataFrame, info: dict) -> dict:
             if official_side.get("xG") is not None:
                 xg_total = round(float(official_side["xG"]), 2)
         elif XG_USE_INTERNAL_TEAM_STAT_CALIBRATION and official_side.get("xG") is not None:
-            # This xG is produced by the internal V7 team-stat model, not by an external site.
+            # This xG is produced by the internal team-stat model, not by an external site.
             xg_total = round(float(official_side["xG"]), 2)
 
         for source_side in (matchcentre_side, official_side):
@@ -12177,7 +12187,7 @@ def main():
     if _official_stats_has(mc_stats):
         page_stats = mc_stats
         console.print(
-            "[green]  Using matchCentreData stat counts; xG totals will be calculated by the internal V7 model (browser skipped).[/green]"
+            "[green]  Using matchCentreData stat counts; xG totals will be calculated by the internal model (browser skipped).[/green]"
         )
     else:
         console.print(
@@ -12195,14 +12205,14 @@ def main():
         except Exception as _off_err:
             console.print(
                 f"[yellow]  ⚠ Official Opta stats fetch failed: {_off_err}[/yellow]\n"
-                f"[yellow]  → Official counts will be kept; xG will be calculated by the internal V7 model.[/yellow]"
+                f"[yellow]  → Official counts will be kept; xG will be calculated by the internal model.[/yellow]"
             )
             page_stats = mc_stats  # may be empty/partial — the local model will fill the gaps
 
-    # V7: keep official/matchCentre counts, but remove any provider/public team xG total.
+    # Keep official/matchCentre counts, but remove any provider/public team xG total.
     # The xG total is produced internally from the event-level model and available team stats.
     page_stats = _strip_external_xg_totals(page_stats)
-    info["xg_reference_source"] = "v7 internal event/team-stat model"
+    info["xg_reference_source"] = xg_model_label()
 
     info["official_stats"] = _finalize_official_stats(page_stats)
     info["official_stats"] = _fill_missing_xg_with_public_fallback(info, events)
@@ -12214,7 +12224,7 @@ def main():
         ]
         if missing_xg:
             raise RuntimeError(
-                "Internal V7 xG was not produced for both teams. "
+                "Internal xG was not produced for both teams. "
                 "This strict version will not output fallback xG totals. "
                 f"Missing: {', '.join(missing_xg)}. "
                 "Try opening the match page manually in Chrome first, then re-run."
@@ -12224,12 +12234,12 @@ def main():
     status = get_status(md)
     if info.get("official_stats"):
         console.print(
-            f"[green]  Using V7 internal xG model for report totals. Stat counts source: matchCentreData/DOM when available. Model: {XG_MODEL_USED}.[/green]"
+            f"[green]  Using the internal xG model for report totals. Stat counts source: matchCentreData/DOM when available. Model: {XG_MODEL_USED}.[/green]"
         )
         console.print(info["official_stats"])
     else:
         console.print(
-            "[yellow]  Official stat counts not found; using event-derived counts and internal V7 xG.[/yellow]"
+            "[yellow]  Official stat counts not found; using event-derived counts and internal xG.[/yellow]"
         )
     sub_in = info["sub_in"]
     sub_out = info["sub_out"]

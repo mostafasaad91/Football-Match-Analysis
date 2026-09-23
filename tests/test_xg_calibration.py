@@ -178,3 +178,16 @@ def test_wider_angle_and_headers_keep_their_expected_order():
         for x in range(99, 40, -1)
     ]
     assert headers == sorted(headers, reverse=True)
+
+
+def test_every_output_names_the_xg_model_the_same_way():
+    """The shots said "v5" and the match info said "v7" for one engine."""
+    import pandas as pd
+
+    from football_analysis.pipeline import football_match_analysis as F
+
+    events = pd.DataFrame(
+        [{"is_shot": True, "x": 88.0, "y": 50.0, "type": "SavedShot", "team_id": 1}]
+    )
+    shot_source = F.apply_best_open_source_xg(events, {})["xg_source"].iloc[0]
+    assert F.xg_model_label() == f"internal model {shot_source}"
