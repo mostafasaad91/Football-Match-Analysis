@@ -1,0 +1,30 @@
+{
+  "method": "psxg_opta_fitted_v1",
+  "weights": {
+    "const": -0.2593256760815761,
+    "logit": 0.9986308153163826,
+    "wide": 1.5483270201551498,
+    "wide2": 1.307738970953322,
+    "high": -0.07454667908220998,
+    "high2": 0.991838509685545,
+    "corner": 0.5235578282661929,
+    "low": 0.3026976644989143,
+    "header": 0.1649658888887696
+  },
+  "reference": "Opta xGOT via FotMob shot maps",
+  "fitted_utc": "2026-09-23T16:03:01+00:00",
+  "shots": 2434,
+  "matches": 269,
+  "rmse_vs_reference": 0.1588,
+  "terms": [
+    "const",
+    "logit",
+    "wide",
+    "wide2",
+    "high",
+    "high2",
+    "corner",
+    "low",
+    "header"
+  ]
+}

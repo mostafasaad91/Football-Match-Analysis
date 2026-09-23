@@ -354,9 +354,13 @@ def test_post_shot_xg_only_counts_shots_that_reached_the_target():
     off_target = ~shots["shot_whoscored_type"].isin(["Goal", "SavedShot"])
     assert float(psxg[off_target].sum()) == 0.0
     # Placement adds value over the raw chance for shots that were on target,
-    # while off-target shots drop out entirely.
+    # while off-target shots drop out entirely. There is no ceiling at the
+    # match's total xG: by Opta's own numbers post-shot xG beats pre-shot xG
+    # in 113 of 269 matches on disk, and in five of the six with seven goals
+    # or more -- this sample finished 4-6. What is bounded is each shot.
     on_target_xg = float(shots.loc[~off_target, "xG"].fillna(0).sum())
-    assert on_target_xg < float(psxg.sum()) < float(shots["xG"].fillna(0).sum())
+    assert on_target_xg < float(psxg.sum())
+    assert float(psxg.max()) <= 0.97
 
 
 def test_post_shot_xg_does_not_hard_code_goals_to_one():

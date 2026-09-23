@@ -238,45 +238,41 @@ def main() -> int:
 
 
 def refit_xg() -> None:
-    """Refit the engine's xG layer on every Opta shot map stored so far.
+    """Refit the xG layers on every Opta shot map stored so far.
 
-    Each fixture rendered keeps its shot map, so the archive the layer learns
-    from grows by a round at a time, and refitting here is what makes the
-    engine -- the fallback whenever FotMob has no map -- improve over the
-    season rather than stay where it was fitted. The script writes nothing
-    unless the new fit beats the engine and holds up against what ships.
+    Each fixture rendered keeps its shot map, so the archive the layers learn
+    from grows by a round at a time, and refitting here is what makes them
+    improve over the season rather than stay where they were fitted: the
+    pre-shot layer on top of the engine, and the post-shot model goalkeepers
+    are judged against. Each script writes nothing unless its new fit holds up.
     """
-    print("\nRefitting the xG layer on the stored Opta shot maps ...", flush=True)
-    try:
-        done = subprocess.run(
-            [sys.executable, "scripts/fit_xg_reference.py"],
-            cwd=ROOT,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=FIXTURE_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
-        print("  refit took too long, stopped; the previous fit stays")
-        return
-    lines = (done.stdout or done.stderr or "").strip().splitlines()
-    for line in lines:
-        if (
-            line.lstrip().startswith(
-                (
-                    "shots paired",
-                    "Opta-fitted",
-                    "what ships",
-                    "written",
-                    "nothing written",
-                    "The fit",
-                )
+    jobs = (
+        (
+            "xG layer",
+            "scripts/fit_xg_reference.py",
+            ("shots paired", "Opta-fitted", "what ships", "The fit"),
+        ),
+        ("post-shot xG", "scripts/fit_psxg.py", ("on-target shots", "fitted (new)", "The fit")),
+    )
+    for name, script, shown in jobs:
+        print(f"\nRefitting the {name} on the stored Opta shot maps ...", flush=True)
+        try:
+            done = subprocess.run(
+                [sys.executable, script],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=FIXTURE_TIMEOUT_S,
             )
-            or "shots paired" in line
-        ):
-            print("  " + line.strip())
+        except subprocess.TimeoutExpired:
+            print("  refit took too long, stopped; the previous fit stays")
+            continue
+        for line in (done.stdout or done.stderr or "").strip().splitlines():
+            if any(token in line for token in shown + ("written",)):
+                print("  " + line.strip())
 
 
 if __name__ == "__main__":

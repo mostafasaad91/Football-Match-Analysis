@@ -1263,16 +1263,20 @@ def post_shot_xg(events: pd.DataFrame) -> pd.Series:
     and one in the top corner scored identically. This weights the base chance
     by how far the placement pulled the ball away from the goalkeeper.
 
-    Heuristic, not a fitted model. The multiplier runs from 0.55 for a shot
-    straight at the keeper to 2.45 in a corner, and the result is capped at
-    0.97 because no placement is a certain goal.
+    Three sources, in order:
 
-    Where the render paired a shot with Opta's own post-shot value
-    (``xgot_reference``, from ``reference_xg``) that value is used instead.
-    The heuristic sees placement and nothing else -- no pace, no keeper
-    position -- and at Brighton 3-0 Arsenal it put Brighton's five efforts on
-    target at 0.86 where Opta has 1.86: a header Opta prices at 0.94 came out
-    at 0.47. It is the fallback, for shots Opta's map does not carry.
+    1. Opta's own post-shot value (``xgot_reference``), where a render in
+       publish mode paired the shot with FotMob's map.
+    2. Our fitted model (``xg.psxg_model``), trained on those Opta values from
+       the pre-shot xG, the placement and the body part. Penalties and own
+       goals skip it, because the map it learns from carries neither.
+    3. The placement heuristic, when no fit is stored: the base chance times a
+       multiplier from 0.55 for a shot straight at the keeper to 2.45 in a
+       corner. It sees placement and nothing else, and it runs low -- 436.5
+       for 754 goals across the shots Opta has priced -- which is why the fit
+       replaced it.
+
+    Every value is capped at 0.97 because no placement is a certain goal.
     """
     if events is None or events.empty:
         return pd.Series(dtype=float)
@@ -1281,6 +1285,13 @@ def post_shot_xg(events: pd.DataFrame) -> pd.Series:
     shot_type = events.get("shot_whoscored_type", pd.Series("", index=events.index)).astype(str)
     on_target = shot_type.isin(ON_TARGET_SHOT_TYPES)
     reference = _numeric_series(events, "xgot_reference", np.nan)
+
+    from football_analysis.xg import psxg_model
+
+    fitted = psxg_model.stored()
+    # The fit never saw a penalty or an own goal: Opta's map carries neither.
+    unfitted = _bool_series(events, "is_penalty") | _bool_series(events, "is_own_goal")
+    body = events.get("body_part", pd.Series("", index=events.index)).astype(str)
 
     values = pd.Series(0.0, index=events.index, dtype=float)
     for idx in events.index[on_target]:
@@ -1293,6 +1304,13 @@ def post_shot_xg(events: pd.DataFrame) -> pd.Series:
             values.at[idx] = float(min(base.at[idx], 0.97))
             continue
         px, py = point
+        if fitted and not unfitted.at[idx]:
+            predicted = psxg_model.predict(
+                base.at[idx], px, py, body.at[idx] == "Head", model=fitted
+            )
+            if predicted is not None:
+                values.at[idx] = float(min(predicted, 0.97))
+                continue
         difficulty = placement_difficulty(px, py)
         multiplier = 0.55 + 1.90 * difficulty
         values.at[idx] = float(min(base.at[idx] * multiplier, 0.97))
