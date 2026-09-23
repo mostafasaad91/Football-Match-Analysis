@@ -463,7 +463,8 @@ def _percentile_frame(observations, minimum_minutes):
     # underscore, which is the same trap that made every percentile read zero.
     from football_analysis.metrics.player_advanced import line_of
 
-    frame["line"] = [line_of(role) for role in frame.get("role", "")]
+    roles = frame["role"] if "role" in frame else [None] * len(frame)
+    frame["line"] = [line_of(role) for role in roles]
     # The prefix must not start with an underscore: DataFrame.itertuples
     # renames any column whose name is not a valid identifier, so "_p_goals"
     # arrived as "_2" and every getattr for it returned the default. Each

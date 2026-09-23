@@ -97,7 +97,10 @@ def progression_distance(events):
     """
     moves = events[
         (events["type"].isin(["Pass", "Carry"]))
-        & (events.get("outcome", "").astype(str).str.lower() == "successful")
+        & (
+            events.get("outcome", pd.Series("", index=events.index)).astype(str).str.lower()
+            == "successful"
+        )
     ]
     if moves.empty:
         return {}

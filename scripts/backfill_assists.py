@@ -34,7 +34,8 @@ SNAPSHOTS = OUTPUT / "raw_snapshots"
 
 def _load(path: Path) -> dict | None:
     try:
-        return json.loads(gzip.open(path, "rt", encoding="utf-8").read())
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            return json.load(handle)
     except Exception:
         return None
 

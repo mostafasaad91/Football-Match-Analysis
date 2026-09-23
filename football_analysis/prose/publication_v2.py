@@ -5,7 +5,6 @@ from football_analysis.prose.match_editorial import (
     headline,
     result_read,
     state_read,
-    section_copy,
     reading,
     visual_section,
 )
@@ -242,7 +241,6 @@ def build_article(
     # The strongest three run here, above the groups, in the order the match
     # ranks them.
     sections.extend(_findings(events, xg, team_metrics, player_metrics, match_info, out))
-    copies = section_copy(c)
     groups = [
         "Chance Creation",
         "Possession and Progression",
@@ -266,7 +264,7 @@ def build_article(
             paragraphs.append(reading)
         else:
             paragraphs.append(observed_contrast(c, group))
-        # copies[group]['implication'] used to go here. It is a standing
+        # section_copy(c)[group]['implication'] used to go here. It is a standing
         # instruction -- "Trace the strongest chances back to the entry route
         # and the final pass" -- written once per section and identical in
         # every match. The boards below the heading now each close on the
