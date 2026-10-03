@@ -6124,7 +6124,16 @@ def shape_over_time(events):
 
     height_ax.set_ylim(0, 100)
     height_ax.axhline(50, color=PITCH_LINE, lw=0.8, alpha=0.35)
-    height_ax.text(1, 51, "halfway", color=MUTED, fontsize=6.5, va="bottom")
+    height_ax.text(
+        0.995,
+        51,
+        "halfway",
+        color=MUTED,
+        fontsize=7.5,
+        va="bottom",
+        ha="right",
+        transform=height_ax.get_yaxis_transform(),
+    )
     height_ax.legend(loc="upper right", frameon=False, labelcolor=TEXT, fontsize=8, ncol=2)
     spread_ax.set_xlabel("Match minute", fontsize=9, color=MUTED)
 
