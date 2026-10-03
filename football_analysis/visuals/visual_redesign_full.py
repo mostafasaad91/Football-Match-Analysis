@@ -6270,6 +6270,13 @@ def playing_through(events, team_id, opponent_id, number):
 def action_value_leaders(events):
     """One value ranking every position can appear in."""
     ranked = player_action_value(events)
+    # An event with no player attached is not a player: it printed as a nameless
+    # row with a value of +0.000 at the foot of the ranking.
+    if not ranked.empty:
+        named = ranked["player"].notna() & ~ranked["player"].astype(str).str.strip().isin(
+            ["", "nan", "None"]
+        )
+        ranked = ranked[named]
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
     base.amoled_header(
         fig,
@@ -6332,6 +6339,21 @@ def action_value_leaders(events):
         fontsize=7.5,
         fontweight="bold",
     )
+    # Which bar is whose: the bars are coloured by team and nothing said so.
+    for slot, (name, colour) in enumerate([(HOME_NAME, HOME), (AWAY_NAME, AWAY)]):
+        key_x = 0.60 + slot * 0.11
+        fig.add_artist(
+            Rectangle((key_x, 0.797), 0.011, 0.016, transform=fig.transFigure, color=colour)
+        )
+        fig.text(
+            key_x + 0.016,
+            0.805,
+            name.upper(),
+            color=TEXT,
+            fontsize=7.5,
+            fontweight="bold",
+            va="center",
+        )
     fig.text(
         0.20,
         0.075,
@@ -6350,7 +6372,7 @@ def action_value_leaders(events):
     return save(fig, "43_action_value.png")
 
 
-def control_surface(events):
+def control_surface(events, players=None):
     """Which side held which parts of the pitch, and where it was contested."""
     grid, shares = pitch_control(events, HOME_ID, AWAY_ID)
     fig, pitch, side = pitch_axes(
@@ -6382,9 +6404,28 @@ def control_surface(events):
         xs = positions["x"] if team_id == HOME_ID else 100 - positions["x"]
         ys = positions["y"] if team_id == HOME_ID else 100 - positions["y"]
         px, py = attack_xy(xs, ys)
+        # Shirt numbers in the marks, so the white dots are people and not a cloud.
+        numbers = {}
+        if players is not None and "shirt_no" in players.columns:
+            numbers = dict(zip(players["name"].astype(str), players["shirt_no"]))
         pitch.scatter(
-            px, py, s=44, marker="o", facecolors=color, edgecolors=BG, linewidths=1.0, zorder=6
+            px, py, s=230, marker="o", facecolors=color, edgecolors=BG, linewidths=1.2, zorder=6
         )
+        for name, x_, y_ in zip(positions["player"], px, py):
+            shirt = numbers.get(str(name))
+            if shirt is None or pd.isna(shirt):
+                continue
+            pitch.text(
+                x_,
+                y_,
+                str(int(float(shirt))),
+                color=text_on_fill(color),
+                fontsize=7.5,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=7,
+            )
 
     # Everything on this map is encoded: the field's colour is which side held
     # the space, the dots are average positions. Neither was stated anywhere.
@@ -7191,7 +7232,7 @@ def generate_match_package(
         playing_through(events, HOME_ID, AWAY_ID, 41),
         playing_through(events, AWAY_ID, HOME_ID, 42),
         action_value_leaders(events),
-        control_surface(events),
+        control_surface(events, players),
         sequence_types(events),
         goal_origins(events),
         press_and_rest(events),

@@ -197,7 +197,7 @@ class Charts:
             ax.axhline(data[y].median(), color=MUTED, ls=":", lw=1)
             from football_analysis.visuals.scatter_labels import label_players
 
-            label_players(ax, data, x, y, color=FG, background=BG, fontsize=9)
+            label_players(ax, data, x, y, color=FG, background=BG, fontsize=9.5, short=True)
         ax.legend(
             facecolor=BG,
             labelcolor=FG,
@@ -684,9 +684,10 @@ def build_insight_visuals(events, players, info, out):
     if len(windows):
         fig, axes = charts.figure(
             "Output around substitution windows",
-            "Compare equal windows before and after each change. A marker is a descriptive comparison, not a substitution effect.",
+            "Equal windows before and after each change \u00b7 a description of output, not a substitution effect",
             columns=2,
-            height=7,
+            # One change needs a short board, not a tall one with a lone row in it.
+            height=6.2 if window_frame.minute.nunique() <= 2 else 7,
         )
         for ax, (tid, name) in zip(axes, charts.names.items()):
             g = window_frame[window_frame.team_id.eq(tid)]

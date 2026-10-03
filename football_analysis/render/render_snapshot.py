@@ -49,7 +49,7 @@ def refresh_publication(
 
     visual.xt_map(events, match_info["home_id"], 7)
     visual.xt_map(events, match_info["away_id"], 8)
-    visual.control_surface(events)
+    visual.control_surface(events, players)
     visual.win_probability_curve(events)
     visual.shot_map(events, xg, match_info["home_id"], 2)
     visual.shot_map(events, xg, match_info["away_id"], 3)

@@ -25,8 +25,29 @@ def _segments_cross(p1, p2, p3, p4):
     return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
 
 
-def label_players(ax, frame, x, y, *, color, background, fontsize=9):
+def short_names(names):
+    """Surnames, with an initial where two players on the page share one.
+
+    A full name is two or three times as wide as the surname, and on a crowded
+    chart the width is what forces a leader across the page. Players are known
+    by surname; two Thomases are told apart by their first initial.
+    """
+    names = [str(n) for n in names]
+    surnames = [n.split()[-1] if n.split() else n for n in names]
+    out = []
+    for name, surname in zip(names, surnames):
+        parts = name.split()
+        if surnames.count(surname) > 1 and len(parts) > 1:
+            out.append(f"{parts[0][0]}. {surname}")
+        else:
+            out.append(surname)
+    return out
+
+
+def label_players(ax, frame, x, y, *, color, background, fontsize=9, short=False):
+    """Label every point with its player; ``short`` uses surnames, not full names."""
     fig = ax.figure
+    shown = short_names(frame["player"]) if short else [str(n) for n in frame["player"]]
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     bounds = ax.get_window_extent(renderer).padded(-5)
@@ -44,7 +65,7 @@ def label_players(ax, frame, x, y, *, color, background, fontsize=9):
     distances = np.linalg.norm(points[:, None] - points[None, :], axis=2)
     density = (distances < 70).sum(axis=1)
     for i in np.argsort(-density, kind="stable"):
-        name = str(frame.iloc[i]["player"])
+        name = shown[i]
         w, h, _ = renderer.get_text_width_height_descent(name, font, False)
         w += 8
         h = max(h + 8, fontsize * fig.dpi / 72 + 7)
