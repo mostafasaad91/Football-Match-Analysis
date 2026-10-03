@@ -120,6 +120,13 @@ NEUTRAL = base.NEUTRAL
 _FOCUS_WORD = "petrol" if IS_LIGHT_THEME else "white"
 # Translucent shaded regions lose presence on a light page; lift their alpha.
 _SHADE_ALPHA = 0.24 if IS_LIGHT_THEME else 0.16
+# Five lanes, five hues, left to right across the page. Away from red and sky
+# blue so no lane reads as a team, and darker on the light page.
+ZONE_LANE_COLOURS = (
+    ("#7A4FD8", "#1F7BD8", "#0E9486", "#C98A00", "#D2452F")
+    if IS_LIGHT_THEME
+    else ("#A77BFF", "#4EA8FF", "#2FD3BE", "#FFC247", "#FF7A5C")
+)
 _HATCH_ALPHA = 0.20 if IS_LIGHT_THEME else 0.13
 
 HOME_ID = base.HOME_ID
@@ -359,9 +366,18 @@ def load_all():
 
 
 def attack_xy(x, y):
+    """Pitch coordinates for a board that attacks up the page.
+
+    The feed numbers the width from the attacking side's RIGHT touchline: a right
+    winger's touches average y near 18 and a left back's near 81. Drawn
+    straight, a side's right flank landed on the left of every board that used
+    this, the mirror image of the pass network beside it and of the lane names
+    the rest of the package uses. The lateral axis is corrected here, once, so
+    the right flank is on the right of the page everywhere.
+    """
     x_arr = np.asarray(x, dtype=float)
     y_arr = np.asarray(y, dtype=float)
-    display_x = (y_arr - 50.0) * (PITCH_WIDTH / 100.0)
+    display_x = (50.0 - y_arr) * (PITCH_WIDTH / 100.0)
     display_y = x_arr * (PITCH_LENGTH / 100.0)
     return display_x, display_y
 
@@ -457,6 +473,35 @@ def draw_long_pitch(ax, line_color=PITCH_LINE, lw=1.15):
         fontweight="bold",
     )
     ax.axis("off")
+
+
+def crop_to_attack(pitch, side, low, bottom_in=1.1):
+    """Show only the pitch from ``low`` (a distance up the pitch) to the goal line.
+
+    Boards about the attacking end drew the whole pitch and used its last third,
+    so most of the picture was empty grass and every mark was small. The pitch is
+    cropped, widened, and the figure is cut down to fit it, so the part that
+    holds data is larger and nothing below it is blank.
+
+    ``bottom_in`` is the room, in inches, kept under the pitch for a key or a
+    strip. Returns the figure fraction where the pitch now ends.
+    """
+    top = PITCH_LENGTH + 3.0
+    low = max(-3.0, low)
+    pitch.set_ylim(low, top)
+    figure = pitch.figure
+    fig_w = figure.get_size_inches()[0]
+    span_x = (PITCH_WIDTH / 2 + 5) * 2
+    width = 0.57
+    pitch_in = min(6.4, width * fig_w * (top - low) / span_x)
+    header_in = 1.45
+    height_in = header_in + pitch_in + bottom_in
+    figure.set_size_inches(fig_w, height_in)
+    pitch_top = 1 - header_in / height_in
+    pitch_bottom = pitch_top - pitch_in / height_in
+    pitch.set_position([0.04, pitch_bottom, width, pitch_in / height_in])
+    side.set_position([0.65, pitch_bottom, 0.295, pitch_in / height_in])
+    return pitch_bottom
 
 
 def side_title(ax, text: str):
@@ -838,6 +883,68 @@ def xg_row(xg, team_name):
     return row.iloc[0] if not row.empty else pd.Series(dtype=float)
 
 
+def shot_timeline(fig, shots, outcome, top, team_id):
+    """Every shot at its minute, standing as high as its xG.
+
+    The map says where a chance came from and the cumulative curve says how the
+    total built; neither says when each one came or how big it was. Stems share
+    the shot map's colours and glyphs, so a goal is the same star here.
+    """
+    if shots.empty or top < 0.13:
+        return None
+    ax = fig.add_axes([0.075, 0.075, 0.54, max(top - 0.075, 0.05)])
+    ax.set_facecolor(BG)
+    minutes = (
+        pd.to_numeric(shots["minute"], errors="coerce").fillna(0)
+        + pd.to_numeric(shots.get("second", 0), errors="coerce").fillna(0) / 60
+    )
+    end = max(95.0, float(minutes.max()) + 2.0)
+    peak = max(float(shots["xG"].max()), 0.2)
+    ax.set_xlim(0, end)
+    ax.set_ylim(0, peak * 1.3)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["bottom"].set_color(GRID)
+    ax.tick_params(colors=MUTED, labelsize=7.5, length=0)
+    ax.set_yticks([])
+    ax.set_xticks([0, 15, 30, 45, 60, 75, 90])
+    ax.set_xticklabels([f"{m}′" for m in (0, 15, 30, 45, 60, 75, 90)])
+    ax.axvline(45, color=GRID, lw=1.0, ls=(0, (3, 3)), zorder=0)
+    kinds = {
+        "MissedShots": ("X", SHOT_MISS),
+        "BlockedShot": ("s", SHOT_BLOCKED),
+        "ShotOnPost": ("D", SHOT_POST),
+        "SavedShot": ("o", SHOT_SAVED),
+        "Goal": ("*", SHOT_GOAL),
+    }
+    for index in shots.index:
+        marker, colour = kinds.get(str(outcome.at[index]), ("o", MUTED))
+        x, height = float(minutes.at[index]), float(shots.at[index, "xG"])
+        ax.vlines(x, 0, height, color=colour, lw=1.6, alpha=0.9, zorder=2)
+        ax.scatter(
+            [x],
+            [height],
+            s=150 if marker == "*" else 42,
+            marker=marker,
+            facecolors=colour,
+            edgecolors=BG,
+            linewidths=0.8,
+            zorder=3,
+        )
+    ax.text(
+        0,
+        1.12,
+        "SHOT TIMELINE · HEIGHT = xG",
+        transform=ax.transAxes,
+        color=MUTED,
+        fontsize=8,
+        fontweight="bold",
+        va="bottom",
+    )
+    return ax
+
+
 def shot_map(events, xg, team_id, number):
     pso = as_bool(events.get("is_penalty_shootout", pd.Series(False, index=events.index)))
     # An own goal is logged as a shot by the side that put it in. Leaving it
@@ -857,9 +964,10 @@ def shot_map(events, xg, team_id, number):
     )
     draw_long_pitch(pitch)
     # Colour carries the outcome (shared shot palette, one key across the whole
-    if not shots.empty:
-        # Zoom without dropping any recorded shot, including unusual long shots.
-        pitch.set_ylim(max(-3, min(48, float(shots["x"].min()) * 1.05 - 5)), PITCH_LENGTH + 3)
+    # Zoom without dropping any recorded shot, including unusual long shots:
+    # the crop runs back to the furthest one, in pitch metres.
+    reach = float(shots["x"].min()) * PITCH_LENGTH / 100 if not shots.empty else 60.0
+    pitch_bottom = crop_to_attack(pitch, side, min(60.0, reach - 6.0), bottom_in=2.5)
     # report); marker shape repeats it so the map still reads in grayscale.
     # Goals are listed last so they draw on top of the other outcomes, and the
     # star glyph is scaled up because it reads much smaller than a disc of the
@@ -886,7 +994,7 @@ def shot_map(events, xg, team_id, number):
         if subset.empty:
             continue
         px, py = attack_xy(subset["x"], subset["y"])
-        sizes = (45 + subset["xG"].to_numpy() * 520) * scale
+        sizes = (90 + subset["xG"].to_numpy() * 900) * scale
         pitch.scatter(
             px,
             py,
@@ -899,14 +1007,41 @@ def shot_map(events, xg, team_id, number):
             label=f"{label} ({len(subset)})",
             zorder=5 if event_type == "Goal" else 4,
         )
+    # The chances worth naming: a figure beside the mark, so the three biggest
+    # do not have to be read off a marker's area.
+    # Only chances big enough to matter, and never two figures on top of each
+    # other: a cluster of 0.13 and 0.14 in the six-yard box is one smudge.
+    named = []
+    for index, row in shots.nlargest(3, "xG").iterrows():
+        if row["xG"] < 0.2 and named:
+            continue
+        lx_, ly_ = attack_xy([row["x"]], [row["y"]])
+        if any(np.hypot(lx_[0] - ox, ly_[0] - oy) < 7 for ox, oy in named):
+            continue
+        named.append((lx_[0], ly_[0]))
+        lx, ly = attack_xy([row["x"]], [row["y"]])
+        pitch.annotate(
+            f"{row['xG']:.2f}",
+            (lx[0], ly[0]),
+            xytext=(11, -4),
+            textcoords="offset points",
+            color=TEXT,
+            fontsize=8.5,
+            fontweight="bold",
+            zorder=8,
+            path_effects=[path_effects.withStroke(linewidth=3, foreground=BG)],
+        )
     pitch.legend(
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.08),
-        ncol=3,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.025),
+        ncol=5,
         frameon=False,
         labelcolor=TEXT,
-        fontsize=7.5,
+        fontsize=8.5,
+        columnspacing=1.4,
+        handletextpad=0.4,
     )
+    shot_timeline(fig, shots, outcome, pitch_bottom - 0.115, team_id)
     xr = xg_row(xg, TEAM_NAME[team_id])
     side_title(side, "SHOT OUTPUT")
     kpi_bottom = side_kpis(
@@ -1704,7 +1839,11 @@ def xt_map(events, team_id, number):
         )[0]
         for _, g in eligible.groupby("team_id")
     ]
-    vmax = max([float(grid.max()) for grid in grids] + [0.001])
+    # The scale tops out at the 95th percentile of the lit cells, not at the
+    # hottest one: a single cell worth 3.79 beside a median of 0.14 took the
+    # whole ramp and left every other cell the colour of the page.
+    lit = np.concatenate([grid[grid > 0] for grid in grids] + [np.array([0.001])])
+    vmax = max(float(np.percentile(lit, 95)), 0.001)
     x_grid = np.linspace(-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 8)
     y_grid = np.linspace(0, PITCH_LENGTH, 13)
     image = pitch.pcolormesh(
@@ -1721,10 +1860,14 @@ def xt_map(events, team_id, number):
         zorder=1,
     )
     draw_long_pitch(pitch)
+    # Figures only on the eight hottest cells: forty-odd numbers at five points
+    # were unreadable and hid the cells they described.
+    # Exactly eight, ties broken by position, so the count never creeps past it.
+    labelled = set(np.argsort(heat.ravel(), kind="stable")[::-1][:8].tolist())
     for ix in range(7):
         for iy in range(12):
             value = float(heat[ix, iy])
-            if value <= 0:
+            if value <= 0 or (ix * 12 + iy) not in labelled:
                 continue
             intensity = min(value / vmax, 1.0)
             cell_fill = mcolors.to_hex(cmap(intensity))
@@ -1734,19 +1877,17 @@ def xt_map(events, team_id, number):
                 (y_grid[iy] + y_grid[iy + 1]) / 2,
                 f"{value:.2f}",
                 color=number_color,
-                fontsize=5.0,
+                fontsize=8.0,
                 fontweight="bold",
                 ha="center",
                 va="center",
                 zorder=3,
             )
     top = team.nlargest(10, "xT")
-    # Ranks 4–10 used to be drawn in the team colour, which is exactly the
-    # colour of the hot cells underneath them — the dashed arrows vanished
-    # into the heatmap. Use an accent hue away from the team's own ramp, at
-    # full opacity with a black halo, so they stay legible over every cell.
+    # Only the top three are drawn. Ranks 4-10 added seven dashed arrows over
+    # a heatmap that already carries the where; they stay in the list beside.
     dash_color = _on_team_heatmap_accent(team_mark)
-    for rank, (_, row) in enumerate(top.iterrows(), start=1):
+    for rank, (_, row) in enumerate(top.head(3).iterrows(), start=1):
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
         top_three = rank <= 3
@@ -1774,7 +1915,9 @@ def xt_map(events, team_id, number):
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
     cbar.ax.tick_params(colors=MUTED, labelsize=7)
     cbar.outline.set_edgecolor(GRID)
-    cbar.set_label("xT added per grid square", color=MUTED, fontsize=8)
+    cbar.set_label(
+        "xT added per grid square · scale tops out at the 95th percentile", color=MUTED, fontsize=8
+    )
     side_title(side, "TOP 10 xT PASSES")
     side_rows(
         side,
@@ -1792,9 +1935,7 @@ def xt_map(events, team_id, number):
         label_weight="bold",
     )
     side.plot([0.08, 0.16], [0.088, 0.088], color=EVENT_HIGHLIGHT, lw=1.75)
-    side.text(0.19, 0.088, "Top 3 xT passes", color=MUTED, fontsize=7.2, va="center")
-    side.plot([0.55, 0.63], [0.088, 0.088], color=dash_color, lw=1.25, linestyle=QUIET_DASH)
-    side.text(0.66, 0.088, "Ranks 4–10", color=MUTED, fontsize=7.2, va="center")
+    side.text(0.19, 0.088, "Top 3 xT passes drawn", color=MUTED, fontsize=7.2, va="center")
     return save(fig, f"{number:02d}_xt_map_{_team_slug(team_id)}.png")
 
 
@@ -1805,40 +1946,106 @@ def pass_map(events, team_id, number):
     key_pass = as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index)))
     fig, pitch, side = pitch_axes(
         f"Pass Map · {TEAM_NAME[team_id]}",
-        "Passes separated by starting third · solid: completed · dashed: incomplete · star: key pass",
+        "Average pass from each zone · width = passes · opacity = completion · stars = key passes",
     )
-    fig.delaxes(pitch)
-    pass_panels = []
-    for panel_index, third in enumerate(["Defensive third", "Middle third", "Attacking third"]):
-        panel = fig.add_axes([0.045 + panel_index * 0.18, 0.24, 0.16, 0.48])
-        draw_long_pitch(panel)
-        panel.set_title(third, color=TEXT, fontsize=9)
-        pass_panels.append(panel)
+    draw_long_pitch(pitch)
     team_mark = _team_mark_color(team_id)
-    for idx, row in frame.iterrows():
-        pitch = pass_panels[min(2, max(0, int(float(row["x"]) / (100 / 3))))]
+    # Six hundred passes drawn as hairlines are a texture, not a map. Each zone
+    # of a 5 x 7 grid is drawn once instead: an arrow in the direction its
+    # passes went on average, as thick as it is busy and as solid as its
+    # completion rate, so a side that circulates and a side that launches read
+    # differently at a glance.
+    columns, rows_n = 5, 7
+    start_x, start_y = attack_xy(frame["x"].to_numpy(), frame["y"].to_numpy())
+    end_x, end_y = attack_xy(frame["end_x"].to_numpy(), frame["end_y"].to_numpy())
+    work = pd.DataFrame(
+        {
+            "sx": np.asarray(start_x, dtype=float),
+            "sy": np.asarray(start_y, dtype=float),
+            "ex": np.asarray(end_x, dtype=float),
+            "ey": np.asarray(end_y, dtype=float),
+            "done": completed.to_numpy(),
+        }
+    )
+    work["col"] = np.clip(
+        ((work["sx"] + PITCH_WIDTH / 2) / PITCH_WIDTH * columns).astype(int), 0, columns - 1
+    )
+    work["row"] = np.clip((work["sy"] / PITCH_LENGTH * rows_n).astype(int), 0, rows_n - 1)
+    zones = work.groupby(["col", "row"])
+    busiest = max(int(zones.size().max()), 1) if len(work) else 1
+    cell_w, cell_h = PITCH_WIDTH / columns, PITCH_LENGTH / rows_n
+    for (col, row_), group in zones:
+        if len(group) < 4:
+            continue
+        cx = -PITCH_WIDTH / 2 + (col + 0.5) * cell_w
+        cy = (row_ + 0.5) * cell_h
+        dx, dy = (
+            float(group["ex"].mean() - group["sx"].mean()),
+            float(group["ey"].mean() - group["sy"].mean()),
+        )
+        length = float(np.hypot(dx, dy))
+        if length < 1.0:
+            continue
+        reach = min(length, cell_h * 1.55)
+        dx, dy = dx / length * reach, dy / length * reach
+        # Keep the whole arrow on the pitch: a goalkeeper's zone pointing
+        # upfield would otherwise start behind his own goal line.
+        cx = float(
+            np.clip(cx, -PITCH_WIDTH / 2 + abs(dx) / 2 + 1, PITCH_WIDTH / 2 - abs(dx) / 2 - 1)
+        )
+        cy = float(np.clip(cy, abs(dy) / 2 + 1.5, PITCH_LENGTH - abs(dy) / 2 - 1.5))
+        rate = float(group["done"].mean())
+        share = len(group) / busiest
+        arrow = pitch.annotate(
+            "",
+            xy=(cx + dx / 2, cy + dy / 2),
+            xytext=(cx - dx / 2, cy - dy / 2),
+            arrowprops=dict(
+                arrowstyle="-|>",
+                color=team_mark,
+                alpha=0.30 + 0.62 * rate,
+                lw=1.6 + 5.0 * share,
+                mutation_scale=10 + 14 * share,
+                shrinkA=0,
+                shrinkB=0,
+            ),
+            zorder=3,
+        )
+        if arrow.arrow_patch is not None:
+            arrow.arrow_patch.set_path_effects(
+                [
+                    path_effects.Stroke(linewidth=2 + 5.0 * share + 1.6, foreground=BG),
+                    path_effects.Normal(),
+                ]
+            )
+        pitch.text(
+            cx - dx / 2,
+            cy - dy / 2 - 2.2,
+            str(len(group)),
+            color=TEXT,
+            fontsize=7.5,
+            ha="center",
+            va="top",
+            zorder=6,
+            path_effects=[path_effects.withStroke(linewidth=2.4, foreground=BG)],
+        )
+    for idx in frame.index[key_pass.reindex(frame.index, fill_value=False)]:
+        row = frame.loc[idx]
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        if bool(key_pass.loc[idx]):
-            color, alpha, width, style = EVENT_HIGHLIGHT, 0.95, 1.8, "-"
-        elif bool(completed.loc[idx]):
-            color, alpha, width, style = team_mark, 0.24, 0.62, "-"
-        else:
-            color, alpha, width, style = team_mark, 0.34, 0.62, FAILURE_DASH
         pitch.plot(
-            [sx[0], ex[0]], [sy[0], ey[0]], color=color, alpha=alpha, lw=width, ls=style, zorder=2
+            [sx[0], ex[0]], [sy[0], ey[0]], color=EVENT_HIGHLIGHT, alpha=0.9, lw=1.6, zorder=5
         )
-        if bool(key_pass.loc[idx]):
-            pitch.scatter(
-                ex[0],
-                ey[0],
-                s=22,
-                marker="*",
-                color=EVENT_HIGHLIGHT,
-                edgecolor=TEXT,
-                linewidth=0.45,
-                zorder=4,
-            )
+        pitch.scatter(
+            ex[0],
+            ey[0],
+            s=70,
+            marker="*",
+            color=EVENT_HIGHLIGHT,
+            edgecolor=BG,
+            linewidth=0.7,
+            zorder=7,
+        )
     attempts = len(frame)
     complete_count = int(completed.sum())
     forward = int(
@@ -1857,19 +2064,19 @@ def pass_map(events, team_id, number):
             ("Completion", f"{100 * complete_count / max(attempts, 1):.1f}%"),
             ("Forward passes", forward),
         ],
-        start=0.82,
-        gap=0.115,
+        start=0.845,
+        gap=0.105,
     )
     # The same completion rate means different things at 13 m and at 25 m, so
     # length and long-ball survival sit next to the raw totals.
-    side.text(0.08, 0.335, "LENGTH & DIRECTION", color=MUTED, fontsize=7.5, fontweight="bold")
+    side.text(0.08, 0.385, "LENGTH & DIRECTION", color=MUTED, fontsize=7.5, fontweight="bold")
     stat_rows = [
         ("Average length", f"{profile['avg_length_m']:.1f} m"),
         ("Long balls", f"{profile['long_ball_share']:.0f}%"),
         ("Long-ball completion", f"{profile['long_ball_completion']:.0f}%"),
     ]
     for idx, (label, value) in enumerate(stat_rows):
-        y = 0.29 - idx * 0.05
+        y = 0.34 - idx * 0.05
         side.text(0.08, y, label, color=TEXT, fontsize=8, va="center")
         side.text(
             0.92, y, value, color=TEXT, fontsize=8.5, fontweight="bold", ha="right", va="center"
@@ -1877,11 +2084,11 @@ def pass_map(events, team_id, number):
     # The key sat at a fixed 0.235/0.165/0.095 while the rows above it ran to
     # 0.19, so the "Completed pass" swatch was drawn through the "Long balls"
     # figure. Anchored under the last row instead.
-    legend_top = 0.29 - (len(stat_rows) - 1) * 0.05 - 0.06
+    legend_top = 0.34 - (len(stat_rows) - 1) * 0.05 - 0.06
     legend_y = [legend_top - index * 0.058 for index in range(3)]
     legend_items = [
-        ("Completed pass", team_mark, "-", "o"),
-        ("Incomplete pass", team_mark, FAILURE_DASH, "o"),
+        ("Average pass from a zone", team_mark, "-", ">"),
+        ("Opacity = completion rate", team_mark, "-", "o"),
         (f"Key pass ({int(key_pass.sum())})", EVENT_HIGHLIGHT, "-", "*"),
     ]
     for y, (label, color, style, marker) in zip(legend_y, legend_items):
@@ -2263,24 +2470,28 @@ def zone14(events, team_id, number):
     final_third = team[successful & (pd.to_numeric(team["end_x"], errors="coerce") >= 66.7)].copy()
     final_third["end_y_num"] = pd.to_numeric(final_third["end_y"], errors="coerce")
     final_third = final_third.dropna(subset=["end_y_num"])
+    # Left to right across the page, which is high to low in the feed's width.
     lane_defs = [
-        ("Left wing", 0, 20),
-        ("Left half-space", 20, 40),
+        ("Left wing", 80, 100.0001),
+        ("Left half-space", 60, 80),
         ("Central lane", 40, 60),
-        ("Right half-space", 60, 80),
-        ("Right wing", 80, 100.0001),
+        ("Right half-space", 20, 40),
+        ("Right wing", 0, 20),
     ]
     team_mark = _team_mark_color(team_id)
-    lane_colors = [team_mark] * len(lane_defs)
+    # One colour a lane, none of them the team's own: the board used to paint
+    # all five in the kit colour, so nothing told a wing from the centre.
+    lane_colors = list(ZONE_LANE_COLOURS)
     lane_counts = [
         int(final_third["end_y_num"].between(lo, hi, inclusive="left").sum())
         for _, lo, hi in lane_defs
     ]
     fig, pitch, side = pitch_axes(
         f"Zone 14 & Five Lanes · {TEAM_NAME[team_id]}",
-        "Lane numbers = completed actions ending in the final third · arrows = completed Zone 14 access",
+        "Final-third actions per lane · arrows = Zone 14 access, coloured by the lane they started in",
     )
     draw_long_pitch(pitch)
+    crop_to_attack(pitch, side, 50.0)
     third_y = 66.7 * PITCH_LENGTH / 100
     for (label, lo, hi), color in zip(lane_defs, lane_colors):
         x1, _ = attack_xy([66.7], [lo])
@@ -2293,7 +2504,7 @@ def zone14(events, team_id, number):
                 facecolor=color,
                 edgecolor=color,
                 lw=0.9,
-                alpha=_SHADE_ALPHA,
+                alpha=0.30 if IS_LIGHT_THEME else 0.24,
                 zorder=0,
             )
         )
@@ -2338,22 +2549,35 @@ def zone14(events, team_id, number):
         va="bottom",
         zorder=5,
     )
+
+    def lane_index(width_value):
+        for index, (_, low, high) in enumerate(lane_defs):
+            if low <= width_value < high:
+                return index
+        return len(lane_defs) // 2
+
+    # Each arrow takes the colour of the lane it started in, so the board says
+    # where the Zone 14 access came from as well as that it happened.
     for _, row in actions.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        pitch.annotate(
+        arrow = pitch.annotate(
             "",
             xy=(ex[0], ey[0]),
             xytext=(sx[0], sy[0]),
             arrowprops=dict(
                 arrowstyle="-|>",
-                color=team_mark,
-                alpha=0.42,
-                lw=0.78,
-                linestyle=QUIET_DASH,
-                mutation_scale=8,
+                color=lane_colors[lane_index(float(row["y"]))],
+                alpha=0.95,
+                lw=1.9,
+                mutation_scale=12,
             ),
+            zorder=5,
         )
+        if arrow.arrow_patch is not None:
+            arrow.arrow_patch.set_path_effects(
+                [path_effects.Stroke(linewidth=3.6, foreground=BG), path_effects.Normal()]
+            )
     top = actions.groupby("player").size().sort_values(ascending=False).head(3)
     side_title(side, "FIVE ATTACKING LANES")
     for idx, ((label, _, _), value, color) in enumerate(zip(lane_defs, lane_counts, lane_colors)):
@@ -3120,7 +3344,7 @@ def dominating_zones(events):
                 ha="center",
                 va="center",
                 color=text_on_fill(cell_fill),
-                fontsize=6.5,
+                fontsize=9.5,
                 fontweight="bold",
                 path_effects=label_outline(cell_fill),
             )
@@ -3132,10 +3356,15 @@ def dominating_zones(events):
     side_kpis(
         side,
         [
-            (f"{HOME_NAME} touches", len(home)),
-            (f"{AWAY_NAME} touches", len(away)),
+            (
+                f"{HOME_NAME} touches",
+                f"{len(home)}  ({100 * len(home) / max(len(home) + len(away), 1):.0f}%)",
+            ),
+            (
+                f"{AWAY_NAME} touches",
+                f"{len(away)}  ({100 * len(away) / max(len(home) + len(away), 1):.0f}%)",
+            ),
             ("Difference", f"{len(home) - len(away):+d}"),
-            ("Cell label", f"{HOME_NAME} − {AWAY_NAME}"),
         ],
     )
     return save(fig, "24_dominating_zones.png")
@@ -3432,10 +3661,10 @@ def box_entries(events, team_id, number):
         "Completed actions entering the penalty area · entry method encoded by shape",
     )
     draw_long_pitch(pitch)
-    if not frame.empty:
-        pitch.set_ylim(
-            max(-3, min(48, float(frame[["x", "end_x"]].min().min()) * 1.05 - 5)), PITCH_LENGTH + 3
-        )
+    reach = (
+        float(frame[["x", "end_x"]].min().min()) * PITCH_LENGTH / 100 if not frame.empty else 60.0
+    )
+    crop_to_attack(pitch, side, min(60.0, reach - 6.0))
     team_mark = _team_mark_color(team_id)
     for _, row in frame.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]])
@@ -3451,14 +3680,14 @@ def box_entries(events, team_id, number):
             arrowprops=dict(
                 arrowstyle="-|>",
                 color=entry_color,
-                alpha=0.62 if is_pass else 0.52,
-                lw=1.0 if is_pass else 0.82,
+                alpha=0.72 if is_pass else 0.6,
+                lw=1.5 if is_pass else 1.2,
                 linestyle="-" if is_pass else FAILURE_DASH,
-                mutation_scale=8,
+                mutation_scale=10,
             ),
         )
         pitch.scatter(
-            ex[0], ey[0], s=32, marker=marker, color=entry_color, edgecolor=TEXT, linewidth=0.65
+            ex[0], ey[0], s=58, marker=marker, color=entry_color, edgecolor=TEXT, linewidth=0.75
         )
     top = frame.groupby("player").size().sort_values(ascending=False).head(5)
     side_title(side, "ENTRY CONTRIBUTORS")
@@ -3496,6 +3725,7 @@ def high_regains(events, team_id, number):
     )
     draw_long_pitch(pitch)
     threshold_y = 60 * PITCH_LENGTH / 100
+    crop_to_attack(pitch, side, threshold_y - 12.0)
     pitch.axhspan(threshold_y, PITCH_LENGTH, color=FOCUS, alpha=0.055)
     pitch.axhline(threshold_y, color=FOCUS, lw=1.0, ls=(0, (5, 4)))
     marker_map = {"Tackle": "o", "Interception": "D", "BallRecovery": "s"}
@@ -3508,11 +3738,11 @@ def high_regains(events, team_id, number):
         pitch.scatter(
             px,
             py,
-            s=65,
+            s=130,
             marker=marker,
             color=team_mark,
             edgecolor=TEXT,
-            linewidth=0.8,
+            linewidth=0.9,
             label=f"{event_type} ({len(subset)})",
         )
     other = frame[~frame["type"].astype(str).isin(marker_map)]
@@ -3521,20 +3751,33 @@ def high_regains(events, team_id, number):
         pitch.scatter(
             px,
             py,
-            s=65,
+            s=130,
             marker="^",
             color=team_mark,
             edgecolor=TEXT,
-            linewidth=0.8,
+            linewidth=0.9,
             label=f"Other ({len(other)})",
         )
+    # The minute beside each regain, so the dot can be found in the match.
+    for _, row in frame.iterrows():
+        rx, ry = attack_xy([row["x"]], [row["y"]])
+        pitch.annotate(
+            f"{int(float(row['minute']))}′",
+            (rx[0], ry[0]),
+            xytext=(8, 5),
+            textcoords="offset points",
+            color=TEXT,
+            fontsize=7,
+            zorder=8,
+            path_effects=[path_effects.withStroke(linewidth=2.6, foreground=BG)],
+        )
     pitch.legend(
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.09),
-        ncol=2,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.03),
+        ncol=4,
         frameon=False,
         labelcolor=TEXT,
-        fontsize=7,
+        fontsize=8.5,
     )
     top = (
         frame.groupby("player").size().sort_values(ascending=False).head(7)
@@ -3568,16 +3811,22 @@ def pass_targets(events, team_id, number):
     )
     team_mark = _team_mark_color(team_id)
     cmap = LinearSegmentedColormap.from_list(f"targets_{team_id}", _team_density_palette(team_id))
+    # The ramp tops out at the 95th percentile of the cells that were hit, so
+    # one busy corner does not turn every other cell the colour of the page.
+    hit = heat[heat > 0]
+    max_cell = max(float(np.percentile(hit, 95)) if hit.size else 1.0, 1.0)
     image = pitch.imshow(
         heat.T,
         extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
         origin="lower",
         cmap=cmap,
+        vmin=0,
+        vmax=max_cell,
         aspect="equal",
         alpha=0.95,
     )
     draw_long_pitch(pitch)
-    max_cell = max(float(heat.max()), 1.0)
+    labelled = set(np.argsort(heat.ravel(), kind="stable")[::-1][:8].tolist())
     for ix in range(7):
         for iy in range(12):
             x0 = -PITCH_WIDTH / 2 + ix * PITCH_WIDTH / 7
@@ -3595,16 +3844,18 @@ def pass_targets(events, team_id, number):
                 )
             )
             value = int(heat[ix, iy])
+            if value <= 0 or (ix * 12 + iy) not in labelled:
+                continue
             # The cell fill is a step on the team-colour ramp, so the label
             # colour has to be read off that fill — a fixed white disappears
             # at the top of a light ramp (Juventus silver, Real Madrid white).
-            cell_fill = mcolors.to_hex(cmap(value / max_cell))
+            cell_fill = mcolors.to_hex(cmap(min(value / max_cell, 1.0)))
             pitch.text(
                 x0 + PITCH_WIDTH / 14,
                 y0 + PITCH_LENGTH / 24,
                 str(value),
                 color=text_on_fill(cell_fill),
-                fontsize=5.6,
+                fontsize=9,
                 fontweight="bold",
                 ha="center",
                 va="center",
@@ -3614,7 +3865,9 @@ def pass_targets(events, team_id, number):
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
     cbar.ax.tick_params(colors=MUTED, labelsize=7)
     cbar.outline.set_edgecolor(GRID)
-    cbar.set_label("Completed-pass targets", color=MUTED, fontsize=8)
+    cbar.set_label(
+        "Completed-pass targets · scale tops out at the 95th percentile", color=MUTED, fontsize=8
+    )
     top = frame.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PASSERS")
     side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
