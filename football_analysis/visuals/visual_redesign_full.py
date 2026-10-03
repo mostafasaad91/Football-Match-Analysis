@@ -1050,7 +1050,10 @@ def shot_map(events, xg, team_id, number):
             ("Shots", f"{len(shots)}"),
             ("xG", f"{float(xr.get('xG', 0)):.2f}"),
             ("xG / shot", f"{float(xr.get('xG_per_shot', 0)):.3f}"),
-            ("On target", f"{int(float(xr.get('on_target', 0)))}"),
+            # Counted from the shots drawn on this board, so the card agrees with
+            # the legend and with the goal-frame split under it. The provider's
+            # own tally, used elsewhere, can file a block as a shot on target.
+            ("On target", f"{int(outcome.isin(['Goal', 'SavedShot']).sum())}"),
         ],
     )
 

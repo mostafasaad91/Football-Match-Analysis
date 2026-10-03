@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from football_analysis.visuals import crests
+from football_analysis.visuals.typography import display
 from football_analysis.metrics.frame_values import surname as _surname
 from football_analysis.visuals.visualization_components import (
     C_AWAY,
@@ -371,11 +372,10 @@ def amoled_header(
         0.909,
         title,
         color=TEXT,
-        fontsize=17.5,
-        fontweight="bold",
         va="center",
         zorder=95,
         path_effects=glow,
+        **display(24),
     )
     # A bare slice cut "…this shows who was on top and when" to "…who was",
     # which reads as a rendering fault rather than an abbreviation. Mark the
@@ -767,249 +767,62 @@ def xg_flow(events: pd.DataFrame) -> Path:
     away_goals = int(match_goals["_credited_team"].eq(AWAY_ID).sum())
 
     fig = plt.figure(figsize=(14, 8), facecolor=BG)
-    header = FancyBboxPatch(
-        (0.025, 0.855),
-        0.95,
-        0.125,
-        boxstyle="round,pad=0.004,rounding_size=0.012",
-        transform=fig.transFigure,
-        facecolor=PANEL,
-        edgecolor=GRID,
-        linewidth=1.0,
-        zorder=90,
-    )
-    fig.add_artist(header)
-    fig.add_artist(
-        Rectangle(
-            (0.025, 0.855),
-            0.475,
-            0.004,
-            transform=fig.transFigure,
-            color=HOME,
-            linewidth=0,
-            zorder=92,
-        )
-    )
-    fig.add_artist(
-        Rectangle(
-            (0.500, 0.855),
-            0.475,
-            0.004,
-            transform=fig.transFigure,
-            color=AWAY,
-            linewidth=0,
-            zorder=92,
-        )
-    )
-    glow_text = [path_effects.withStroke(linewidth=3.5, foreground=BG)]
-    fig.text(
-        0.045,
-        0.950,
-        "●  XG FLOW",
-        color=TEXT,
-        fontsize=9.2,
-        fontweight="bold",
-        va="center",
-        zorder=95,
-    )
-    fig.text(
-        0.045,
-        0.910,
-        "CUMULATIVE EXPECTED GOALS",
-        color=TEXT,
-        fontsize=15.5,
-        fontweight="bold",
-        va="center",
-        zorder=95,
-        path_effects=glow_text,
-    )
-    fig.text(
-        0.045,
-        0.878,
-        "",
-        color=FOCUS,
-        fontsize=6.3,
-        fontweight="bold",
-        va="center",
-        zorder=95,
-    )
-    fig.text(
-        0.102,
-        0.878,
-        "Chance quality accumulated after every shot · shootout excluded",
-        color=MUTED,
-        fontsize=7.0,
-        va="center",
-        zorder=95,
+    amoled_header(
+        fig,
+        "Expected Goals Through the Match",
+        "Cumulative shot xG · each step is one attempt · circles are goals · shootout excluded",
     )
 
-    fig.text(
-        0.385,
-        0.952,
-        HOME_NAME.upper(),
-        color=HOME,
-        fontsize=7.2,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
+    # One card holds the curves, so the page reads as a panel with a header
+    # rather than a plot on black; the area fill under each curve shows how much
+    # of the match each side owned, not only where it ended.
+    card = fig.add_axes([0.035, 0.225, 0.93, 0.605])
+    card.axis("off")
+    card.set_xlim(0, 1)
+    card.set_ylim(0, 1)
+    card.add_patch(
+        FancyBboxPatch(
+            (0, 0),
+            1,
+            1,
+            boxstyle="round,pad=0,rounding_size=0.014",
+            mutation_aspect=0.595 * 8 / (0.93 * 14),
+            facecolor=PANEL,
+            edgecolor=GRID,
+            linewidth=1.0,
+        )
     )
-    fig.text(
-        0.385,
-        0.913,
-        f"{home_total:.2f}",
-        color=TEXT,
-        fontsize=18,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-        path_effects=glow_text,
-    )
-    fig.text(
-        0.385,
-        0.882,
-        f"xG  ·  {int(shot_counts.get(HOME_ID, 0))} SHOTS  ·  "
-        f"xGOT {team_post_shot_xg(events, HOME_ID):.2f}",
-        color=MUTED,
-        fontsize=6.4,
-        ha="center",
-        va="center",
-        zorder=95,
-    )
-    fig.text(
-        0.520,
-        0.928,
-        f"{home_goals} — {away_goals}",
-        color=TEXT,
-        fontsize=19,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-        path_effects=glow_text,
-    )
-    fig.text(
-        0.520,
-        0.888,
-        "FULL TIME",
-        color=MUTED,
-        fontsize=6.2,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-    )
-    fig.text(
-        0.655,
-        0.952,
-        AWAY_NAME.upper(),
-        color=AWAY,
-        fontsize=7.2,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-    )
-    fig.text(
-        0.655,
-        0.913,
-        f"{away_total:.2f}",
-        color=TEXT,
-        fontsize=18,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-        path_effects=glow_text,
-    )
-    fig.text(
-        0.655,
-        0.882,
-        f"xG  ·  {int(shot_counts.get(AWAY_ID, 0))} SHOTS  ·  "
-        f"xGOT {team_post_shot_xg(events, AWAY_ID):.2f}",
-        color=MUTED,
-        fontsize=6.4,
-        ha="center",
-        va="center",
-        zorder=95,
-    )
-    leader_name = HOME_NAME if home_total >= away_total else AWAY_NAME
-    edge = abs(home_total - away_total)
-    edge_color = HOME if home_total >= away_total else AWAY
-    badge = FancyBboxPatch(
-        (0.800, 0.885),
-        0.145,
-        0.060,
-        boxstyle="round,pad=0.006,rounding_size=0.010",
-        transform=fig.transFigure,
-        facecolor=PANEL_2 if IS_LIGHT_THEME else "#0B0B0B",
-        edgecolor=edge_color,
-        linewidth=0.9,
-        zorder=94,
-    )
-    fig.add_artist(badge)
-    fig.text(
-        0.8725,
-        0.925,
-        "xG EDGE",
-        color=MUTED,
-        fontsize=6.0,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-    )
-    fig.text(
-        0.8725,
-        0.901,
-        f"{leader_name.upper()}  +{edge:.2f}",
-        color=edge_color,
-        fontsize=8.5,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=95,
-    )
-
-    ax = fig.add_axes([0.07, 0.315, 0.82, 0.495])
-    clean_ax(ax)
-    ymax = max(0.5, max(home_total, away_total) * 1.16)
-    ax.set_xlim(0, max_minute + 12)
-    ax.set_ylim(0, ymax)
-    ax.grid(axis="y", color=GRID, lw=0.75, alpha=0.85)
-    ax.tick_params(labelsize=7)
-    ax.set_xlabel("MATCH MINUTE", fontsize=7, fontweight="bold", labelpad=8)
-    ax.set_ylabel("CUMULATIVE xG", fontsize=7, fontweight="bold", labelpad=8)
-    ax.text(
-        0.0,
-        1.035,
-        "CUMULATIVE xG",
-        transform=ax.transAxes,
-        color=MUTED,
-        fontsize=6.5,
-        fontweight="bold",
-    )
+    card.text(0.022, 0.93, "CUMULATIVE xG", color=MUTED, fontsize=9, fontweight="bold", va="center")
     peak = float(shots["xG"].max()) if not shots.empty else 0.0
-    ax.text(
-        0.56,
-        1.035,
-        f"PEAK CHANCE  ·  {peak:.2f} xG",
-        transform=ax.transAxes,
-        color=FOCUS,
-        fontsize=6.5,
+    card.text(
+        0.978,
+        0.93,
+        f"DOT SIZE = SHOT xG   ·   BIGGEST CHANCE {peak:.2f}",
+        color=NEUTRAL,
+        fontsize=8,
         fontweight="bold",
-        ha="center",
-    )
-    ax.text(
-        1.0,
-        1.035,
-        "DOT SIZE = SHOT xG",
-        transform=ax.transAxes,
-        color=MUTED,
-        fontsize=6.2,
         ha="right",
+        va="center",
     )
+
+    ax = fig.add_axes([0.085, 0.275, 0.735, 0.465])
+    ax.set_facecolor("none")
+    clean_ax(ax)
+    ymax = max(0.5, max(home_total, away_total) * 1.18)
+    ax.set_xlim(0, max_minute + 2)
+    ax.set_ylim(0, ymax)
+    ax.grid(axis="y", color=GRID, lw=0.9, alpha=0.9)
+    ax.set_axisbelow(True)
+    ticks = [m for m in (0, 15, 30, 45, 60, 75, 90) if m <= max_minute]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{m}′" for m in ticks])
+    ax.tick_params(labelsize=9, length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    from football_analysis.pipeline.match_clock import event_label
+
+    end_labels = []
     for team_id, marker in [(HOME_ID, "o"), (AWAY_ID, "s")]:
         team = shots[shots["team_id"].eq(team_id)].sort_values(["minute", "second"])
         minutes = [0.0] + team["minute"].tolist() + [max_minute]
@@ -1017,205 +830,157 @@ def xg_flow(events: pd.DataFrame) -> Path:
         cumulative += [cumulative[-1] if cumulative else 0.0]
         color = TEAM_COLOR[team_id]
         ax.step(
-            minutes,
-            cumulative,
-            where="post",
-            color=color,
-            lw=9,
-            alpha=0.045,
-            solid_capstyle="round",
-            zorder=2,
+            minutes, cumulative, where="post", color=color, lw=3.0, solid_capstyle="round", zorder=3
         )
-        ax.step(
-            minutes,
-            cumulative,
-            where="post",
-            color=color,
-            lw=5.5,
-            alpha=0.11,
-            solid_capstyle="round",
-            zorder=2,
-        )
-        ax.step(
-            minutes, cumulative, where="post", color=color, lw=2.8, solid_capstyle="round", zorder=3
-        )
-        shot_y = team["xG"].cumsum()
-        sizes = 20 + team["xG"].to_numpy() * 72
+        ax.fill_between(minutes, cumulative, step="post", color=color, alpha=0.11, zorder=2)
         ax.scatter(
             team["minute"],
-            shot_y,
-            s=sizes,
+            team["xG"].cumsum(),
+            s=16 + team["xG"].to_numpy() * 150,
             marker=marker,
             facecolor=BG,
             edgecolor=color,
-            linewidth=1.5,
+            linewidth=1.4,
             zorder=4,
         )
-        total = cumulative[-1]
-        ax.text(
-            max_minute + 1.4,
-            total,
-            f"{TEAM_NAME[team_id].upper()}  ·  {total:.2f}",
-            color=TEXT,
-            va="center",
-            fontsize=8.5,
-            fontweight="bold",
-        )
+        end_labels.append((team_id, cumulative[-1], color))
         # Only goals the team actually scored belong on its own xG curve: an
         # own goal is struck by this team but counts for the opponent.
         team_goals = team[
             _bool(team.get("is_goal", pd.Series(False, index=team.index)))
             & credited_team(team).eq(team_id)
         ]
-        for goal_idx, (_, goal) in enumerate(team_goals.iterrows()):
+        for _, goal in team_goals.iterrows():
             upto = team[team["minute"].le(goal["minute"])]["xG"].sum()
             ax.scatter(
-                goal["minute"], upto, s=130, facecolor=BG, edgecolor=FOCUS, linewidth=2.4, zorder=6
+                goal["minute"],
+                upto,
+                s=150,
+                facecolor=color,
+                edgecolor="white",
+                linewidth=1.9,
+                zorder=6,
             )
-            ax.scatter(
-                goal["minute"], upto, s=40, facecolor=color, edgecolor=BG, linewidth=0.8, zorder=7
-            )
-            # Name the scorer on the marker — a minute alone makes the reader
-            # cross-reference the timeline strip below to learn who scored.
-            # str(nan) is "nan" and "".split()[-1] raises: the chart used to
-            # either label a goal "nan" or stop drawing altogether.
+            # The scorer and the minute on the marker, so nothing has to be
+            # looked up on a second strip. A missing name leaves the minute.
             surname = _surname(goal.get("player"))[:12]
-            from football_analysis.pipeline.match_clock import event_label
-
-            label = f"{surname} {event_label(goal)}" if surname else event_label(goal)
-            offset = 13 if goal_idx % 2 == 0 else 22
+            label = f"{surname}  {event_label(goal)}" if surname else event_label(goal)
             ax.annotate(
                 label,
                 (goal["minute"], upto),
-                xytext=(0, offset),
+                xytext=(0, 12),
                 textcoords="offset points",
                 ha="center",
+                va="bottom",
                 color=TEXT,
-                fontsize=6.4,
-                fontweight="bold",
                 zorder=8,
-                bbox=dict(
-                    boxstyle="round,pad=0.22",
-                    facecolor=BG,
-                    edgecolor=color,
-                    linewidth=0.7,
-                    alpha=0.92,
-                ),
+                path_effects=[path_effects.withStroke(linewidth=3, foreground=PANEL)],
+                **display(12.5),
             )
-    ax.axvline(45, color="#3A3A3A", lw=0.9, ls=(0, (3, 4)))
-    ax.text(
-        45,
-        ymax * 0.975,
-        "HT",
-        color=MUTED,
-        fontsize=6.2,
-        ha="center",
-        va="top",
-        bbox=dict(boxstyle="round,pad=0.25", fc=PANEL, ec=GRID, lw=0.6),
-    )
+    ax.axvline(45, color=GRID, lw=1.0, ls=(0, (3, 4)), zorder=1)
+    ax.text(45.6, ymax * 0.985, "HT", color=MUTED, fontsize=8.5, fontweight="bold", va="top")
 
-    state_ax = fig.add_axes([0.07, 0.205, 0.82, 0.055])
-    state_ax.set_xlim(0, max_minute)
+    # The totals are the headline of this page: large, in the team colour, with
+    # the supporting counts underneath instead of a second row of captions.
+    for team_id, total, color in end_labels:
+        shots_n = int(shot_counts.get(team_id, 0))
+        got = team_post_shot_xg(events, team_id)
+        ax.text(
+            max_minute + 3.2,
+            total,
+            f"{total:.2f}",
+            color=color,
+            ha="left",
+            va="center",
+            clip_on=False,
+            **display(34),
+        )
+        ax.text(
+            max_minute + 3.4,
+            total - ymax * 0.085,
+            f"xG  ·  {shots_n} shots  ·  xGOT {got:.2f}",
+            color=MUTED,
+            fontsize=8.5,
+            ha="left",
+            va="top",
+            clip_on=False,
+        )
+    ax.set_xlabel("MATCH MINUTE", fontsize=8, fontweight="bold", labelpad=8)
+
+    edge = abs(home_total - away_total)
+    if edge >= 0.005:
+        leader_name = HOME_NAME if home_total >= away_total else AWAY_NAME
+        edge_color = HOME if home_total >= away_total else AWAY
+        card.text(
+            0.5,
+            0.93,
+            f"{leader_name.upper()}  +{edge:.2f} xG",
+            color=edge_color,
+            ha="center",
+            va="center",
+            **display(15),
+        )
+
+    state_card = fig.add_axes([0.035, 0.09, 0.93, 0.105])
+    state_card.axis("off")
+    state_card.set_xlim(0, 1)
+    state_card.set_ylim(0, 1)
+    state_card.add_patch(
+        FancyBboxPatch(
+            (0, 0),
+            1,
+            1,
+            boxstyle="round,pad=0,rounding_size=0.02",
+            mutation_aspect=0.105 * 8 / (0.93 * 14),
+            facecolor=PANEL,
+            edgecolor=GRID,
+            linewidth=1.0,
+        )
+    )
+    state_card.text(
+        0.022, 0.80, "SCORE THROUGH THE MATCH", color=MUTED, fontsize=8.5, fontweight="bold"
+    )
+    state_ax = fig.add_axes([0.085, 0.108, 0.735, 0.044])
+    state_ax.set_xlim(0, max_minute + 2)
     state_ax.set_ylim(0, 1)
     state_ax.axis("off")
-    state_ax.text(0, 1.16, "MATCH STATE", color=MUTED, fontsize=6.3, fontweight="bold", va="bottom")
+
+    def _state_block(begin, finish, home_now, away_now):
+        leader_color = HOME if home_now > away_now else (AWAY if away_now > home_now else "#555555")
+        state_ax.add_patch(
+            Rectangle(
+                (begin, 0.05),
+                max(finish - begin, 0.3),
+                0.9,
+                facecolor=leader_color,
+                edgecolor=PANEL,
+                lw=1.4,
+                alpha=0.55,
+            )
+        )
+        if finish - begin >= 4:
+            state_ax.text(
+                (begin + finish) / 2,
+                0.5,
+                f"{home_now}–{away_now}",
+                color=TEXT,
+                ha="center",
+                va="center",
+                **display(14),
+            )
+
     home_score = away_score = 0
     start = 0.0
     for _, goal in match_goals.iterrows():
         end = float(goal["minute"])
-        leader_color = (
-            HOME if home_score > away_score else (AWAY if away_score > home_score else "#444444")
-        )
-        state_ax.add_patch(
-            Rectangle(
-                (start, 0.15),
-                max(end - start, 0.3),
-                0.55,
-                facecolor=leader_color,
-                edgecolor=GRID,
-                lw=0.65,
-                alpha=0.22,
-            )
-        )
-        if end - start >= 5:
-            state_ax.text(
-                (start + end) / 2,
-                0.425,
-                f"{home_score}–{away_score}",
-                color=TEXT,
-                fontsize=5.8,
-                fontweight="bold",
-                ha="center",
-                va="center",
-            )
+        _state_block(start, end, home_score, away_score)
         if int(goal["_credited_team"]) == HOME_ID:
             home_score += 1
         else:
             away_score += 1
         start = end
-    leader_color = (
-        HOME if home_score > away_score else (AWAY if away_score > home_score else "#444444")
-    )
-    state_ax.add_patch(
-        Rectangle(
-            (start, 0.15),
-            max(max_minute - start, 0.3),
-            0.55,
-            facecolor=leader_color,
-            edgecolor=GRID,
-            lw=0.65,
-            alpha=0.22,
-        )
-    )
-    if max_minute - start >= 4:
-        state_ax.text(
-            (start + max_minute) / 2,
-            0.425,
-            f"{home_score}–{away_score}",
-            color=TEXT,
-            fontsize=5.8,
-            fontweight="bold",
-            ha="center",
-            va="center",
-        )
-
-    goals_ax = fig.add_axes([0.07, 0.065, 0.82, 0.095])
-    goals_ax.set_xlim(0, max_minute)
-    goals_ax.set_ylim(0, 1)
-    goals_ax.axis("off")
-    goals_ax.text(0, 1.02, "GOALS", color=MUTED, fontsize=6.3, fontweight="bold", va="bottom")
-    goals_ax.plot([0, max_minute], [0.50, 0.50], color=GRID, lw=0.7)
-    for idx, (_, goal) in enumerate(match_goals.iterrows()):
-        minute = float(goal["minute"])
-        color = TEAM_COLOR.get(int(goal["_credited_team"]), TEXT)
-        y = 0.78 if idx % 2 == 0 else 0.22
-        goals_ax.plot([minute, minute], [0.50, y], color=color, lw=0.65, alpha=0.8)
-        goals_ax.scatter(
-            [minute], [0.50], s=36, facecolor=color, edgecolor=BG, linewidth=0.7, zorder=3
-        )
-        surname = (_surname(goal.get("player"), "GOAL")[:10]).upper()
-        own = " (OG)" if _bool(pd.Series([goal.get("is_own_goal", False)])).iloc[0] else ""
-        from football_analysis.pipeline.match_clock import event_label
-
-        goals_ax.text(
-            minute,
-            y,
-            f"{event_label(goal)}  {surname}{own}",
-            color=TEXT,
-            fontsize=5.4,
-            fontweight="bold",
-            ha="center",
-            va="center",
-        )
-    fig.text(
-        0.945,
-        0.030,
-        "PURE BLACK MATCH INTELLIGENCE · REAL EVENT DATA",
-        ha="right",
-        fontsize=6.5,
-        color=NEUTRAL,
-    )
-    fig._amoled_header_applied = True
+    _state_block(start, max_minute, home_score, away_score)
+    fig.text(0.945, 0.030, "REAL EVENT DATA", ha="right", fontsize=7.5, color=NEUTRAL)
     return save(fig, "03_xg_flow_redesign.png")
 
 

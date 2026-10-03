@@ -23,6 +23,7 @@ from football_analysis.visuals.visualization_components import (
     slope_label_offsets,
 )
 from football_analysis.metrics.metric_registry import format_value
+from football_analysis.visuals.typography import display_family
 
 POSTERS = (
     "match_poster_1_match_story.png",
@@ -102,7 +103,9 @@ class Poster:
             color=self.muted,
         )
         self._rule(0.045, 0.955, 0.952)
-        self._text(0.045, 0.929, title, size=30, weight="bold", va="center", width=0.91)
+        self._text(
+            0.045, 0.929, title, size=30, weight="bold", va="center", width=0.91, display=True
+        )
         self._text(0.045, 0.904, subtitle, size=10.5, color=self.muted, va="center", width=0.91)
         from football_analysis.visuals import crests
 
@@ -128,6 +131,7 @@ class Poster:
                 ha=ha,
                 va="center",
                 width=0.245,
+                display=True,
             )
         self._text(
             0.5,
@@ -138,6 +142,7 @@ class Poster:
             ha="center",
             va="center",
             width=0.20,
+            display=True,
         )
         self._text(
             0.5,
@@ -185,6 +190,7 @@ class Poster:
                     color=self.colors[tid],
                     ha="right",
                     width=0.075,
+                    display=True,
                 )
                 self.fig.add_artist(
                     Rectangle(
@@ -243,10 +249,15 @@ class Poster:
             ax.grid(color=self.rule, alpha=0.55, lw=0.6)
             ax.set_axisbelow(True)
 
-    def _text(self, x, y, text, *, size=11, color=TEXT_MAIN, width=None, **kwargs):
-        artist = self.fig.text(
-            x, y, str(text), color=color, size=size, fontfamily="DejaVu Sans", **kwargs
-        )
+    def _text(self, x, y, text, *, size=11, color=TEXT_MAIN, width=None, display=False, **kwargs):
+        # Titles and big numbers use the condensed face. It sets a quarter
+        # narrower than DejaVu, so it is drawn larger to fill the same room;
+        # the fit pass below still shrinks anything that overruns its width.
+        family = display_family() if display else "DejaVu Sans"
+        if display and family != "DejaVu Sans":
+            size = size * 1.3
+            kwargs["weight"] = "bold"
+        artist = self.fig.text(x, y, str(text), color=color, size=size, fontfamily=family, **kwargs)
         if width:
             self.fit.append((artist, width))
         return artist
@@ -298,6 +309,7 @@ class Poster:
             weight="bold",
             va="center",
             width=span - 0.032,
+            display=True,
         )
         self._text(
             left,
@@ -361,15 +373,15 @@ class Poster:
                 va="center",
             )
             for share, display, tid, dy, hatch in zip(
-                shares, [h, a], self.names, [0.16, -0.16], ["", "///"]
+                shares, [h, a], self.names, [0.24, -0.24], ["", "///"]
             ):
-                ax.barh(y + dy, 0.48, left=0.40, height=0.16, color=self.rule, alpha=0.30)
+                ax.barh(y + dy, 0.48, left=0.40, height=0.17, color=self.rule, alpha=0.30)
                 if np.isfinite(share):
                     ax.barh(
                         y + dy,
                         0.48 * min(max(share, 0), 1),
                         left=0.40,
-                        height=0.16,
+                        height=0.17,
                         color=self.colors[tid],
                         edgecolor=BG_DARK,
                         lw=0.3,
@@ -380,9 +392,10 @@ class Poster:
                     y + dy,
                     str(display),
                     color=self.colors[tid],
-                    size=value_size,
+                    size=value_size * (1.25 if display_family() != "DejaVu Sans" else 1.0),
                     weight="bold",
                     va="center",
+                    fontfamily=display_family(),
                 )
         self.notes[-1]["scale"] = (
             "Each metric uses a separate zero-based scale shared by both teams; "
@@ -1132,8 +1145,37 @@ def build_match_posters(
             where="post",
             color=b.colors[tid],
             lw=2.8,
-            ls=style,
+            ls="-",
         )
+        ax.fill_between(
+            np.r_[0, numeric(g, "minute") + numeric(g, "second") / 60, end_minute],
+            np.r_[0, total, total.iloc[-1] if len(total) else 0],
+            step="post",
+            color=b.colors[tid],
+            alpha=0.10,
+        )
+        for _, goal in g[flags(g, "is_goal")].iterrows():
+            at = float(goal["minute"]) + float(goal.get("second", 0) or 0) / 60
+            height = float(total[g["minute"].le(goal["minute"])].iloc[-1])
+            ax.scatter(
+                [at],
+                [height],
+                s=130,
+                facecolor=b.colors[tid],
+                edgecolor="white",
+                linewidth=1.6,
+                zorder=5,
+            )
+            ax.annotate(
+                f"{int(goal['minute'])}′",
+                (at, height),
+                xytext=(0, 9),
+                textcoords="offset points",
+                ha="center",
+                color=TEXT_MAIN,
+                size=11,
+                weight="bold",
+            )
         if len(total):
             ax.annotate(
                 f"{b.names[tid]}  {total.iloc[-1]:.2f}",
