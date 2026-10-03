@@ -84,7 +84,7 @@ _BUILT: dict[Path, tuple] = {}
 
 def _article(out: Path):
     if out not in _BUILT:
-        info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
+        info = json.loads((out / "match_info.json").read_text(encoding="utf-8-sig"))
         frames = [
             pd.read_csv(out / name)
             for name in (

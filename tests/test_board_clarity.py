@@ -151,3 +151,38 @@ def test_the_pass_map_is_one_pitch_of_zone_arrows(board):
     assert len(pitches) == 1, "the three miniature pitches are gone"
     lines = [ln for ax in pitches for ln in ax.lines if len(ln.get_xdata()) == 2]
     assert len(lines) <= 40, "key passes and pitch markings only; the hairlines are gone"
+
+
+def test_zone_flow_draws_one_arrow_per_busy_zone_and_keeps_them_on_the_pitch(v):
+    fig, pitch, _side = v.pitch_axes("Flow · Test", "x")
+    v.draw_long_pitch(pitch)
+    rng = np.random.default_rng(3)
+    n = 300
+    frame = pd.DataFrame(
+        {
+            "x": rng.uniform(0, 100, n),
+            "y": rng.uniform(0, 100, n),
+            "end_x": rng.uniform(0, 100, n),
+            "end_y": rng.uniform(0, 100, n),
+        }
+    )
+    drawn = v.draw_zone_flow(pitch, frame, np.ones(n, dtype=bool), "#ff0000")
+    assert 0 < drawn <= 35, "at most one arrow per zone of the 5 x 7 grid"
+    plt.close(fig)
+
+
+def test_zone_flow_ignores_an_empty_frame(v):
+    fig, pitch, _side = v.pitch_axes("Flow · Test", "x")
+    assert v.draw_zone_flow(pitch, pd.DataFrame(), [], "#fff") == 0
+    plt.close(fig)
+
+
+# ── set pieces and sequence types ───────────────────────────────────────────
+def test_set_pieces_share_one_shot_scale_and_drop_rows_nobody_used(board):
+    v, _info, events, _xg, figures = board
+    v.set_pieces(events)
+    panels = [ax for ax in figures[0].axes if ax.patches]
+    assert len(panels) == 2
+    assert panels[0].get_xlim() == panels[1].get_xlim(), "unequal scales invert the comparison"
+    rows = [len(ax.get_yticklabels()) for ax in panels]
+    assert rows[0] == rows[1]

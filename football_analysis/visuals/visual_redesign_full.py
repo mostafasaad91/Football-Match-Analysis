@@ -1939,23 +1939,19 @@ def xt_map(events, team_id, number):
     return save(fig, f"{number:02d}_xt_map_{_team_slug(team_id)}.png")
 
 
-def pass_map(events, team_id, number):
-    frame = events[events["team_id"].eq(team_id) & events["type"].astype(str).eq("Pass")].copy()
-    frame = frame.dropna(subset=["x", "y", "end_x", "end_y"])
-    completed = frame["outcome"].astype(str).str.lower().eq("successful")
-    key_pass = as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index)))
-    fig, pitch, side = pitch_axes(
-        f"Pass Map · {TEAM_NAME[team_id]}",
-        "Average pass from each zone · width = passes · opacity = completion · stars = key passes",
-    )
-    draw_long_pitch(pitch)
-    team_mark = _team_mark_color(team_id)
-    # Six hundred passes drawn as hairlines are a texture, not a map. Each zone
-    # of a 5 x 7 grid is drawn once instead: an arrow in the direction its
-    # passes went on average, as thick as it is busy and as solid as its
-    # completion rate, so a side that circulates and a side that launches read
-    # differently at a glance.
-    columns, rows_n = 5, 7
+def draw_zone_flow(pitch, frame, done, colour, columns=5, rows_n=7, min_count=4, labels=True):
+    """One arrow per zone: the way the passes from it went, on average.
+
+    Hundreds of origin-destination lines are a texture, not a map. A zone of a
+    ``columns`` x ``rows_n`` grid is drawn once instead: an arrow in the
+    direction its passes went on average, as thick as it is busy and as solid as
+    its completion rate, so a side that circulates and a side that launches
+    read differently at a glance. ``done`` flags each row of ``frame`` as
+    completed. Arrows are kept on the pitch; zones with fewer than ``min_count``
+    passes are left out.
+    """
+    if frame is None or len(frame) == 0:
+        return 0
     start_x, start_y = attack_xy(frame["x"].to_numpy(), frame["y"].to_numpy())
     end_x, end_y = attack_xy(frame["end_x"].to_numpy(), frame["end_y"].to_numpy())
     work = pd.DataFrame(
@@ -1964,7 +1960,7 @@ def pass_map(events, team_id, number):
             "sy": np.asarray(start_y, dtype=float),
             "ex": np.asarray(end_x, dtype=float),
             "ey": np.asarray(end_y, dtype=float),
-            "done": completed.to_numpy(),
+            "done": np.asarray(done, dtype=bool),
         }
     )
     work["col"] = np.clip(
@@ -1972,17 +1968,16 @@ def pass_map(events, team_id, number):
     )
     work["row"] = np.clip((work["sy"] / PITCH_LENGTH * rows_n).astype(int), 0, rows_n - 1)
     zones = work.groupby(["col", "row"])
-    busiest = max(int(zones.size().max()), 1) if len(work) else 1
+    busiest = max(int(zones.size().max()), 1)
     cell_w, cell_h = PITCH_WIDTH / columns, PITCH_LENGTH / rows_n
+    drawn = 0
     for (col, row_), group in zones:
-        if len(group) < 4:
+        if len(group) < min_count:
             continue
         cx = -PITCH_WIDTH / 2 + (col + 0.5) * cell_w
         cy = (row_ + 0.5) * cell_h
-        dx, dy = (
-            float(group["ex"].mean() - group["sx"].mean()),
-            float(group["ey"].mean() - group["sy"].mean()),
-        )
+        dx = float(group["ex"].mean() - group["sx"].mean())
+        dy = float(group["ey"].mean() - group["sy"].mean())
         length = float(np.hypot(dx, dy))
         if length < 1.0:
             continue
@@ -2002,7 +1997,7 @@ def pass_map(events, team_id, number):
             xytext=(cx - dx / 2, cy - dy / 2),
             arrowprops=dict(
                 arrowstyle="-|>",
-                color=team_mark,
+                color=colour,
                 alpha=0.30 + 0.62 * rate,
                 lw=1.6 + 5.0 * share,
                 mutation_scale=10 + 14 * share,
@@ -2018,17 +2013,36 @@ def pass_map(events, team_id, number):
                     path_effects.Normal(),
                 ]
             )
-        pitch.text(
-            cx - dx / 2,
-            cy - dy / 2 - 2.2,
-            str(len(group)),
-            color=TEXT,
-            fontsize=7.5,
-            ha="center",
-            va="top",
-            zorder=6,
-            path_effects=[path_effects.withStroke(linewidth=2.4, foreground=BG)],
-        )
+        if labels:
+            pitch.text(
+                cx - dx / 2,
+                cy - dy / 2 - 2.2,
+                str(len(group)),
+                color=TEXT,
+                fontsize=7.5,
+                ha="center",
+                va="top",
+                zorder=6,
+                path_effects=[path_effects.withStroke(linewidth=2.4, foreground=BG)],
+            )
+        drawn += 1
+    return drawn
+
+
+def pass_map(events, team_id, number):
+    frame = events[events["team_id"].eq(team_id) & events["type"].astype(str).eq("Pass")].copy()
+    frame = frame.dropna(subset=["x", "y", "end_x", "end_y"])
+    completed = frame["outcome"].astype(str).str.lower().eq("successful")
+    key_pass = as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index)))
+    fig, pitch, side = pitch_axes(
+        f"Pass Map · {TEAM_NAME[team_id]}",
+        "Average pass from each zone · width = passes · opacity = completion · stars = key passes",
+    )
+    draw_long_pitch(pitch)
+    team_mark = _team_mark_color(team_id)
+    # Six hundred passes drawn as hairlines are a texture, not a map: one arrow
+    # per zone instead, see draw_zone_flow.
+    draw_zone_flow(pitch, frame, completed, team_mark)
     for idx in frame.index[key_pass.reindex(frame.index, fill_value=False)]:
         row = frame.loc[idx]
         sx, sy = attack_xy([row["x"]], [row["y"]])
@@ -2959,43 +2973,47 @@ def progressive(events, team_id, number):
     prog["xT"] = pd.to_numeric(prog["xT"], errors="coerce").fillna(0)
     fig, pitch, side = pitch_axes(
         f"Progressive Passes · {TEAM_NAME[team_id]}",
-        "Canonical zone-aware thresholds · strongest ten actions highlighted by xT added",
+        "Average progressive pass from each zone · the five strongest by xT added are drawn on top",
     )
     draw_long_pitch(pitch)
-    # The dashed layer carries the full progressive volume, so it has to stay
-    # legible under the ten white highlight arrows. Denser dash, heavier stroke
-    # and a much higher alpha than the generic QUIET_DASH treatment.
-    volume_dash = (0, (3.4, 2.2))
-    for _, row in prog.iterrows():
+    # The volume is a flow map, one arrow per zone, so sixty-odd progressive
+    # passes read as the routes the side used rather than as a tangle. The five
+    # strongest by xT stand out on top, each with its xT figure.
+    draw_zone_flow(
+        pitch,
+        prog,
+        np.ones(len(prog), dtype=bool),
+        _team_mark_color(team_id),
+        min_count=3,
+        labels=False,
+    )
+    for _, row in prog.nlargest(5, "xT").iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        pitch.annotate(
+        arrow = pitch.annotate(
             "",
             xy=(ex[0], ey[0]),
             xytext=(sx[0], sy[0]),
             arrowprops=dict(
-                arrowstyle="-|>",
-                color=_team_mark_color(team_id),
-                alpha=0.55,
-                lw=1.15,
-                linestyle=volume_dash,
-                mutation_scale=10,
+                arrowstyle="-|>", color=EVENT_HIGHLIGHT, alpha=0.97, lw=2.2, mutation_scale=13
             ),
+            zorder=6,
         )
-    for _, row in prog.nlargest(10, "xT").iterrows():
-        sx, sy = attack_xy([row["x"]], [row["y"]])
-        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-        pitch.annotate(
-            "",
-            xy=(ex[0], ey[0]),
-            xytext=(sx[0], sy[0]),
-            arrowprops=dict(
-                arrowstyle="-|>",
-                color=EVENT_HIGHLIGHT,
-                alpha=0.95,
-                lw=1.9,
-                mutation_scale=11,
-            ),
+        if arrow.arrow_patch is not None:
+            arrow.arrow_patch.set_path_effects(
+                [path_effects.Stroke(linewidth=4.2, foreground=BG), path_effects.Normal()]
+            )
+        pitch.text(
+            ex[0],
+            ey[0] + 2.0,
+            f"{row['xT']:.2f}",
+            color=TEXT,
+            fontsize=8,
+            fontweight="bold",
+            ha="center",
+            va="bottom",
+            zorder=8,
+            path_effects=[path_effects.withStroke(linewidth=2.6, foreground=BG)],
         )
     top = prog.groupby("player").size().sort_values(ascending=False).head(7)
     side_title(side, "TOP PROGRESSORS")
@@ -3003,12 +3021,12 @@ def progressive(events, team_id, number):
     side.text(
         0.08,
         0.14,
-        f"Team-colour dashed = all progressive passes ({len(prog)})",
+        f"Team-colour arrows = average of all {len(prog)} progressive passes",
         color=_team_mark_color(team_id),
         fontsize=8.2,
     )
     side.text(
-        0.08, 0.09, f"{HIGHLIGHT_LABEL} = top 10 by xT added", color=EVENT_HIGHLIGHT, fontsize=8.4
+        0.08, 0.09, f"{HIGHLIGHT_LABEL} = top 5 by xT added", color=EVENT_HIGHLIGHT, fontsize=8.4
     )
     return save(fig, f"{number:02d}_progressive_{_team_slug(team_id)}.png")
 
@@ -3109,10 +3127,20 @@ def defensive_activity(events, team_id, number):
         aspect="equal",
         vmin=0,
         vmax=1,
-        alpha=0.92,
+        alpha=0.62,
         interpolation="bicubic",
     )
     draw_long_pitch(pitch)
+    # How high up the pitch the work was done: one line at the average height of
+    # the actions, so a high press and a low block are told apart by where it sits.
+    average_height = float(
+        np.mean(
+            attack_xy(actions["x"].to_numpy(), actions["y"].to_numpy())[1]
+            if len(actions)
+            else [0.0]
+        )
+    )
+    pitch.axhline(average_height, color=FOCUS, lw=1.2, ls=(0, (5, 4)), alpha=0.9, zorder=4)
     marker_map = {
         "Tackle": "o",
         "Interception": "D",
@@ -3138,11 +3166,11 @@ def defensive_activity(events, team_id, number):
             px,
             py,
             marker=marker,
-            s=34,
+            s=84,
             facecolors=action_colors[event_type],
             edgecolors=BG,
-            linewidth=0.75,
-            alpha=0.96,
+            linewidth=0.9,
+            alpha=0.98,
             zorder=5,
         )
     counts = team_event_counts(events, team_id)
@@ -3180,6 +3208,15 @@ def defensive_activity(events, team_id, number):
             va="center",
         )
         side.plot([0.08, 0.92], [y - 0.043, y - 0.043], color=GRID, lw=0.55, alpha=0.7)
+    side.plot([0.09, 0.17], [0.235, 0.235], color=FOCUS, lw=1.4, ls=(0, (5, 4)))
+    side.text(
+        0.21,
+        0.235,
+        f"Average action height · {average_height:.0f} m",
+        color=TEXT,
+        fontsize=8,
+        va="center",
+    )
     side.add_patch(
         Rectangle((0.09, 0.105), 0.08, 0.055, facecolor=team_mark, edgecolor=GRID, alpha=0.82)
     )
@@ -5746,6 +5783,14 @@ def set_pieces(events):
     DEAD_BALL = ("corner", "free_kick", "penalty")
     home = set_piece_breakdown(events, HOME_ID)
     away = set_piece_breakdown(events, AWAY_ID)
+    # A source neither side shot from is an empty row twice over; both panels
+    # drop it together so the rows still line up side by side.
+    sources = [
+        (key, label) for key, label in sources if home[key]["shots"] + away[key]["shots"] > 0
+    ] or sources[:1]
+    # One shot scale for both panels: auto-scaled, a four-shot bar and a
+    # fourteen-shot bar came out the same length.
+    shot_max = max([data[key]["shots"] for data in (home, away) for key, _ in sources] + [1])
 
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
     base.amoled_header(
@@ -5779,7 +5824,7 @@ def set_pieces(events):
         ax.set_yticks(positions)
         ax.set_yticklabels(labels, fontsize=9, color=TEXT)
         ax.invert_yaxis()
-        ax.set_xlim(0, max(max(shots), 1) * 1.35)
+        ax.set_xlim(0, shot_max * 1.45)
         ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
         ax.set_xlabel("Shots", fontsize=8.5, color=MUTED)
         ax.tick_params(labelsize=8)
@@ -5787,7 +5832,7 @@ def set_pieces(events):
             if count == 0:
                 continue
             ax.text(
-                count + max(max(shots), 1) * 0.03,
+                count + shot_max * 0.03,
                 position,
                 f"{count}  \u00b7  {value:.2f} xG  \u00b7  {data[key]['goals']}G",
                 color=TEXT,
@@ -6079,23 +6124,41 @@ def playing_through(events, team_id, opponent_id, number):
     team_mark = _team_mark_color(team_id)
 
     if not breaks.empty:
+        # The line being broken, at its average height over the match. Each
+        # arrow starts behind it and ends beyond it, so drawing it shows what
+        # "line-breaking" meant instead of leaving the reader to take it on trust.
+        line_y = float(breaks["line_height"].mean()) * PITCH_LENGTH / 100
+        pitch.axhline(line_y, color=FOCUS, lw=1.2, ls=(0, (5, 4)), zorder=1, alpha=0.9)
         for _, row in breaks.iterrows():
             sx, sy = attack_xy([row["x"]], [row["y"]])
             ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
-            completed = bool(row["successful"])
-            pitch.annotate(
-                "",
-                xy=(ex[0], ey[0]),
-                xytext=(sx[0], sy[0]),
-                arrowprops=dict(
-                    arrowstyle="-|>",
-                    color=team_mark if completed else EVENT_NEUTRAL,
-                    alpha=0.85 if completed else 0.4,
-                    lw=1.35 if completed else 0.75,
-                    linestyle="-" if completed else FAILURE_DASH,
-                    mutation_scale=9,
-                ),
-            )
+            if bool(row["successful"]):
+                arrow = pitch.annotate(
+                    "",
+                    xy=(ex[0], ey[0]),
+                    xytext=(sx[0], sy[0]),
+                    arrowprops=dict(
+                        arrowstyle="-|>", color=team_mark, alpha=0.95, lw=2.0, mutation_scale=12
+                    ),
+                    zorder=5,
+                )
+                if arrow.arrow_patch is not None:
+                    arrow.arrow_patch.set_path_effects(
+                        [path_effects.Stroke(linewidth=3.8, foreground=BG), path_effects.Normal()]
+                    )
+            else:
+                # A pass that did not arrive is a mark where it started, not a
+                # second tangle of lines under the ones that worked.
+                pitch.scatter(
+                    sx,
+                    sy,
+                    s=46,
+                    marker="o",
+                    facecolors="none",
+                    edgecolors=EVENT_NEUTRAL,
+                    linewidths=1.3,
+                    zorder=4,
+                )
 
     resistance = press_resistance(events, team_id)
     completed = int(breaks["successful"].sum()) if not breaks.empty else 0
@@ -6141,12 +6204,21 @@ def playing_through(events, team_id, opponent_id, number):
             va="center",
         )
 
-    pitch.plot([], [], color=team_mark, lw=1.35, label="Completed")
-    pitch.plot([], [], color=EVENT_NEUTRAL, lw=0.9, ls=FAILURE_DASH, label="Incomplete")
+    pitch.plot([], [], color=FOCUS, lw=1.2, ls=(0, (5, 4)), label="Opponent line (average)")
+    pitch.plot([], [], color=team_mark, lw=2.0, label="Completed line-breaking pass")
+    pitch.scatter(
+        [],
+        [],
+        s=46,
+        facecolors="none",
+        edgecolors=EVENT_NEUTRAL,
+        linewidths=1.3,
+        label="Incomplete (origin)",
+    )
     pitch.legend(
         loc="lower center",
         bbox_to_anchor=(0.5, -0.075),
-        ncol=2,
+        ncol=3,
         frameon=False,
         labelcolor=TEXT,
         fontsize=7.5,
@@ -6338,6 +6410,14 @@ def sequence_types(events):
         max([float(frame["xG"].max()) for frame in both.values() if not frame.empty] or [0.1])
         * 1.45
     )
+    # A route neither side used is an empty row on both panels; drop it from both.
+    order = [
+        key
+        for key in order
+        if any(
+            key in frame.index and float(frame.loc[key, "sequences"]) > 0 for frame in both.values()
+        )
+    ] or order[:1]
 
     for column, (team_id, team_name, color) in enumerate(
         [(HOME_ID, HOME_NAME, HOME), (AWAY_ID, AWAY_NAME, AWAY)]

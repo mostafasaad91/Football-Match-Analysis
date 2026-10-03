@@ -1284,10 +1284,53 @@ def xt_per_minute(events: pd.DataFrame) -> Path:
     ax.plot(minutes, home_roll, color=HOME, lw=2.8)
     ax.plot(minutes, -away_roll, color=AWAY, lw=2.8, ls=(0, (7, 4)))
     max_abs = max(float(home.max()), float(away.max()), 0.02)
-    ax.set_ylim(-max_abs * 1.35, max_abs * 1.35)
+    ax.set_ylim(-max_abs * 1.55, max_abs * 1.55)
     ax.set_xlim(0, max_min + 18)
     ax.set_xlabel("Match minute")
-    ax.set_yticks([])
+    # A scale, and the match's own landmarks: both sides read from the same
+    # zero line, so the axis prints magnitudes, and the half-time line and the
+    # goals say when the threat turned into something.
+    step = 0.5 if max_abs < 2.5 else 1.0
+    top = float(np.floor(max_abs / step) * step)
+    ticks = [t for t in np.arange(-top, top + step / 2, step)]
+    ax.set_yticks(ticks)
+    ax.yaxis.set_major_formatter(lambda value, _pos: f"{abs(value):.1f}")
+    ax.tick_params(axis="y", labelsize=8.5, colors=MUTED)
+    ax.set_ylabel("xT per minute", color=MUTED, fontsize=9)
+    ax.axvline(45, color=GRID, lw=1.1, ls=(0, (4, 4)), zorder=1)
+    ax.text(45.6, -max_abs * 1.5, "HT", color=MUTED, fontsize=8.5, fontweight="bold", va="bottom")
+    goals = work[
+        _bool(work.get("is_goal", pd.Series(False, index=work.index)))
+        & ~_bool(work.get("is_own_goal", pd.Series(False, index=work.index)))
+    ]
+    for _, goal in goals.iterrows():
+        mine = goal["team_id"] == HOME_ID
+        colour = HOME if mine else AWAY
+        minute = float(goal["minute"])
+        height = max_abs * (1.32 if mine else -1.32)
+        ax.vlines(minute, 0, height, color=colour, lw=1.0, alpha=0.5, zorder=1)
+        ax.scatter(
+            [minute],
+            [height],
+            s=170,
+            marker="*",
+            color=colour,
+            edgecolor=BG,
+            linewidth=0.8,
+            zorder=5,
+        )
+        surname = str(goal.get("player") or "").split()[-1] if goal.get("player") else ""
+        ax.text(
+            minute,
+            height + (max_abs * 0.14 if mine else -max_abs * 0.14),
+            f"{int(minute)}′ {surname}".strip(),
+            color=TEXT,
+            fontsize=8.5,
+            fontweight="bold",
+            ha="center",
+            va="bottom" if mine else "top",
+            zorder=6,
+        )
     ax.text(
         max_min + 1,
         float(home_roll.iloc[-1]),
