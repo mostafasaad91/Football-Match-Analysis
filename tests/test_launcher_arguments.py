@@ -36,3 +36,35 @@ def test_no_arguments_change_nothing():
 def test_other_arguments_pass_through_untouched():
     rest, environ = _apply(["--something"])
     assert rest == ["--something"] and environ == {}
+
+
+def test_the_pipeline_file_can_be_run_directly(tmp_path):
+    """The editor's Run button runs the file with its own folder on sys.path.
+
+    That used to fail at once with "No module named 'football_analysis'". The run
+    is killed after a few seconds, long before any network fetch could finish;
+    what matters is that it got as far as printing the fixture.
+    """
+    import os
+    import subprocess
+    import sys
+
+    pipeline = LAUNCHER.parent / "football_analysis" / "pipeline" / "football_match_analysis.py"
+    env = {**os.environ, "MATCH_ANALYSIS_URL": "http://127.0.0.1:9/matches/1/live/a-b"}
+    process = subprocess.Popen(
+        [sys.executable, str(pipeline)],
+        cwd=tmp_path,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    try:
+        output, _ = process.communicate(timeout=12)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        output, _ = process.communicate()
+    assert "ModuleNotFoundError" not in output
+    assert "Fixture" in output

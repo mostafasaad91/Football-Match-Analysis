@@ -17,6 +17,16 @@ Install the required packages:
               beautifulsoup4 numpy pandas matplotlib rich
 """
 
+# Run directly (python football_analysis/pipeline/football_match_analysis.py, or
+# the editor's Run button) the folder on sys.path is this one, not the repository
+# root, and "football_analysis" cannot be imported. Put the root there first.
+import os as _os
+import sys as _sys
+
+_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+
 from football_analysis.paths import PROJECT_ROOT
 
 # ══════════════════════════════════════════════════════
