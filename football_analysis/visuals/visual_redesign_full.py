@@ -1842,6 +1842,74 @@ def _heat_cmap(team_mark, name):
     return LinearSegmentedColormap.from_list(name, [BG, dark, mid, team_mark, light])
 
 
+CELL_COLUMNS = 8
+CELL_ROWS = 12
+
+
+def cell_counts(px, py, weights=None, columns=CELL_COLUMNS, rows=CELL_ROWS):
+    """Points in equal squares over the whole pitch, indexed ``[row, column]``.
+
+    ``px, py`` are pitch metres from ``attack_xy``, so a column is a strip of the
+    pitch's width and a row a strip of its length, and the cells are close to
+    square: eight across 68 m, twelve along 105 m, 8.5 by 8.75 m. Counting in
+    the same frame the board is drawn in keeps left on the left; counting raw
+    feed width put the wings the wrong way round.
+    """
+    grid, _, _ = np.histogram2d(
+        np.asarray(py, dtype=float),
+        np.asarray(px, dtype=float),
+        bins=[rows, columns],
+        range=[[0, PITCH_LENGTH], [-PITCH_WIDTH / 2, PITCH_WIDTH / 2]],
+        weights=None if weights is None else np.asarray(weights, dtype=float),
+    )
+    return grid
+
+
+def draw_cell_heat(pitch, grid, cmap, vmax, labels=8, fmt="{:.0f}"):
+    """Paint ``grid`` as squares over the pitch and number the hottest ``labels``.
+
+    Returns the mesh, for a colour bar. Exactly ``labels`` cells are numbered, ties
+    broken by position, so a flat board never grows a page of figures.
+    """
+    rows, columns = grid.shape
+    x_edges = np.linspace(-PITCH_WIDTH / 2, PITCH_WIDTH / 2, columns + 1)
+    y_edges = np.linspace(0, PITCH_LENGTH, rows + 1)
+    mesh = pitch.pcolormesh(
+        x_edges,
+        y_edges,
+        grid,
+        cmap=cmap,
+        vmin=0,
+        vmax=vmax,
+        shading="flat",
+        edgecolors=GRID,
+        linewidth=0.58,
+        alpha=0.98,
+        zorder=1,
+    )
+    draw_long_pitch(pitch)
+    hottest = set(np.argsort(grid.ravel(), kind="stable")[::-1][:labels].tolist())
+    for row in range(rows):
+        for column in range(columns):
+            value = float(grid[row, column])
+            if value <= 0 or (row * columns + column) not in hottest:
+                continue
+            fill = mcolors.to_hex(cmap(min(value / vmax, 1.0)))
+            pitch.text(
+                (x_edges[column] + x_edges[column + 1]) / 2,
+                (y_edges[row] + y_edges[row + 1]) / 2,
+                fmt.format(value),
+                color=text_on_fill(fill),
+                fontsize=8.5,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=3,
+                path_effects=label_outline(fill),
+            )
+    return mesh
+
+
 def xt_map(events, team_id, number):
     eligible = events[
         events["type"].isin(["Pass", "Carry"])
@@ -1853,65 +1921,53 @@ def xt_map(events, team_id, number):
     team = eligible[eligible["team_id"].eq(team_id)].copy()
     fig, pitch, side = pitch_axes(
         f"xT Heatmap · {TEAM_NAME[team_id]}",
-        "Smoothed xT added where each successful pass or carry began · one scale for both teams",
+        "8 × 12 squares over the pitch · xT added where each successful pass or carry began · one scale for both teams",
     )
     team_mark = _team_mark_color(team_id)
-    cmap = _heat_cmap(team_mark, f"xt_surface_{team_id}")
-
-    def surface(frame):
-        px, py = attack_xy(frame["x"].to_numpy(), frame["y"].to_numpy())
-        return smooth_heat(px, py, frame["xT"].to_numpy())
-
-    surfaces = [surface(g) for _, g in eligible.groupby("team_id")]
-    # The ramp tops out near the hottest part of either side's surface, not at a
-    # single spike: one carry worth 3.8 beside a median of 0.14 would otherwise
-    # take the whole ramp and leave everything else the colour of the page.
-    pooled = np.concatenate([grid[grid > 0].ravel() for grid in surfaces] + [np.array([0.001])])
-    vmax = max(float(np.percentile(pooled, 99)), 0.001)
-    heat = surface(team) if len(team) else np.zeros((int(PITCH_LENGTH), int(PITCH_WIDTH)))
-    image = pitch.imshow(
-        heat,
-        extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
-        origin="lower",
-        cmap=cmap,
-        vmin=0,
-        vmax=vmax,
-        interpolation="bicubic",
-        aspect="equal",
-        zorder=1,
+    team_rgb = np.asarray(mcolors.to_rgb(team_mark), dtype=float)
+    team_dark = mcolors.to_hex(team_rgb * 0.42)
+    cmap = LinearSegmentedColormap.from_list(
+        f"xt_full_grid_{team_id}", [BG, PANEL_2, team_dark, team_mark]
     )
-    draw_long_pitch(pitch)
 
-    # The three biggest single moves, as numbered rings where they began: the
-    # list beside the map names them, and no arrow is laid over the surface.
+    def squares(frame):
+        px, py = attack_xy(frame["x"].to_numpy(), frame["y"].to_numpy())
+        return cell_counts(px, py, frame["xT"].to_numpy())
+
+    grids = [squares(g) for _, g in eligible.groupby("team_id")]
+    # The scale tops out at the 95th percentile of the lit squares, not at the
+    # hottest one: a single square worth 3.79 beside a median of 0.14 took the
+    # whole ramp and left every other square the colour of the page.
+    lit = np.concatenate([grid[grid > 0] for grid in grids] + [np.array([0.001])])
+    vmax = max(float(np.percentile(lit, 95)), 0.001)
+    heat = squares(team) if len(team) else np.zeros((CELL_ROWS, CELL_COLUMNS))
+    image = draw_cell_heat(pitch, heat, cmap, vmax, labels=8, fmt="{:.2f}")
+
     top = team.nlargest(10, "xT")
-    ring = _on_team_heatmap_accent(team_mark)
+    # Only the top three are drawn as arrows: the squares carry the where, and
+    # ranks 4-10 stay in the list beside the map.
     for rank, (_, row) in enumerate(top.head(3).iterrows(), start=1):
         sx, sy = attack_xy([row["x"]], [row["y"]])
-        pitch.scatter(
-            sx,
-            sy,
-            s=250,
-            facecolor=BG,
-            edgecolor=ring,
-            linewidth=1.6,
-            zorder=6,
+        ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
+        arrow = pitch.annotate(
+            "",
+            xy=(ex[0], ey[0]),
+            xytext=(sx[0], sy[0]),
+            arrowprops=dict(
+                arrowstyle="-|>", color=EVENT_HIGHLIGHT, lw=1.75, alpha=0.94, mutation_scale=11
+            ),
+            zorder=5,
         )
-        pitch.text(
-            sx[0],
-            sy[0],
-            str(rank),
-            color=TEXT,
-            fontsize=8,
-            fontweight="bold",
-            ha="center",
-            va="center",
-            zorder=7,
-        )
+        if arrow.arrow_patch is not None:
+            arrow.arrow_patch.set_path_effects(
+                [path_effects.Stroke(linewidth=3.0, foreground=BG), path_effects.Normal()]
+            )
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
     cbar.ax.tick_params(colors=MUTED, labelsize=7)
     cbar.outline.set_edgecolor(GRID)
-    cbar.set_label("xT added, smoothed · scale shared by both teams", color=MUTED, fontsize=8)
+    cbar.set_label(
+        "xT added per square · scale tops out at the 95th percentile", color=MUTED, fontsize=8
+    )
     side_title(side, "TOP 10 xT PASSES")
     side_rows(
         side,
@@ -1928,10 +1984,8 @@ def xt_map(events, team_id, number):
         label_color=TEXT,
         label_weight="bold",
     )
-    side.scatter([0.11], [0.088], s=80, facecolor=BG, edgecolor=ring, linewidth=1.4)
-    side.text(
-        0.19, 0.088, "Rings 1–3 = where the top three began", color=MUTED, fontsize=7.2, va="center"
-    )
+    side.plot([0.08, 0.16], [0.088, 0.088], color=EVENT_HIGHLIGHT, lw=1.75)
+    side.text(0.19, 0.088, "Top 3 xT passes drawn", color=MUTED, fontsize=7.2, va="center")
     return save(fig, f"{number:02d}_xt_map_{_team_slug(team_id)}.png")
 
 
@@ -2034,7 +2088,7 @@ def pass_map(events, team_id, number):
     key_pass = as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index)))
     fig, pitch, side = pitch_axes(
         f"Pass Map · {TEAM_NAME[team_id]}",
-        "Smoothed density of completed passes by where they were played from · stars = key passes",
+        "Every pass as an arrow · completed in team colour, incomplete dashed grey · stars = key passes",
     )
     team_mark = _team_mark_color(team_id)
     cmap = _heat_cmap(team_mark, f"pass_surface_{team_id}")
@@ -2043,7 +2097,9 @@ def pass_map(events, team_id, number):
     done = completed.to_numpy()
     heat = smooth_heat(px[done], py[done], sigma=3.8) if done.any() else None
     if heat is not None:
-        image = pitch.imshow(
+        # The surface is only there to say where the volume sat; the arrows are
+        # the map, so it is kept low and has no colour bar of its own.
+        pitch.imshow(
             heat,
             extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
             origin="lower",
@@ -2052,42 +2108,51 @@ def pass_map(events, team_id, number):
             vmax=float(np.percentile(heat[heat > 0], 99)) if (heat > 0).any() else 1.0,
             interpolation="bicubic",
             aspect="equal",
+            alpha=0.45,
             zorder=1,
         )
-        cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
-        cbar.ax.tick_params(colors=MUTED, labelsize=7)
-        cbar.outline.set_edgecolor(GRID)
-        cbar.set_label(
-            "Completed passes played from here, smoothed · this team's own scale",
-            color=MUTED,
-            fontsize=8,
-        )
     draw_long_pitch(pitch)
-    # Passes that did not arrive are small hollow marks where they were played
-    # from, so the places the side gave the ball away are visible on the surface.
-    lost = ~done
-    if lost.any():
-        pitch.scatter(
-            px[lost],
-            py[lost],
-            s=16,
-            facecolor="none",
-            edgecolor=EVENT_NEUTRAL,
-            linewidth=0.7,
-            alpha=0.75,
-            zorder=4,
-        )
+    ex, ey = attack_xy(frame["end_x"].to_numpy(), frame["end_y"].to_numpy())
+    ex, ey = np.asarray(ex, dtype=float), np.asarray(ey, dtype=float)
     keys = key_pass.reindex(frame.index, fill_value=False).to_numpy()
+    order = np.argsort(keys.astype(int) + 0, kind="stable")  # key passes drawn last
+    for i in order:
+        if keys[i]:
+            colour, alpha, width, style, scale = EVENT_HIGHLIGHT, 0.95, 1.7, "-", 9
+        elif done[i]:
+            colour, alpha, width, style, scale = team_mark, 0.32, 0.75, "-", 5
+        else:
+            colour, alpha, width, style, scale = EVENT_NEUTRAL, 0.55, 0.7, (0, (3, 2)), 5
+        arrow = pitch.annotate(
+            "",
+            xy=(ex[i], ey[i]),
+            xytext=(px[i], py[i]),
+            arrowprops=dict(
+                arrowstyle="-|>",
+                color=colour,
+                alpha=alpha,
+                lw=width,
+                linestyle=style,
+                mutation_scale=scale,
+                shrinkA=0,
+                shrinkB=0,
+            ),
+            zorder=7 if keys[i] else 3,
+        )
+        if keys[i] and arrow.arrow_patch is not None:
+            arrow.arrow_patch.set_path_effects(
+                [path_effects.Stroke(linewidth=3.2, foreground=BG), path_effects.Normal()]
+            )
     if keys.any():
         pitch.scatter(
             px[keys],
             py[keys],
-            s=130,
+            s=70,
             marker="*",
             facecolor=EVENT_HIGHLIGHT,
             edgecolor=BG,
-            linewidth=0.8,
-            zorder=7,
+            linewidth=0.7,
+            zorder=8,
         )
     attempts = len(frame)
     complete_count = int(completed.sum())
@@ -2129,22 +2194,23 @@ def pass_map(events, team_id, number):
     legend_top = 0.34 - (len(stat_rows) - 1) * 0.05 - 0.06
     legend_y = [legend_top - index * 0.058 for index in range(3)]
     legend_items = [
-        ("Heat = completed passes", team_mark, "s", 46),
-        ("Incomplete pass, where played", EVENT_NEUTRAL, "o", 26),
-        (f"Key pass ({int(key_pass.sum())})", EVENT_HIGHLIGHT, "*", 70),
+        ("Completed pass", team_mark, "-", ">"),
+        ("Incomplete pass", EVENT_NEUTRAL, (0, (3, 2)), ">"),
+        (f"Key pass ({int(key_pass.sum())})", EVENT_HIGHLIGHT, "-", "*"),
     ]
-    for y, (label, color, marker, size) in zip(legend_y, legend_items):
+    for y, (label, color, style, marker) in zip(legend_y, legend_items):
+        side.plot([0.09, 0.25], [y, y], color=color, lw=2.0, ls=style)
         side.scatter(
-            [0.14],
+            [0.25],
             [y],
-            s=size,
+            s=38 if marker == "*" else 20,
             marker=marker,
-            facecolor=color if marker != "o" else "none",
-            edgecolor=color if marker == "o" else TEXT,
-            linewidth=0.8 if marker == "o" else 0.4,
+            color=color,
+            edgecolor=TEXT,
+            linewidth=0.45,
             zorder=4,
         )
-        side.text(0.24, y, label, color=TEXT, fontsize=8, va="center")
+        side.text(0.31, y, label, color=TEXT, fontsize=8, va="center")
     return save(fig, f"{number:02d}_pass_map_{_team_slug(team_id)}.png")
 
 
@@ -3903,66 +3969,18 @@ def pass_targets(events, team_id, number):
         .dropna(subset=["end_x", "end_y"])
         .copy()
     )
-    heat, _, _ = np.histogram2d(
-        frame["end_y"], frame["end_x"], bins=[7, 12], range=[[0, 100], [0, 100]]
-    )
     fig, pitch, side = pitch_axes(
         f"Pass Target Zones · {TEAM_NAME[team_id]}",
-        "Completed-pass destinations · one sequential density scale",
+        "Completed-pass destinations in 8 × 12 squares over the whole pitch · one sequential scale",
     )
-    team_mark = _team_mark_color(team_id)
     cmap = LinearSegmentedColormap.from_list(f"targets_{team_id}", _team_density_palette(team_id))
-    # The ramp tops out at the 95th percentile of the cells that were hit, so
-    # one busy corner does not turn every other cell the colour of the page.
+    px, py = attack_xy(frame["end_x"].to_numpy(), frame["end_y"].to_numpy())
+    heat = cell_counts(px, py)
+    # The ramp tops out at the 95th percentile of the squares that were hit, so
+    # one busy corner does not turn every other square the colour of the page.
     hit = heat[heat > 0]
     max_cell = max(float(np.percentile(hit, 95)) if hit.size else 1.0, 1.0)
-    image = pitch.imshow(
-        heat.T,
-        extent=[-PITCH_WIDTH / 2, PITCH_WIDTH / 2, 0, PITCH_LENGTH],
-        origin="lower",
-        cmap=cmap,
-        vmin=0,
-        vmax=max_cell,
-        aspect="equal",
-        alpha=0.95,
-    )
-    draw_long_pitch(pitch)
-    labelled = set(np.argsort(heat.ravel(), kind="stable")[::-1][:8].tolist())
-    for ix in range(7):
-        for iy in range(12):
-            x0 = -PITCH_WIDTH / 2 + ix * PITCH_WIDTH / 7
-            y0 = iy * PITCH_LENGTH / 12
-            pitch.add_patch(
-                Rectangle(
-                    (x0, y0),
-                    PITCH_WIDTH / 7,
-                    PITCH_LENGTH / 12,
-                    fill=False,
-                    edgecolor=GRID,
-                    lw=0.42,
-                    alpha=0.55,
-                    zorder=3,
-                )
-            )
-            value = int(heat[ix, iy])
-            if value <= 0 or (ix * 12 + iy) not in labelled:
-                continue
-            # The cell fill is a step on the team-colour ramp, so the label
-            # colour has to be read off that fill — a fixed white disappears
-            # at the top of a light ramp (Juventus silver, Real Madrid white).
-            cell_fill = mcolors.to_hex(cmap(min(value / max_cell, 1.0)))
-            pitch.text(
-                x0 + PITCH_WIDTH / 14,
-                y0 + PITCH_LENGTH / 24,
-                str(value),
-                color=text_on_fill(cell_fill),
-                fontsize=9,
-                fontweight="bold",
-                ha="center",
-                va="center",
-                zorder=5,
-                path_effects=label_outline(cell_fill),
-            )
+    image = draw_cell_heat(pitch, heat, cmap, max_cell, labels=8, fmt="{:.0f}")
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02)
     cbar.ax.tick_params(colors=MUTED, labelsize=7)
     cbar.outline.set_edgecolor(GRID)

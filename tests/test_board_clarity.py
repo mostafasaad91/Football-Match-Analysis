@@ -112,16 +112,29 @@ def _numbers(figure):
     return [t for t in _pitch_of(figure).texts if t.get_text().replace(".", "").isdigit()]
 
 
-def test_the_xt_map_is_a_smooth_surface_with_no_grid_labels_or_arrows(board):
+def test_the_xt_map_is_squares_with_a_few_figures_and_three_arrows(board):
     v, info, events, _xg, figures = board
     v.xt_map(events, info["home_id"], 7)
     pitch = _pitch_of(figures[0])
-    assert pitch.images, "the heat is an image, not a grid of boxes"
-    assert not any(type(c).__name__ == "QuadMesh" for c in pitch.collections)
-    assert not [
-        t for t in pitch.texts if t.get_text().replace(".", "").isdigit() and len(t.get_text()) > 1
-    ]
-    assert not [a for a in pitch.texts if getattr(a, "arrow_patch", None) is not None]
+    meshes = [c for c in pitch.collections if type(c).__name__ == "QuadMesh"]
+    assert len(meshes) == 1
+    assert meshes[0].get_array().size == v.CELL_ROWS * v.CELL_COLUMNS
+    assert 0 < len(_numbers(figures[0])) <= 8
+    arrows = [a for a in pitch.texts if getattr(a, "arrow_patch", None) is not None]
+    assert len(arrows) == 3
+
+
+def test_the_squares_are_close_to_square(v):
+    cell_w = v.PITCH_WIDTH / v.CELL_COLUMNS
+    cell_h = v.PITCH_LENGTH / v.CELL_ROWS
+    assert 0.9 < cell_w / cell_h < 1.1
+
+
+def test_the_squares_count_in_the_frame_they_are_drawn_in(v):
+    """A pass that ends on the attacking side's right is counted in the right-hand column."""
+    px, py = v.attack_xy([80.0], [10.0])
+    grid = v.cell_counts(px, py)
+    assert grid[:, v.CELL_COLUMNS // 2 :].sum() == 1 and grid[:, : v.CELL_COLUMNS // 2].sum() == 0
 
 
 def test_the_pass_target_map_labels_only_its_busiest_cells(board):
@@ -130,24 +143,39 @@ def test_the_pass_target_map_labels_only_its_busiest_cells(board):
     assert 0 < len(_numbers(figures[0])) <= 8
 
 
-def test_the_xt_scale_is_shared_and_not_set_by_one_spike(board):
+def test_the_xt_scale_is_shared_by_both_teams(board):
     v, info, events, _xg, figures = board
     v.xt_map(events, info["home_id"], 7)
     v.xt_map(events, info["away_id"], 8)
-    first, second = (_pitch_of(f).images[0] for f in figures[:2])
-    assert first.get_clim() == second.get_clim(), "one scale for both teams"
+    first, second = (
+        next(c for c in _pitch_of(f).collections if type(c).__name__ == "QuadMesh")
+        for f in figures[:2]
+    )
+    assert first.get_clim() == second.get_clim()
     assert first.get_clim()[1] > 0
 
 
 # ── the pass map ────────────────────────────────────────────────────────────
-def test_the_pass_map_is_a_heat_surface_without_arrows(board):
+def test_the_pass_map_draws_the_passes_as_arrows(board):
     v, info, events, _xg, figures = board
     v.pass_map(events, info["home_id"], 9)
     pitches = [ax for ax in figures[0].axes if ax.get_aspect() == 1.0]
     assert len(pitches) == 1
-    pitch = pitches[0]
-    assert pitch.images, "completed passes are drawn as a surface"
-    assert not [t for t in pitch.texts if getattr(t, "arrow_patch", None) is not None]
+    arrows = [t for t in pitches[0].texts if getattr(t, "arrow_patch", None) is not None]
+    passes = events[
+        events["team_id"].eq(info["home_id"])
+        & events["type"].astype(str).eq("Pass")
+        & events[["x", "y", "end_x", "end_y"]].notna().all(axis=1)
+    ]
+    assert len(arrows) == len(passes)
+
+
+def test_the_pass_target_map_is_the_same_squares(board):
+    v, info, events, _xg, figures = board
+    v.pass_targets(events, info["home_id"], 29)
+    pitch = _pitch_of(figures[0])
+    meshes = [c for c in pitch.collections if type(c).__name__ == "QuadMesh"]
+    assert len(meshes) == 1 and meshes[0].get_array().size == v.CELL_ROWS * v.CELL_COLUMNS
 
 
 def test_zone_flow_draws_one_arrow_per_busy_zone_and_keeps_them_on_the_pitch(v):

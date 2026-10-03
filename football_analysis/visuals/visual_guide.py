@@ -19,11 +19,11 @@ GUIDES = [
     ),
     (
         "xt_map",
-        "Positive xT is the increase in local zone threat from successful passes or explicit carries, drawn where each began. Both teams share one colour scale; it is not a probability of scoring.",
+        "Positive xT is the increase in local zone threat from successful passes or explicit carries, summed in 8 by 12 squares where each began. Both teams share one colour scale; it is not a probability of scoring.",
     ),
     (
         "pass_map",
-        "The surface shows where passes were played from; hollow marks are passes that did not arrive and stars are key passes. Compare where the ball was circulated with where it was lost.",
+        "Arrows trace recorded pass origins and destinations: completed in the team colour, incomplete dashed, key passes highlighted. Compare route, length and outcome to understand how the ball was moved.",
     ),
     (
         "goalkeeper",

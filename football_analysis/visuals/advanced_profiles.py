@@ -1,5 +1,6 @@
 """One role-aware player page, replacing duplicated historical radar exports."""
 
+from football_analysis.visuals.typography import display
 import re
 import numpy as np
 import pandas as pd
@@ -156,7 +157,7 @@ def _role_pizza(fig, rect, labels, values, colour, *, role_average=None, printed
             color=FG if readable else MUTED,
             ha=align,
             va="top",
-            fontsize=10.5 if readable else 7,
+            fontsize=12 if readable else 8,
             weight="bold" if readable else "normal",
             style="normal" if readable else "italic",
         )
@@ -167,7 +168,7 @@ def _role_pizza(fig, rect, labels, values, colour, *, role_average=None, printed
             color=MUTED,
             ha=align,
             va="bottom",
-            fontsize=6.2,
+            fontsize=7.4,
             weight="bold",
             linespacing=1.25,
         )
@@ -772,11 +773,9 @@ def compact_profiles(charts, players, events):
             # labels are the long ones: "PROGRESSIVE PASS SHARE" beside "32%"
             # ran through the "18" of the tile after it. Stacked, every tile is
             # the same narrow column and nothing can reach its neighbour.
-            fig.text(
-                x, 0.806, number, color=colour, size=25, weight="bold", ha="left", va="baseline"
-            )
-            fig.text(x, 0.786, name, color=FG, size=7.2, weight="bold", ha="left", va="baseline")
-            fig.text(x, 0.773, under, color=MUTED, size=6.6, ha="left", va="baseline")
+            fig.text(x, 0.806, number, color=colour, ha="left", va="baseline", **display(34))
+            fig.text(x, 0.784, name, color=FG, size=8.8, weight="bold", ha="left", va="baseline")
+            fig.text(x, 0.768, under, color=MUTED, size=8, ha="left", va="baseline")
 
         # The tiles print the figure and say the place under it, rather than
         # printing the percentile. Three tiles reading "94 percentile" side by
@@ -1127,7 +1126,7 @@ def compact_profiles(charts, players, events):
             linewidths=0.6,
             zorder=8,
         )
-        ax.set_title("Where he had the ball, and where he defended", color=FG, size=9.5, pad=12)
+        ax.set_title("Where he had the ball, and where he defended", color=FG, size=11.5, pad=12)
         # Under the pitch in one row, not stacked in a box beside it. Boxed on
         # the right it took width the pitch needed and set the reader scanning
         # sideways between a mark and its name; under it, the eye travels the
@@ -1195,7 +1194,7 @@ def compact_profiles(charts, players, events):
             handles=handles,
             loc="upper center",
             bbox_to_anchor=(0.5, -0.015),
-            fontsize=6.4,
+            fontsize=7.6,
             frameon=False,
             ncol=len(handles),
             handletextpad=0.4,
@@ -1265,7 +1264,7 @@ def compact_profiles(charts, players, events):
             panel.set_xlim(0, 1)
             panel.set_ylim(0, 1)
             panel.axis("off")
-            panel.text(0, 1, heading, color=FG, size=9, weight="bold", va="top")
+            panel.text(0, 1, heading, color=FG, size=11.5, weight="bold", va="top")
             for j, (caption, key) in enumerate(metrics):
                 y = 0.82 - j * 0.155
                 shown = _paired(p, key)
@@ -1295,8 +1294,8 @@ def compact_profiles(charts, players, events):
                             else 0,
                         )
                     )
-                panel.text(0, y, caption, color=MUTED, size=8, va="center")
-                panel.text(1, y, shown, color=FG, size=9, weight="bold", ha="right", va="center")
+                panel.text(0, y, caption, color=MUTED, size=10, va="center")
+                panel.text(1, y, shown, color=FG, size=11, weight="bold", ha="right", va="center")
                 panel.plot([0, 1], [y - 0.052, y - 0.052], color=MUTED, lw=0.35, alpha=0.25)
         definitions = (
             "Raw match totals; unavailable values shown as N/A. The ring compares a player with others in his role when four or more played 30+ minutes, and with every 30+ minute player otherwise; the caption above says which.\n"
@@ -1307,7 +1306,7 @@ def compact_profiles(charts, players, events):
         # The method footer is drawn at y=.055 and grows upward, so this block
         # has to finish above it. At .132 and five lines it did not, and the
         # two ran through each other.
-        fig.text(0.055, 0.152, definitions, color=MUTED, size=6.9, linespacing=1.45, va="top")
+        fig.text(0.055, 0.152, definitions, color=MUTED, size=7.6, linespacing=1.4, va="top")
         method = "Role and minutes govern comparisons; these are match observations, not a season ability rating. Nominal pitch 105 × 68 m."
         filename = (
             "player_profiles/"
