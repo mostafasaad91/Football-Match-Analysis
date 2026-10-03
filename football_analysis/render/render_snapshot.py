@@ -126,12 +126,35 @@ def refresh_publication(
     }
 
 
+# Team metrics added after a package was written. They are deterministic
+# functions of the saved events, so a snapshot fills them in rather than
+# publishing a board that reads "unavailable" for something the match has.
+_LATE_TEAM_COLUMNS = ("xGoT", "line_breaking_passes", "line_breaking_completed")
+
+
+def _backfill_team_metrics(events, info, team_frame):
+    missing = [c for c in _LATE_TEAM_COLUMNS if c not in team_frame.columns]
+    if not missing:
+        return team_frame
+    from football_analysis.metrics.match_metrics import advanced_metrics_frames
+
+    fresh, _players = advanced_metrics_frames(events, info)
+    by_side = fresh.set_index("side")
+    team_frame = team_frame.copy()
+    for column in missing:
+        team_frame[column] = team_frame["side"].map(by_side[column])
+    return team_frame
+
+
 def load_snapshot(source):
     source = Path(source)
     info = json.loads((source / "match_info.json").read_text(encoding="utf-8-sig"))
     names = ["events", "players", "xg", "team_advanced_metrics", "player_sequence_metrics"]
-    frames = [pd.read_csv(source / (name + ".csv")) for name in names]
-    return (*frames, info)
+    events, players, xg, team_metrics, player_metrics = (
+        pd.read_csv(source / (name + ".csv")) for name in names
+    )
+    team_metrics = _backfill_team_metrics(events, info, team_metrics)
+    return events, players, xg, team_metrics, player_metrics, info
 
 
 def main():

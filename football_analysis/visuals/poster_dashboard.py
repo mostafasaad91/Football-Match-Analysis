@@ -1112,9 +1112,9 @@ def build_match_posters(
         "Where the goals came from and whether the chance quality matched the scoreline.",
         [
             kpi("Expected goals", "xG", 2),
+            kpi("Expected goals on target", "xGoT", 2),
             kpi("Shots", "shots"),
             kpi("On target", "on_target"),
-            kpi("Big chances", "big_chances"),
         ],
     )
     ax = b.panel(
@@ -1155,6 +1155,7 @@ def build_match_posters(
         [
             kpi("Goals", "goals"),
             kpi("xG per shot", "xG_per_shot", 3),
+            kpi("Big chances", "big_chances"),
             kpi("Box entries", "box_entries"),
             kpi("Field tilt", "field_tilt", 1, "%"),
             kpi("Deep completions", "deep_completions"),
@@ -1196,7 +1197,7 @@ def build_match_posters(
         [
             kpi("Field tilt", "field_tilt", 1, "%"),
             kpi("Progressive passes", "progressive_passes"),
-            kpi("Third entries", "final_third_entries"),
+            kpi("Line-breaking passes", "line_breaking_completed"),
             kpi("Box entries", "box_entries"),
         ],
     )

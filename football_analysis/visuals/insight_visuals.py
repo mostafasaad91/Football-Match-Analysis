@@ -26,6 +26,28 @@ FG = TEXT_MAIN
 MUTED = TEXT_DIM
 
 
+def counted(n, singular, plural=None):
+    """ "1 entry", "2 entries": the noun agrees with the number printed beside it."""
+    n = int(n)
+    return f"{n} {singular if n == 1 else plural or singular + 's'}"
+
+
+def share_limits(axes, axis="x"):
+    """Give every panel of a two-team chart the same limits on one axis.
+
+    Each panel used to size its own axis to its own team, so a side with a
+    third of the values drew bars as long as the other's: the eye compared
+    lengths and read the wrong answer. Only the value axis is shared; a
+    category axis keeps its own order.
+    """
+    axes = list(axes)
+    read = (lambda a: a.get_xlim()) if axis == "x" else (lambda a: a.get_ylim())
+    lows, highs = zip(*(sorted(read(a)) for a in axes))
+    low, high = min(lows), max(highs)
+    for a in axes:
+        (a.set_xlim if axis == "x" else a.set_ylim)(low, high)
+
+
 class Charts:
     def __init__(self, out, info):
         self.out = Path(out)
@@ -351,6 +373,7 @@ def build_insight_visuals(events, players, info, out):
         ax.set_title(name, color=FG)
         ax.set_ylabel("Positive xT")
         ax.set_xlim(-0.6, 3.6)
+    share_limits(axes, "y")
     charts.save(
         fig,
         "53_possession_speed_value.png",
@@ -381,10 +404,11 @@ def build_insight_visuals(events, players, info, out):
         )
         ax.set_ylim(3.6, -0.6)
         ax.set_xlim(0, max(counts + [1]) * 1.4)
-        ax.set_title(f"{name} · {len(times)} regains", color=FG)
+        ax.set_title(f"{name} · {counted(len(times), 'regain')}", color=FG)
         ax.set_xlabel("Regains")
         for i, n in enumerate(counts):
             ax.text(n + 0.2, i, f"{n} / {len(times)}", va="center", color=FG, size=10)
+    share_limits(axes, "x")
     charts.save(
         fig,
         "54_regain_speed.png",
@@ -442,11 +466,18 @@ def build_insight_visuals(events, players, info, out):
             ax.plot([0, total], [i, i], color=MUTED, lw=3, alpha=0.45)
             ax.scatter(total, i, s=90, color=MUTED, zorder=3)
             ax.scatter(shot, i, s=90, marker="s", color=charts.colors[tid], zorder=4)
-            ax.text(total + 0.35, i + 0.13, f"{int(total)} entries", color=FG, size=9, va="bottom")
+            ax.text(
+                total + 0.35,
+                i + 0.13,
+                counted(total, "entry", "entries"),
+                color=FG,
+                size=9,
+                va="bottom",
+            )
             ax.text(
                 shot + 0.35,
                 i - 0.15,
-                f"{int(shot)} shots · {rate:.0f}%",
+                f"{counted(shot, 'shot')} · {rate:.0f}%",
                 color=FG,
                 size=9,
                 va="top",
@@ -484,8 +515,9 @@ def build_insight_visuals(events, players, info, out):
             loc="upper right",
         )
         readings.append(
-            f"{name}: {len(g)} entries, {int(g.shot_followed.sum())} followed by a shot in that possession."
+            f"{name}: {counted(len(g), 'entry', 'entries')}, {int(g.shot_followed.sum())} followed by a shot in that possession."
         )
+    share_limits(axes, "x")
     charts.save(
         fig,
         "56_entry_routes.png",
@@ -703,6 +735,7 @@ def build_insight_visuals(events, players, info, out):
                 ax.legend(facecolor=BG, labelcolor=FG, edgecolor="none")
             ax.set_title(name, color=FG)
             ax.set_xlabel("xG in equal windows")
+        share_limits(axes, "x")
         charts.save(
             fig,
             "61_substitution_windows.png",

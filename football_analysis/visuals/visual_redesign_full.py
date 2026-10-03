@@ -871,8 +871,18 @@ def shot_map(events, xg, team_id, number):
         ("SavedShot", "o", SHOT_SAVED, "Saved", 1.0),
         ("Goal", "*", SHOT_GOAL, "Goal", 2.4),
     ]
+    # The outcome is the classified shot type, not the raw event type: the feed
+    # logs a blocked shot as a SavedShot, so reading ``type`` filed nine blocks
+    # under "Saved (11)" for a side whose keeper-board count was two, and the
+    # Blocked series above never drew a mark.
+    outcome = (
+        shots["shot_whoscored_type"].astype(str)
+        if "shot_whoscored_type" in shots
+        else pd.Series("", index=shots.index)
+    )
+    outcome = outcome.where(~outcome.isin(["", "nan", "None"]), shots["type"].astype(str))
     for event_type, marker, color, label, scale in markers:
-        subset = shots[shots["type"].astype(str).eq(event_type)]
+        subset = shots[outcome.eq(event_type)]
         if subset.empty:
             continue
         px, py = attack_xy(subset["x"], subset["y"])
@@ -6585,7 +6595,7 @@ def _corrected_xgot(events: pd.DataFrame, xg: pd.DataFrame, match_info: dict) ->
     if not {"goal_mouth_y", "goal_mouth_z"}.issubset(events.columns):
         return xg
     try:
-        from football_analysis.metrics.match_metrics import post_shot_xg
+        from football_analysis.metrics.match_metrics import team_post_shot_xg
     except Exception:
         return xg
 
@@ -6599,8 +6609,7 @@ def _corrected_xgot(events: pd.DataFrame, xg: pd.DataFrame, match_info: dict) ->
         rows = corrected.index[corrected["team"].astype(str).str.lower().eq(name.lower())]
         if not len(rows):
             continue
-        shots = events[events["team_id"].eq(team_id)]
-        corrected.loc[rows, "xGoT"] = round(float(post_shot_xg(shots).sum()), 2)
+        corrected.loc[rows, "xGoT"] = team_post_shot_xg(events, team_id)
     return corrected
 
 

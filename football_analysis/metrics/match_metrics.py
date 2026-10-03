@@ -985,7 +985,18 @@ def team_advanced_metrics(events: pd.DataFrame, info: dict[str, Any]) -> dict[st
         team_touch_mask = touch_mask(team_events)
         touch_x = _numeric_series(team_events, "x", np.nan)
         touches = int(team_touch_mask.sum())
+        other_side = "away" if side == "home" else "home"
+        line_breakers = line_breaking_passes(events, team_id, team_ids[other_side])
         result[side] = {
+            # Post-shot xG: how likely each on-target attempt was to beat the
+            # keeper as struck. Own goals and shootout kicks are not attempts.
+            "xGoT": team_post_shot_xg(events, team_id),
+            # Passes that started behind the opponent's estimated line and
+            # finished beyond it, and how many of those arrived.
+            "line_breaking_passes": int(len(line_breakers)),
+            "line_breaking_completed": (
+                int(line_breakers["successful"].sum()) if len(line_breakers) else 0
+            ),
             "provider_recoveries": provider_recoveries,
             "possession_regains": len(regains),
             "high_regains": len(high_regains),
@@ -1326,7 +1337,12 @@ def team_post_shot_xg(events: pd.DataFrame, team_id: Any) -> float:
     """Return one team's total PSxG."""
     if events is None or events.empty:
         return 0.0
-    shots = events[_bool_series(events, "is_shot") & (events.get("team_id") == team_id)]
+    shots = events[
+        _bool_series(events, "is_shot")
+        & (events.get("team_id") == team_id)
+        & ~_bool_series(events, "is_own_goal")
+        & ~_bool_series(events, "is_penalty_shootout")
+    ]
     if shots.empty:
         return 0.0
     return round(float(post_shot_xg(shots).sum()), 2)

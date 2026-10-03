@@ -423,7 +423,7 @@ def page(title: str, subtitle: str, figsize=(14, 8)) -> tuple[plt.Figure, plt.Ax
     fig.text(
         0.94,
         0.035,
-        "VISUAL REDESIGN PREVIEW · REAL MATCH DATA",
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
         ha="right",
         fontsize=8,
         color=NEUTRAL,
@@ -1473,7 +1473,7 @@ def defensive_activity(events: pd.DataFrame, team_id=HOME_ID) -> Path:
     fig.text(
         0.94,
         0.035,
-        "VISUAL REDESIGN PREVIEW · REAL MATCH DATA",
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
         ha="right",
         fontsize=8,
         color=NEUTRAL,

@@ -513,6 +513,8 @@ def build_context(
         for key in ["xG", "xGoT", "xG_per_shot", "shots", "on_target", "big_chances", "xT"]:
             context[f"{side}_{key}"] = _xg_metric(xg, team, key)
         for key in [
+            "line_breaking_passes",
+            "line_breaking_completed",
             "possession_share",
             "pass_share",
             "field_tilt",
@@ -1375,11 +1377,13 @@ class TacticalPDF:
     # territory. COVER_GROUPS slices this tuple, so there is one list of rows.
     COVER_ROWS = (
         ("EXPECTED GOALS", "xG", "{:.2f}"),
+        ("EXPECTED GOALS ON TARGET", "xGoT", "{:.2f}"),
         ("SHOTS  (ON TARGET)", "shots", ""),
         ("BIG CHANCES", "big_chances", "{:.0f}"),
         ("POSSESSION", "possession_share", "{:.0f}%"),
         ("BOX ENTRIES", "box_entries", "{:.0f}"),
         ("FIELD TILT", "field_tilt", "{:.0f}%"),
+        ("LINE-BREAKING PASSES", "line_breaking_completed", "{:.0f}"),
     )
 
     def _cover_competition(self) -> str:
@@ -1462,7 +1466,7 @@ class TacticalPDF:
         c.drawCentredString(centre, y - 15, str(self.context["score"]))
 
     # ── the cover ─────────────────────────────────────────────────────────
-    COVER_GROUPS = (("CHANCES", COVER_ROWS[:3]), ("TERRITORY", COVER_ROWS[3:]))
+    COVER_GROUPS = (("CHANCES", COVER_ROWS[:4]), ("TERRITORY", COVER_ROWS[4:]))
 
     def cover(self):
         """Fixture, six figures, how the chances came, and who scored.

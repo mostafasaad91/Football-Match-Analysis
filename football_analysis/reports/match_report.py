@@ -3984,6 +3984,9 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
     attack_rows = [
         ("Goals", _goals_for(home_id), _goals_for(away_id)),
         ("xG", _xg_for(home_id), _xg_for(away_id)),
+        # Post-shot xG: the same attempts priced after the strike, by where the
+        # ball crossed the line. Beside xG so the gap between them is the read.
+        ("xGOT", home_advanced["xGoT"], away_advanced["xGoT"]),
         ("Shots", _shots_for(home_id), _shots_for(away_id)),
         ("Big chances", _big_chances_for(home_id), _big_chances_for(away_id)),
         ("xT", _xt_for(home_id), _xt_for(away_id)),
@@ -4001,6 +4004,19 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             "Progressive passes",
             home_advanced["progressive_passes"],
             away_advanced["progressive_passes"],
+        ),
+        # Passes that started behind the opponent's line and finished beyond it:
+        # completed over attempted, the bar scaled by completed.
+        (
+            "Line-breaking passes",
+            (
+                home_advanced["line_breaking_completed"],
+                f"{home_advanced['line_breaking_completed']}/{home_advanced['line_breaking_passes']}",
+            ),
+            (
+                away_advanced["line_breaking_completed"],
+                f"{away_advanced['line_breaking_completed']}/{away_advanced['line_breaking_passes']}",
+            ),
         ),
         (
             "Box entries",
