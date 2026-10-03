@@ -15,7 +15,7 @@ GUIDES = [
     ),
     (
         "pass_network",
-        "Nodes are touch-based average player locations within the named half; links represent inferred completed passes. Link weight indicates volume, not off-ball positioning.",
+        "Circles are touch-based average player locations within the named half, numbered by shirt; the line-up card names them. Each line joins a pair, its weight the completed passes between them in both directions. A ring went off, a square came on. Weight shows volume, not off-ball positioning.",
     ),
     (
         "xt_map",

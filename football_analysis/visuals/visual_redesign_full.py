@@ -1153,196 +1153,510 @@ def _half_network_data(events, players, team_id, half):
     return positions, edges, sub_on, sub_off, substitutions, int(len(passes))
 
 
+def _network_resolve(label, names):
+    """Map a compact substitution label back to a full player name."""
+    stem = str(label).rstrip("…").strip()
+    if not stem or stem == "—":
+        return None
+    parts = {name: (name.split() or [name])[-1] for name in names}
+    for test in (
+        lambda n, last: last == stem,
+        lambda n, last: last.startswith(stem),
+        lambda n, last: stem in n,
+    ):
+        for name, last in parts.items():
+            if test(name, last):
+                return name
+    return None
+
+
+def _network_repel(anchor, radii, half_w, length, gap=1.6, steps=600):
+    """Push overlapping nodes apart while keeping each near its true position."""
+    names = list(anchor)
+    pos = {n: np.array(anchor[n], dtype=float) for n in names}
+    for _ in range(steps):
+        moved = False
+        for i, a in enumerate(names):
+            for b in names[i + 1 :]:
+                d = pos[a] - pos[b]
+                dist = float(np.hypot(*d))
+                if dist < 1e-6:
+                    d, dist = np.array([1.0, 0.0]), 1.0
+                need = radii[a] + radii[b] + gap
+                if dist < need:
+                    push = (need - dist) / 2 * (d / dist)
+                    pos[a] += push
+                    pos[b] -= push
+                    moved = True
+        for n in names:
+            pos[n] += (np.array(anchor[n]) - pos[n]) * 0.006
+            pos[n][0] = float(np.clip(pos[n][0], -half_w + radii[n], half_w - radii[n]))
+            pos[n][1] = float(np.clip(pos[n][1], radii[n], length - radii[n]))
+        if not moved:
+            break
+    return pos
+
+
+def _network_place_labels(pos, radii, names, label_of, fontpt, unit_pt, half_w, length):
+    """Name a node only where the name sits clearly beside it.
+
+    Tried below, above, beside and diagonally, close in. A spot is refused when
+    it covers another node, another name, or sits nearer somebody else's circle
+    than its own -- a name that reads as his neighbour's is worse than none, and
+    the line-up card names every number anyway.
+    """
+    placed, boxes = {}, []
+    for n in sorted(names, key=lambda m: -radii[m]):
+        text_ = label_of(n)
+        w = (len(text_) * fontpt * 0.62 + 4) / unit_pt
+        h = fontpt * 1.3 / unit_pt
+        x, y = pos[n]
+        r = radii[n]
+        cands = []
+        for extra in (0.0, 1.6, 3.2):
+            cands += [
+                (x, y - r - 0.9 - extra - h / 2),
+                (x, y + r + 0.9 + extra + h / 2),
+                (x + r + 0.8 + extra + w / 2, y),
+                (x - r - 0.8 - extra - w / 2, y),
+                (x + (r + 0.6 + extra) * 0.72 + w / 2, y - (r + 0.6 + extra) * 0.72 - h / 2),
+                (x - (r + 0.6 + extra) * 0.72 - w / 2, y - (r + 0.6 + extra) * 0.72 - h / 2),
+            ]
+        best, best_pen = None, 1e9
+        for cx, cy in cands:
+            box = (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+            pen = 0.0
+            for m in names:
+                mx, my = pos[m]
+                nx, ny = min(max(mx, box[0]), box[2]), min(max(my, box[1]), box[3])
+                if np.hypot(nx - mx, ny - my) < radii[m] + 0.9:
+                    pen += 90
+            for b in boxes:
+                if box[0] < b[2] and box[2] > b[0] and box[1] < b[3] and box[3] > b[1]:
+                    pen += 60
+            if box[0] < -half_w - 3 or box[2] > half_w + 3 or box[1] < -2 or box[3] > length + 2:
+                pen += 60
+            own = float(np.hypot(cx - x, cy - y))
+            if any(np.hypot(cx - pos[m][0], cy - pos[m][1]) < own for m in names if m != n):
+                pen += 70
+            pen += 0.35 * own
+            if pen < best_pen:
+                best, best_pen = (cx, cy, box), pen
+        if best is not None and best_pen < 60:
+            placed[n] = best[:2]
+            boxes.append(best[2])
+    return placed
+
+
 def pass_network(events, players, team_id, number, half):
+    """Who linked with whom in one half, with the changes marked where they happened.
+
+    Numbers sit in the circles and the names live in the line-up card beside the
+    pitch: sixteen names, sixteen badges and twenty arrows on one midfield was
+    unreadable. A circle is a player at his average touch position; a ring is a
+    man who went off, a square a man who came on, and a short dotted line joins
+    each to the player he replaced. Links carry no arrowheads -- the picture is
+    the shape of the team's connections, and each pair is the sum of both ways.
+    """
+    from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
     positions, edges, sub_on, sub_off, substitutions, completed_links = _half_network_data(
         events, players, team_id, half
     )
     half_label = "First Half" if half == 1 else "Second Half"
-    fig, pitch, side = pitch_axes(
-        f"Pass Network · {TEAM_NAME[team_id]} · {half_label}",
-        f"All {len(positions)} participants shown · node size = touches · square = came on · {_FOCUS_WORD} outline = went off",
+    team_name = TEAM_NAME[team_id]
+    team_color = _team_mark_color(team_id)
+    names = [str(n) for n in positions.index]
+    fig_w, fig_h = 12.0, 10.0
+
+    fig = plt.figure(figsize=(fig_w, fig_h), facecolor=BG)
+    base.amoled_header(
+        fig,
+        f"Pass Network · {team_name} · {half_label}",
+        f"{len(names)} participants · each circle sits at the player's average touch position",
+        active_team=team_name,
     )
-    draw_long_pitch(pitch)
-    display = {}
-    for name, row in positions.iterrows():
-        px, py = player_position_xy([row["x"]], [row["y"]])
-        display[str(name)] = (float(px[0]), float(py[0]), float(row["touches"]))
-    display = _separate_network_positions(display, min_gap=6.3)
+    pitch = fig.add_axes([0.04, 0.085, 0.46, 0.745])
+    # Softer lines than the other boards: here the data is the lines and circles.
+    soft_line = mcolors.to_hex(
+        np.asarray(mcolors.to_rgb(PITCH_LINE)) * 0.45 + np.asarray(mcolors.to_rgb(BG)) * 0.55
+    )
+    draw_long_pitch(pitch, line_color=soft_line)
+    x0, x1 = pitch.get_xlim()
+    y0, y1 = pitch.get_ylim()
+    box = pitch.get_position()
+    unit_pt = min(box.width * fig_w * 72 / (x1 - x0), box.height * fig_h * 72 / (y1 - y0))
+
+    # ── who came on and off, and for whom ───────────────────────────────────
+    off_min, on_min, replaced = {}, {}, {}
+    for minute, on_label, off_label in substitutions:
+        off_name = _network_resolve(off_label, names)
+        on_name = _network_resolve(on_label, names)
+        if off_name:
+            off_min[off_name] = minute
+        if on_name:
+            on_min[on_name] = minute
+        if off_name and on_name:
+            replaced[on_name] = off_name
+    went_off = {n for n in names if n in sub_off}
+    came_on = {n for n in names if n in sub_on}
+
+    # ── geometry ────────────────────────────────────────────────────────────
+    anchor, touches = {}, {}
+    for name in names:
+        px, py = player_position_xy([positions.at[name, "x"]], [positions.at[name, "y"]])
+        anchor[name] = (float(px[0]), float(py[0]))
+        touches[name] = float(positions.at[name, "touches"])
+    max_touch = max(touches.values() or [1.0]) or 1.0
+    radii = {n: 1.55 + 1.45 * np.sqrt(touches[n] / max_touch) for n in names}
+    pos = _network_repel(anchor, radii, PITCH_WIDTH / 2, PITCH_LENGTH)
+
+    # ── links: one line per pair, both ways summed, the strongest nine ──────
     _link_low, link_color, _link_strong = network_link_palette(TEAM_COLOR[team_id])
-    edges = edges.sort_values("passes", ascending=False).copy()
-    max_edge = max(float(edges["passes"].max()) if not edges.empty else 1, 1)
-    if not edges.empty:
-        strong_cut = float(edges["passes"].quantile(0.75))
-        medium_cut = float(edges["passes"].quantile(0.40))
-    else:
-        strong_cut, medium_cut = 1.0, 1.0
+    pair_total = {}
     for _, edge in edges.iterrows():
-        a, b = str(edge["player"]), str(edge["next_player"])
-        if a not in display or b not in display:
+        key = tuple(sorted((str(edge["player"]), str(edge["next_player"]))))
+        pair_total[key] = pair_total.get(key, 0) + int(edge["passes"])
+    ranked = sorted(pair_total.items(), key=lambda item: -item[1])
+    top_count = float(ranked[0][1]) if ranked else 1.0
+    for (a, b), count in ranked[:9]:
+        if a in pos and b in pos:
+            share = count / top_count
+            pitch.plot(
+                [pos[a][0], pos[b][0]],
+                [pos[a][1], pos[b][1]],
+                color=link_color,
+                lw=1.0 + 4.2 * share**0.9,
+                alpha=0.20 + 0.55 * share**0.8,
+                solid_capstyle="round",
+                zorder=2,
+            )
+
+    # ── replacement: a short dotted line, the shapes already give the way ───
+    for on_name, off_name in replaced.items():
+        gap = np.hypot(*(pos[off_name] - pos[on_name])) - radii[off_name] - radii[on_name]
+        if gap < 0.6:
             continue
-        ax, ay, _ = display[a]
-        bx, by, _ = display[b]
-        passes = float(edge["passes"])
-        strength = (
-            "strong" if passes >= strong_cut else ("medium" if passes >= medium_cut else "weak")
+        pitch.add_patch(
+            FancyArrowPatch(
+                tuple(pos[off_name]),
+                tuple(pos[on_name]),
+                connectionstyle="arc3,rad=-0.25",
+                arrowstyle="-",
+                lw=2.0,
+                linestyle=(0, (1.0, 2.0)),
+                color=FOCUS,
+                shrinkA=radii[off_name] * unit_pt + 2,
+                shrinkB=radii[on_name] * unit_pt + 2,
+                zorder=3,
+            )
         )
-        alpha = {"strong": 0.90, "medium": 0.58, "weak": 0.24}[strength]
-        width = {"strong": 4.2, "medium": 2.5, "weak": 1.0}[strength]
-        pitch.plot(
-            [ax, bx],
-            [ay, by],
-            color=link_color,
-            alpha=alpha,
-            lw=width * (0.55 + 0.45 * passes / max_edge),
-            zorder=2,
-        )
-    max_touch = max([value[2] for value in display.values()] or [1])
+
+    # ── circles ─────────────────────────────────────────────────────────────
     shirts = shirt_number_map(players)
-    radii = {
-        name: _network_node_radius(touches, max_touch)
-        for name, (_x, _y, touches) in display.items()
-    }
-    for name, (px, py, touches) in display.items():
-        entered = name in sub_on
-        left = name in sub_off
-        pitch.scatter(
-            px,
-            py,
-            s=260 + 640 * touches / max_touch,
-            marker="s" if entered else "o",
-            color=_team_mark_color(team_id),
-            edgecolor=FOCUS if left else link_color,
-            linewidth=2.3 if left else 1.15,
-            zorder=4,
-        )
-        draw_node_label(
-            pitch,
-            px,
-            py,
-            name,
-            touches,
-            max_touch,
-            node_color=_team_mark_color(team_id),
-            shirt=shirts.get(str(name)),
-            node_radius=radii[name],
-            neighbours=_node_neighbours(display, radii, name),
-        )
-
-    side_title(side, "TOP HALF CONNECTIONS")
-    side.text(
-        0.92,
-        0.94,
-        f"{len(positions)} players",
-        color=TEXT,
-        fontsize=8,
-        fontweight="bold",
-        ha="right",
-        va="top",
-    )
-    # Decode relationship strength outside the pitch so the network itself
-    # stays clean and the same key works for every team/half.
-    for y, label, width, alpha in [
-        (0.875, "Strong", 4.0, 0.90),
-        (0.845, "Medium", 2.5, 0.58),
-        (0.815, "Weak", 1.0, 0.24),
-    ]:
-        side.plot(
-            [0.08, 0.18], [y, y], color=link_color, lw=width, alpha=alpha, solid_capstyle="round"
-        )
-        side.text(0.22, y, label, color=TEXT, fontsize=7.2, va="center")
-    side_rows(
-        side,
-        [
-            (
-                f"{compact_player_label(r.player, 11)} → {compact_player_label(r.next_player, 11)}",
-                str(int(r.passes)),
+    bg_rgb, team_rgb = np.asarray(mcolors.to_rgb(BG)), np.asarray(mcolors.to_rgb(team_color))
+    faded = mcolors.to_hex(team_rgb * 0.42 + bg_rgb * 0.58)
+    for name in names:
+        x, y = pos[name]
+        r = radii[name]
+        if name in came_on:
+            fill = team_color
+            pitch.add_patch(
+                FancyBboxPatch(
+                    (x - r * 0.93, y - r * 0.93),
+                    2 * r * 0.93,
+                    2 * r * 0.93,
+                    boxstyle=f"round,pad=0,rounding_size={r * 0.38}",
+                    facecolor=fill,
+                    edgecolor=FOCUS,
+                    lw=2.0,
+                    zorder=5,
+                )
             )
-            for r in edges.head(5).itertuples()
-        ],
-        start=0.755,
-        gap=0.065,
-    )
-
-    # Link volume names the busiest pair. Betweenness names the player the
-    # network routes through — take them out and it splits in two.
-    #
-    # Scoped to this half, like everything else on the page. Run over the whole
-    # match it lists players who were not on the pitch for the half being drawn.
-    half_events = events[
-        events["period_code"].astype(str).str.lower().eq("1h" if half == 1 else "2h")
-    ]
-    centrality = network_centrality(half_events, team_id)
-    if not centrality.empty:
-        side.text(0.08, 0.455, "CONNECTORS", color=MUTED, fontsize=7.5, fontweight="bold")
-        for idx, row in enumerate(centrality.head(3).itertuples()):
-            y = 0.412 - idx * 0.043
-            side.text(
-                0.08, y, compact_player_label(row.player, 16), color=TEXT, fontsize=8, va="center"
+        elif name in went_off:
+            fill = faded
+            pitch.add_patch(Circle((x, y), r, facecolor=fill, edgecolor=FOCUS, lw=2.4, zorder=5))
+        else:
+            fill = team_color
+            pitch.add_patch(
+                Circle((x, y), r, facecolor=fill, edgecolor=link_color, lw=1.4, zorder=5)
             )
-            side.text(
-                0.92,
+        shirt = shirts.get(name)
+        if shirt:
+            pitch.text(
+                x,
                 y,
-                f"{row.betweenness:.3f}",
-                color=TEXT,
-                fontsize=8.5,
+                str(shirt),
+                color=text_on_fill(fill),
+                fontsize=6.4 + 2.6 * (r - 1.55) / 1.45,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                zorder=6,
+            )
+
+    def label_of(name):
+        surname = (name.split() or [name])[-1]
+        return f"{surname} {on_min[name]}′" if name in on_min else surname
+
+    label_size = 8.0
+    for name, (cx, cy) in _network_place_labels(
+        pos, radii, names, label_of, label_size, unit_pt, PITCH_WIDTH / 2, PITCH_LENGTH
+    ).items():
+        pitch.text(
+            cx,
+            cy,
+            label_of(name),
+            color=TEXT,
+            fontsize=label_size,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            zorder=10,
+            path_effects=[path_effects.withStroke(linewidth=3.0, foreground=BG)],
+        )
+
+    # ── panel: top pairs, line-up, three numbers ────────────────────────────
+    panel_w, panel_h = 0.43, 0.745
+    panel = fig.add_axes([0.535, 0.085, panel_w, panel_h])
+    panel.axis("off")
+    panel.set_xlim(0, 1)
+    panel.set_ylim(0, 1)
+    size = (fig_w * panel_w, fig_h * panel_h)
+
+    def card(x, y, w, h):
+        panel.add_patch(
+            FancyBboxPatch(
+                (x, y),
+                w,
+                h,
+                boxstyle=f"round,pad=0,rounding_size={0.10 / size[0]}",
+                mutation_aspect=size[0] / size[1],
+                facecolor=PANEL,
+                edgecolor=GRID,
+                linewidth=1.0,
+                zorder=1,
+            )
+        )
+
+    def head(y, left, right=""):
+        panel.text(
+            0.045, y, left.upper(), color=MUTED, fontsize=8.6, fontweight="bold", va="center"
+        )
+        if right:
+            panel.text(
+                0.955,
+                y,
+                right.upper(),
+                color=NEUTRAL,
+                fontsize=7.4,
                 fontweight="bold",
                 ha="right",
                 va="center",
             )
 
-    side.text(0.08, 0.255, "SUBSTITUTIONS", color=MUTED, fontsize=7.5, fontweight="bold")
-    if substitutions:
-        # A fixed 0.042 step fits four rows above the footer and puts a fifth
-        # exactly on top of it. Tighten the step only when the extra row needs
-        # it, so the common case keeps its existing spacing.
-        shown = substitutions[:5]
-        top, floor = 0.215, 0.135
-        gap = 0.042 if len(shown) < 2 else min(0.042, (top - floor) / (len(shown) - 1))
-        for idx, (minute, on_name, off_name) in enumerate(shown):
-            y = top - idx * gap
-            side.text(
-                0.08, y, f"{minute}′", color=TEXT, fontsize=7.5, fontweight="bold", va="center"
+    card(0, 0.635, 1, 0.365)
+    head(0.955, "Top pairs", "passes both ways")
+    for i, ((a, b), count) in enumerate(ranked[:4]):
+        y = 0.885 - i * 0.064
+        pair = f"{(a.split() or [a])[-1]}  ↔  {(b.split() or [b])[-1]}"
+        panel.text(0.045, y, pair, color=TEXT, fontsize=10.5, fontweight="bold", va="center")
+        panel.text(
+            0.955,
+            y - 0.003,
+            str(count),
+            color=TEXT,
+            fontsize=17,
+            fontweight="bold",
+            ha="right",
+            va="center",
+        )
+        panel.add_patch(
+            Rectangle((0.045, y - 0.036), 0.91, 0.006, facecolor=GRID, edgecolor="none", zorder=2)
+        )
+        panel.add_patch(
+            Rectangle(
+                (0.045, y - 0.036),
+                0.91 * count / top_count,
+                0.006,
+                facecolor=team_color,
+                edgecolor="none",
+                zorder=3,
             )
-            change = (
-                f"{off_name} OFF AT INTERVAL"
-                if on_name == "—"
-                else f"{on_name} IN  ·  {off_name} OFF"
-            )
-            side.text(0.19, y, change, color=TEXT, fontsize=7.2, va="center")
-    else:
-        side.text(0.08, 0.215, "No in-half changes", color=MUTED, fontsize=8)
-    side.text(
-        0.08,
-        0.105,
-        f"Completed pass links: {completed_links}",
-        color=TEXT,
-        fontsize=8,
+        )
+
+    card(0, 0.125, 1, 0.48)
+    changes = len(substitutions)
+    head(0.572, "Line-up", f"{changes} changes" if changes else "no changes")
+    panel.text(
+        0.045,
+        0.527,
+        "STARTED THE HALF",
+        color=NEUTRAL,
+        fontsize=6.8,
         fontweight="bold",
+        va="center",
     )
-    # "Began half" is wider than the old 0.19 gap between markers, so it ran
-    # under the next swatch. Spaced to the widest label rather than to an
-    # eyeballed step.
-    side.scatter(
-        [0.06, 0.34],
-        [0.055, 0.055],
-        s=[65, 65],
-        marker="o",
-        color=_team_mark_color(team_id),
-        edgecolor=[TEXT, FOCUS],
-        linewidth=[1.0, 2.1],
+    panel.text(0.545, 0.527, "CAME ON", color=NEUTRAL, fontsize=6.8, fontweight="bold", va="center")
+
+    def shirt_of(name):
+        value = str(shirts.get(name) or "")
+        return (0, int(value)) if value.isdigit() else (1, 0)
+
+    def triangle(cx, cy, up, color, size_=0.009):
+        pts = (
+            [(cx - size_, cy - size_ * 0.8), (cx + size_, cy - size_ * 0.8), (cx, cy + size_)]
+            if up
+            else [(cx - size_, cy + size_ * 0.8), (cx + size_, cy + size_ * 0.8), (cx, cy - size_)]
+        )
+        panel.add_patch(Polygon(pts, closed=True, facecolor=color, edgecolor="none", zorder=3))
+
+    started = sorted((n for n in names if n not in came_on), key=shirt_of)
+    for i, name in enumerate(started):
+        y = 0.485 - i * 0.0335
+        gone = name in went_off
+        color = MUTED if gone else TEXT
+        panel.text(
+            0.045,
+            y,
+            str(shirts.get(name) or ""),
+            color=color,
+            fontsize=10.5,
+            fontweight="bold",
+            va="center",
+        )
+        panel.text(
+            0.115,
+            y,
+            (name.split() or [name])[-1],
+            color=color,
+            fontsize=9.6,
+            fontweight="bold",
+            va="center",
+        )
+        if gone:
+            triangle(0.395, y, False, MUTED)
+            if name in off_min:
+                panel.text(
+                    0.42,
+                    y,
+                    f"{off_min[name]}′",
+                    color=MUTED,
+                    fontsize=9.6,
+                    fontweight="bold",
+                    va="center",
+                )
+    entered = sorted(
+        (n for n in names if n in came_on), key=lambda n: (on_min.get(n, 999), shirt_of(n))
     )
-    side.scatter(
-        [0.60],
-        [0.055],
-        s=65,
-        marker="s",
-        color=_team_mark_color(team_id),
-        edgecolor=TEXT,
-        linewidth=1.0,
+    for i, name in enumerate(entered):
+        y = 0.485 - i * 0.075
+        triangle(0.555, y, True, TEXT, 0.010)
+        panel.text(
+            0.60,
+            y,
+            str(shirts.get(name) or ""),
+            color=TEXT,
+            fontsize=10.5,
+            fontweight="bold",
+            va="center",
+        )
+        panel.text(
+            0.665,
+            y,
+            (name.split() or [name])[-1],
+            color=TEXT,
+            fontsize=9.6,
+            fontweight="bold",
+            va="center",
+        )
+        if name in on_min:
+            panel.text(
+                0.955,
+                y,
+                f"{on_min[name]}′",
+                color=TEXT,
+                fontsize=10.5,
+                fontweight="bold",
+                ha="right",
+                va="center",
+            )
+        if name in replaced:
+            panel.text(
+                0.665,
+                y - 0.027,
+                f"for {(replaced[name].split() or [replaced[name]])[-1]}",
+                color=MUTED,
+                fontsize=8,
+                va="center",
+            )
+    if not entered:
+        panel.text(0.545, 0.485, "No changes in this half", color=NEUTRAL, fontsize=9, va="center")
+
+    # Link volume names the busiest pair. Betweenness names the player the
+    # network routes through -- take them out and it splits in two. Scoped to
+    # this half: run over the whole match it lists players who were not on the
+    # pitch for the half being drawn.
+    half_events = events[
+        events["period_code"].astype(str).str.lower().eq("1h" if half == 1 else "2h")
+    ]
+    centrality = network_centrality(half_events, team_id)
+    card(0, 0, 1, 0.095)
+    tiles = [(str(completed_links), "completed links"), (str(len(names)), "players used")]
+    if not centrality.empty:
+        top_row = centrality.iloc[0]
+        tiles.append(
+            (
+                (str(top_row["player"]).split() or [""])[-1].upper(),
+                f"top connector · {float(top_row['betweenness']):.3f}",
+            )
+        )
+    for i, (value, label) in enumerate(tiles):
+        tx = [0.045, 0.265, 0.445][i]
+        panel.text(
+            tx,
+            0.056,
+            value,
+            color=TEXT,
+            fontsize=14 if i < 2 else 12.5,
+            fontweight="bold",
+            va="center",
+        )
+        panel.text(
+            tx, 0.020, label.upper(), color=MUTED, fontsize=6.2, fontweight="bold", va="center"
+        )
+        if i:
+            panel.plot([tx - 0.02, tx - 0.02], [0.012, 0.083], color=GRID, lw=1.0)
+
+    # ── key: only the shapes this half actually uses ────────────────────────
+    key = fig.add_axes([0.04, 0.035, 0.46, 0.03])
+    key.axis("off")
+    key.set_xlim(0, 1)
+    key.set_ylim(0, 1)
+    items = [(0.015, "o", team_color, link_color, "Started, stayed")]
+    if went_off:
+        items.append((0.30, "o", faded, FOCUS, "Went off"))
+    if came_on:
+        items.append((0.50, "s", team_color, FOCUS, "Came on"))
+    for kx, marker, fill, edge, label in items:
+        key.scatter([kx], [0.5], s=70, marker=marker, facecolor=fill, edgecolor=edge, linewidth=1.5)
+        key.text(
+            kx + 0.03, 0.5, label.upper(), color=MUTED, fontsize=7.2, fontweight="bold", va="center"
+        )
+    if replaced:
+        key.plot([0.70, 0.78], [0.5, 0.5], color=FOCUS, lw=2.0, linestyle=(0, (1.0, 2.0)))
+        key.text(
+            0.80, 0.5, "REPLACEMENT", color=MUTED, fontsize=7.2, fontweight="bold", va="center"
+        )
+    fig.text(
+        0.945,
+        0.035,
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
+        ha="right",
+        fontsize=8,
+        color=NEUTRAL,
     )
-    side.text(0.10, 0.055, "Began half", color=TEXT, fontsize=6.8, va="center")
-    side.text(0.38, 0.055, "Went off", color=TEXT, fontsize=6.8, va="center")
-    side.text(0.64, 0.055, "Came on", color=TEXT, fontsize=6.8, va="center")
+
     suffix = "1h" if half == 1 else "2h"
     return save(
         fig,
