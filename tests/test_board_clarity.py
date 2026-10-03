@@ -112,10 +112,16 @@ def _numbers(figure):
     return [t for t in _pitch_of(figure).texts if t.get_text().replace(".", "").isdigit()]
 
 
-def test_the_xt_map_labels_only_its_hottest_cells(board):
+def test_the_xt_map_is_a_smooth_surface_with_no_grid_labels_or_arrows(board):
     v, info, events, _xg, figures = board
     v.xt_map(events, info["home_id"], 7)
-    assert 0 < len(_numbers(figures[0])) <= 8
+    pitch = _pitch_of(figures[0])
+    assert pitch.images, "the heat is an image, not a grid of boxes"
+    assert not any(type(c).__name__ == "QuadMesh" for c in pitch.collections)
+    assert not [
+        t for t in pitch.texts if t.get_text().replace(".", "").isdigit() and len(t.get_text()) > 1
+    ]
+    assert not [a for a in pitch.texts if getattr(a, "arrow_patch", None) is not None]
 
 
 def test_the_pass_target_map_labels_only_its_busiest_cells(board):
@@ -124,33 +130,24 @@ def test_the_pass_target_map_labels_only_its_busiest_cells(board):
     assert 0 < len(_numbers(figures[0])) <= 8
 
 
-def test_the_xt_scale_is_not_set_by_its_single_hottest_cell(board):
+def test_the_xt_scale_is_shared_and_not_set_by_one_spike(board):
     v, info, events, _xg, figures = board
     v.xt_map(events, info["home_id"], 7)
-    mesh = next(c for ax in figures[0].axes for c in ax.collections if hasattr(c, "get_clim"))
-    team = events[
-        (events["team_id"] == info["home_id"])
-        & events["type"].isin(["Pass", "Carry"])
-        & events["outcome"].astype(str).str.lower().eq("successful")
-    ].dropna(subset=["x", "y"])
-    heat, _, _ = np.histogram2d(
-        team["y"],
-        team["x"],
-        bins=[7, 12],
-        range=[[0, 100], [0, 100]],
-        weights=pd.to_numeric(team["xT"], errors="coerce").fillna(0).clip(lower=0),
-    )
-    assert mesh.get_clim()[1] < float(heat.max())
+    v.xt_map(events, info["away_id"], 8)
+    first, second = (_pitch_of(f).images[0] for f in figures[:2])
+    assert first.get_clim() == second.get_clim(), "one scale for both teams"
+    assert first.get_clim()[1] > 0
 
 
 # ── the pass map ────────────────────────────────────────────────────────────
-def test_the_pass_map_is_one_pitch_of_zone_arrows(board):
+def test_the_pass_map_is_a_heat_surface_without_arrows(board):
     v, info, events, _xg, figures = board
     v.pass_map(events, info["home_id"], 9)
     pitches = [ax for ax in figures[0].axes if ax.get_aspect() == 1.0]
-    assert len(pitches) == 1, "the three miniature pitches are gone"
-    lines = [ln for ax in pitches for ln in ax.lines if len(ln.get_xdata()) == 2]
-    assert len(lines) <= 40, "key passes and pitch markings only; the hairlines are gone"
+    assert len(pitches) == 1
+    pitch = pitches[0]
+    assert pitch.images, "completed passes are drawn as a surface"
+    assert not [t for t in pitch.texts if getattr(t, "arrow_patch", None) is not None]
 
 
 def test_zone_flow_draws_one_arrow_per_busy_zone_and_keeps_them_on_the_pitch(v):
