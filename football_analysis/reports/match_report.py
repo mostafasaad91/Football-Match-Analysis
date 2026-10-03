@@ -4283,10 +4283,10 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             bar_h = spacing * 0.40
             # home bar (anchored at 0.38, grows leftwards)
             if h_ratio:
-                bw = 0.27 * h_ratio
+                bw = 0.20 * h_ratio
                 ax.add_patch(
                     mpatches.Rectangle(
-                        (0.38 - bw, cy - bar_h / 2),
+                        (0.33 - bw, cy - bar_h / 2),
                         bw,
                         bar_h,
                         facecolor=home_color,
@@ -4297,10 +4297,10 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
                 )
             # away bar (anchored at 0.62, grows rightwards)
             if a_ratio:
-                bw = 0.27 * a_ratio
+                bw = 0.20 * a_ratio
                 ax.add_patch(
                     mpatches.Rectangle(
-                        (0.62, cy - bar_h / 2),
+                        (0.67, cy - bar_h / 2),
                         bw,
                         bar_h,
                         facecolor=away_color,
@@ -4349,7 +4349,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
                 ha="center",
                 va="center",
                 color=TEXT_DIM,
-                fontsize=8.7,
+                fontsize=8.7 if len(label) <= 14 else 8.2,
                 fontweight="bold",
                 family=FONT_SANS,
                 transform=ax.transAxes,
@@ -4622,7 +4622,10 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             home_text_col,
             "ATTACK & PASSING",
             "Shots and key passes show how often each side created looks at "
-            "goal. Pass volume reflects how long the ball was kept circulating.",
+            "goal. xGOT rates the shots that were on target once the placement "
+            "is known, so it can exceed xG for a clinical finisher. A "
+            "line-breaking pass starts behind the opponent's line and ends "
+            "beyond it; the figure is completed / attempted.",
         ),
         (
             C_GOLD,
@@ -4672,7 +4675,7 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             ha="left",
             va="top",
             color=TEXT_MAIN,
-            fontsize=7.8,
+            fontsize=8.3,
             transform=com_ax.transAxes,
             linespacing=1.5,
         )

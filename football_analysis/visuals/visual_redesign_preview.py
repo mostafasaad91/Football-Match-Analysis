@@ -33,6 +33,7 @@ from football_analysis.metrics.match_metrics import (
     advanced_metrics_frames,
     high_regain_events,
     progressive_pass_mask,
+    team_post_shot_xg,
     touch_mask,
 )
 
@@ -868,7 +869,8 @@ def xg_flow(events: pd.DataFrame) -> Path:
     fig.text(
         0.385,
         0.882,
-        f"xG  ·  {int(shot_counts.get(HOME_ID, 0))} SHOTS",
+        f"xG  ·  {int(shot_counts.get(HOME_ID, 0))} SHOTS  ·  "
+        f"xGOT {team_post_shot_xg(events, HOME_ID):.2f}",
         color=MUTED,
         fontsize=6.4,
         ha="center",
@@ -924,7 +926,8 @@ def xg_flow(events: pd.DataFrame) -> Path:
     fig.text(
         0.655,
         0.882,
-        f"xG  ·  {int(shot_counts.get(AWAY_ID, 0))} SHOTS",
+        f"xG  ·  {int(shot_counts.get(AWAY_ID, 0))} SHOTS  ·  "
+        f"xGOT {team_post_shot_xg(events, AWAY_ID):.2f}",
         color=MUTED,
         fontsize=6.4,
         ha="center",
