@@ -3607,6 +3607,25 @@ def attacking_zones(events):
     for team_id, team_name, direction, x_tail, x_limit, row_names in layouts:
         counts, shares, total = _attacking_corridors(events, team_id)
         by_name = dict(zip(("Left", "Centre", "Right"), zip(shares, counts)))
+        # What each corridor produced, so the share of entries can be set beside
+        # the share of chances: shots are filed by the lane they were taken from,
+        # the feed's width running from the attacking side's right touchline.
+        team_shots = events[
+            events["team_id"].eq(team_id)
+            & as_bool(events["is_shot"])
+            & ~as_bool(events.get("is_penalty_shootout", pd.Series(False, index=events.index)))
+            & ~as_bool(events.get("is_own_goal", pd.Series(False, index=events.index)))
+        ].dropna(subset=["y"])
+        shot_lane = pd.cut(
+            pd.to_numeric(team_shots["y"], errors="coerce"),
+            [-1, 100 / 3, 200 / 3, 101],
+            labels=["Right", "Centre", "Left"],
+        )
+        shot_xg = pd.to_numeric(team_shots["xG"], errors="coerce").fillna(0)
+        lane_output = {
+            lane: (int((shot_lane == lane).sum()), float(shot_xg[shot_lane == lane].sum()))
+            for lane in ("Left", "Centre", "Right")
+        }
         summary[team_id] = (counts, shares, total)
         colour = _team_mark_color(team_id)
         span = abs(x_limit - x_tail)
@@ -3639,6 +3658,17 @@ def attacking_zones(events):
                 fontweight="bold",
                 zorder=6,
                 bbox=dict(boxstyle="round,pad=0.42", facecolor=colour, edgecolor="none"),
+            )
+            shots_n, lane_xg = lane_output[name]
+            ax.text(
+                x_tail + direction * (span * 0.30),
+                row_y - 10.6,
+                f"{shots_n} {'shot' if shots_n == 1 else 'shots'}  ·  {lane_xg:.2f} xG",
+                ha="center",
+                va="center",
+                color=TEXT,
+                fontsize=8.5,
+                zorder=6,
             )
             ax.text(
                 x_tail + direction * (span * 0.30),
@@ -3690,7 +3720,8 @@ def attacking_zones(events):
         0.045,
         f"Denominator · {HOME_NAME} {home_total} final-third "
         f"{'entry' if home_total == 1 else 'entries'}, {AWAY_NAME} {away_total}. "
-        "A share of a small count moves a long way on one entry.",
+        "A share of a small count moves a long way on one entry. "
+        "Shots and xG under each arrow are the shots taken from that lane.",
         color=MUTED,
         fontsize=9,
     )
