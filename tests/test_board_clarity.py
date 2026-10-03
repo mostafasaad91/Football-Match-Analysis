@@ -186,3 +186,14 @@ def test_set_pieces_share_one_shot_scale_and_drop_rows_nobody_used(board):
     assert panels[0].get_xlim() == panels[1].get_xlim(), "unequal scales invert the comparison"
     rows = [len(ax.get_yticklabels()) for ax in panels]
     assert rows[0] == rows[1]
+
+
+def test_goal_origins_draws_one_pitch_per_goal(board):
+    v, info, events, _xg, figures = board
+    v.goal_origins(events)
+    pitches = [ax for ax in figures[0].axes if ax.get_aspect() == 1.0]
+    goals = events[
+        events["is_goal"].astype(str).str.lower().isin(["true", "1"])
+        & ~events["is_own_goal"].astype(str).str.lower().isin(["true", "1"])
+    ]
+    assert len(pitches) == len(goals)

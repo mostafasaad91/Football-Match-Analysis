@@ -369,19 +369,19 @@ def amoled_header(
     )
     fig.text(
         0.055,
-        0.909,
+        0.912,
         title,
         color=TEXT,
         va="center",
         zorder=95,
         path_effects=glow,
-        **display(24),
+        **display(22),
     )
     # A bare slice cut "…this shows who was on top and when" to "…who was",
     # which reads as a rendering fault rather than an abbreviation. Mark the
     # cut so an over-long subtitle is obviously shortened, not broken.
     trimmed = subtitle if len(subtitle) <= 115 else subtitle[:114].rstrip() + "…"
-    fig.text(0.055, 0.881, trimmed, color=MUTED, fontsize=7.5, va="center", zorder=95)
+    fig.text(0.055, 0.877, trimmed, color=MUTED, fontsize=7.5, va="center", zorder=95)
 
     fixture_cluster(fig, glow)
     context = "FULL MATCH"

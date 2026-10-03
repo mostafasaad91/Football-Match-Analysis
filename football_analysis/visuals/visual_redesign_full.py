@@ -53,6 +53,7 @@ from football_analysis.visuals.visualization_components import (
 )
 
 from football_analysis.visuals import visual_redesign_preview as base
+from football_analysis.visuals.typography import display
 from football_analysis.metrics.match_metrics import (
     advanced_metrics_frames,
     defensive_line_height,
@@ -523,7 +524,7 @@ def side_kpis(ax, items: list[tuple[str, str]], start=0.82, gap=0.14) -> float:
         if y < 0.06:
             break
         ax.text(0.08, y, label.upper(), color=MUTED, fontsize=7.5, fontweight="bold", va="top")
-        ax.text(0.08, y - 0.055, str(value), color=TEXT, fontsize=16, fontweight="bold", va="top")
+        ax.text(0.08, y - 0.052, str(value), color=TEXT, va="top", **display(23))
         bottom = y - 0.055 - 0.045  # value baseline plus its own height
     return bottom
 
@@ -2508,7 +2509,7 @@ def zone14(events, team_id, number):
         "Final-third actions per lane · arrows = Zone 14 access, coloured by the lane they started in",
     )
     draw_long_pitch(pitch)
-    crop_to_attack(pitch, side, 50.0)
+    crop_to_attack(pitch, side, 62.0)
     third_y = 66.7 * PITCH_LENGTH / 100
     for (label, lo, hi), color in zip(lane_defs, lane_colors):
         x1, _ = attack_xy([66.7], [lo])
@@ -6477,75 +6478,185 @@ def sequence_types(events):
     return save(fig, "45_sequence_types.png")
 
 
+def _goal_sequence(annotated, goal_row):
+    """The scoring side's own touches in the possession a goal ended, in order.
+
+    Passes and carries that reached a team-mate, plus the shot itself. Events by
+    the opponent inside the same possession window (a clearance that dropped to
+    the scorer, say) are not part of the build-up and are left out.
+    """
+    window = annotated[annotated["possession_id"].eq(goal_row["possession_id"])]
+    window = window[window["team_id"].eq(goal_row["team_id"])]
+    shot = window[as_bool(window["is_goal"])].tail(1)
+    moves = window[window["type"].astype(str).isin(["Pass", "Carry"])].dropna(
+        subset=["x", "y", "end_x", "end_y"]
+    )
+    moves = moves[moves["outcome"].astype(str).str.lower().eq("successful")]
+    return moves, shot
+
+
 def goal_origins(events):
-    """The sequence behind every goal, not just the scorer and the minute."""
+    """The sequence behind every goal, drawn on the pitch it travelled over."""
     chains = goal_origin_chains(events, HOME_ID, AWAY_ID)
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
     base.amoled_header(
         fig,
         "Goal Origins",
-        "Where each goal began, how long it took and how many players touched it",
+        "Every goal drawn from where its possession began · numbered touches, arrows for the passes that built it",
     )
     if chains.empty:
         fig.text(0.5, 0.5, "No goals from open sequences", color=MUTED, ha="center")
         return save(fig, "46_goal_origins.png")
 
-    headers = ["MIN", "SCORER", "ROUTE", "PASSES", "SECONDS", "PLAYERS", "STARTED"]
-    xs = [0.065, 0.115, 0.30, 0.44, 0.53, 0.63, 0.73]
-    top = 0.755
-    for x, header in zip(xs, headers):
-        fig.text(x, top, header, color=MUTED, fontsize=7.6, fontweight="bold")
-    fig.add_artist(
-        Line2D(
-            [0.06, 0.94], [top - 0.018, top - 0.018], transform=fig.transFigure, color=GRID, lw=1
-        )
-    )
+    annotated, _possessions = build_possessions(events)
+    goals = annotated[as_bool(annotated["is_goal"]) & ~as_bool(annotated["is_own_goal"])]
+    goals = goals.dropna(subset=["possession_id"]).sort_values(["minute", "second"], kind="stable")
 
-    row_height = min(0.055, 0.60 / max(len(chains), 1))
-    for index, row in enumerate(chains.itertuples()):
-        y = top - 0.045 - index * row_height
+    count = len(chains)
+    columns = min(count, 4)
+    rows_n = int(np.ceil(count / columns))
+    area_top, area_bottom = 0.84, 0.07
+    cell_h = (area_top - area_bottom) / rows_n
+    caption_h = 0.17
+    pitch_h = cell_h - caption_h - 0.03
+    fig_w, fig_h = fig.get_size_inches()
+    # Pitch width follows its height so the grass keeps its proportions.
+    pitch_w = pitch_h * fig_h / fig_w * (PITCH_WIDTH + 10) / (PITCH_LENGTH + 6)
+    pitch_w = min(pitch_w, 0.9 / columns - 0.02)
+    cell_w = 0.93 / columns
+
+    for index, (row, goal) in enumerate(zip(chains.itertuples(), goals.itertuples())):
+        r, c = divmod(index, columns)
+        centre = 0.035 + cell_w * (c + 0.5)
+        top = area_top - r * cell_h
         color = HOME if int(row.team_id) == HOME_ID else AWAY
-        values = [
-            f"{int(row.minute)}'",
-            _surname(row.scorer)[:16],
-            str(row.sequence_type).replace("_", " ").title(),
-            str(int(row.passes)),
-            f"{float(row.duration):.0f}",
-            str(int(row.players)),
-            str(row.started_from).replace("_", " "),
-        ]
-        for x, value, is_first in zip(xs, values, [True] + [False] * 6):
-            fig.text(
-                x,
-                y,
-                value,
-                color=color if is_first else TEXT,
-                fontsize=8.4,
-                fontweight="bold" if is_first else "normal",
+        mark = _team_mark_color(int(row.team_id))
+        ax = fig.add_axes([centre - pitch_w / 2, top - pitch_h, pitch_w, pitch_h])
+        ax.set_facecolor(BG)
+        draw_long_pitch(ax)
+        ax.axis("off")
+
+        moves, shot = _goal_sequence(annotated, goal._asdict())
+        for step, (_, move) in enumerate(moves.iterrows(), start=1):
+            sx, sy = attack_xy([move["x"]], [move["y"]])
+            ex, ey = attack_xy([move["end_x"]], [move["end_y"]])
+            arrow = ax.annotate(
+                "",
+                xy=(ex[0], ey[0]),
+                xytext=(sx[0], sy[0]),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color=mark,
+                    alpha=0.9,
+                    lw=1.6,
+                    mutation_scale=9,
+                    shrinkA=3,
+                    shrinkB=3,
+                ),
+                zorder=4,
+            )
+            if arrow.arrow_patch is not None:
+                arrow.arrow_patch.set_path_effects(
+                    [path_effects.Stroke(linewidth=3.2, foreground=BG), path_effects.Normal()]
+                )
+        # Numbered touches: one per move, at the place it was played from.
+        for step, (_, move) in enumerate(moves.iterrows(), start=1):
+            sx, sy = attack_xy([move["x"]], [move["y"]])
+            ax.scatter(
+                sx,
+                sy,
+                s=190,
+                facecolor=BG,
+                edgecolor=mark,
+                linewidth=1.4,
+                zorder=6,
+            )
+            ax.text(
+                sx[0],
+                sy[0],
+                str(step),
+                color=TEXT,
+                fontsize=7.5,
+                fontweight="bold",
+                ha="center",
                 va="center",
+                zorder=7,
             )
-        fig.add_artist(
-            Line2D(
-                [0.06, 0.94],
-                [y - row_height * 0.42, y - row_height * 0.42],
-                transform=fig.transFigure,
-                color=GRID,
-                lw=0.5,
-                alpha=0.6,
+        if not shot.empty:
+            gx, gy = attack_xy(shot["x"].to_numpy(), shot["y"].to_numpy())
+            if len(moves):
+                lx, ly = attack_xy([moves.iloc[-1]["end_x"]], [moves.iloc[-1]["end_y"]])
+                ax.plot(
+                    [lx[0], gx[0]],
+                    [ly[0], gy[0]],
+                    color=EVENT_HIGHLIGHT,
+                    lw=1.6,
+                    ls=(0, (3, 2)),
+                    zorder=5,
+                )
+            ax.scatter(
+                gx,
+                gy,
+                s=340,
+                marker="*",
+                facecolor=EVENT_HIGHLIGHT,
+                edgecolor=BG,
+                linewidth=1.0,
+                zorder=8,
             )
+
+        text_x = centre - pitch_w / 2
+        caption_top = top - pitch_h - 0.012
+        fig.text(
+            text_x,
+            caption_top,
+            f"{int(row.minute)}′",
+            color=color,
+            va="top",
+            **display(26),
+        )
+        fig.text(
+            text_x + 0.062,
+            caption_top - 0.004,
+            _surname(row.scorer)[:18],
+            color=TEXT,
+            va="top",
+            **display(18),
+        )
+        fig.text(
+            text_x + 0.062,
+            caption_top - 0.034,
+            str(row.sequence_type).replace("_", " ").upper(),
+            color=MUTED,
+            fontsize=7.5,
+            fontweight="bold",
+            va="top",
+        )
+        facts = (
+            f"{int(row.passes)} passes  ·  {float(row.duration):.0f} s  ·  "
+            f"{int(row.players)} players"
+        )
+        fig.text(text_x, caption_top - 0.066, facts, color=TEXT, fontsize=8.5, va="top")
+        fig.text(
+            text_x,
+            caption_top - 0.088,
+            "Started: " + str(row.started_from).replace("_", " "),
+            color=MUTED,
+            fontsize=8,
+            va="top",
         )
 
     fig.text(
         0.06,
-        0.075,
-        "Route is read from the possession the goal ended, so a first-time finish from a regain shows as a counter with few passes.",
+        0.04,
+        "Route is read from the possession the goal ended, so a first-time finish from a regain shows as a counter with few passes. Star = the goal.",
         color=NEUTRAL,
         fontsize=7,
     )
     fig.text(
         0.945,
         0.035,
-        "FULL VISUAL REDESIGN \u00b7 REAL MATCH DATA",
+        "FULL VISUAL REDESIGN · REAL MATCH DATA",
         ha="right",
         fontsize=8,
         color=NEUTRAL,
