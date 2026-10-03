@@ -2283,7 +2283,11 @@ def gk_saves(events, xg, players):
                 point = _placement_xy(row)
                 if point is None:
                     continue
-                px, py = point
+                # A wide or high miss is recorded well outside the frame; it is
+                # kept at the edge of the drawing, since leaving the axes made
+                # it vanish and the board then counted shots it did not show.
+                px = float(np.clip(point[0], -1.64, 1.64))
+                py = float(np.clip(point[1], -0.12, 1.30))
                 body = str(row.get("body_part") or "").lower()
                 marker = _BODY_PART_MARKERS.get(body, ("o", "Right foot"))[0]
                 ax.scatter(
@@ -2316,7 +2320,9 @@ def gk_saves(events, xg, players):
         fig.text(
             x0,
             0.788,
-            f"{keeper_team_name} · {plotted} of {len(faced)} shots faced reached the frame",
+            f"{keeper_team_name} · {int(shot_type.isin(['Goal', 'SavedShot']).sum())} of "
+            f"{len(faced)} shots faced on target · {int(shot_type.eq('MissedShots').sum())} off target"
+            f" · {int(shot_type.eq('BlockedShot').sum())} blocked",
             color=MUTED,
             fontsize=8,
         )
