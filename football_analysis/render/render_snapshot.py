@@ -116,6 +116,10 @@ def refresh_publication(
         score=match_info["score"],
         match_date=match_info.get("date", ""),
     )
+    from football_analysis.visuals.poster_square import FILENAME, build_square_poster
+
+    (out / FILENAME).unlink(missing_ok=True)
+    build_square_poster(events, xg, team_metrics, match_info, out)
     return {
         "output_dir": out,
         "pdf": pdf,

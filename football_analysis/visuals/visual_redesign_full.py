@@ -7341,6 +7341,10 @@ def generate_match_package(
         competition=str(match_info.get("competition") or "MATCH ANALYSIS"),
         match_date=str(match_info.get("date") or ""),
     )
+    # The same match on one 1:1 page, for timelines that crop to a square.
+    from football_analysis.visuals.poster_square import build_square_poster
+
+    build_square_poster(events, xg, team_metrics, match_info, OUT)
 
     # The publishable read, beside the reference report. Never fatal: a package
     # that cannot write its article still has every visual and the PDF.
