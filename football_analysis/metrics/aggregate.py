@@ -277,6 +277,18 @@ def _apply_team_ratios(table: pd.DataFrame, matches: pd.Series | None = None) ->
     return table
 
 
+def partial_columns(rows: pd.DataFrame) -> list[str]:
+    """Numeric columns that are missing for some matches but not all of them.
+
+    A sum or a mean over such a column silently covers only the matches that had it,
+    and reads as if it covered them all. Packages rendered before a metric existed are
+    the usual cause; the caller should rebuild the column or say so.
+    """
+    numeric = rows.select_dtypes(include="number")
+    missing = numeric.isna().sum()
+    return [c for c in numeric.columns if 0 < missing[c] < len(numeric)]
+
+
 def aggregate_teams(rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Totals and per-match averages, one row per team, from per-match team rows.
 
