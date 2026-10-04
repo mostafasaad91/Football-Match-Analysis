@@ -895,7 +895,9 @@ def goalkeepers(league: League, minimum_minutes: float = 180.0) -> Path:
 
 
 # ── profile cards: one club or one player against the rest of the league ───────────────────
-GROUP_COLOURS = {"ATTACK": "#FF7A5C", "BUILD-UP": "#4EA8FF", "DEFENCE": "#2FD3BE"}
+# Fully saturated, so a slice stays vivid against the near-black page and the three groups
+# cannot be mistaken for one another at a glance.
+GROUP_COLOURS = {"ATTACK": "#FF3B1D", "BUILD-UP": "#0A84FF", "DEFENCE": "#00D95F"}
 
 # (column, label, lower_is_better, format, group)
 TEAM_SLICES = [
@@ -961,7 +963,7 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS) -> None:
                 color=colour,
                 edgecolor=base.BG,
                 linewidth=1.2,
-                alpha=0.95,
+                alpha=1.0,
                 zorder=3,
             )
         angle = theta[i]
