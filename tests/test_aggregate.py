@@ -172,3 +172,11 @@ def test_rounds_parse_as_a_range_or_a_single_round():
     assert list(module.parse_rounds("3")) == [3]
     with pytest.raises(Exception):
         module.parse_rounds("5-1")
+
+
+def test_the_round_number_is_not_added_up_as_if_it_were_a_statistic():
+    rows = pd.DataFrame(
+        [_team("m1", "Arsenal", 1, 0, round=1), _team("m2", "Arsenal", 1, 0, round=2)]
+    )
+    totals, per_match = aggregate_teams(rows)
+    assert "round" not in totals.columns and "round" not in per_match.columns

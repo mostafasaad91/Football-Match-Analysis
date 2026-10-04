@@ -173,7 +173,7 @@ _RATE = re.compile(
     r"speed|duration|progress|compact|accuracy|success|score|_per)",
     re.IGNORECASE,
 )
-TEAM_ID_COLUMNS = {"team_id", "side"}
+TEAM_ID_COLUMNS = {"team_id", "side", "round"}
 
 
 def is_rate(column: str) -> bool:
