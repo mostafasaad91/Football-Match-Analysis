@@ -179,7 +179,7 @@ console = Console()
 # Set MATCH_ANALYSIS_URL to analyse a different fixture without editing this file.
 MATCH_URL = os.environ.get(
     "MATCH_ANALYSIS_URL",
-    "https://www.whoscored.com/matches/1969844/live/international-uefa-nations-league-a-2026-2027-croatia-england",
+    "https://www.whoscored.com/matches/2029184/live/europe-champions-league-2026-2027-napoli-arsenal",
 ).strip()
 # رقم الجولة. الأفضل تمريره مع الرابط بدل تعديل الملف:
 #     $env:MATCH_ANALYSIS_ROUND = "Matchweek 1"
@@ -190,7 +190,7 @@ MATCH_URL = os.environ.get(
 # is unknown, and the date fallback names it Week_of_<Monday>. A default of "1"
 # would file every fixture whose round nobody stated under Matchweek_01, which
 # is a guess wearing a fact's clothes.
-MATCH_ROUND = os.environ.get("MATCH_ANALYSIS_ROUND", "3").strip()
+MATCH_ROUND = os.environ.get("MATCH_ANALYSIS_ROUND", "").strip()
 SAVE_DIR = "output"
 SCRIPT_DIR = str(PROJECT_ROOT)
 if not os.path.isabs(SAVE_DIR):
