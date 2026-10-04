@@ -895,9 +895,12 @@ def goalkeepers(league: League, minimum_minutes: float = 180.0) -> Path:
 
 
 # ── profile cards: one club or one player against the rest of the league ───────────────────
-# Fully saturated, so a slice stays vivid against the near-black page and the three groups
-# cannot be mistaken for one another at a glance.
-GROUP_COLOURS = {"ATTACK": "#FF3B1D", "BUILD-UP": "#0A84FF", "DEFENCE": "#00D95F"}
+# Three deep, distinct hues -- vermilion, amber, blue -- that hold up on the near-black page
+# and stay apart for readers who confuse red and green.
+GROUP_COLOURS = {"ATTACK": "#E8452C", "BUILD-UP": "#F2B134", "DEFENCE": "#2F7FE0"}
+TRACK = "#101419"  # the empty part of each slice's lane
+RING = "#2A3037"  # the 20, 40, 60 and 80 per cent circles
+RING_OUTER = "#5A646E"  # the outer circle and the one round the hole
 
 # (column, label, lower_is_better, format, group)
 TEAM_SLICES = [
@@ -931,11 +934,22 @@ PLAYER_SLICES = [
 ]
 
 
-def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS) -> None:
-    """Twelve slices, each as long as the share of the league it beats (full is the best).
+INNER = 0.17  # the hole in the middle, where the club's badge sits
 
-    ``shares`` run 0 to 1; a missing value draws an empty slice and prints a dash. The
-    raw figure is printed beside its label so the picture never has to be decoded.
+
+def _radius(share: float) -> float:
+    """Where a share of the league (0 to 1) ends on the radius, outside the central hole."""
+    return INNER + share * (1.0 - INNER)
+
+
+def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS, centre=None) -> None:
+    """Twelve slices round a central hole, each as long as the share of the league it beats.
+
+    ``shares`` run 0 to 1 (full is the best in the league); a missing value draws an empty
+    slice and prints a dash. Rings at 20, 40, 60 and 80 per cent make the length readable
+    without a scale, each slice ends in a circle holding its percentile, and the raw figure
+    sits beside the label so the picture never has to be decoded. ``centre`` is a
+    ``(league, club)`` pair whose badge fills the hole.
     """
     n = len(slices)
     width = 2 * np.pi / n
@@ -947,31 +961,60 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS) -> None:
     ax.set_xticks([])
     ax.set_yticks([])
     ax.spines["polar"].set_visible(False)
+    full = np.linspace(0, 2 * np.pi, 361)
+    # the track each slice grows along, then the circles over it
     ax.bar(
-        theta, 1.0, width=width * 0.96, color=base.PANEL, edgecolor=base.BG, linewidth=1.2, zorder=1
+        theta,
+        1.0 - INNER,
+        bottom=INNER,
+        width=width * 0.94,
+        color=TRACK,
+        edgecolor="none",
+        zorder=1,
     )
-    for ring in (0.25, 0.5, 0.75):
-        ax.plot(np.linspace(0, 2 * np.pi, 200), [ring] * 200, color=base.GRID, lw=0.7, zorder=2)
+    for ring in (0.2, 0.4, 0.6, 0.8):
+        ax.plot(full, [_radius(ring)] * len(full), color=RING, lw=0.8, zorder=2)
+    ax.plot(full, [1.0] * len(full), color=RING_OUTER, lw=1.6, zorder=4)
+    ax.plot(full, [INNER] * len(full), color=RING_OUTER, lw=1.6, zorder=4)
     for i, (key, label, _low, fmt, group) in enumerate(slices):
         share = shares[i]
         colour = colour_by_group[group]
+        angle = theta[i]
         if share is not None and not np.isnan(share):
+            length = max(share, 0.05)
             ax.bar(
-                theta[i],
-                max(share, 0.04),
-                width=width * 0.96,
+                angle,
+                length * (1.0 - INNER),
+                bottom=INNER,
+                width=width * 0.94,
                 color=colour,
                 edgecolor=base.BG,
-                linewidth=1.2,
-                alpha=1.0,
+                linewidth=1.0,
                 zorder=3,
             )
-        angle = theta[i]
+            tip = max(_radius(length) - 0.075, INNER + 0.06)
+            ax.text(
+                angle,
+                tip,
+                f"{round(100 * share):d}",
+                ha="center",
+                va="center",
+                color="white",
+                fontsize=8.5,
+                fontweight="bold",
+                zorder=6,
+                bbox=dict(
+                    boxstyle="circle,pad=0.28",
+                    facecolor=darken(colour),
+                    edgecolor="white",
+                    linewidth=1.2,
+                ),
+            )
         raw = raws[i]
         value = "—" if raw is None or pd.isna(raw) else fmt.format(raw)
-        # The label and its figure share one anchor just outside the slice, aligned away
-        # from the centre: left of the anchor on the left of the chart and right of it on
-        # the right, so a long name never runs back under its own number.
+        # The label and its figure share one anchor just outside the ring, aligned away from
+        # the centre: left of the anchor on the right of the chart and right of it on the
+        # left, so a long name never runs back under its own number.
         visual = np.pi / 2 + width / 2 - angle
         side = np.cos(visual)
         ha = "left" if side > 0.35 else ("right" if side < -0.35 else "center")
@@ -999,6 +1042,15 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS) -> None:
             fontfamily="Barlow Condensed",
             **common,
         )
+    if centre is not None:
+        league, club = centre
+        put_crest(ax, league, club, (0.5, 0.5), zoom=0.42, transform="axes fraction")
+
+
+def darken(colour: str, amount: float = 0.38) -> str:
+    """The colour pulled toward black, for the badge that sits on a slice of that colour."""
+    rgb = np.array(mcolors.to_rgb(colour))
+    return mcolors.to_hex(rgb * (1.0 - amount))
 
 
 def _percentiles(frame: pd.DataFrame, row_index, slices) -> tuple[list, list]:
@@ -1063,7 +1115,7 @@ def team_profile(league: League, team: str) -> Path:
         f"{league.title.title()} · {league.rounds.title()} · {int(row['matches'])} matches · {int(row['won'])}W {int(row['drawn'])}D {int(row['lost'])}L · {int(row['points'])} points · {position}{_ordinal(position)}",
     )
     ax = fig.add_axes([0.27, 0.13, 0.46, 0.60], projection="polar")
-    pizza(ax, TEAM_SLICES, shares, raws)
+    pizza(ax, TEAM_SLICES, shares, raws, centre=(league, team))
     ax.text(0, 0, "", transform=ax.transAxes)
     _legend(fig, 0.05, 0.075)
     fig.text(
@@ -1129,7 +1181,7 @@ def player_profile(
         + (f" · rating {rating:.2f}" if pd.notna(rating) else ""),
     )
     ax = fig.add_axes([0.27, 0.13, 0.46, 0.60], projection="polar")
-    pizza(ax, PLAYER_SLICES, shares, raws)
+    pizza(ax, PLAYER_SLICES, shares, raws, centre=(league, team))
     _legend(fig, 0.05, 0.075)
     fig.text(
         0.97,
