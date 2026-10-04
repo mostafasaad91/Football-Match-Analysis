@@ -1,4 +1,4 @@
-"""The timeline graphics: every card draws, at 1200 x 1500, from the saved block."""
+"""The timeline graphics: every card draws in both frames, into one folder, from the saved block."""
 
 import pytest
 from PIL import Image
@@ -8,6 +8,7 @@ from football_analysis.visuals import league_boards as lb
 from football_analysis.visuals import social_cards as sc
 
 BLOCK = OUTPUT_DIR / "aggregates" / "England_Premier_League_2026-2027_R1-5"
+GROUPS = {"Attack", "Defence", "Pressing", "Passing"}
 
 
 @pytest.fixture(scope="module")
@@ -17,32 +18,44 @@ def league():
     return lb.League.load(BLOCK, packages=OUTPUT_DIR / "England_Premier_League" / "2026-2027")
 
 
-def test_there_are_two_cards_a_group_for_clubs_and_for_players():
-    names = {card.name for card in sc.CARDS}
-    assert names == {f"{kind}{i}" for kind in "tp" for i in range(1, 9)}
+def test_clubs_and_players_each_cover_all_four_groups():
     for kind in "tp":
-        groups = [card.group for card in sc.CARDS if card.name.startswith(kind)]
-        assert sorted(groups) == [
-            "Attack",
-            "Attack",
-            "Defence",
-            "Defence",
-            "Passing",
-            "Passing",
-            "Pressing",
-            "Pressing",
-        ]
+        groups = {card.group for card in sc.CARDS if card.name.startswith(kind)}
+        assert groups == GROUPS
 
 
-def test_every_card_draws_a_timeline_sized_png(league, tmp_path, monkeypatch):
+def test_card_ids_are_unique_and_numbered():
+    names = [card.name for card in sc.CARDS]
+    assert len(names) == len(set(names))
+    assert all(n[0] in "tp" and n[1:].isdigit() for n in names)
+
+
+def test_each_frame_is_the_size_it_says(league, tmp_path, monkeypatch):
     monkeypatch.setattr(league, "folder", tmp_path)
-    for path in sc.build_all(league):
-        with Image.open(path) as image:
-            assert image.size == (1200, 1500), path.name
-        assert path.stat().st_size > 30_000, path.name
+    for name, size in (("4x5", (1200, 1500)), ("16x9", (1600, 900))):
+        paths = sc.build_all(league, only=["t05", "p03"], formats=(name,))
+        assert len(paths) == 2
+        for path in paths:
+            with Image.open(path) as image:
+                assert image.size == size, path.name
+            assert path.parent.name == f"twitter_{name}"
+            assert path.parent.parent.name == "visuals"
 
 
-def test_only_draws_the_cards_asked_for(league, tmp_path, monkeypatch):
+def test_every_card_draws_in_both_frames(league, tmp_path, monkeypatch):
     monkeypatch.setattr(league, "folder", tmp_path)
-    paths = sc.build_all(league, only=["t3", "p5"])
-    assert sorted(p.name[:2] for p in paths) == ["p5", "t3"]
+    paths = sc.build_all(league)
+    assert len(paths) == 2 * len(sc.CARDS)
+    assert all(p.stat().st_size > 30_000 for p in paths)
+
+
+def test_the_frame_is_reset_after_drawing(league, tmp_path, monkeypatch):
+    monkeypatch.setattr(league, "folder", tmp_path)
+    sc.build_all(league, only=["t05"], formats=("16x9",))
+    assert sc.GEO is sc.FOUR_BY_FIVE
+
+
+def test_a_card_filename_carries_its_id(league, tmp_path, monkeypatch):
+    monkeypatch.setattr(league, "folder", tmp_path)
+    (path,) = sc.build_all(league, only=["t05"], formats=("4x5",))
+    assert path.name.startswith("t05_")
