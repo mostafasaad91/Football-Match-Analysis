@@ -31,7 +31,9 @@ SIZE, DPI = lb.SIZE, lb.DPI
 GOOD, BAD, GOLD, GREY = "#3DDC84", "#FF6B5B", "#F2B134", "#8E99A4"
 PARTS = ["#4EA8FF", "#F2B134", "#E8452C", "#A77BFF"]
 MIN_MINUTES = 270.0
-ALL_ROLES = ["Defender", "Midfielder", "Forward"]
+# Substitutes carry no position in the feed, so a player who only ever came on has role "Unknown".
+# He belongs in a ranking that does not depend on position, and in none that does.
+ALL_ROLES = ["Defender", "Midfielder", "Forward", "Unknown"]
 LIST_RECT = (0.485, 0.07, 0.475, 0.88)  # a chart with a label for every row
 PLOT_RECT = (0.40, 0.10, 0.575, 0.85)  # a scatter
 TABLE_LEFT = 0.315  # where a full-width table begins
@@ -1145,6 +1147,13 @@ PLAYER_RANKINGS = [
 ]
 
 
+def who_note(roles) -> str:
+    """The footnote naming who is ranked: every outfield player, or just the positions listed."""
+    if set(roles) >= set(ALL_ROLES):
+        return f"Outfield players with {MIN_MINUTES:.0f}+ minutes."
+    return f"{', '.join(r.lower() + 's' for r in roles)} with {MIN_MINUTES:.0f}+ minutes."
+
+
 def player_ranking_card(spec) -> Card:
     key, group, title, subtitle, fmt, roles, where = spec
     index = PLAYER_RANKINGS.index(spec) + 1
@@ -1165,7 +1174,7 @@ def player_ranking_card(spec) -> Card:
             rows,
             key,
             fmt,
-            f"{', '.join(r.lower() + 's' for r in roles)} with {MIN_MINUTES:.0f}+ minutes.",
+            who_note(roles),
         )
 
     return Card("players", group, stem, draw)

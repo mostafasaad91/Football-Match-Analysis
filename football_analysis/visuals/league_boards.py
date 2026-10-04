@@ -502,13 +502,13 @@ def _findings(fig, slices, shares, raws, ranks, x: float) -> None:
     )
     blocks = (("STRONGEST", scored[:3], "#3DDC84"), ("WEAKEST", scored[::-1][:3], "#FF6B5B"))
     for b, (heading, rows, colour) in enumerate(blocks):
-        top = 0.77 - b * 0.30
+        top = 0.775 - b * 0.34
         fig.text(x, top, heading, color=colour, fontsize=9, fontweight="bold", va="center")
         fig.add_artist(
             Rectangle((x, top - 0.02), 0.17, 0.002, transform=fig.transFigure, color=colour, lw=0)
         )
         for r, (_, i) in enumerate(rows):
-            y = top - 0.085 - r * 0.077
+            y = top - 0.085 - r * 0.072
             key, label, lower, fmt, group = slices[i]
             fig.text(
                 x,
@@ -595,7 +595,9 @@ def player_profile(
 ) -> Path | None:
     pool = _qualified(league, minimum_minutes)
     role = league.per90.set_index(["player", "team"]).loc[(player, team)]["role"]
-    peers = pool[pool["role"].eq(role)] if role in set(pool["role"]) else pool
+    # a player who only came off the bench has no listed position: he is set against every outfield player
+    peers = pool[pool["role"].eq(role)] if role != "Unknown" and role in set(pool["role"]) else pool
+    role_label = "outfield player" if role == "Unknown" else role.lower()
     peers = peers.reset_index(drop=True).set_index(["player", "team"])
     if (player, team) not in peers.index:
         return None
@@ -606,7 +608,7 @@ def player_profile(
         fig,
         league.colour(team),
         player.upper(),
-        f"{team} · {role} · {int(totals['matches'])} matches · {totals['minutes']:.0f} minutes"
+        f"{team} · {'position not listed' if role == 'Unknown' else role} · {int(totals['matches'])} matches · {totals['minutes']:.0f} minutes"
         + (" · small sample" if totals["minutes"] < 450 else ""),
     )
     badges = [f"{round(100 * s):d}" if s is not None else "" for s in shares]
@@ -627,7 +629,7 @@ def player_profile(
     _findings(fig, PLAYER_SLICES, shares, raws, ranks, 0.79)
     _footnote(
         fig,
-        f"Slice length = share of the {len(peers)} {role.lower()}s with {minimum_minutes:.0f}+ minutes this player beats · per 90 · circle = percentile · dashed ring = median",
+        f"Slice length = share of the {len(peers)} {role_label}s with {minimum_minutes:.0f}+ minutes this player beats · per 90 · circle = percentile · dashed ring = median",
         0.79,
         46,
     )

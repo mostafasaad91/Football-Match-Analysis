@@ -154,7 +154,7 @@ def player_rows(package: Path, info: dict) -> pd.DataFrame:
     lives outside the package folder so the package stays exactly what the renderer wrote.
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache = CACHE_DIR / f"v2__{package.parent.parent.parent.name}__{package.name}.csv"
+    cache = CACHE_DIR / f"v3__{package.parent.parent.parent.name}__{package.name}.csv"
     events_file = package / "events.csv"
     if cache.exists() and cache.stat().st_mtime >= events_file.stat().st_mtime:
         return pd.read_csv(cache)

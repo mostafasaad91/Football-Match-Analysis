@@ -117,6 +117,12 @@ def _mode(values):
     return values.mode().iloc[0] if len(values) else ""
 
 
+def _mode_role(values):
+    """The role a player most often started in; ``Unknown`` only when he never started."""
+    known = values[~values.astype(str).isin(["Unknown", "nan", ""])].dropna()
+    return known.mode().iloc[0] if len(known) else "Unknown"
+
+
 def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     """One row per player and team from per-match rows (``player``, ``team``, ``minutes``, ...).
 
@@ -147,7 +153,7 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     grouped = frame.groupby(["player", "team"], sort=False)
     out = grouped[PLAYER_COUNTS + ["minutes"]].sum(min_count=1)
     out["matches"] = grouped["match_id"].nunique()
-    out["role"] = grouped["role_group"].agg(_mode) if "role_group" in frame else ""
+    out["role"] = grouped["role_group"].agg(_mode_role) if "role_group" in frame else ""
     sums = grouped[
         [
             "_height_weight",

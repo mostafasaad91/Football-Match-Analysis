@@ -453,7 +453,18 @@ def _people_for(events, players, info):
     from football_analysis.metrics.match_insights import build_insights
     from football_analysis.metrics.player_advanced import enrich
 
-    key = (str(info.get("match_id") or info.get("url") or ""), len(events), len(players))
+    # Two matches can share a length and carry neither an id nor a url, and a key made of those
+    # alone handed one match's players to another. The two sides and the date tell matches apart,
+    # and the sum of the event ids tells two renders of one match apart.
+    key = (
+        str(info.get("match_id") or info.get("url") or ""),
+        info.get("home_id"),
+        info.get("away_id"),
+        str(info.get("date") or ""),
+        len(events),
+        len(players),
+        float(pd.to_numeric(events.get("event_id"), errors="coerce").fillna(0).sum()),
+    )
     if key not in _PEOPLE_CACHE:
         people = build_insights(events, players, info)["players"].copy()
         people["role_group"] = people.role.map(role_group)

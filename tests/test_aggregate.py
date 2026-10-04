@@ -288,3 +288,25 @@ def test_a_column_present_for_only_some_matches_is_reported():
 def test_there_is_no_rating_column_in_the_player_totals():
     rows = pd.DataFrame([_player("m1", "Rice", 90, rating=8.0)])
     assert "avg_rating" not in aggregate_players(rows).columns
+
+
+def test_the_player_frame_cache_does_not_hand_one_match_to_another():
+    """Two matches of the same length with no id or url used to share a cache entry."""
+    import json
+    from conftest import match_dir
+
+    from football_analysis.render.render_snapshot import load_snapshot
+    from football_analysis.visuals.advanced_profiles import _people_for
+
+    pairs = []
+    for name in ("Arsenal_vs_Coventry_3-0",):
+        package = match_dir(name)
+        if (package / "match_info.json").exists():
+            pairs.append(package)
+    if not pairs:
+        pytest.skip("no rendered package to test with")
+    events, players, _xg, _teams, _pm, info = load_snapshot(pairs[0])
+    first = _people_for(events, players, info)
+    other_info = {**info, "home_id": 99991, "away_id": 99992}
+    second = _people_for(events, players, other_info)
+    assert second is not first, "a different pair of sides must not reuse the cached frame"
