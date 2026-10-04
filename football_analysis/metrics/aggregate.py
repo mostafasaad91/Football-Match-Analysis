@@ -132,7 +132,6 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
         "minutes",
         "defensive_height",
         "padj_defensive_actions",
-        "rating",
     ]:
         frame[column] = pd.to_numeric(frame[column], errors="coerce") if column in frame else np.nan
     frame["_height_weight"] = frame["defensive_height"].fillna(0) * frame[
@@ -141,8 +140,6 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     frame["_height_actions"] = np.where(
         frame["defensive_height"].notna(), frame["defensive_actions"].fillna(0), 0
     )
-    frame["_rating_weight"] = frame["rating"].fillna(0) * frame["minutes"].fillna(0)
-    frame["_rating_minutes"] = np.where(frame["rating"].notna(), frame["minutes"].fillna(0), 0)
     frame["_padj_weight"] = frame["padj_defensive_actions"].fillna(0) * frame["minutes"].fillna(0)
     frame["_padj_minutes"] = np.where(
         frame["padj_defensive_actions"].notna(), frame["minutes"].fillna(0), 0
@@ -157,8 +154,6 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
             "_height_actions",
             "_padj_weight",
             "_padj_minutes",
-            "_rating_weight",
-            "_rating_minutes",
         ]
     ].sum()
     out = out.reset_index()
@@ -174,8 +169,6 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     out["xA_per_100_passes"] = _ratio(out["xA"], out["passes"], 100).values
     out["defensive_height"] = _ratio(sums["_height_weight"], sums["_height_actions"]).values
     out["padj_defensive_actions"] = _ratio(sums["_padj_weight"], sums["_padj_minutes"]).values
-    # The provider's match rating, averaged over the minutes it was earned in.
-    out["avg_rating"] = _ratio(sums["_rating_weight"], sums["_rating_minutes"]).values
     out["cross_pct"] = _ratio(out["crosses_completed"], out["crosses"], 100).values
     out["long_ball_pct"] = _ratio(out["long_balls_completed"], out["long_balls"], 100).values
     out["tackle_pct"] = _ratio(out["tackles_won"], out["tackles"], 100).values
@@ -211,7 +204,6 @@ def per90(totals: pd.DataFrame, minimum_minutes: float = 90.0) -> pd.DataFrame:
         "xT_per_100_touches",
         "defensive_height",
         "padj_defensive_actions",
-        "avg_rating",
         "cross_pct",
         "long_ball_pct",
         "tackle_pct",

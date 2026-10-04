@@ -246,17 +246,6 @@ def test_players_assists_and_key_passes_are_summed_and_given_per_90():
     assert rates["key_passes_p90"] == pytest.approx(4.0)
 
 
-def test_a_rating_is_weighted_by_the_minutes_it_was_earned_in():
-    rows = pd.DataFrame(
-        [
-            _player("m1", "Rice", 90, rating=8.0),
-            _player("m2", "Rice", 30, rating=6.0),
-            _player("m3", "Rice", 45),  # unrated: its minutes do not dilute the average
-        ]
-    )
-    assert aggregate_players(rows).iloc[0]["avg_rating"] == pytest.approx((8 * 90 + 6 * 30) / 120)
-
-
 def test_the_plain_counts_agree_with_the_statistics_page():
     from conftest import match_dir
     import json
@@ -294,3 +283,8 @@ def test_a_column_present_for_only_some_matches_is_reported():
     )
     assert partial_columns(rows) == ["line_breaking_completed"]
     assert partial_columns(rows.drop(columns="line_breaking_completed")) == []
+
+
+def test_there_is_no_rating_column_in_the_player_totals():
+    rows = pd.DataFrame([_player("m1", "Rice", 90, rating=8.0)])
+    assert "avg_rating" not in aggregate_players(rows).columns

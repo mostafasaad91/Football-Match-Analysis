@@ -38,7 +38,7 @@ from football_analysis.metrics.aggregate import (  # noqa: E402
     partial_columns,
     per90,
 )
-from football_analysis.metrics.extra_stats import player_extra, rating_by_player, team_extra  # noqa: E402
+from football_analysis.metrics.extra_stats import player_extra, starts_by_player, team_extra  # noqa: E402
 from football_analysis.paths import OUTPUT_DIR  # noqa: E402
 
 CACHE_DIR = OUTPUT_DIR / "aggregates" / "_cache"
@@ -167,9 +167,9 @@ def player_rows(package: Path, info: dict) -> pd.DataFrame:
     people["team"] = people["team_id"].map(names)
     people["match_id"] = package.name
     # Counts that are not in the card frame (assists, key passes, cards ...), and the
-    # provider's rating and starting place, matched on player and team.
+    # starting place, matched on player and team.
     people = people.merge(player_extra(events), on=["player", "team_id"], how="left")
-    people = people.merge(rating_by_player(players), on=["player", "team_id"], how="left")
+    people = people.merge(starts_by_player(players), on=["player", "team_id"], how="left")
     extra = [c for c in player_extra(events).columns if c not in {"player", "team_id"}]
     people[extra + ["started"]] = people[extra + ["started"]].fillna(0)
     people.to_csv(cache, index=False, encoding="utf-8-sig")

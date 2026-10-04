@@ -601,14 +601,12 @@ def player_profile(
         return None
     shares, raws = _percentiles(peers, (player, team), PLAYER_SLICES)
     totals = league.players.set_index(["player", "team"]).loc[(player, team)]
-    rating = totals.get("avg_rating")
     fig = plt.figure(figsize=SIZE, facecolor=base.BG)
     _card_header(
         fig,
         league.colour(team),
         player.upper(),
         f"{team} · {role} · {int(totals['matches'])} matches · {totals['minutes']:.0f} minutes"
-        + (f" · rating {rating:.2f}" if pd.notna(rating) else "")
         + (" · small sample" if totals["minutes"] < 450 else ""),
     )
     badges = [f"{round(100 * s):d}" if s is not None else "" for s in shares]

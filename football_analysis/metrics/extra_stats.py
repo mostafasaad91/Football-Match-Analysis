@@ -212,15 +212,14 @@ def player_extra(events: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def rating_by_player(players: pd.DataFrame) -> pd.DataFrame:
-    """The provider rating and whether the player started, from players.csv."""
+def starts_by_player(players: pd.DataFrame) -> pd.DataFrame:
+    """Whether each player was in the starting eleven, from players.csv."""
     if players is None or players.empty:
-        return pd.DataFrame(columns=["player", "team_id", "rating", "started"])
+        return pd.DataFrame(columns=["player", "team_id", "started"])
     out = pd.DataFrame(
         {
             "player": players["name"],
             "team_id": players["team_id"],
-            "rating": pd.to_numeric(players.get("rating"), errors="coerce"),
             "started": players.get("is_first_xi", pd.Series(False, index=players.index))
             .astype(str)
             .str.lower()
