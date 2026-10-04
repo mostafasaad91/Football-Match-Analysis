@@ -1,0 +1,12 @@
+# Spain LaLiga 2026-2027 - Matchweek 2  (20-24 Aug 2026)
+# Run with:  python run_round.py --round 2 --urls rounds/spain-laliga-2026-2027-mw02.txt
+https://www.whoscored.com/matches/1993915/live/spain-laliga-2026-2027-rayo-vallecano-deportivo-alaves
+https://www.whoscored.com/matches/1993909/live/spain-laliga-2026-2027-real-betis-real-sociedad
+https://www.whoscored.com/matches/1993907/live/spain-laliga-2026-2027-athletic-club-sevilla
+https://www.whoscored.com/matches/1993916/live/spain-laliga-2026-2027-valencia-celta-vigo
+https://www.whoscored.com/matches/1993911/live/spain-laliga-2026-2027-espanyol-real-madrid
+https://www.whoscored.com/matches/1993908/live/spain-laliga-2026-2027-atletico-madrid-villarreal
+https://www.whoscored.com/matches/1993912/live/spain-laliga-2026-2027-getafe-racing-santander
+https://www.whoscored.com/matches/1993910/live/spain-laliga-2026-2027-elche-barcelona
+https://www.whoscored.com/matches/1993914/live/spain-laliga-2026-2027-osasuna-levante
+https://www.whoscored.com/matches/1993913/live/spain-laliga-2026-2027-malaga-deportivo-de-a-coruna

@@ -22,9 +22,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from match_metrics import post_shot_xg
-from player_radar import player_metrics
-from visual_redesign_full import _corrected_xgot
+from football_analysis.metrics.match_metrics import post_shot_xg
+from football_analysis.visuals.player_radar import player_metrics
+from football_analysis.visuals.visual_redesign_full import _corrected_xgot
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -43,10 +43,17 @@ def _fixture(match):
 
 
 def _shot(xg, gy, gz):
-    return pd.DataFrame([{
-        "xG": xg, "goal_mouth_y": gy, "goal_mouth_z": gz,
-        "shot_whoscored_type": "Goal", "is_shot": True,
-    }])
+    return pd.DataFrame(
+        [
+            {
+                "xG": xg,
+                "goal_mouth_y": gy,
+                "goal_mouth_z": gz,
+                "shot_whoscored_type": "Goal",
+                "is_shot": True,
+            }
+        ]
+    )
 
 
 def test_placement_changes_the_value():
@@ -62,10 +69,17 @@ def test_a_well_placed_shot_can_exceed_its_pre_shot_value():
 
 
 def test_an_off_target_shot_is_worth_nothing_post_shot():
-    off = pd.DataFrame([{
-        "xG": 0.5, "goal_mouth_y": 50.0, "goal_mouth_z": 2.0,
-        "shot_whoscored_type": "MissedShots", "is_shot": True,
-    }])
+    off = pd.DataFrame(
+        [
+            {
+                "xG": 0.5,
+                "goal_mouth_y": 50.0,
+                "goal_mouth_z": 2.0,
+                "shot_whoscored_type": "MissedShots",
+                "is_shot": True,
+            }
+        ]
+    )
     assert float(post_shot_xg(off).sum()) == 0.0
 
 
@@ -80,8 +94,7 @@ def test_the_radar_and_the_team_card_agree(match):
 
     for side in ("home", "away"):
         team_id, name = int(info[f"{side}_id"]), str(info[f"{side}_name"])
-        squad = sorted(set(events[events["team_id"].eq(team_id)]["player"]
-                           .dropna().astype(str)))
+        squad = sorted(set(events[events["team_id"].eq(team_id)]["player"].dropna().astype(str)))
         summed = sum(player_metrics(events, p)["xGOT"] for p in squad)
         stated = float(corrected[corrected["team"].astype(str).eq(name)].iloc[0]["xGoT"])
         # Rounding per player against rounding once for the team.
@@ -94,8 +107,11 @@ def test_an_old_export_still_produces_a_consistent_package(match):
     events, xg, info = _fixture(match)
     corrected = _corrected_xgot(events, xg, info)
     for _, row in corrected.iterrows():
-        team_id = (int(info["home_id"]) if str(row["team"]) == str(info["home_name"])
-                   else int(info["away_id"]))
+        team_id = (
+            int(info["home_id"])
+            if str(row["team"]) == str(info["home_name"])
+            else int(info["away_id"])
+        )
         expected = round(float(post_shot_xg(events[events["team_id"].eq(team_id)]).sum()), 2)
         assert abs(float(row["xGoT"]) - expected) < 1e-9, (row["team"], row["xGoT"], expected)
 

@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pytest
 
-import visual_redesign_preview as base
+from football_analysis.visuals import visual_redesign_preview as base
 
 
 FIGSIZE, DPI = (12, 9), 150
@@ -61,8 +61,7 @@ def test_no_name_touches_a_crest(home, away, figure):
     for x0, x1 in names:
         for cx0, cx1 in crests:
             assert x1 <= cx0 or x0 >= cx1, (
-                f"{home} v {away}: text {x0:.4f}-{x1:.4f} overlaps crest "
-                f"{cx0:.4f}-{cx1:.4f}"
+                f"{home} v {away}: text {x0:.4f}-{x1:.4f} overlaps crest {cx0:.4f}-{cx1:.4f}"
             )
 
 
@@ -86,6 +85,7 @@ def test_nothing_in_the_cluster_overlaps_anything_else(home, away, figure):
 # how a name shortens
 # --------------------------------------------------------------------------
 
+
 def _budget(fig):
     half = base._text_width(fig, "2 — 1", base.FIXTURE_SCORE_SIZE) / 2
     crest = base.FIXTURE_CREST_W + base.FIXTURE_GAP
@@ -106,7 +106,7 @@ def test_a_name_that_fits_is_left_whole(figure):
 
 
 def test_a_dropped_tail_never_leaves_a_dangling_joiner(figure):
-    """"Brighton and Hove Albion" cut to "BRIGHTON AND", which reads unfinished."""
+    """ "Brighton and Hove Albion" cut to "BRIGHTON AND", which reads unfinished."""
     assert base._fit_name(figure, "Brighton and Hove Albion", _budget(figure)) == "BRIGHTON"
 
 

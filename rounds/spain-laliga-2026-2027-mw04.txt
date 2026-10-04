@@ -1,0 +1,15 @@
+# Spain LaLiga 2026-2027 - Matchweek 4  (4-7 Sep 2026)
+# Two fixtures played in the same window belong to other rounds and are not
+# here: Real Sociedad-Celta Vigo (3 Sep, id 1994148) was brought forward, and
+# Sevilla-Valencia (11 Sep, id 1994166) opens Matchweek 5.
+# Run with:  python run_round.py --round 4 --urls rounds/spain-laliga-2026-2027-mw04.txt
+https://www.whoscored.com/matches/1993928/live/spain-laliga-2026-2027-real-betis-real-madrid
+https://www.whoscored.com/matches/1993946/live/spain-laliga-2026-2027-athletic-club-atletico-madrid
+https://www.whoscored.com/matches/1993945/live/spain-laliga-2026-2027-rayo-vallecano-racing-santander
+https://www.whoscored.com/matches/1993927/live/spain-laliga-2026-2027-villarreal-deportivo-de-a-coruna
+https://www.whoscored.com/matches/1993949/live/spain-laliga-2026-2027-valencia-barcelona
+https://www.whoscored.com/matches/1993940/live/spain-laliga-2026-2027-malaga-levante
+https://www.whoscored.com/matches/1993942/live/spain-laliga-2026-2027-deportivo-alaves-osasuna
+https://www.whoscored.com/matches/1993933/live/spain-laliga-2026-2027-espanyol-sevilla
+https://www.whoscored.com/matches/1993936/live/spain-laliga-2026-2027-getafe-celta-vigo
+https://www.whoscored.com/matches/1993931/live/spain-laliga-2026-2027-elche-real-sociedad

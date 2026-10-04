@@ -2,7 +2,7 @@
 
 This file used to test ``match_posters``: its panel grid, its coordinate
 helpers, its indicator tables. None of that shipped. ``match_posters`` ended
-with ``from poster_dashboard import build_match_posters``, which replaced the
+with ``from football_analysis.visuals.poster_dashboard import build_match_posters``, which replaced the
 name every caller imported, so the module's own eleven hundred lines of
 drawing code had been unreachable since the redesign while the tests around
 them stayed green. The module is gone; what is left here is what still runs.
@@ -17,8 +17,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import crests
-import poster_dashboard as pd_
+from football_analysis.visuals import crests
+from football_analysis.visuals import poster_dashboard as pd_
 from conftest import match_dir
 
 
@@ -41,6 +41,7 @@ def _frames():
 # --------------------------------------------------------------------------
 # crests
 # --------------------------------------------------------------------------
+
 
 def test_crest_url_is_addressed_by_the_provider_team_id():
     """No name matching: the id on the event row is the id on the CDN."""
@@ -94,8 +95,9 @@ def test_a_failed_download_never_poisons_the_cache(tmp_path, monkeypatch):
 # rendering
 # --------------------------------------------------------------------------
 
+
 def _render(builder, tmp_path):
-    import visual_redesign_full as visual
+    from football_analysis.visuals import visual_redesign_full as visual
 
     events, players, xg, team_metrics, player_metrics, out = _frames()
     import json
@@ -103,11 +105,18 @@ def _render(builder, tmp_path):
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8-sig"))
     visual.configure_match(info, tmp_path)
     return builder(
-        events, xg, team_metrics, player_metrics, players,
+        events,
+        xg,
+        team_metrics,
+        player_metrics,
+        players,
         out_dir=tmp_path,
-        home_id=info["home_id"], away_id=info["away_id"],
-        home_name=info["home_name"], away_name=info["away_name"],
-        home_color=visual.HOME, away_color=visual.AWAY,
+        home_id=info["home_id"],
+        away_id=info["away_id"],
+        home_name=info["home_name"],
+        away_name=info["away_name"],
+        home_color=visual.HOME,
+        away_color=visual.AWAY,
         score=info["score"],
         competition="MATCH ANALYSIS",
         allow_download=False,  # offline: the monogram fallback must carry it

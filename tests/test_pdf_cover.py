@@ -16,8 +16,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import tactical_pdf_report as report
-from tactical_pdf_report import TacticalPDF, build_context
+from football_analysis.reports import tactical_pdf_report as report
+from football_analysis.reports.tactical_pdf_report import TacticalPDF, build_context
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,14 +25,20 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_article_failure_stops_pdf_instead_of_silent_fallback(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    import match_article
+    from football_analysis.prose import match_article
 
-    sections = ["Match Story", "Chance Creation", "Possession and Progression",
-                "Pressing and Rest Defence", "Transitions and Efficiency",
-                "Player Impact Appendix"]
+    sections = [
+        "Match Story",
+        "Chance Creation",
+        "Possession and Progression",
+        "Pressing and Rest Defence",
+        "Transitions and Efficiency",
+        "Player Impact Appendix",
+    ]
     monkeypatch.setattr(report, "build_context", lambda *args: {})
-    monkeypatch.setattr(report, "_section_copy", lambda c: {
-        name: {"subtitle": name} for name in sections})
+    monkeypatch.setattr(
+        report, "_section_copy", lambda c: {name: {"subtitle": name} for name in sections}
+    )
     monkeypatch.setattr(report, "TacticalPDF", lambda *args: SimpleNamespace(article_readings={}))
     monkeypatch.setattr(match_article, "cover_headline", lambda *args: "Test")
     cause = ValueError("Invalid article data")
@@ -73,6 +79,7 @@ def _cover(tmp_path, context=None):
 # --------------------------------------------------------------------------
 # the lead statistic
 # --------------------------------------------------------------------------
+
 
 def test_every_match_gets_a_lead_statistic():
     """The old pool of three share metrics left most matches with none."""
@@ -116,6 +123,7 @@ def test_a_goalless_metric_is_skipped_rather_than_dividing_by_zero():
 # the page
 # --------------------------------------------------------------------------
 
+
 def _coverage(tmp_path, context):
     """Share of the cover's rows carrying anything, its deepest gap, and reach.
 
@@ -130,8 +138,11 @@ def _coverage(tmp_path, context):
     _cover(tmp_path, context)
     doc = fitz.open(tmp_path / "cover.pdf")
     pix = doc[0].get_pixmap(dpi=60)
-    image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-        pix.height, pix.width, pix.n)[..., :3].astype(int)
+    image = (
+        np.frombuffer(pix.samples, dtype=np.uint8)
+        .reshape(pix.height, pix.width, pix.n)[..., :3]
+        .astype(int)
+    )
     page = image[4, 4]
     rows = (np.abs(image - page).sum(axis=2) > 12).any(axis=1)
     doc.close()
@@ -164,11 +175,9 @@ COVER_MIN_REACH = 0.90
 def test_the_cover_draws_every_band_of_the_page(tmp_path):
     """Measured, because 'looks empty' is exactly what went unnoticed before."""
     covered, gap, reach = _coverage(tmp_path, _context())
-    assert covered > COVER_MIN_FILL, (
-        f"only {covered:.0%} of the cover's rows carry anything")
+    assert covered > COVER_MIN_FILL, f"only {covered:.0%} of the cover's rows carry anything"
     assert gap < COVER_MAX_GAP, f"a dead band {gap:.0%} of the page deep"
-    assert reach > COVER_MIN_REACH, (
-        f"the cover's ink spans only {reach:.0%} of the page")
+    assert reach > COVER_MIN_REACH, f"the cover's ink spans only {reach:.0%} of the page"
 
 
 def test_the_card_sits_between_its_rules_with_equal_air(tmp_path):
@@ -186,13 +195,20 @@ def test_the_card_sits_between_its_rules_with_equal_air(tmp_path):
     fitz = pytest.importorskip("fitz")
     import numpy as np
 
-    from tactical_pdf_report import COVER_FOOT_LIFT, COVER_HEAD_DROP, PAGE_H
+    from football_analysis.reports.tactical_pdf_report import (
+        COVER_FOOT_LIFT,
+        COVER_HEAD_DROP,
+        PAGE_H,
+    )
 
     _cover(tmp_path, _context())
     doc = fitz.open(tmp_path / "cover.pdf")
     pix = doc[0].get_pixmap(dpi=60)
-    image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-        pix.height, pix.width, pix.n)[..., :3].astype(int)
+    image = (
+        np.frombuffer(pix.samples, dtype=np.uint8)
+        .reshape(pix.height, pix.width, pix.n)[..., :3]
+        .astype(int)
+    )
     doc.close()
     rows = (np.abs(image - image[4, 4]).sum(axis=2) > 12).any(axis=1)
 
@@ -201,13 +217,17 @@ def test_the_card_sits_between_its_rules_with_equal_air(tmp_path):
     # row inside the band and reads as the card reaching all the way down.
     scale = PAGE_H / len(rows)
     head, foot = PAGE_H - COVER_HEAD_DROP, COVER_FOOT_LIFT
-    inside = [PAGE_H - i * scale for i, hit in enumerate(rows)
-              if hit and foot + 3 < PAGE_H - i * scale < head - 3]
+    inside = [
+        PAGE_H - i * scale
+        for i, hit in enumerate(rows)
+        if hit and foot + 3 < PAGE_H - i * scale < head - 3
+    ]
     assert inside, "nothing is drawn between the two rules"
 
     above, below = head - max(inside), min(inside) - foot
     assert abs(above - below) < 15, (
-        f"{above:.0f}pt of air above the card and {below:.0f}pt below it")
+        f"{above:.0f}pt of air above the card and {below:.0f}pt below it"
+    )
 
 
 def test_the_cover_carries_both_crests(tmp_path):
@@ -238,15 +258,17 @@ def test_the_thesis_wraps_instead_of_touching_both_margins(tmp_path):
     c = pdf.canvas
     longest = max(
         c.stringWidth(line, "Helvetica-Bold", report.TYPE_THESIS)
-        for line in ["Aston Villa created the better chances and lost. PSG needed",
-                     "fewer of them and took them."]
+        for line in [
+            "Aston Villa created the better chances and lost. PSG needed",
+            "fewer of them and took them.",
+        ]
     )
     assert longest <= 720
 
 
 _THEME_PROBE = """
     import json
-    import tactical_pdf_report as report
+    from football_analysis.reports import tactical_pdf_report as report
     print(json.dumps({"thesis": report.TYPE_THESIS, "fixture": report.TYPE_FIXTURE}))
 """
 
@@ -264,7 +286,7 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
         from pathlib import Path
         sys.path.insert(0, {str(ROOT)!r})
         import pandas as pd
-        from tactical_pdf_report import TacticalPDF, build_context
+        from football_analysis.reports.tactical_pdf_report import TacticalPDF, build_context
         out = Path({str(fixture)!r})
         info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
         context = build_context(
@@ -278,9 +300,14 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
         print("OK")
     """)
     completed = subprocess.run(
-        [sys.executable, "-c", script], cwd=ROOT,
+        [sys.executable, "-c", script],
+        cwd=ROOT,
         env={**os.environ, "MATCH_ANALYSIS_THEME": theme, "PYTHONIOENCODING": "utf-8"},
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
     assert "OK" in completed.stdout
@@ -305,7 +332,7 @@ def test_the_cover_builds_on_both_pages(theme, tmp_path):
 
 def test_nothing_reaches_for_the_deleted_artwork(tmp_path):
     """The fallback is gone, so a stale PNG cannot become the article's cover."""
-    from match_article import _cover_image
+    from football_analysis.prose.match_article import _cover_image
 
     (tmp_path / "cover_art.png").write_bytes(b"not a real png")
     assert _cover_image(tmp_path) is None

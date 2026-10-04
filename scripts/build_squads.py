@@ -16,6 +16,7 @@ one the pipeline could not find on its own.
 A team that appears in more than one fixture gets the union of what was seen,
 with the number of matches each name appeared in, so a one-off is easy to spot.
 """
+
 from __future__ import annotations
 
 import json
@@ -66,24 +67,27 @@ def main(argv: list[str]) -> int:
     if "--check" in argv:
         existing = {}
         if TARGET.exists():
-            existing = {str(k).strip().lower(): set(v)
-                        for k, v in json.loads(TARGET.read_text(encoding="utf-8")).items()}
+            existing = {
+                str(k).strip().lower(): set(v)
+                for k, v in json.loads(TARGET.read_text(encoding="utf-8")).items()
+            }
         for team, names in squads.items():
             known = existing.get(team.lower())
             if known is None:
                 print(f"{team}: no roster in {TARGET.name}")
                 continue
             strangers = [n for n in names if n not in known]
-            print(f"{team}: {len(strangers)} not in your roster"
-                  + (f" — {', '.join(strangers)}" if strangers else ""))
+            print(
+                f"{team}: {len(strangers)} not in your roster"
+                + (f" — {', '.join(strangers)}" if strangers else "")
+            )
         return 0
 
     if TARGET.exists():
         print(f"{TARGET.name} already exists; not overwriting a roster you have edited.")
         return 1
 
-    TARGET.write_text(json.dumps(squads, indent=2, ensure_ascii=False) + "\n",
-                      encoding="utf-8")
+    TARGET.write_text(json.dumps(squads, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Wrote {TARGET} for {len(squads)} team(s).")
     print("Review it: names seen in only one fixture are the ones worth checking.")
     for team, counter in sorted(seen.items()):

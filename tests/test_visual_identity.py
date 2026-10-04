@@ -1,10 +1,13 @@
-import football_match_analysis as analysis
-import visual_redesign_full as complete_visuals
-import visual_redesign_preview as preview
-from football_match_analysis import WHITE_KIT_SILVER, choose_matchup_colors
-from player_radar import _side_team_color
-from tactical_visualizations import _clean_dark_navy, _team_identity_color
-from visualization_components import (
+from football_analysis.pipeline import football_match_analysis as analysis
+from football_analysis.visuals import visual_redesign_full as complete_visuals
+from football_analysis.visuals import visual_redesign_preview as preview
+from football_analysis.pipeline.football_match_analysis import (
+    WHITE_KIT_SILVER,
+    choose_matchup_colors,
+)
+from football_analysis.visuals.player_radar import _side_team_color
+from football_analysis.visuals.tactical_visualizations import _clean_dark_navy, _team_identity_color
+from football_analysis.visuals.visualization_components import (
     BG_PITCH,
     C_AWAY,
     C_HOME,
@@ -96,7 +99,7 @@ def test_matchup_colours_are_stable_and_distinct_for_unknown_teams():
 def test_same_kit_fixtures_fall_back_to_the_fixed_roles():
     """Two teams that resolve to near-identical colours must not both render
     in that colour — the renderers drop back to the role pair instead."""
-    from tactical_visualizations import _match_colors
+    from football_analysis.visuals.tactical_visualizations import _match_colors
 
     info = {
         "home_id": 1,
@@ -109,7 +112,7 @@ def test_same_kit_fixtures_fall_back_to_the_fixed_roles():
 
 
 def test_single_team_pages_never_share_a_colour():
-    from tactical_visualizations import _team_identity_color
+    from football_analysis.visuals.tactical_visualizations import _team_identity_color
 
     info = {
         "home_id": 7,
@@ -127,7 +130,7 @@ def test_single_team_pages_never_share_a_colour():
 
 
 def test_pitch_reads_as_white_markings_on_true_black():
-    from visualization_components import IS_LIGHT_THEME
+    from football_analysis.visuals.visualization_components import IS_LIGHT_THEME
 
     if IS_LIGHT_THEME:
         return
@@ -151,30 +154,30 @@ def test_shot_outcomes_have_one_colour_each():
 
 
 def test_team_palette_database_covers_every_competition_tier():
-    import football_match_analysis as analysis
-    import team_palettes
+    from football_analysis.pipeline import football_match_analysis as analysis
+    from football_analysis.visuals import team_palettes
 
     palettes = analysis.TOP5_2025_26_TEAM_PALETTES
     # Champions League / Europa League / Conference League regulars, the
     # non-UEFA continental competitions, and national teams.
     for team in (
-        "Arsenal",           # Premier League
-        "Real Madrid",       # LaLiga
-        "Inter Milan",       # Serie A
-        "Bayern Munich",     # Bundesliga
-        "PSG",               # Ligue 1
-        "Sporting CP",       # Primeira Liga
-        "Qarabag",           # UCL league phase, outside the big leagues
-        "Pafos",             # UCL league phase, outside the big leagues
-        "Bodo/Glimt",        # Eliteserien
-        "Ferencvaros",       # NB I
-        "Al Ahly",           # CAF Champions League
-        "Al Hilal",          # AFC Champions League Elite
-        "Flamengo",          # Copa Libertadores
-        "Club America",      # CONCACAF Champions Cup
-        "Brazil",            # CONMEBOL national team
-        "Uganda",            # CAF national team
-        "Vanuatu",           # OFC national team
+        "Arsenal",  # Premier League
+        "Real Madrid",  # LaLiga
+        "Inter Milan",  # Serie A
+        "Bayern Munich",  # Bundesliga
+        "PSG",  # Ligue 1
+        "Sporting CP",  # Primeira Liga
+        "Qarabag",  # UCL league phase, outside the big leagues
+        "Pafos",  # UCL league phase, outside the big leagues
+        "Bodo/Glimt",  # Eliteserien
+        "Ferencvaros",  # NB I
+        "Al Ahly",  # CAF Champions League
+        "Al Hilal",  # AFC Champions League Elite
+        "Flamengo",  # Copa Libertadores
+        "Club America",  # CONCACAF Champions Cup
+        "Brazil",  # CONMEBOL national team
+        "Uganda",  # CAF national team
+        "Vanuatu",  # OFC national team
     ):
         assert team in palettes, team
         assert analysis._team_palette(team, "#999999")[0].startswith("#")
@@ -240,7 +243,7 @@ def test_live_matches_use_complete_amoled_renderer(tmp_path):
         assert (preview.HOME, preview.AWAY) == expected
         # Both sides must clear readable contrast against the page they are
         # actually drawn on (black on AMOLED, light paper on light).
-        from visualization_components import IS_LIGHT_THEME
+        from football_analysis.visuals.visualization_components import IS_LIGHT_THEME
 
         page = preview.BG
         min_side = 2.2 if IS_LIGHT_THEME else 2.4
@@ -301,7 +304,7 @@ def test_team_series_palette_and_score_are_fixture_aware():
 
 
 def test_approved_team_colours_are_preserved_without_lift_or_outline():
-    from visualization_components import IS_LIGHT_THEME
+    from football_analysis.visuals.visualization_components import IS_LIGHT_THEME
 
     primary, _secondary = complete_visuals._team_series_palette(C_AWAY)
 
@@ -327,9 +330,7 @@ def test_single_team_visuals_resolve_identity_from_fixture_role():
     info = {"home_id": 10, "away_id": 20}
     assert _team_identity_color(info, 10, "#FFFFFF") == C_HOME
     assert _team_identity_color(info, 20, "#FFFFFF") == C_AWAY
-    assert _team_identity_color(info, 10, C_AWAY) != _team_identity_color(
-        info, 20, C_HOME
-    )
+    assert _team_identity_color(info, 10, C_AWAY) != _team_identity_color(info, 20, C_HOME)
 
 
 def test_team_density_maps_use_distinct_fixture_colours():
@@ -394,7 +395,7 @@ def test_semantic_event_styles_share_the_canonical_identity():
 def test_ambiguous_team_names_are_refused_not_guessed():
     """Partial matching used to take the first overlapping key out of ~975, so
     "Al " resolved to Arsenal and "United" to whichever United came first."""
-    import football_match_analysis as fma
+    from football_analysis.pipeline import football_match_analysis as fma
 
     fma.UNRESOLVED_TEAM_NAMES.clear()
     for ambiguous in ("Real", "United"):
@@ -413,7 +414,7 @@ def test_ambiguous_team_names_are_refused_not_guessed():
 
 
 def test_unique_partial_match_is_accepted_but_recorded():
-    import football_match_analysis as fma
+    from football_analysis.pipeline import football_match_analysis as fma
 
     fma.UNRESOLVED_TEAM_NAMES.clear()
     palette = fma._team_palette("Athletic Bilbao FC", "#999999")
