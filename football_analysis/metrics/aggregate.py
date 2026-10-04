@@ -53,8 +53,34 @@ PLAYER_COUNTS = [
     "claims",
     "sweeps",
     "goals_prevented",
+    # from extra_stats.player_extra
+    "assists",
+    "key_passes",
+    "shots_on_target",
+    "crosses",
+    "crosses_completed",
+    "long_balls",
+    "long_balls_completed",
+    "passes_into_final_third",
+    "passes_into_box",
+    "tackles",
+    "fouls_committed",
+    "fouls_won",
+    "yellow_cards",
+    "red_cards",
+    "started",
 ]
 PLAYER_PER90 = [
+    "assists",
+    "key_passes",
+    "shots_on_target",
+    "crosses",
+    "long_balls",
+    "passes_into_final_third",
+    "passes_into_box",
+    "tackles",
+    "fouls_committed",
+    "fouls_won",
     "xG",
     "xA",
     "xG_xA",
@@ -102,7 +128,12 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     if rows.empty:
         return pd.DataFrame()
     frame = rows.copy()
-    for column in PLAYER_COUNTS + ["minutes", "defensive_height", "padj_defensive_actions"]:
+    for column in PLAYER_COUNTS + [
+        "minutes",
+        "defensive_height",
+        "padj_defensive_actions",
+        "rating",
+    ]:
         frame[column] = pd.to_numeric(frame[column], errors="coerce") if column in frame else np.nan
     frame["_height_weight"] = frame["defensive_height"].fillna(0) * frame[
         "defensive_actions"
@@ -110,6 +141,8 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     frame["_height_actions"] = np.where(
         frame["defensive_height"].notna(), frame["defensive_actions"].fillna(0), 0
     )
+    frame["_rating_weight"] = frame["rating"].fillna(0) * frame["minutes"].fillna(0)
+    frame["_rating_minutes"] = np.where(frame["rating"].notna(), frame["minutes"].fillna(0), 0)
     frame["_padj_weight"] = frame["padj_defensive_actions"].fillna(0) * frame["minutes"].fillna(0)
     frame["_padj_minutes"] = np.where(
         frame["padj_defensive_actions"].notna(), frame["minutes"].fillna(0), 0
@@ -118,7 +151,16 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     out = grouped[PLAYER_COUNTS + ["minutes"]].sum(min_count=1)
     out["matches"] = grouped["match_id"].nunique()
     out["role"] = grouped["role_group"].agg(_mode) if "role_group" in frame else ""
-    sums = grouped[["_height_weight", "_height_actions", "_padj_weight", "_padj_minutes"]].sum()
+    sums = grouped[
+        [
+            "_height_weight",
+            "_height_actions",
+            "_padj_weight",
+            "_padj_minutes",
+            "_rating_weight",
+            "_rating_minutes",
+        ]
+    ].sum()
     out = out.reset_index()
     out["pass_pct"] = _ratio(out["completed_passes"], out["passes"], 100).values
     out["progressive_pass_pct"] = _ratio(
@@ -132,6 +174,15 @@ def aggregate_players(rows: pd.DataFrame) -> pd.DataFrame:
     out["xA_per_100_passes"] = _ratio(out["xA"], out["passes"], 100).values
     out["defensive_height"] = _ratio(sums["_height_weight"], sums["_height_actions"]).values
     out["padj_defensive_actions"] = _ratio(sums["_padj_weight"], sums["_padj_minutes"]).values
+    # The provider's match rating, averaged over the minutes it was earned in.
+    out["avg_rating"] = _ratio(sums["_rating_weight"], sums["_rating_minutes"]).values
+    out["cross_pct"] = _ratio(out["crosses_completed"], out["crosses"], 100).values
+    out["long_ball_pct"] = _ratio(out["long_balls_completed"], out["long_balls"], 100).values
+    out["tackle_pct"] = _ratio(out["tackles_won"], out["tackles"], 100).values
+    out["shot_accuracy"] = _ratio(out["shots_on_target"], out["shots"], 100).values
+    out["goal_conversion"] = _ratio(out["goals"], out["shots"], 100).values
+    out["goals_minus_xG"] = out["goals"] - out["xG"]
+    out["goal_contributions"] = out["goals"] + out["assists"]
     first = ["player", "team", "role", "matches", "minutes"]
     return out[first + [c for c in out.columns if c not in first]].sort_values(
         ["minutes", "player"], ascending=[False, True], ignore_index=True
@@ -160,8 +211,15 @@ def per90(totals: pd.DataFrame, minimum_minutes: float = 90.0) -> pd.DataFrame:
         "xT_per_100_touches",
         "defensive_height",
         "padj_defensive_actions",
+        "avg_rating",
+        "cross_pct",
+        "long_ball_pct",
+        "tackle_pct",
+        "shot_accuracy",
+        "goal_conversion",
     ):
         out[column] = kept[column]
+    out["goal_contributions_p90"] = 90.0 * kept["goal_contributions"] / kept["minutes"]
     return out.sort_values("minutes", ascending=False, ignore_index=True)
 
 
@@ -169,15 +227,54 @@ def per90(totals: pd.DataFrame, minimum_minutes: float = 90.0) -> pd.DataFrame:
 # Names that mark a figure which is a rate, a share or an average: it is averaged
 # over matches and never summed.
 _RATE = re.compile(
-    r"(rate|pct|share|tilt|ppda|avg|average|per_|efficiency|height|spread|length|"
-    r"speed|duration|progress|compact|accuracy|success|score|_per)",
+    r"(rate|pct|share|tilt|ppda|avg_|average|per_|_per|efficiency|directness|"
+    r"vulnerability|accuracy)",
     re.IGNORECASE,
 )
+# Counts whose names would otherwise read as rates: the two halves of PPDA.
+_COUNTS = {"ppda_passes_allowed", "ppda_defensive_actions"}
 TEAM_ID_COLUMNS = {"team_id", "side", "round"}
 
 
 def is_rate(column: str) -> bool:
-    return bool(_RATE.search(column))
+    """A figure that is averaged over matches and never added up."""
+    return column not in _COUNTS and bool(_RATE.search(column))
+
+
+# Ratios worked out from summed counts, so a side's pass completion over five matches
+# is its completed passes over its attempts and not the mean of five percentages.
+TEAM_RATIOS = {
+    "pass_pct": ("passes_completed", "passes", 100.0),
+    "long_ball_pct": ("long_balls_completed", "long_balls", 100.0),
+    "cross_pct": ("completed_crosses", "crosses", 100.0),
+    "aerial_pct": ("aerials_won", "aerials", 100.0),
+    "ground_duel_pct": ("ground_duels_won", "ground_duels", 100.0),
+    "shot_accuracy": ("on_target", "shots", 100.0),
+    "goal_conversion": ("goals_for", "shots", 100.0),
+    "xG_per_shot": ("xG", "shots", 1.0),
+    "ppda": ("ppda_passes_allowed", "ppda_defensive_actions", 1.0),
+    "xG_against_per_shot": ("xG_against", "shots_against", 1.0),
+}
+
+
+def _apply_team_ratios(table: pd.DataFrame, matches: pd.Series | None = None) -> pd.DataFrame:
+    """Recompute the ratio columns, and the for-minus-against figures, from the counts.
+
+    ``table`` holds summed counts (``matches`` is None) or per-match means (``matches`` given);
+    a ratio of two means equals the ratio of the two sums, so one rule serves both.
+    """
+    for name, (top, bottom, scale) in TEAM_RATIOS.items():
+        if top in table and bottom in table:
+            table[name] = _ratio(table[top], table[bottom], scale).values
+    if {"xG", "xG_against"} <= set(table.columns):
+        table["xG_difference"] = table["xG"] - table["xG_against"]
+    if {"goals_for", "xG"} <= set(table.columns):
+        table["goals_minus_xG"] = table["goals_for"] - table["xG"]
+    if {"xGoT_against", "goals_against"} <= set(table.columns):
+        # What the side's goalkeeping saved beyond the shots it faced: the post-shot value of
+        # the attempts on target, less the goals actually conceded.
+        table["goals_prevented"] = table["xGoT_against"] - table["goals_against"]
+    return table
 
 
 def aggregate_teams(rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -227,9 +324,9 @@ def aggregate_teams(rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     for column in numeric:
         if is_rate(column):
             sums[column] = np.nan
-    if {"xG", "shots"} <= set(sums.columns):
-        sums["xG_per_shot"] = _ratio(sums["xG"], sums["shots"]).values
     totals = base[lead].join(sums).reset_index()
+    # The two goal columns sit in the base block, so give the ratio step one table.
+    totals = _apply_team_ratios(totals)
     means = grouped[numeric].mean()
     means = means.join(base["matches"]).reset_index()
     per_match = pd.concat(
@@ -242,6 +339,7 @@ def aggregate_teams(rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         ],
         axis=1,
     )
+    per_match = _apply_team_ratios(per_match)
     order = ["points", "goal_difference", "goals_for"]
     totals = totals.sort_values(order, ascending=False, ignore_index=True)
     per_match = per_match.set_index("team").loc[totals["team"]].reset_index()

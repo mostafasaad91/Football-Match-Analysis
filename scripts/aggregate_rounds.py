@@ -32,6 +32,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from football_analysis.metrics.aggregate import aggregate_players, aggregate_teams, per90  # noqa: E402
+from football_analysis.metrics.extra_stats import player_extra, rating_by_player, team_extra  # noqa: E402
 from football_analysis.paths import OUTPUT_DIR  # noqa: E402
 
 CACHE_DIR = OUTPUT_DIR / "aggregates" / "_cache"
@@ -110,7 +111,28 @@ def team_rows(package: Path, round_number: int, info: dict) -> pd.DataFrame:
                 }
             )
         out.append(row)
-    return pd.DataFrame(out)
+    frame = pd.DataFrame(out)
+
+    events = pd.read_csv(package / "events.csv", low_memory=False)
+    frame = frame.merge(team_extra(events, info), on="team", how="left")
+
+    # What each side conceded: the other row's attacking figures, so a table can say
+    # who allowed the fewest chances and how well each goalkeeper did against the shots faced.
+    against = {
+        "xG": "xG_against",
+        "xGoT": "xGoT_against",
+        "shots": "shots_against",
+        "on_target": "on_target_against",
+        "big_chances": "big_chances_against",
+        "box_entries": "box_entries_against",
+        "key_passes": "key_passes_against",
+    }
+    for index in frame.index:
+        other = frame.drop(index).iloc[0]
+        for source, target in against.items():
+            if source in frame:
+                frame.loc[index, target] = other[source]
+    return frame
 
 
 def player_rows(package: Path, info: dict) -> pd.DataFrame:
@@ -121,7 +143,7 @@ def player_rows(package: Path, info: dict) -> pd.DataFrame:
     lives outside the package folder so the package stays exactly what the renderer wrote.
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache = CACHE_DIR / f"{package.parent.parent.parent.name}__{package.name}.csv"
+    cache = CACHE_DIR / f"v2__{package.parent.parent.parent.name}__{package.name}.csv"
     events_file = package / "events.csv"
     if cache.exists() and cache.stat().st_mtime >= events_file.stat().st_mtime:
         return pd.read_csv(cache)
@@ -133,6 +155,12 @@ def player_rows(package: Path, info: dict) -> pd.DataFrame:
     names = {info["home_id"]: info["home_name"], info["away_id"]: info["away_name"]}
     people["team"] = people["team_id"].map(names)
     people["match_id"] = package.name
+    # Counts that are not in the card frame (assists, key passes, cards ...), and the
+    # provider's rating and starting place, matched on player and team.
+    people = people.merge(player_extra(events), on=["player", "team_id"], how="left")
+    people = people.merge(rating_by_player(players), on=["player", "team_id"], how="left")
+    extra = [c for c in player_extra(events).columns if c not in {"player", "team_id"}]
+    people[extra + ["started"]] = people[extra + ["started"]].fillna(0)
     people.to_csv(cache, index=False, encoding="utf-8-sig")
     return people
 

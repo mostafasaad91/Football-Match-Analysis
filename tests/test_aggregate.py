@@ -180,3 +180,104 @@ def test_the_round_number_is_not_added_up_as_if_it_were_a_statistic():
     )
     totals, per_match = aggregate_teams(rows)
     assert "round" not in totals.columns and "round" not in per_match.columns
+
+
+# ── the added statistics ─────────────────────────────────────────────────────
+def test_ppda_is_the_summed_passes_over_the_summed_actions():
+    rows = pd.DataFrame(
+        [
+            _team("m1", "Arsenal", 1, 0, ppda_passes_allowed=100, ppda_defensive_actions=10),
+            _team("m2", "Arsenal", 1, 0, ppda_passes_allowed=100, ppda_defensive_actions=40),
+        ]
+    )
+    totals, per_match = aggregate_teams(rows)
+    # 200 / 50 = 4.0, not the mean of 10.0 and 2.5
+    assert totals.iloc[0]["ppda"] == pytest.approx(4.0)
+    assert per_match.iloc[0]["ppda"] == pytest.approx(4.0)
+    assert totals.iloc[0]["ppda_passes_allowed"] == 200, (
+        "the two halves are counts, so they are summed"
+    )
+
+
+def test_progressive_passes_and_build_up_successes_are_counts_not_rates():
+    assert not is_rate("progressive_passes")
+    assert not is_rate("build_up_successes")
+    assert is_rate("directness") and is_rate("rest_defence_vulnerability")
+
+
+def test_for_and_against_figures_become_differences():
+    rows = pd.DataFrame(
+        [
+            _team("m1", "Arsenal", 3, 1, xG=2.0, xG_against=0.5, xGoT_against=1.2, shots_against=5),
+            _team("m2", "Arsenal", 0, 0, xG=1.0, xG_against=1.5, xGoT_against=0.3, shots_against=9),
+        ]
+    )
+    totals, _ = aggregate_teams(rows)
+    row = totals.iloc[0]
+    assert row["xG_difference"] == pytest.approx(1.0)
+    assert row["goals_minus_xG"] == pytest.approx(0.0)
+    assert row["goals_prevented"] == pytest.approx(1.5 - 1.0)
+
+
+def test_pass_completion_is_recomputed_from_the_counts():
+    rows = pd.DataFrame(
+        [
+            _team("m1", "Arsenal", 1, 0, passes=100, passes_completed=90),
+            _team("m2", "Arsenal", 1, 0, passes=300, passes_completed=240),
+        ]
+    )
+    totals, _ = aggregate_teams(rows)
+    assert totals.iloc[0]["pass_pct"] == pytest.approx(100 * 330 / 400)
+
+
+def test_players_assists_and_key_passes_are_summed_and_given_per_90():
+    rows = pd.DataFrame(
+        [
+            _player("m1", "Saka", 90, assists=1, key_passes=3, shots=2, shots_on_target=1, goals=1),
+            _player("m2", "Saka", 90, assists=2, key_passes=5, shots=2, shots_on_target=2, goals=0),
+        ]
+    )
+    totals = aggregate_players(rows).iloc[0]
+    assert (totals["assists"], totals["key_passes"], totals["goal_contributions"]) == (3, 8, 4)
+    assert totals["shot_accuracy"] == pytest.approx(75.0)
+    rates = per90(aggregate_players(rows)).iloc[0]
+    assert rates["assists_p90"] == pytest.approx(1.5)
+    assert rates["key_passes_p90"] == pytest.approx(4.0)
+
+
+def test_a_rating_is_weighted_by_the_minutes_it_was_earned_in():
+    rows = pd.DataFrame(
+        [
+            _player("m1", "Rice", 90, rating=8.0),
+            _player("m2", "Rice", 30, rating=6.0),
+            _player("m3", "Rice", 45),  # unrated: its minutes do not dilute the average
+        ]
+    )
+    assert aggregate_players(rows).iloc[0]["avg_rating"] == pytest.approx((8 * 90 + 6 * 30) / 120)
+
+
+def test_the_plain_counts_agree_with_the_statistics_page():
+    from conftest import match_dir
+    import json
+
+    package = match_dir("Arsenal_vs_Coventry_3-0")
+    if not (package / "match_info.json").exists():
+        pytest.skip("Arsenal_vs_Coventry_3-0 has not been rendered")
+    from football_analysis.metrics.extra_stats import team_extra
+
+    info = json.loads((package / "match_info.json").read_text(encoding="utf-8-sig"))
+    events = pd.read_csv(package / "events.csv", low_memory=False)
+    side = team_extra(events, info).set_index("team")
+    arsenal, coventry = side.loc["Arsenal"], side.loc["Coventry"]
+    # the figures the match statistics page prints for this fixture
+    assert (arsenal["passes"], arsenal["key_passes"], coventry["key_passes"]) == (653, 17, 3)
+    assert (arsenal["tackles"], arsenal["interceptions"], arsenal["blocks"]) == (9, 5, 1)
+    assert (arsenal["aerials_won"], arsenal["aerials"], coventry["aerials_won"]) == (11, 28, 17)
+    assert (arsenal["ground_duels_won"], arsenal["ground_duels"], coventry["ground_duels_won"]) == (
+        11,
+        19,
+        8,
+    )
+    assert arsenal["ppda_passes_allowed"] / arsenal["ppda_defensive_actions"] == pytest.approx(
+        5.55, abs=0.01
+    )
