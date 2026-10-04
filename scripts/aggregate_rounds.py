@@ -31,7 +31,13 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from football_analysis.metrics.aggregate import aggregate_players, aggregate_teams, per90  # noqa: E402
+from football_analysis.metrics.aggregate import (  # noqa: E402
+    aggregate_players,
+    PLAYER_COUNTS,
+    aggregate_teams,
+    partial_columns,
+    per90,
+)
 from football_analysis.metrics.extra_stats import player_extra, rating_by_player, team_extra  # noqa: E402
 from football_analysis.paths import OUTPUT_DIR  # noqa: E402
 
@@ -80,8 +86,15 @@ def _score(info: dict) -> tuple[int, int]:
 
 def team_rows(package: Path, round_number: int, info: dict) -> pd.DataFrame:
     """One row per side: the xG table and the advanced metrics, with the result."""
+    from football_analysis.render.render_snapshot import _backfill_team_metrics
+
     xg = pd.read_csv(package / "xg.csv")
-    advanced = pd.read_csv(package / "team_advanced_metrics.csv")
+    events = pd.read_csv(package / "events.csv", low_memory=False)
+    # Packages rendered before xGOT and line-breaking passes were added lack those columns;
+    # they are rebuilt from the saved events, as the offline renderer does.
+    advanced = _backfill_team_metrics(
+        events, info, pd.read_csv(package / "team_advanced_metrics.csv")
+    )
     home_goals, away_goals = _score(info)
     out = []
     for side, name, goals_for, goals_against in (
@@ -112,8 +125,6 @@ def team_rows(package: Path, round_number: int, info: dict) -> pd.DataFrame:
             )
         out.append(row)
     frame = pd.DataFrame(out)
-
-    events = pd.read_csv(package / "events.csv", low_memory=False)
     frame = frame.merge(team_extra(events, info), on="team", how="left")
 
     # What each side conceded: the other row's attacking figures, so a table can say
@@ -205,8 +216,21 @@ def main(argv=None) -> int:
         )
         print(f"R{number}  {package.name}")
 
-    team_totals, team_means = aggregate_teams(pd.concat(teams, ignore_index=True))
-    player_totals = aggregate_players(pd.concat(people, ignore_index=True))
+    all_teams = pd.concat(teams, ignore_index=True)
+    all_people = pd.concat(people, ignore_index=True)
+    # Player ratios are blank by nature where nothing was attempted, and goals prevented
+    # exists only for goalkeepers; the counts are what must be complete.
+    player_counts = all_people[
+        [c for c in PLAYER_COUNTS if c in all_people and c != "goals_prevented"]
+    ]
+    for label, frame in (("team", all_teams), ("player", player_counts)):
+        gaps = partial_columns(frame)
+        if gaps:
+            print(
+                f"WARNING: {label} columns missing for some matches, so their totals cover fewer: {gaps}"
+            )
+    team_totals, team_means = aggregate_teams(all_teams)
+    player_totals = aggregate_players(all_people)
     player_rates = per90(player_totals, args.min_minutes)
     matches = pd.DataFrame(listing)
 

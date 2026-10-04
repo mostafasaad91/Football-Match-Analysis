@@ -11,6 +11,7 @@ from football_analysis.metrics.aggregate import (
     aggregate_players,
     aggregate_teams,
     is_rate,
+    partial_columns,
     per90,
 )
 
@@ -281,3 +282,15 @@ def test_the_plain_counts_agree_with_the_statistics_page():
     assert arsenal["ppda_passes_allowed"] / arsenal["ppda_defensive_actions"] == pytest.approx(
         5.55, abs=0.01
     )
+
+
+def test_a_column_present_for_only_some_matches_is_reported():
+    rows = pd.DataFrame(
+        [
+            _team("m1", "Arsenal", 1, 0, line_breaking_completed=20.0),
+            _team("m2", "Arsenal", 1, 0, line_breaking_completed=np.nan),
+            _team("m3", "Arsenal", 1, 0, line_breaking_completed=24.0),
+        ]
+    )
+    assert partial_columns(rows) == ["line_breaking_completed"]
+    assert partial_columns(rows.drop(columns="line_breaking_completed")) == []

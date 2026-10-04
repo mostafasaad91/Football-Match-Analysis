@@ -1,16 +1,17 @@
-"""Boards for a block of rounds: every team and the players who stood out.
+"""Shared pieces for the season graphics, and the club and player profile cards.
 
-The match boards answer "what happened on Saturday". These answer "what does the
-season so far look like" from the tables ``scripts/aggregate_rounds.py`` writes, so
-they read CSVs and know nothing about events. They share the match boards' tokens
-(page, panel and grid colours, the bundled condensed face) and use each club's own
-colour and crest where there is one.
+Everything here reads the aggregate tables ``scripts/aggregate_rounds.py`` writes and
+knows nothing about events. ``League`` holds the tables and each club's id and colour;
+the helpers draw badges, spread overlapping marks apart and place labels where nothing
+else is; ``team_profile`` and ``player_profile`` draw the ringed pizza cards. All are
+16:9 (1600 x 900): the widest frame a timeline shows, and the one every graphic uses.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,7 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
-from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.patches import Rectangle
 
 from football_analysis.visuals import crests
 from football_analysis.visuals import visual_redesign_preview as base
@@ -28,7 +29,8 @@ from football_analysis.visuals.typography import display
 
 matplotlib.use("Agg")
 
-DPI = 170
+SIZE = (12.0, 6.75)
+DPI = 1600 / 12  # 1600 x 900
 ACCENT = "#2FD3BE"
 
 
@@ -102,196 +104,9 @@ def surname(name: str) -> str:
     return parts[-1] if parts else str(name)
 
 
-# ── page furniture ──────────────────────────────────────────────────────────────
-def page(league: League, title: str, subtitle: str, size=(14, 9)):
-    fig = plt.figure(figsize=size, facecolor=base.BG)
-    fig.text(
-        0.05,
-        0.955,
-        f"{league.title}  ·  {league.rounds}",
-        color=base.MUTED,
-        fontsize=10,
-        fontweight="bold",
-    )
-    fig.text(0.05, 0.898, title.upper(), color=base.TEXT, va="center", **display(38))
-    fig.text(0.05, 0.855, subtitle, color=base.MUTED, fontsize=11)
-    fig.add_artist(
-        Rectangle((0.05, 0.835), 0.9, 0.003, transform=fig.transFigure, color=ACCENT, lw=0)
-    )
-    fig.text(0.95, 0.022, "MOSTAFA SAAD", color=base.MUTED, ha="right", **display(13))
-    return fig
-
-
-def finish(fig, league: League, name: str, note: str = "") -> Path:
-    if note:
-        fig.text(0.05, 0.022, note, color=base.NEUTRAL, fontsize=8)
-    out = league.folder / "visuals"
-    out.mkdir(parents=True, exist_ok=True)
-    path = out / name
-    fig.savefig(path, dpi=DPI, facecolor=base.BG)
-    plt.close(fig)
-    return path
-
-
-def put_crest(ax, league: League, team: str, xy, zoom=0.24, transform=None):
-    """A club badge at ``xy``; returns False when there is none to draw."""
-    team_id = league.ids.get(team)
-    image = crests.crest_image(team_id, allow_download=False) if team_id is not None else None
-    if image is None:
-        return False
-    box = AnnotationBbox(
-        OffsetImage(image, zoom=zoom),
-        xy,
-        frameon=False,
-        xycoords=transform or "data",
-        box_alignment=(0.5, 0.5),
-        zorder=6,
-    )
-    ax.add_artist(box)
-    return True
-
-
-def place_labels(ax, points, names, marker_pt=15.0, fontsize=8):
-    """Name each point beside its badge, on the side where nothing else is.
-
-    Tries below, above, right and left in turn and keeps the first position whose text
-    does not touch another label or any badge. Falls back to below, which is where a
-    reader looks first. Positions are measured in the figure's own pixels.
-    """
-    fig = ax.figure
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    scale = fig.dpi / 72.0
-    pixels = ax.transData.transform(np.asarray(points, dtype=float))
-    radius = marker_pt * scale
-    badges = [(x - radius, y - radius, x + radius, y + radius) for x, y in pixels]
-    taken = []
-
-    def overlaps(box, others):
-        return any(
-            box[0] < o[2] and box[2] > o[0] and box[1] < o[3] and box[3] > o[1] for o in others
-        )
-
-    for index, ((x, y), name) in enumerate(zip(pixels, names)):
-        probe = ax.text(0, 0, name, fontsize=fontsize, fontweight="bold")
-        width = probe.get_window_extent(renderer).width
-        height = probe.get_window_extent(renderer).height
-        probe.remove()
-        gap = 4 * scale
-        options = [
-            ("center", "top", x, y - radius - gap),
-            ("center", "bottom", x, y + radius + gap),
-            ("left", "center", x + radius + gap, y),
-            ("right", "center", x - radius - gap, y),
-        ]
-        chosen = options[0]
-        for option in options:
-            ha, va, px, py = option
-            left = px - width / 2 if ha == "center" else (px if ha == "left" else px - width)
-            bottom = py - height if va == "top" else (py if va == "bottom" else py - height / 2)
-            box = (left, bottom, left + width, bottom + height)
-            others = [b for i, b in enumerate(badges) if i != index] + taken
-            if not overlaps(box, others):
-                chosen = option
-                taken.append(box)
-                break
-        else:
-            ha, va, px, py = chosen
-            left = px - width / 2
-            taken.append((left, py - height, left + width, py))
-        ha, va, px, py = chosen
-        data = ax.transData.inverted().transform((px, py))
-        ax.text(
-            data[0],
-            data[1],
-            name,
-            ha=ha,
-            va=va,
-            color=base.TEXT,
-            fontsize=fontsize,
-            fontweight="bold",
-            zorder=7,
-        )
-
-
-# ── 1. what each side created against what it allowed ───────────────────────────────
-def xg_quadrant(league: League) -> Path:
-    t = league.per_match.set_index("team")
-    fig = page(
-        league,
-        "Chances for and against",
-        "Expected goals created and conceded per match · top right is the best of both",
-    )
-    ax = fig.add_axes([0.08, 0.10, 0.86, 0.69])
-    ax.set_facecolor(base.PANEL)
-    x, y = t["xG"], t["xG_against"]
-    pad_x, pad_y = (x.max() - x.min()) * 0.12, (y.max() - y.min()) * 0.12
-    ax.set_xlim(x.min() - pad_x, x.max() + pad_x)
-    ax.set_ylim(y.max() + pad_y, y.min() - pad_y)  # up is fewer chances conceded
-    ax.axvline(x.median(), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
-    ax.axhline(y.median(), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
-    ax.grid(color=base.GRID, lw=0.5, alpha=0.5)
-    ax.set_axisbelow(True)
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.tick_params(colors=base.MUTED, labelsize=9, length=0)
-    ax.set_xlabel("xG created per match  →", color=base.MUTED, fontsize=10, fontweight="bold")
-    ax.set_ylabel(
-        "← more   xG conceded per match   fewer →", color=base.MUTED, fontsize=10, fontweight="bold"
-    )
-    corner = dict(color=base.NEUTRAL, fontsize=11, fontweight="bold", alpha=0.85)
-    ax.text(0.985, 0.975, "DOMINANT", ha="right", va="top", transform=ax.transAxes, **corner)
-    ax.text(0.015, 0.975, "SOLID BUT BLUNT", ha="left", va="top", transform=ax.transAxes, **corner)
-    ax.text(0.985, 0.025, "OPEN GAMES", ha="right", va="bottom", transform=ax.transAxes, **corner)
-    ax.text(0.015, 0.025, "STRUGGLING", ha="left", va="bottom", transform=ax.transAxes, **corner)
-    for team, row in t.iterrows():
-        colour = league.colour(team)
-        ax.scatter(
-            row["xG"],
-            row["xG_against"],
-            s=900,
-            facecolor=base.BG,
-            edgecolor=colour,
-            linewidth=2.0,
-            zorder=4,
-        )
-        if not put_crest(ax, league, team, (row["xG"], row["xG_against"]), zoom=0.20):
-            ax.text(
-                row["xG"],
-                row["xG_against"],
-                team[:3].upper(),
-                color=colour,
-                ha="center",
-                va="center",
-                fontsize=8,
-                fontweight="bold",
-                zorder=6,
-            )
-    place_labels(ax, list(zip(t["xG"], t["xG_against"])), list(t.index))
-    return finish(
-        fig,
-        league,
-        "01_xg_for_against.png",
-        "xG is the model value of each chance; the dotted lines are the league medians.",
-    )
-
-
-# ── 2. the league as a heat table ──────────────────────────────────────────────────────
-# (column, header, lower_is_better, format) read from the per-match table
-HEAT_COLUMNS = [
-    ("xG", "xG", False, "{:.2f}"),
-    ("xG_against", "xGA", True, "{:.2f}"),
-    ("shots", "SHOTS", False, "{:.1f}"),
-    ("shots_against", "SHOTS V", True, "{:.1f}"),
-    ("ppda", "PPDA", True, "{:.1f}"),
-    ("field_tilt", "TILT %", False, "{:.0f}"),
-    ("pass_pct", "PASS %", False, "{:.0f}"),
-    ("progressive_passes", "PROG", False, "{:.0f}"),
-    ("line_breaking_completed", "LINE BRK", False, "{:.0f}"),
-    ("high_regains", "HIGH REG", False, "{:.1f}"),
-    ("box_entries", "BOX ENT", False, "{:.1f}"),
-    ("key_passes", "KEY P", False, "{:.1f}"),
-]
+def _qualified(league: League, minimum_minutes: float, outfield=True) -> pd.DataFrame:
+    pool = league.per90[league.per90["minutes"] >= minimum_minutes].copy()
+    return pool[~is_goalkeeper(pool)] if outfield else pool
 
 
 def percentile_rank(series: pd.Series, lower_is_better: bool) -> pd.Series:
@@ -301,597 +116,166 @@ def percentile_rank(series: pd.Series, lower_is_better: bool) -> pd.Series:
     return 1 - score if lower_is_better else score
 
 
-def league_heat_table(league: League) -> Path:
-    totals = league.teams.set_index("team")
-    per = league.per_match.set_index("team").loc[totals.index]
-    columns = [c for c in HEAT_COLUMNS if c[0] in per.columns]
-    rows = len(per)
-    fig = page(
-        league,
-        "The league at a glance",
-        "Per-match figures, shaded by rank in the league · brighter is better, whichever way the number runs",
-    )
-    top, bottom = 0.80, 0.07
-    left, right = 0.05, 0.95
-    name_w, lead_w = 0.17, 0.115
-    grid_w = (right - left - name_w - lead_w) / len(columns)
-    row_h = (top - bottom - 0.035) / rows
-    y0 = top - 0.03
-    heads = ["PTS", "GD"] + [h for _, h, _, _ in columns]
-    xs = [left + name_w + lead_w * (0.25 + 0.5 * i) for i in range(2)] + [
-        left + name_w + lead_w + grid_w * (i + 0.5) for i in range(len(columns))
-    ]
-    for x, head in zip(xs, heads):
-        fig.text(
-            x,
-            top,
-            head,
-            color=base.MUTED,
-            fontsize=8.5,
-            fontweight="bold",
-            ha="center",
-            va="bottom",
-        )
-    ramp = mcolors.LinearSegmentedColormap.from_list("heat", [base.PANEL, "#0F4A44", ACCENT])
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
-    ax.set_zorder(-1)
-    ranks = {c[0]: percentile_rank(per[c[0]], c[2]) for c in columns}
-    for i, (team, _row) in enumerate(per.iterrows()):
-        y = y0 - (i + 1) * row_h
-        ax.add_patch(
-            Rectangle(
-                (left, y + 0.002),
-                right - left,
-                row_h - 0.004,
-                facecolor=base.PANEL if i % 2 == 0 else base.BG,
-                edgecolor="none",
-            )
-        )
-        fig.text(
-            left + 0.012,
-            y + row_h / 2,
-            f"{i + 1}",
-            color=base.MUTED,
-            fontsize=9,
-            va="center",
-            ha="left",
-        )
-        put_crest(ax, league, team, (left + 0.05, y + row_h / 2), zoom=0.12)
-        fig.text(
-            left + 0.072,
-            y + row_h / 2,
-            team,
-            color=base.TEXT,
-            fontsize=10,
-            fontweight="bold",
-            va="center",
-        )
-        for x, value in zip(
-            xs[:2], (totals.loc[team, "points"], totals.loc[team, "goal_difference"])
-        ):
-            text = f"{value:.0f}" if x == xs[0] else f"{value:+.0f}"
-            fig.text(
-                x, y + row_h / 2, text, color=base.TEXT, va="center", ha="center", **display(18)
-            )
-        for j, (key, _head, _low, fmt) in enumerate(columns):
-            cx = left + name_w + lead_w + grid_w * j
-            rank = float(ranks[key].loc[team])
-            ax.add_patch(
-                Rectangle(
-                    (cx + 0.003, y + 0.004),
-                    grid_w - 0.006,
-                    row_h - 0.008,
-                    facecolor=ramp(rank),
-                    edgecolor="none",
-                )
-            )
-            fill = mcolors.to_hex(ramp(rank))
-            fig.text(
-                cx + grid_w / 2,
-                y + row_h / 2,
-                fmt.format(per.loc[team, key]),
-                color=base.BG if rank > 0.62 else base.TEXT,
-                fontsize=9,
-                fontweight="bold",
-                va="center",
-                ha="center",
-            )
-    return finish(
-        fig,
-        league,
-        "02_league_heat_table.png",
-        "Ordered by points. PPDA, xGA and shots faced are shaded the other way round: lower is better.",
-    )
-
-
-# ── 3. players who led each measure ───────────────────────────────────────────────────────
-LEADERBOARDS = [
-    ("xG_xA_p90", "xG + xA per 90", "{:.2f}"),
-    ("progression_metres_p90", "Progression metres per 90", "{:.0f}"),
-    ("key_passes_p90", "Key passes per 90", "{:.2f}"),
-    ("line_breaking_passes_p90", "Line-breaking passes per 90", "{:.1f}"),
-    ("defensive_actions_p90", "Defensive actions per 90", "{:.1f}"),
-    ("positive_xT_p90", "xT added per 90", "{:.2f}"),
-]
-
-
-def player_leaderboards(league: League, minimum_minutes: float = 270.0) -> Path:
-    pool = league.per90[league.per90["minutes"] >= minimum_minutes].copy()
-    pool = pool[~is_goalkeeper(pool)]
-    fig = page(
-        league,
-        "Who led the way",
-        f"Per 90 minutes · players with at least {minimum_minutes:.0f} minutes ({len(pool)} qualify) · outfield only",
-    )
-    panels = [(k, t, f) for k, t, f in LEADERBOARDS if k in pool.columns]
-    for index, (key, title, fmt) in enumerate(panels):
-        column, row = index % 3, index // 3
-        left = 0.05 + column * 0.305
-        top = 0.80 - row * 0.385
-        card = fig.add_axes([left, top - 0.355, 0.285, 0.355])
-        card.axis("off")
-        card.set_xlim(0, 1)
-        card.set_ylim(0, 1)
-        card.add_patch(
-            FancyBboxPatch(
-                (0, 0),
-                1,
-                1,
-                boxstyle="round,pad=0,rounding_size=0.025",
-                mutation_aspect=0.355 * 9 / (0.285 * 14),
-                facecolor=base.PANEL,
-                edgecolor=base.GRID,
-                linewidth=1.0,
-            )
-        )
-        card.text(
-            0.05,
-            0.93,
-            title.upper(),
-            color=base.MUTED,
-            fontsize=8.5,
-            fontweight="bold",
-            va="center",
-        )
-        best = pool.nlargest(8, key)
-        top_value = float(best[key].max()) or 1.0
-        for rank, (_, player) in enumerate(best.iterrows()):
-            y = 0.80 - rank * 0.098
-            colour = league.colour(player["team"])
-            card.text(0.05, y, f"{rank + 1}", color=base.MUTED, fontsize=8.5, va="center")
-            card.text(
-                0.10,
-                y,
-                surname(player["player"]),
-                color=base.TEXT,
-                fontsize=9.5,
-                fontweight="bold",
-                va="center",
-            )
-            card.add_patch(
-                Rectangle(
-                    (0.43, y - 0.027),
-                    0.40 * float(player[key]) / top_value,
-                    0.054,
-                    facecolor=colour,
-                    edgecolor="none",
-                )
-            )
-            card.text(
-                0.43 + 0.40 * float(player[key]) / top_value + 0.012,
-                y,
-                fmt.format(player[key]),
-                color=base.TEXT,
-                va="center",
-                **display(15),
-            )
-            card.text(
-                0.10, y - 0.036, str(player["team"]), color=base.NEUTRAL, fontsize=6.5, va="center"
-            )
-    return finish(
-        fig,
-        league,
-        "03_player_leaderboards.png",
-        "Bars share a scale within each panel. Minutes are the sum over the block.",
-    )
-
-
-# ── 4. how each side plays: pressing against territory ────────────────────────────────
-def _crest_scatter(league: League, ax, xs, ys, names) -> None:
-    for team, x, y in zip(names, xs, ys):
-        colour = league.colour(team)
-        ax.scatter(x, y, s=900, facecolor=base.BG, edgecolor=colour, linewidth=2.0, zorder=4)
-        if not put_crest(ax, league, team, (x, y), zoom=0.20):
-            ax.text(
-                x,
-                y,
-                team[:3].upper(),
-                color=colour,
-                ha="center",
-                va="center",
-                fontsize=8,
-                fontweight="bold",
-                zorder=6,
-            )
-    place_labels(ax, list(zip(xs, ys)), list(names))
-
-
-def _quadrant_axes(fig, x_label: str, y_label: str):
-    ax = fig.add_axes([0.08, 0.10, 0.86, 0.69])
-    ax.set_facecolor(base.PANEL)
-    ax.grid(color=base.GRID, lw=0.5, alpha=0.5)
-    ax.set_axisbelow(True)
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.tick_params(colors=base.MUTED, labelsize=9, length=0)
-    ax.set_xlabel(x_label, color=base.MUTED, fontsize=10, fontweight="bold")
-    ax.set_ylabel(y_label, color=base.MUTED, fontsize=10, fontweight="bold")
-    return ax
-
-
-def _corners(ax, top_right, top_left, bottom_right, bottom_left) -> None:
-    style = dict(
-        color=base.NEUTRAL, fontsize=11, fontweight="bold", alpha=0.85, transform=ax.transAxes
-    )
-    ax.text(0.985, 0.975, top_right, ha="right", va="top", **style)
-    ax.text(0.015, 0.975, top_left, ha="left", va="top", **style)
-    ax.text(0.985, 0.025, bottom_right, ha="right", va="bottom", **style)
-    ax.text(0.015, 0.025, bottom_left, ha="left", va="bottom", **style)
-
-
-def style_map(league: League) -> Path:
-    t = league.per_match.set_index("team")
-    fig = page(
-        league,
-        "How they play",
-        "Pressing intensity against territory · PPDA is passes the opponent makes per defensive action, so lower is harder",
-    )
-    ax = _quadrant_axes(
-        fig,
-        "← softer       PPDA       harder press →",
-        "Field tilt: share of final-third touches (%)",
-    )
-    x, y = t["ppda"], t["field_tilt"]
-    ax.set_xlim(x.max() + 0.6, x.min() - 0.6)  # harder pressing to the right
-    ax.set_ylim(y.min() - 4, y.max() + 4)
-    ax.axvline(x.median(), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
-    ax.axhline(y.median(), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
-    _corners(ax, "HIGH PRESS, HIGH TERRITORY", "PATIENT CONTROL", "PRESS AND COUNTER", "LOW BLOCK")
-    _crest_scatter(league, ax, x, y, t.index)
-    return finish(
-        fig,
-        league,
-        "04_style_map.png",
-        "PPDA counts the opponent's passes in the front 60% of the pitch over the side's tackles, interceptions, fouls and recoveries there.",
-    )
-
-
-# ── 5. results against what the chances said ────────────────────────────────────────────
-def over_under(league: League) -> Path:
-    t = league.teams.set_index("team")
-    fig = page(
-        league,
-        "Luck, finishing and goalkeeping",
-        "Where results ran ahead of the chances and where they fell behind · five matches is a short run, so read it as a lean",
-    )
-    panels = [
-        (
-            "goals_minus_xG",
-            "FINISHING",
-            "Goals scored minus xG created",
-            "scored more than the chances said",
-        ),
-        (
-            "goals_prevented",
-            "GOALKEEPING",
-            "xGOT faced minus goals conceded",
-            "conceded fewer than deserved",
-        ),
-    ]
-    for index, (key, heading, caption, good) in enumerate(panels):
-        ordered = t[key].sort_values()
-        left = 0.05 + index * 0.475
-        ax = fig.add_axes([left + 0.075, 0.075, 0.33, 0.69])
-        ax.set_facecolor(base.BG)
-        positions = np.arange(len(ordered))
-        ax.barh(
-            positions,
-            ordered.values,
-            color=[league.colour(team) for team in ordered.index],
-            height=0.66,
-        )
-        ax.axvline(0, color=base.TEXT, lw=1.0, alpha=0.7)
-        ax.set_yticks(positions)
-        ax.set_yticklabels(ordered.index, fontsize=9, color=base.TEXT)
-        ax.tick_params(axis="x", colors=base.MUTED, labelsize=8.5, length=0)
-        ax.tick_params(axis="y", length=0)
-        ax.grid(axis="x", color=base.GRID, lw=0.6, alpha=0.7)
-        ax.set_axisbelow(True)
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-        span = float(np.abs(ordered.values).max()) or 1.0
-        ax.set_xlim(-span * 1.28, span * 1.28)
-        for position, value in zip(positions, ordered.values):
-            ax.text(
-                value + (0.04 * span if value >= 0 else -0.04 * span),
-                position,
-                f"{value:+.2f}",
-                ha="left" if value >= 0 else "right",
-                va="center",
-                color=base.TEXT,
-                fontsize=8.5,
-                fontweight="bold",
-            )
-        fig.text(left + 0.075, 0.795, heading, color=base.TEXT, **display(22))
-        fig.text(left + 0.075, 0.772, caption, color=base.MUTED, fontsize=9)
-        fig.text(
-            left + 0.075 + 0.33,
-            0.772,
-            f"right = {good}",
-            color=base.NEUTRAL,
-            fontsize=7.5,
-            ha="right",
-        )
-    return finish(
-        fig,
-        league,
-        "05_finishing_goalkeeping.png",
-        "Team totals over the block. A goalkeeper's figure is the shots on target faced, priced after the strike, less the goals that went in.",
-    )
-
-
-# ── 6. where the chances came from ────────────────────────────────────────────────────────
-SOURCES = [
-    ("open_play_xG", "Open play", "#4EA8FF"),
-    ("corner_xG", "Corners", "#FFC247"),
-    ("free_kick_xG", "Free kicks", "#2FD3BE"),
-    ("throw_in_xG", "Throw-ins", "#A77BFF"),
-    ("penalty_xG", "Penalties", "#FF7A5C"),
-]
-
-
-def chance_sources(league: League) -> Path:
-    t = league.per_match.set_index("team")
-    columns = [s for s in SOURCES if s[0] in t.columns]
-    order = t[[c for c, _, _ in columns]].sum(axis=1).sort_values()
-    fig = page(
-        league,
-        "Where the chances came from",
-        "Expected goals per match, split by how the move began · the dead-ball share shows who lives off set pieces",
-    )
-    ax = fig.add_axes([0.16, 0.075, 0.76, 0.69])
-    ax.set_facecolor(base.BG)
-    positions = np.arange(len(order))
-    left = np.zeros(len(order))
-    for column, label, colour in columns:
-        values = t.loc[order.index, column].to_numpy()
-        ax.barh(
-            positions,
-            values,
-            left=left,
-            color=colour,
-            height=0.68,
-            label=label,
-            edgecolor=base.BG,
-            linewidth=0.8,
-        )
-        left += values
-    ax.set_yticks(positions)
-    ax.set_yticklabels(order.index, fontsize=9.5, color=base.TEXT)
-    ax.tick_params(axis="x", colors=base.MUTED, labelsize=8.5, length=0)
-    ax.tick_params(axis="y", length=0)
-    ax.grid(axis="x", color=base.GRID, lw=0.6, alpha=0.7)
-    ax.set_axisbelow(True)
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    dead_cols = [c for c in ("corner_xG", "free_kick_xG", "penalty_xG") if c in t.columns]
-    dead = t.loc[order.index, dead_cols].sum(axis=1)
-    for position, (team, total) in enumerate(order.items()):
-        share = 100 * dead[team] / total if total else 0
-        ax.text(
-            total + 0.03,
-            position,
-            f"{total:.2f}   ·   {share:.0f}% dead ball",
-            va="center",
-            color=base.TEXT,
-            fontsize=8.5,
-            fontweight="bold",
-        )
-    ax.set_xlim(0, float(order.max()) * 1.32)
-    ax.legend(loc="lower right", frameon=False, labelcolor=base.TEXT, fontsize=9)
-    return finish(
-        fig,
-        league,
-        "06_chance_sources.png",
-        "Dead ball = corners, free kicks and penalties. A throw-in is a restart, not a rehearsed set piece, so it is shown but not counted as one.",
-    )
-
-
-# ── 7. players: who creates, who progresses, who wins it back ────────────────────────────────
-def _qualified(league: League, minimum_minutes: float, outfield=True) -> pd.DataFrame:
-    pool = league.per90[league.per90["minutes"] >= minimum_minutes].copy()
-    return pool[~is_goalkeeper(pool)] if outfield else pool
-
-
-def _player_scatter(
-    league: League,
-    key_x: str,
-    key_y: str,
-    title: str,
-    subtitle: str,
-    x_label: str,
-    y_label: str,
-    name: str,
-    note: str,
-    minimum_minutes: float = 270.0,
-    labels: int = 14,
-) -> Path:
-    pool = _qualified(league, minimum_minutes)
-    fig = page(league, title, subtitle.format(n=len(pool), m=int(minimum_minutes)))
-    ax = _quadrant_axes(fig, x_label, y_label)
-    ax.axvline(pool[key_x].median(), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
-    ax.axhline(pool[key_y].median(), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
-    spread = max(pool["minutes"].max() - pool["minutes"].min(), 1)
-    sizes = 30 + 150 * (pool["minutes"] - pool["minutes"].min()) / spread
-    ax.scatter(
-        pool[key_x],
-        pool[key_y],
-        s=sizes,
-        c=[league.colour(t) for t in pool["team"]],
-        alpha=0.85,
-        edgecolor=base.BG,
-        linewidth=0.8,
-        zorder=3,
-    )
-    # name the players furthest from the middle on either measure
-    zx = (pool[key_x] - pool[key_x].mean()) / (pool[key_x].std() or 1)
-    zy = (pool[key_y] - pool[key_y].mean()) / (pool[key_y].std() or 1)
-    standout = pool.assign(_score=np.hypot(zx, zy)).nlargest(labels, "_score")
-    for _, row in standout.iterrows():
-        ax.annotate(
-            surname(row["player"]),
-            (row[key_x], row[key_y]),
-            xytext=(6, 6),
-            textcoords="offset points",
-            color=base.TEXT,
-            fontsize=8.5,
-            fontweight="bold",
+def put_crest(ax, league: League, team: str, xy, zoom=0.24, transform=None):
+    """A club badge at ``xy``; returns False when there is none to draw."""
+    team_id = league.ids.get(team)
+    image = crests.crest_image(team_id, allow_download=False) if team_id is not None else None
+    if image is None:
+        return False
+    ax.add_artist(
+        AnnotationBbox(
+            OffsetImage(image, zoom=zoom),
+            xy,
+            frameon=False,
+            xycoords=transform or "data",
+            box_alignment=(0.5, 0.5),
             zorder=6,
         )
-    return finish(fig, league, name, note)
+    )
+    return True
 
 
-def scoring_and_creating(league: League) -> Path:
-    return _player_scatter(
-        league,
-        "xG_p90",
-        "xA_p90",
-        "Finishers and creators",
-        "xG against xA per 90 · {n} players with at least {m} minutes · bigger dots played more",
-        "xG per 90  →",
-        "xA per 90  →",
-        "07_finishers_creators.png",
-        "Named: the players furthest from the middle of the pack. Dotted lines are the medians.",
+# ── keeping marks apart ───────────────────────────────────────────────────────────────
+def spread_apart(ax, xs, ys, radius_px: float, reach: float = 3.0):
+    """Nudge marks that overlap until they do not, and say where each one ended up.
+
+    Positions are moved in screen pixels, no further than ``reach`` radii from where the
+    data puts them, and returned in data units. Callers draw a small dot at the true
+    position and a hairline to the moved mark, so the chart stays honest about where a
+    value really is. The marks are moved in pairs, half each, so a tight cluster opens up
+    like a flower and not into a line.
+    """
+    ax.figure.canvas.draw()
+    home = ax.transData.transform(np.column_stack([xs, ys])).astype(float)
+    moved = home.copy()
+    gap = 2 * radius_px + 2.0
+    for _ in range(80):
+        shifted = False
+        for i in range(len(moved)):
+            for j in range(i + 1, len(moved)):
+                delta = moved[j] - moved[i]
+                distance = float(np.hypot(*delta))
+                if distance >= gap:
+                    continue
+                direction = (
+                    delta / distance if distance > 1e-6 else np.array([np.cos(i), np.sin(i)])
+                )
+                push = (gap - distance) / 2 + 0.1
+                moved[i] -= direction * push
+                moved[j] += direction * push
+                shifted = True
+        pull = moved - home
+        length = np.hypot(pull[:, 0], pull[:, 1])
+        too_far = length > reach * radius_px
+        if too_far.any():
+            moved[too_far] = (
+                home[too_far] + pull[too_far] / length[too_far, None] * reach * radius_px
+            )
+        if not shifted:
+            break
+    return ax.transData.inverted().transform(moved)
+
+
+def place_labels(
+    ax, points, names, radius_px=12.0, fontsize=8, avoid=None, leaders=True, badges=False
+):
+    """Name each point in the nearest free spot: not on another label, badge or point.
+
+    ``points`` are data coordinates. Each label tries sixteen directions at three distances
+    and keeps the first position that overlaps nothing, so a crowded cluster spreads its
+    names outward instead of printing them on top of one another. A label that had to move
+    away is joined to its point by a hairline. ``avoid`` is any further points a label must
+    not cover (every dot on a busy scatter, when only the outliers are named).
+    """
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    pixels = ax.transData.transform(np.asarray(points, dtype=float))
+    others = pixels if avoid is None else ax.transData.transform(np.asarray(avoid, dtype=float))
+    axes_box = ax.get_window_extent(renderer)
+    taken = []
+    drawn = []
+    # with ``badges`` every point is a round mark of ``radius_px``; a label may not sit on one
+    marks = (
+        [(px - radius_px, py - radius_px, px + radius_px, py + radius_px) for px, py in pixels]
+        if badges
+        else []
     )
 
+    def clash(box, own=None):
+        boxes = taken + [m for k, m in enumerate(marks) if k != own]
+        return sum(
+            box[0] < o[2] and box[2] > o[0] and box[1] < o[3] and box[3] > o[1] for o in boxes
+        )
 
-def progressing_the_ball(league: League) -> Path:
-    return _player_scatter(
-        league,
-        "progression_metres_p90",
-        "line_breaking_passes_p90",
-        "Moving the ball forward",
-        "Progression metres against line-breaking passes per 90 · {n} players with at least {m} minutes",
-        "Progression metres per 90  →",
-        "Line-breaking passes per 90  →",
-        "08_ball_progressors.png",
-        "Progression metres are ground gained toward goal by completed passes and carries.",
-    )
+    def covers(box):
+        return int(
+            (
+                (others[:, 0] > box[0])
+                & (others[:, 0] < box[2])
+                & (others[:, 1] > box[1])
+                & (others[:, 1] < box[3])
+            ).sum()
+        )
 
-
-def winning_the_ball(league: League) -> Path:
-    return _player_scatter(
-        league,
-        "recoveries_p90",
-        "tackles_won_p90",
-        "Winning the ball back",
-        "Recoveries against tackles won per 90 · {n} players with at least {m} minutes",
-        "Recoveries per 90  →",
-        "Tackles won per 90  →",
-        "09_ball_winners.png",
-        "Named: the players furthest from the middle of the pack.",
-    )
-
-
-# ── 8. goalkeepers ────────────────────────────────────────────────────────────────────────
-def goalkeepers(league: League, minimum_minutes: float = 180.0) -> Path:
-    keepers = league.players[
-        is_goalkeeper(league.players) & (league.players["minutes"] >= minimum_minutes)
-    ]
-    keepers = keepers.sort_values("goals_prevented", ascending=False)
-    fig = page(
-        league,
-        "Goalkeepers",
-        f"Goals prevented is the post-shot xG of the shots faced less the goals conceded · keepers with at least {minimum_minutes:.0f} minutes",
-    )
-    heads = [
-        ("MIN", "minutes", "{:.0f}", 0.34),
-        ("SAVES", "saves", "{:.0f}", 0.42),
-        ("CLAIMS", "claims", "{:.0f}", 0.50),
-        ("SWEEPS", "sweeps", "{:.0f}", 0.58),
-        ("PASS %", "pass_pct", "{:.0f}", 0.66),
-        ("PREVENTED", "goals_prevented", "{:+.2f}", 0.76),
-    ]
-    top = 0.78
-    row_h = min(0.036, 0.66 / max(len(keepers), 1))
-    for head, _, _, x in heads:
-        fig.text(x, top, head, color=base.MUTED, fontsize=8.5, fontweight="bold", ha="center")
-    fig.text(0.10, top, "GOALKEEPER", color=base.MUTED, fontsize=8.5, fontweight="bold")
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
-    ax.set_zorder(-1)
-    span = float(np.abs(keepers["goals_prevented"]).max()) or 1.0
-    for i, (_, row) in enumerate(keepers.iterrows()):
-        y = top - 0.03 - i * row_h
-        ax.add_patch(
-            Rectangle(
-                (0.05, y - row_h / 2 + 0.002),
-                0.9,
-                row_h - 0.004,
-                facecolor=base.PANEL if i % 2 == 0 else base.BG,
-                edgecolor="none",
+    scale = fig.dpi / 72.0
+    for index, ((x, y), name) in enumerate(zip(pixels, names)):
+        probe = ax.text(0, 0, name, fontsize=fontsize, fontweight="bold")
+        extent = probe.get_window_extent(renderer)
+        width, height = extent.width, extent.height
+        probe.remove()
+        best = None
+        for step, distance in enumerate(
+            (radius_px + 3 * scale, radius_px + 14 * scale, radius_px + 30 * scale)
+        ):
+            for angle in np.linspace(-np.pi / 2, 3 * np.pi / 2, 16, endpoint=False):
+                cx, cy = x + distance * np.cos(angle), y + distance * np.sin(angle)
+                ha = (
+                    "left"
+                    if np.cos(angle) > 0.4
+                    else ("right" if np.cos(angle) < -0.4 else "center")
+                )
+                va = (
+                    "bottom"
+                    if np.sin(angle) > 0.4
+                    else ("top" if np.sin(angle) < -0.4 else "center")
+                )
+                left = cx if ha == "left" else (cx - width if ha == "right" else cx - width / 2)
+                bottom = cy if va == "bottom" else (cy - height if va == "top" else cy - height / 2)
+                box = (left, bottom, left + width, bottom + height)
+                inside = (
+                    box[0] >= axes_box.x0
+                    and box[2] <= axes_box.x1
+                    and box[1] >= axes_box.y0
+                    and box[3] <= axes_box.y1
+                )
+                cost = (
+                    clash(box, index) * 1000 + covers(box) * 60 + step * 10 + (0 if inside else 400)
+                )
+                if best is None or cost < best[0]:
+                    best = (cost, box, ha, va, cx, cy, step)
+            if best[0] < 10:  # nothing in the way at this distance
+                break
+        _, box, ha, va, cx, cy, step = best
+        taken.append(box)
+        data = ax.transData.inverted().transform((cx, cy))
+        drawn.append(
+            ax.text(
+                data[0],
+                data[1],
+                name,
+                ha=ha,
+                va=va,
+                color=base.TEXT,
+                fontsize=fontsize,
+                fontweight="bold",
+                zorder=8,
             )
         )
-        put_crest(ax, league, row["team"], (0.075, y), zoom=0.11)
-        fig.text(
-            0.10,
-            y,
-            surname(row["player"]),
-            color=base.TEXT,
-            fontsize=10,
-            fontweight="bold",
-            va="center",
-        )
-        fig.text(0.20, y, row["team"], color=base.NEUTRAL, fontsize=8, va="center")
-        for _, key, fmt, x in heads:
-            value = row[key]
-            if pd.isna(value):
-                continue
-            if key == "goals_prevented":
-                width = 0.07 * float(value) / span
-                ax.add_patch(
-                    Rectangle(
-                        (x, y - 0.009),
-                        width,
-                        0.018,
-                        facecolor=league.colour(row["team"]),
-                        edgecolor="none",
-                    )
-                )
-                fig.text(
-                    x + 0.08,
-                    y,
-                    fmt.format(value),
-                    color=base.TEXT,
-                    va="center",
-                    ha="left",
-                    **display(15),
-                )
-            else:
-                fig.text(
-                    x, y, fmt.format(value), color=base.TEXT, fontsize=9.5, va="center", ha="center"
-                )
-    return finish(
-        fig,
-        league,
-        "10_goalkeepers.png",
-        "Penalties and own goals are left out of goals prevented.",
-    )
+        if leaders and step > 0:
+            anchor = ax.transData.inverted().transform((x, y))
+            ax.plot([anchor[0], data[0]], [anchor[1], data[1]], color="#6B7580", lw=0.6, zorder=2)
+    return drawn
 
 
 # ── profile cards: one club or one player against the rest of the league ───────────────────
@@ -901,6 +285,8 @@ GROUP_COLOURS = {"ATTACK": "#E8452C", "BUILD-UP": "#F2B134", "DEFENCE": "#2F7FE0
 TRACK = "#101419"  # the empty part of each slice's lane
 RING = "#2A3037"  # the 20, 40, 60 and 80 per cent circles
 RING_OUTER = "#5A646E"  # the outer circle and the one round the hole
+INNER = 0.17  # the hole in the middle, where the club's badge sits
+MUTED_SLICE = "#2B323A"  # what a weak slice fades toward
 
 # (column, label, lower_is_better, format, group)
 TEAM_SLICES = [
@@ -934,22 +320,31 @@ PLAYER_SLICES = [
 ]
 
 
-INNER = 0.17  # the hole in the middle, where the club's badge sits
-
-
 def _radius(share: float) -> float:
     """Where a share of the league (0 to 1) ends on the radius, outside the central hole."""
     return INNER + share * (1.0 - INNER)
 
 
-def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS, centre=None) -> None:
+def darken(colour: str, amount: float = 0.38) -> str:
+    """The colour pulled toward black, for the badge that sits on a slice of that colour."""
+    return mcolors.to_hex(np.array(mcolors.to_rgb(colour)) * (1.0 - amount))
+
+
+def strength_colour(colour: str, share: float) -> str:
+    """The group colour, faded toward grey the further the slice falls short of the league."""
+    fade = float(np.clip((0.55 - share) / 0.55, 0.0, 1.0)) * 0.72
+    a, b = np.array(mcolors.to_rgb(colour)), np.array(mcolors.to_rgb(MUTED_SLICE))
+    return mcolors.to_hex(a * (1.0 - fade) + b * fade)
+
+
+def pizza(ax, slices, shares, raws, badges, centre=None) -> None:
     """Twelve slices round a central hole, each as long as the share of the league it beats.
 
-    ``shares`` run 0 to 1 (full is the best in the league); a missing value draws an empty
-    slice and prints a dash. Rings at 20, 40, 60 and 80 per cent make the length readable
-    without a scale, each slice ends in a circle holding its percentile, and the raw figure
-    sits beside the label so the picture never has to be decoded. ``centre`` is a
-    ``(league, club)`` pair whose badge fills the hole.
+    Rings at 20, 40, 60 and 80 per cent make the length readable without a scale, the dashed
+    ring at 50 is the league median, and each slice ends in a circle holding ``badges[i]`` (a
+    rank or a percentile). A measure where less is better is marked with a down arrow: its
+    slice is long when the figure is small. ``centre`` is a ``(league, club)`` pair whose
+    badge fills the hole.
     """
     n = len(slices)
     width = 2 * np.pi / n
@@ -962,7 +357,6 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS, centre=None) 
     ax.set_yticks([])
     ax.spines["polar"].set_visible(False)
     full = np.linspace(0, 2 * np.pi, 361)
-    # the track each slice grows along, then the circles over it
     ax.bar(
         theta,
         1.0 - INNER,
@@ -974,13 +368,14 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS, centre=None) 
     )
     for ring in (0.2, 0.4, 0.6, 0.8):
         ax.plot(full, [_radius(ring)] * len(full), color=RING, lw=0.8, zorder=2)
+    ax.plot(full, [_radius(0.5)] * len(full), color="#8E99A4", lw=1.1, ls=(0, (4, 4)), zorder=5)
     ax.plot(full, [1.0] * len(full), color=RING_OUTER, lw=1.6, zorder=4)
     ax.plot(full, [INNER] * len(full), color=RING_OUTER, lw=1.6, zorder=4)
-    for i, (key, label, _low, fmt, group) in enumerate(slices):
+    for i, (key, label, lower, fmt, group) in enumerate(slices):
         share = shares[i]
-        colour = colour_by_group[group]
         angle = theta[i]
         if share is not None and not np.isnan(share):
+            colour = strength_colour(GROUP_COLOURS[group], share)
             length = max(share, 0.05)
             ax.bar(
                 angle,
@@ -996,25 +391,22 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS, centre=None) 
             ax.text(
                 angle,
                 tip,
-                f"{round(100 * share):d}",
+                badges[i],
                 ha="center",
                 va="center",
                 color="white",
-                fontsize=8.5,
+                fontsize=8,
                 fontweight="bold",
                 zorder=6,
                 bbox=dict(
-                    boxstyle="circle,pad=0.28",
-                    facecolor=darken(colour),
+                    boxstyle="circle,pad=0.26",
+                    facecolor=darken(GROUP_COLOURS[group], 0.55),
                     edgecolor="white",
-                    linewidth=1.2,
+                    linewidth=1.1,
                 ),
             )
         raw = raws[i]
         value = "—" if raw is None or pd.isna(raw) else fmt.format(raw)
-        # The label and its figure share one anchor just outside the ring, aligned away from
-        # the centre: left of the anchor on the right of the chart and right of it on the
-        # left, so a long name never runs back under its own number.
         visual = np.pi / 2 + width / 2 - angle
         side = np.cos(visual)
         ha = "left" if side > 0.35 else ("right" if side < -0.35 else "center")
@@ -1022,35 +414,29 @@ def pizza(ax, slices, shares, raws, colour_by_group=GROUP_COLOURS, centre=None) 
         common = dict(
             xy=(angle, 1.06), textcoords="offset points", ha=ha, annotation_clip=False, zorder=5
         )
-        lift = 10 if np.sin(visual) > 0.7 else (-6 if np.sin(visual) < -0.7 else 0)
+        lift = 9 if np.sin(visual) > 0.7 else (-5 if np.sin(visual) < -0.7 else 0)
         ax.annotate(
-            label.upper(),
-            xytext=(shift, 7 + lift),
+            label.upper() + ("  ↓" if lower else ""),
+            xytext=(shift, 6 + lift),
             va="bottom",
             color=base.MUTED,
-            fontsize=7.6,
+            fontsize=7.4,
             fontweight="bold",
             **common,
         )
         ax.annotate(
             value,
-            xytext=(shift, 6 + lift),
+            xytext=(shift, 5 + lift),
             va="top",
             color=base.TEXT,
-            fontsize=13,
+            fontsize=12,
             fontweight="bold",
             fontfamily="Barlow Condensed",
             **common,
         )
     if centre is not None:
         league, club = centre
-        put_crest(ax, league, club, (0.5, 0.5), zoom=0.42, transform="axes fraction")
-
-
-def darken(colour: str, amount: float = 0.38) -> str:
-    """The colour pulled toward black, for the badge that sits on a slice of that colour."""
-    rgb = np.array(mcolors.to_rgb(colour))
-    return mcolors.to_hex(rgb * (1.0 - amount))
+        put_crest(ax, league, club, (0.5, 0.5), zoom=0.36, transform="axes fraction")
 
 
 def _percentiles(frame: pd.DataFrame, row_index, slices) -> tuple[list, list]:
@@ -1066,142 +452,186 @@ def _percentiles(frame: pd.DataFrame, row_index, slices) -> tuple[list, list]:
     return shares, raws
 
 
-def _legend(fig, x, y) -> None:
-    for i, (group, colour) in enumerate(GROUP_COLOURS.items()):
+def _ordinal(n: int) -> str:
+    return "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+
+
+def _card_header(fig, colour: str, title: str, subtitle: str) -> None:
+    fig.text(0.03, 0.93, title, color=base.TEXT, va="center", **display(40))
+    fig.text(0.03, 0.865, subtitle, color=base.MUTED, fontsize=10, va="center")
+    fig.add_artist(
+        Rectangle((0.03, 0.835), 0.94, 0.004, transform=fig.transFigure, color=colour, lw=0)
+    )
+    fig.text(0.97, 0.03, "MOSTAFA SAAD", color=base.MUTED, ha="right", va="center", **display(13))
+
+
+def _legend_column(fig, x, y) -> None:
+    for group, colour in GROUP_COLOURS.items():
         fig.add_artist(
-            Rectangle(
-                (x + i * 0.095, y), 0.011, 0.016, transform=fig.transFigure, color=colour, lw=0
-            )
+            Rectangle((x, y - 0.008), 0.011, 0.02, transform=fig.transFigure, color=colour, lw=0)
         )
         fig.text(
-            x + i * 0.095 + 0.016,
-            y + 0.008,
+            x + 0.017,
+            y + 0.002,
             group,
             color=base.MUTED,
             fontsize=8,
             fontweight="bold",
             va="center",
         )
+        y -= 0.05
 
 
-def _card_header(fig, league: League, team: str, title: str, subtitle: str) -> None:
-    ax = fig.add_axes([0.03, 0.865, 0.1, 0.11])
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    put_crest(ax, league, team, (0.5, 0.5), zoom=0.40)
-    fig.text(0.14, 0.935, title, color=base.TEXT, va="center", **display(36))
-    fig.text(0.14, 0.893, subtitle, color=base.MUTED, fontsize=10.5, va="center")
-    fig.add_artist(
-        Rectangle(
-            (0.03, 0.852), 0.94, 0.003, transform=fig.transFigure, color=league.colour(team), lw=0
+def _figure_pairs(fig, pairs, x0=0.03, y0=0.745) -> None:
+    """The headline figures, stacked in one column left of the chart."""
+    for i, (label, value) in enumerate(pairs):
+        y = y0 - i * 0.15
+        fig.text(x0, y + 0.045, label, color=base.MUTED, fontsize=8, fontweight="bold")
+        fig.text(x0, y, value, color=base.TEXT, va="center", **display(26))
+
+
+def _findings(fig, slices, shares, raws, ranks, x: float) -> None:
+    """The three strongest and the three weakest measures, in words, right of the chart."""
+    scored = sorted(
+        (
+            (shares[i], i)
+            for i in range(len(slices))
+            if shares[i] is not None and not np.isnan(shares[i])
+        ),
+        reverse=True,
+    )
+    blocks = (("STRONGEST", scored[:3], "#3DDC84"), ("WEAKEST", scored[::-1][:3], "#FF6B5B"))
+    for b, (heading, rows, colour) in enumerate(blocks):
+        top = 0.77 - b * 0.30
+        fig.text(x, top, heading, color=colour, fontsize=9, fontweight="bold", va="center")
+        fig.add_artist(
+            Rectangle((x, top - 0.02), 0.17, 0.002, transform=fig.transFigure, color=colour, lw=0)
         )
-    )
-    fig.text(0.97, 0.022, "MOSTAFA SAAD", color=base.MUTED, ha="right", **display(13))
+        for r, (_, i) in enumerate(rows):
+            y = top - 0.085 - r * 0.077
+            key, label, lower, fmt, group = slices[i]
+            fig.text(
+                x,
+                y + 0.028,
+                label.upper() + (" ↓" if lower else ""),
+                color=base.MUTED,
+                fontsize=7.6,
+                fontweight="bold",
+                va="center",
+            )
+            fig.text(x, y - 0.012, fmt.format(raws[i]), color=base.TEXT, va="center", **display(20))
+            fig.text(
+                x + 0.17,
+                y - 0.012,
+                ranks[i],
+                color=base.TEXT,
+                va="center",
+                ha="right",
+                **display(20),
+            )
 
 
-def team_profile(league: League, team: str) -> Path:
-    per = league.per_match.set_index("team")
-    totals = league.teams.set_index("team")
-    shares, raws = _percentiles(per, team, TEAM_SLICES)
-    row = totals.loc[team]
-    position = int(list(totals.index).index(team)) + 1
-    fig = plt.figure(figsize=(12, 9), facecolor=base.BG)
-    _card_header(
-        fig,
-        league,
-        team,
-        team.upper(),
-        f"{league.title.title()} · {league.rounds.title()} · {int(row['matches'])} matches · {int(row['won'])}W {int(row['drawn'])}D {int(row['lost'])}L · {int(row['points'])} points · {position}{_ordinal(position)}",
-    )
-    ax = fig.add_axes([0.27, 0.13, 0.46, 0.60], projection="polar")
-    pizza(ax, TEAM_SLICES, shares, raws, centre=(league, team))
-    ax.text(0, 0, "", transform=ax.transAxes)
-    _legend(fig, 0.05, 0.075)
+def _footnote(fig, text: str, x: float, width: int) -> None:
     fig.text(
-        0.97,
+        x,
         0.075,
-        "Slice length = share of the league this side beats · per match",
+        textwrap.fill(text, width),
         color=base.NEUTRAL,
-        fontsize=8,
-        ha="right",
-        va="center",
+        fontsize=7,
+        va="bottom",
+        linespacing=1.4,
     )
-    # four figures that carry the story, with the rank each one holds
-    figures = [
-        ("GOALS", f"{int(row['goals_for'])}–{int(row['goals_against'])}", None),
-        ("xG", f"{row['xG']:.1f}–{row['xG_against']:.1f}", None),
-        ("GOALS − xG", f"{row['goals_minus_xG']:+.1f}", None),
-        ("PREVENTED", f"{row['goals_prevented']:+.1f}", None),
-    ]
-    for i, (label, value, _) in enumerate(figures):
-        x = 0.03 + (i % 2) * 0.115
-        y = 0.70 - (i // 2) * 0.115
-        fig.text(x, y + 0.045, label, color=base.MUTED, fontsize=8, fontweight="bold")
-        fig.text(x, y, value, color=base.TEXT, **display(24))
-    return finish_card(fig, league, f"teams/{team.replace(' ', '_')}.png")
 
 
-def _ordinal(n: int) -> str:
-    return "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-
-
-def finish_card(fig, league: League, relative: str) -> Path:
-    path = league.folder / "visuals" / relative
+def finish_card(fig, league: League, scope: str, filename: str) -> Path:
+    path = league.folder / "visuals" / scope / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=DPI, facecolor=base.BG)
     plt.close(fig)
     return path
 
 
+def team_profile(league: League, team: str) -> Path:
+    per = league.per_match.set_index("team")
+    totals = league.teams.set_index("team")
+    shares, raws = _percentiles(per, team, TEAM_SLICES)
+    size = len(per)
+    positions = [None if s is None else int(round(size - s * (size - 1))) for s in shares]
+    badges = [str(p) if p is not None else "" for p in positions]
+    ranks = [f"#{p}" if p is not None else "—" for p in positions]
+    row = totals.loc[team]
+    place = int(list(totals.index).index(team)) + 1
+    fig = plt.figure(figsize=SIZE, facecolor=base.BG)
+    _card_header(
+        fig,
+        league.colour(team),
+        team.upper(),
+        f"{league.title.title()} · {league.rounds.title()} · {int(row['matches'])} matches · "
+        f"{int(row['won'])}W {int(row['drawn'])}D {int(row['lost'])}L · {int(row['points'])} points · {place}{_ordinal(place)}",
+    )
+    ax = fig.add_axes([0.285, 0.075, 0.43, 0.66], projection="polar")
+    pizza(ax, TEAM_SLICES, shares, raws, badges, centre=(league, team))
+    _figure_pairs(
+        fig,
+        [
+            ("GOALS", f"{int(row['goals_for'])}–{int(row['goals_against'])}"),
+            ("xG", f"{row['xG']:.1f}–{row['xG_against']:.1f}"),
+            ("GOALS − xG", f"{row['goals_minus_xG']:+.1f}"),
+        ],
+    )
+    _legend_column(fig, 0.03, 0.2)
+    _findings(fig, TEAM_SLICES, shares, raws, ranks, 0.79)
+    _footnote(
+        fig,
+        f"Slice length = share of the league this side beats · circle = rank of {size}, 1 is best · dashed ring = league median · ↓ fewer is better, so a long slice is a small figure",
+        0.79,
+        46,
+    )
+    return finish_card(fig, league, "teams", f"profile_{team.replace(' ', '_')}.png")
+
+
 def player_profile(
     league: League, player: str, team: str, minimum_minutes: float = 270.0
 ) -> Path | None:
     pool = _qualified(league, minimum_minutes)
-    role_rows = league.per90.set_index(["player", "team"]).loc[(player, team)]
-    role = role_rows["role"]
-    peers = (
-        pool[pool["role"].eq(role)].reset_index(drop=True)
-        if role in set(pool["role"])
-        else pool.reset_index(drop=True)
-    )
-    peers = peers.set_index(["player", "team"])
+    role = league.per90.set_index(["player", "team"]).loc[(player, team)]["role"]
+    peers = pool[pool["role"].eq(role)] if role in set(pool["role"]) else pool
+    peers = peers.reset_index(drop=True).set_index(["player", "team"])
     if (player, team) not in peers.index:
         return None
     shares, raws = _percentiles(peers, (player, team), PLAYER_SLICES)
     totals = league.players.set_index(["player", "team"]).loc[(player, team)]
-    fig = plt.figure(figsize=(12, 9), facecolor=base.BG)
     rating = totals.get("avg_rating")
+    fig = plt.figure(figsize=SIZE, facecolor=base.BG)
     _card_header(
         fig,
-        league,
-        team,
+        league.colour(team),
         player.upper(),
         f"{team} · {role} · {int(totals['matches'])} matches · {totals['minutes']:.0f} minutes"
-        + (f" · rating {rating:.2f}" if pd.notna(rating) else ""),
+        + (f" · rating {rating:.2f}" if pd.notna(rating) else "")
+        + (" · small sample" if totals["minutes"] < 450 else ""),
     )
-    ax = fig.add_axes([0.27, 0.13, 0.46, 0.60], projection="polar")
-    pizza(ax, PLAYER_SLICES, shares, raws, centre=(league, team))
-    _legend(fig, 0.05, 0.075)
-    fig.text(
-        0.97,
-        0.075,
-        f"Slice length = share of the {len(peers)} {role.lower()}s with {minimum_minutes:.0f}+ minutes this player beats · per 90",
-        color=base.NEUTRAL,
-        fontsize=8,
-        ha="right",
-        va="center",
-    )
-    figures = [
-        ("GOALS", f"{totals['goals']:.0f}"),
-        ("ASSISTS", f"{totals['assists']:.0f}"),
-        ("KEY PASSES", f"{totals['key_passes']:.0f}"),
-        ("SHOTS", f"{totals['shots']:.0f}"),
+    badges = [f"{round(100 * s):d}" if s is not None else "" for s in shares]
+    ranks = [
+        f"{round(100 * s):d}{_ordinal(round(100 * s))}" if s is not None else "—" for s in shares
     ]
-    for i, (label, value) in enumerate(figures):
-        x = 0.03 + (i % 2) * 0.115
-        y = 0.70 - (i // 2) * 0.115
-        fig.text(x, y + 0.045, label, color=base.MUTED, fontsize=8, fontweight="bold")
-        fig.text(x, y, value, color=base.TEXT, **display(24))
+    ax = fig.add_axes([0.285, 0.075, 0.43, 0.66], projection="polar")
+    pizza(ax, PLAYER_SLICES, shares, raws, badges, centre=(league, team))
+    _figure_pairs(
+        fig,
+        [
+            ("GOALS", f"{totals['goals']:.0f}"),
+            ("ASSISTS", f"{totals['assists']:.0f}"),
+            ("KEY PASSES", f"{totals['key_passes']:.0f}"),
+        ],
+    )
+    _legend_column(fig, 0.03, 0.2)
+    _findings(fig, PLAYER_SLICES, shares, raws, ranks, 0.79)
+    _footnote(
+        fig,
+        f"Slice length = share of the {len(peers)} {role.lower()}s with {minimum_minutes:.0f}+ minutes this player beats · per 90 · circle = percentile · dashed ring = median",
+        0.79,
+        46,
+    )
     safe = re.sub(r"[^\w\-]+", "_", player).strip("_")
-    return finish_card(fig, league, f"players/{team.replace(' ', '_')}/{safe}.png")
+    return finish_card(fig, league, "players", f"profile_{team.replace(' ', '_')}__{safe}.png")
