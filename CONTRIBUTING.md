@@ -46,6 +46,7 @@ If your team is missing from the color database:
 ### Code Style
 
 - Follow the existing code style and naming conventions
+- Format with `ruff format .` before committing (CI runs `ruff format --check .`)
 - Keep the dark-mode aesthetic for all visualizations
 - Test your changes with multiple match URLs from different leagues
 - Ensure no new warnings are introduced

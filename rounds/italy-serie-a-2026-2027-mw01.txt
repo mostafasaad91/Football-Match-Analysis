@@ -1,0 +1,16 @@
+# Italy Serie A 2026-2027 - Matchweek 1  (22-24 Aug 2026)
+# Read off the stage fixture list and checked the only way the data allows:
+# ten fixtures, twenty clubs, none repeated. The whoscored ids are not
+# consecutive within a round here, unlike LaLiga's first three, so the block
+# shortcut that works there would file these wrong.
+# Run with:  python run_round.py --round 1 --urls rounds/italy-serie-a-2026-2027-mw01.txt
+https://www.whoscored.com/matches/1980886/live/italy-serie-a-2026-2027-inter-monza
+https://www.whoscored.com/matches/1980897/live/italy-serie-a-2026-2027-udinese-como
+https://www.whoscored.com/matches/1980890/live/italy-serie-a-2026-2027-parma-calcio-1913-cagliari
+https://www.whoscored.com/matches/1980882/live/italy-serie-a-2026-2027-genoa-napoli
+https://www.whoscored.com/matches/1980891/live/italy-serie-a-2026-2027-frosinone-juventus
+https://www.whoscored.com/matches/1980900/live/italy-serie-a-2026-2027-venezia-lecce
+https://www.whoscored.com/matches/1980894/live/italy-serie-a-2026-2027-torino-ac-milan
+https://www.whoscored.com/matches/1980883/live/italy-serie-a-2026-2027-atalanta-sassuolo
+https://www.whoscored.com/matches/1980887/live/italy-serie-a-2026-2027-bologna-lazio
+https://www.whoscored.com/matches/1980879/live/italy-serie-a-2026-2027-roma-fiorentina

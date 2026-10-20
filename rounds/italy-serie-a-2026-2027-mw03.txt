@@ -1,0 +1,13 @@
+# Italy Serie A 2026-2027 - Matchweek 3  (4-7 Sep 2026)
+# Matchweek 4 opened on 11 September and is not complete, so it is not here.
+# Run with:  python run_round.py --round 3 --urls rounds/italy-serie-a-2026-2027-mw03.txt
+https://www.whoscored.com/matches/1980905/live/italy-serie-a-2026-2027-genoa-como
+https://www.whoscored.com/matches/1980898/live/italy-serie-a-2026-2027-fiorentina-torino
+https://www.whoscored.com/matches/1980909/live/italy-serie-a-2026-2027-inter-napoli
+https://www.whoscored.com/matches/1980888/live/italy-serie-a-2026-2027-roma-atalanta
+https://www.whoscored.com/matches/1980901/live/italy-serie-a-2026-2027-frosinone-venezia
+https://www.whoscored.com/matches/1980921/live/italy-serie-a-2026-2027-parma-calcio-1913-monza
+https://www.whoscored.com/matches/1980892/live/italy-serie-a-2026-2027-bologna-sassuolo
+https://www.whoscored.com/matches/1980918/live/italy-serie-a-2026-2027-juventus-ac-milan
+https://www.whoscored.com/matches/1980895/live/italy-serie-a-2026-2027-cagliari-lecce
+https://www.whoscored.com/matches/1980924/live/italy-serie-a-2026-2027-udinese-lazio

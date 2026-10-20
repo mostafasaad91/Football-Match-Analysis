@@ -8,7 +8,7 @@ deviations cannot cancel into a misleading combined-total conclusion.
 ## Offline reproduction
 
 ```powershell
-python render_snapshot.py "output/path/to/saved-fixture" --output "output/review/fixture" --theme dark --both-themes
+python -m football_analysis.render.render_snapshot "output/path/to/saved-fixture" --output "output/review/fixture" --theme dark --both-themes
 ```
 
 The source needs `events.csv`, `players.csv`, `xg.csv`,

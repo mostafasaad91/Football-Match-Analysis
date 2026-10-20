@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".runtime_packages", "output", "logs"]
+
+[tool.ruff.format]
+line-ending = "auto"
+
+[tool.ruff.lint]
+# Rules that catch real mistakes. Style is the formatter's job.
+select = ["E9", "F", "B", "PLE"]
+ignore = [
+    "F401",  # modules re-export names other modules import from them
+    "B905",  # zip() without strict= is the house idiom
+    "E731",  # small lambdas are used as local helpers
+]

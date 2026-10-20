@@ -25,8 +25,8 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir
-from match_article import build_article
-from tactical_pdf_report import (
+from football_analysis.prose.match_article import build_article
+from football_analysis.reports.tactical_pdf_report import (
     _section_copy,
     build_context,
     visual_data_read,
@@ -78,6 +78,7 @@ def _boards(out: Path) -> list[Path]:
 # --------------------------------------------------------------------------
 # the shapes
 # --------------------------------------------------------------------------
+
 
 def _rename(events, xg, team_metrics, player_metrics, info, home, away):
     """Give the two sides different names, keeping every id intact."""
@@ -155,9 +156,17 @@ def _lead_changed(events, xg, team_metrics, player_metrics, info):
 
 def _without_optional_columns(events, xg, team_metrics, player_metrics, info):
     """A thinner export: the optional metrics simply are not there."""
-    drop = ["ppda", "rest_defence_dangerous_counters", "counterpress_success_rate",
-            "transition_goals", "deep_completions", "build_up_success_rate"]
-    team_metrics = team_metrics.drop(columns=[c for c in drop if c in team_metrics], errors="ignore")
+    drop = [
+        "ppda",
+        "rest_defence_dangerous_counters",
+        "counterpress_success_rate",
+        "transition_goals",
+        "deep_completions",
+        "build_up_success_rate",
+    ]
+    team_metrics = team_metrics.drop(
+        columns=[c for c in drop if c in team_metrics], errors="ignore"
+    )
     return events, xg, team_metrics, player_metrics, info
 
 
@@ -192,8 +201,12 @@ def _empty_player_metrics(events, xg, team_metrics, player_metrics, info):
 def _blank_cells(events, xg, team_metrics, player_metrics, info):
     """Optional columns present but empty, which is not the same as absent."""
     team_metrics = team_metrics.copy()
-    for column in ("rest_defence_dangerous_counters", "counterpress_success_rate",
-                   "deep_completions", "transition_goals"):
+    for column in (
+        "rest_defence_dangerous_counters",
+        "counterpress_success_rate",
+        "deep_completions",
+        "transition_goals",
+    ):
         if column in team_metrics:
             team_metrics[column] = pd.NA
     return events, xg, team_metrics, player_metrics, info
@@ -233,13 +246,15 @@ SHAPES = {
 def _shaped(name):
     events, xg, team_metrics, player_metrics, info, out = _base()
     events, xg, team_metrics, player_metrics, info = SHAPES[name](
-        events, xg, team_metrics, player_metrics, info)
+        events, xg, team_metrics, player_metrics, info
+    )
     return events, xg, team_metrics, player_metrics, info, out
 
 
 # --------------------------------------------------------------------------
 # what must hold for any of them
 # --------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_the_report_writes_every_board_without_filler_or_leaks(shape):
@@ -320,8 +335,13 @@ def test_a_level_match_is_never_described_as_having_a_leader():
     text = " ".join(write(b, context) for b in _boards(out) for write in WRITERS)
     for section in _section_copy(context).values():
         text += " " + " ".join(t for _, t in section["performance"] + section["data"])
-    for claim in ("shot more often", "The same asymmetry", "And it was paid for",
-                  "stronger field tilt", "'s curve finished above"):
+    for claim in (
+        "shot more often",
+        "The same asymmetry",
+        "And it was paid for",
+        "stronger field tilt",
+        "'s curve finished above",
+    ):
         assert claim not in text, (claim, "claimed in a match where the sides are equal")
 
 
@@ -343,8 +363,7 @@ def test_a_goalless_match_does_not_describe_an_opening_goal():
         # entirely to whichever side was listed at home.
         ("Milan", "Inter Milan", "03_shot_map_inter_milan.png", "Inter Milan"),
         ("Inter Milan", "Milan", "03_shot_map_milan.png", "Milan"),
-        ("United", "Manchester United", "03_shot_map_manchester_united.png",
-         "Manchester United"),
+        ("United", "Manchester United", "03_shot_map_manchester_united.png", "Manchester United"),
         # A name that sits inside the board's own vocabulary. "cross" is a
         # substring of "crosses", so a side called Cross claimed every
         # crossing board in the report.
@@ -356,7 +375,7 @@ def test_a_goalless_match_does_not_describe_an_opening_goal():
     ],
 )
 def test_a_board_is_attributed_to_the_side_whose_name_ends_it(home, away, filename, owner):
-    from tactical_pdf_report import _visual_team
+    from football_analysis.reports.tactical_pdf_report import _visual_team
 
     team, side = _visual_team(Path(filename), {"home": home, "away": away})
     assert team == owner, (filename, home, away, team)
@@ -374,7 +393,7 @@ def test_a_board_is_attributed_to_the_side_whose_name_ends_it(home, away, filena
 )
 def test_the_article_caption_names_the_same_side(home, away, filename, owner):
     """The caption builder had its own copy of the substring match."""
-    from match_article import _caption
+    from football_analysis.prose.match_article import _caption
 
     # The caption does not always lead with the name — "Where Arsenal's
     # possession added threat" — so check that the chosen side is named, and
@@ -400,16 +419,18 @@ def test_the_whole_package_builds_for_a_hostile_fixture(shape, tmp_path):
 
     events, xg, team_metrics, player_metrics, info, out = _shaped(shape)
     players = pd.read_csv(out / "players.csv")
-    from visual_redesign_full import generate_match_package
+    from football_analysis.visuals.visual_redesign_full import generate_match_package
 
     target = tmp_path / shape
     target.mkdir(parents=True, exist_ok=True)
     try:
-        generate_match_package(events, players, xg, team_metrics, player_metrics,
-                               info, target)
+        generate_match_package(events, players, xg, team_metrics, player_metrics, info, target)
         assert len(list(target.glob("*.png"))) > 40, shape
-        assert (target / "full_visual_redesign_real_data.pdf").exists(), shape
-        assert (target / "match_article.docx").exists(), shape
+        # The report and the article are not produced any more -- their prose
+        # was invented -- so their absence is the package being correct rather
+        # than the render having failed. The boards are what a package is.
+        assert not list(target.glob("*.pdf")), shape
+        assert not list(target.glob("*.docx")), shape
     finally:
         shutil.rmtree(target, ignore_errors=True)
 

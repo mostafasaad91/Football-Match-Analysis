@@ -10,6 +10,8 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.lock
+      # One layout for every file, checked rather than argued over in review.
+      - run: pip install 'ruff>=0.15,<1' && ruff format --check .
       # Naming ten files by hand is how the headline regression shipped. The
       # suite that caught it — 55 fixtures sharing one sentence — was written,
       # committed, and never run here, because it was not on the list. The

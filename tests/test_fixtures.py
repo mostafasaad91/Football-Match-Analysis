@@ -1,6 +1,6 @@
 import pytest
 
-from fixtures import (
+from football_analysis.pipeline.fixtures import (
     known_teams,
     load_fixtures,
     resolve_team,
@@ -52,7 +52,7 @@ def test_each_league_is_a_complete_double_round_robin(rows):
 
 
 def test_exact_name_wins_over_substring(rows):
-    """"leeds" is also inside no other slug, but the principle matters where
+    """ "leeds" is also inside no other slug, but the principle matters where
     one team's name contains another's."""
     assert resolve_team("arsenal", rows) == "arsenal"
     assert resolve_team("Aston Villa", rows) == "aston-villa"
@@ -70,9 +70,7 @@ def test_an_unknown_name_says_so(rows):
 
 def test_a_team_plays_every_other_team_twice(rows):
     arsenal = team_fixtures("arsenal", rows)
-    opponents = [
-        row["away"] if row["home"] == "arsenal" else row["home"] for row in arsenal
-    ]
+    opponents = [row["away"] if row["home"] == "arsenal" else row["home"] for row in arsenal]
     assert len(arsenal) == 38
     assert sorted(set(opponents)) == sorted(set(opponents))
     assert all(opponents.count(name) == 2 for name in set(opponents))

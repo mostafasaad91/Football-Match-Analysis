@@ -22,8 +22,8 @@ share the 105 × 68 m pitch. No metric calculations change for the redesign.
 Rebuild just the posters, offline, in a separate destination:
 
 ```powershell
-python render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/dark
-python render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/light --theme light
+python scripts/render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/dark
+python scripts/render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/light --theme light
 ```
 
 Inspect all four full-size images and a reduced contact sheet in both themes.

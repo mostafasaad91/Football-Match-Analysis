@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-import render_light
+from football_analysis.render import render_light
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,24 +34,27 @@ def _in_theme(theme: str, body: str):
     }
     completed = subprocess.run(
         [sys.executable, "-c", textwrap.dedent(body)],
-        cwd=ROOT, env=environment, capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=180,
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
 # Kits that clear the floor on one page and fail on the other.
-BRIGHT_KITS = {"Man City sky": "#6CABDD", "Juventus silver": "#DCE3EC",
-               "Norwich yellow": "#FFF200"}
-DARK_KITS = {"PSG navy": "#004170", "Aston Villa claret": "#7A003C",
-             "near-black": "#111111"}
+BRIGHT_KITS = {"Man City sky": "#6CABDD", "Juventus silver": "#DCE3EC", "Norwich yellow": "#FFF200"}
+DARK_KITS = {"PSG navy": "#004170", "Aston Villa claret": "#7A003C", "near-black": "#111111"}
 
 
 _LIFT_PROBE = """
     import json
     from matplotlib import colors as mcolors
-    import visual_redesign_full as v
+    from football_analysis.visuals import visual_redesign_full as v
 
     kits = %r
     out = {}
@@ -112,8 +115,8 @@ _POSTER_PROBE = """
     # pixel used: its drawing code was unreachable. poster_dashboard is what
     # renders both poster sets, so its palette is the one worth a contrast
     # guarantee.
-    import poster_dashboard as mp
-    from visualization_components import contrast_ratio, TEXT_MAIN, TEXT_DIM, BG_DARK
+    from football_analysis.visuals import poster_dashboard as mp
+    from football_analysis.visuals.visualization_components import contrast_ratio, TEXT_MAIN, TEXT_DIM, BG_DARK
     print(json.dumps({
         "bg": BG_DARK,
         "ink": TEXT_MAIN,
@@ -149,11 +152,12 @@ def test_the_two_pages_do_not_share_a_background():
 # crest plate
 # --------------------------------------------------------------------------
 
+
 def test_the_plate_opposes_the_page_not_the_crest():
     """A silver crest on paper needs a dark plate, not another light one."""
     import numpy as np
 
-    import crests
+    from football_analysis.visuals import crests
 
     silver = np.full((8, 8, 4), 230, dtype=np.uint8)
     silver[..., 3] = 255
@@ -168,7 +172,7 @@ def test_the_plate_opposes_the_page_not_the_crest():
 def test_a_crest_that_reads_on_its_page_gets_no_plate():
     import numpy as np
 
-    import crests
+    from football_analysis.visuals import crests
 
     silver = np.full((8, 8, 4), 230, dtype=np.uint8)
     silver[..., 3] = 255
@@ -180,7 +184,7 @@ def test_the_plate_is_decided_per_pixel_not_on_the_crest_mean():
     """A crest can average light and still separate: Villa's claret border."""
     import numpy as np
 
-    import crests
+    from football_analysis.visuals import crests
 
     # Half near-white, half deep claret. The mean is light enough to look
     # unreadable on paper; half the crest reads perfectly.
@@ -195,6 +199,7 @@ def test_the_plate_is_decided_per_pixel_not_on_the_crest_mean():
 # --------------------------------------------------------------------------
 # the light pass itself
 # --------------------------------------------------------------------------
+
 
 def test_light_output_is_a_subfolder_so_neither_run_clobbers_the_other():
     assert render_light.light_dir("output/x").name == "light"
@@ -243,18 +248,26 @@ def test_a_failed_light_run_returns_none_rather_than_raising(tmp_path, monkeypat
 def test_the_child_refuses_to_render_under_the_dark_theme():
     """Rendering without the env var would write the black set into light/."""
     completed = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent("""
-            import render_light, pathlib, sys
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent("""
+            from football_analysis.render import render_light; import pathlib, sys
             try:
                 render_light._render_here(pathlib.Path("."))
             except RuntimeError as error:
                 print("REFUSED", error)
                 sys.exit(0)
             sys.exit(1)
-        """)],
+        """),
+        ],
         cwd=ROOT,
         env={**os.environ, "MATCH_ANALYSIS_THEME": "dark", "PYTHONIOENCODING": "utf-8"},
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
     assert "REFUSED" in completed.stdout
@@ -266,8 +279,8 @@ def test_the_child_refuses_to_render_under_the_dark_theme():
 
 _PDF_PROBE = """
     import json
-    import tactical_pdf_report as pdf
-    from visualization_components import contrast_ratio
+    from football_analysis.reports import tactical_pdf_report as pdf
+    from football_analysis.visuals.visualization_components import contrast_ratio
     print(json.dumps({
         "bg": pdf.BG.hexval()[2:],
         "panel": pdf.PANEL.hexval()[2:],
@@ -316,6 +329,7 @@ def test_report_chrome_reads_on_its_own_page(theme):
 # the radars have to survive the change of page too
 # ---------------------------------------------------------------------------
 
+
 def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
     """A number needs a tile under it, and the tile needs the page under that.
 
@@ -336,8 +350,8 @@ def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
     import sys
 
     probe = (
-        "import player_radar as pr;"
-        "from visualization_components import BG_DARK, contrast_ratio;"
+        "from football_analysis.visuals import player_radar as pr;"
+        "from football_analysis.visuals.visualization_components import BG_DARK, contrast_ratio;"
         "g = pr.group_palette(5);"
         "print([(round(contrast_ratio(c, BG_DARK), 2),"
         " round(contrast_ratio(pr._chip_text_color(c), c), 2)) for c in pr.chip_fills(g)])"
@@ -345,11 +359,13 @@ def test_a_chip_tile_is_visible_on_whichever_page_it_is_printed_on():
     for theme, floor in (("light", 2.0), ("dark", 1.1)):
         out = subprocess.run(
             [sys.executable, "-c", probe],
-            capture_output=True, text=True, cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
             env={**os.environ, "MATCH_ANALYSIS_THEME": theme},
         )
         assert out.returncode == 0, out.stderr
-        measured = eval(out.stdout.strip())          # noqa: S307 - our own output
+        measured = eval(out.stdout.strip())  # noqa: S307 - our own output
         assert len(measured) == 5
         for tile_vs_page, ink_vs_tile in measured:
             assert tile_vs_page >= floor, (theme, measured)
@@ -360,8 +376,8 @@ def test_the_light_package_carries_the_squad_for_advanced_profiles():
     """Both themes keep the squad frame for the role-aware profile renderer."""
     import inspect
 
-    import visual_redesign_full as vrf
+    from football_analysis.visuals import visual_redesign_full as vrf
 
     source = inspect.getsource(vrf.generate_match_package)
-    assert 'players.csv' in source, "the squad is not written beside the frames"
+    assert "players.csv" in source, "the squad is not written beside the frames"
     assert "build_insight_visuals(events, players, match_info, OUT)" in source

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from match_store import (
+from football_analysis.pipeline.match_store import (
     list_matches,
     match_identity,
     metric_percentile,
@@ -25,7 +25,13 @@ def _team_frame(home="Arsenal", away="Chelsea", tilt=60.0):
     return pd.DataFrame(
         [
             {"team": home, "side": "home", "team_id": 1, "field_tilt": tilt, "box_entries": 12},
-            {"team": away, "side": "away", "team_id": 2, "field_tilt": 100 - tilt, "box_entries": 5},
+            {
+                "team": away,
+                "side": "away",
+                "team_id": 2,
+                "field_tilt": 100 - tilt,
+                "box_entries": 5,
+            },
         ]
     )
 
@@ -149,10 +155,16 @@ def test_match_key_survives_a_reschedule(db):
 
 
 def test_raw_snapshot_round_trips_and_is_replayable(db, tmp_path):
-    from match_store import load_snapshot, save_snapshot, stored_snapshots
+    from football_analysis.pipeline.match_store import (
+        load_snapshot,
+        save_snapshot,
+        stored_snapshots,
+    )
 
     payload = {"events": [{"id": 1, "type": "Pass"}], "home": {"name": "Arsenal"}}
-    save_match(_info(), _team_frame(), None, url="https://www.whoscored.com/matches/7/live/x", db_path=db)
+    save_match(
+        _info(), _team_frame(), None, url="https://www.whoscored.com/matches/7/live/x", db_path=db
+    )
     path = save_snapshot("ws-7", payload, db_path=db)
 
     assert path.exists() and path.suffix == ".gz"

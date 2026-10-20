@@ -20,7 +20,7 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir
-from match_article import (
+from football_analysis.prose.match_article import (
     TARGET_WORDS,
     Article,
     build_article,
@@ -49,8 +49,9 @@ def _article(match, mirror=False) -> Article:
     events, xg, team_metrics, player_metrics, info, out = _frames(match)
     if mirror:
         team_metrics = team_metrics.copy()
-        team_metrics["side"] = team_metrics["side"].map(
-            {"home": "away", "away": "home"}).fillna(team_metrics["side"])
+        team_metrics["side"] = (
+            team_metrics["side"].map({"home": "away", "away": "home"}).fillna(team_metrics["side"])
+        )
         info = dict(info)
         info["home_name"], info["away_name"] = info["away_name"], info["home_name"]
         info["home_id"], info["away_id"] = info["away_id"], info["home_id"]
@@ -60,6 +61,7 @@ def _article(match, mirror=False) -> Article:
 # --------------------------------------------------------------------------
 # shape
 # --------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("match", MATCHES)
 def test_the_argument_is_the_length_it_was_commissioned_at(match):
@@ -104,10 +106,9 @@ def test_the_article_carries_the_whole_package(match):
 def test_it_shows_five_radars_a_side(match):
     events, _xg, _tm, _pm, _info, _out = _frames(match)
     article = _article(match)
-    from match_article import RADARS_PER_TEAM
+    from football_analysis.prose.match_article import RADARS_PER_TEAM
 
-    radars = [Path(v) for s in article.sections for v in s.visuals
-              if "player_radars" in str(v)]
+    radars = [Path(v) for s in article.sections for v in s.visuals if "player_radars" in str(v)]
     assert len(radars) == RADARS_PER_TEAM * 2, [r.name for r in radars]
     per_team = {}
     for radar in radars:
@@ -142,6 +143,7 @@ def test_every_visual_it_points_at_exists(match):
 # the claims
 # --------------------------------------------------------------------------
 
+
 def _text(article, findings_only: bool = False) -> str:
     sections = [s for s in article.sections if not (findings_only and s.gallery)]
     return " ".join(p for s in sections for p in s.paragraphs)
@@ -163,8 +165,13 @@ def test_the_headline_names_the_side_the_numbers_name(match, mirror):
         row = xg[xg["team"].astype(str).str.lower().eq(name.lower())]
         return int(float(row.iloc[0]["goals"])) if not row.empty else 0
 
-    winner = (home if team_goals(home) > team_goals(away)
-              else away if team_goals(away) > team_goals(home) else None)
+    winner = (
+        home
+        if team_goals(home) > team_goals(away)
+        else away
+        if team_goals(away) > team_goals(home)
+        else None
+    )
     xg_leader = home if team_xg(home) >= team_xg(away) else away
 
     if winner and abs(team_xg(home) - team_xg(away)) > 0.15 and xg_leader != winner:
@@ -248,6 +255,7 @@ def test_the_definitions_are_allowed_to_recur():
 # the Word file
 # --------------------------------------------------------------------------
 
+
 def test_the_docx_is_built_for_pasting_into_an_editor(tmp_path):
     import re
     import zipfile
@@ -274,10 +282,14 @@ def test_the_docx_is_built_for_pasting_into_an_editor(tmp_path):
 
 
 def test_a_broken_render_returns_none_rather_than_killing_the_package(tmp_path):
-    from match_article import build_match_article
+    from football_analysis.prose.match_article import build_match_article
 
-    assert build_match_article(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
-                               pd.DataFrame(), {}, tmp_path) is None
+    assert (
+        build_match_article(
+            pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}, tmp_path
+        )
+        is None
+    )
 
 
 # --------------------------------------------------------------------------
@@ -297,7 +309,7 @@ def _titles():
     if _TITLE_CACHE is not None:
         return _TITLE_CACHE
 
-    from match_article import build_article
+    from football_analysis.prose.match_article import build_article
 
     root = Path(__file__).resolve().parent.parent
     rows = []
@@ -309,7 +321,8 @@ def _titles():
             pd.read_csv(out / "xg.csv"),
             pd.read_csv(out / "team_advanced_metrics.csv"),
             pd.read_csv(out / "player_sequence_metrics.csv"),
-            info, out,
+            info,
+            out,
         )
         rows.append((out.name, article.title, article.standfirst))
     _TITLE_CACHE = rows
@@ -344,7 +357,7 @@ def test_the_headline_is_stable_for_the_same_match():
     """
     import json
 
-    from match_article import build_article
+    from football_analysis.prose.match_article import build_article
 
     root = Path(__file__).resolve().parent.parent
     folder = next(iter(sorted((root / "output").glob("*/match_info.json"))), None)

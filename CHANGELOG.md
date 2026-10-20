@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The forty-four library modules moved out of the project root into the
+  `football_analysis` package (`pipeline`, `xg`, `metrics`, `prose`, `reports`,
+  `visuals`, `render`). `python football_match_analysis.py` and `run_round.py`
+  run as before; module command lines are now `python -m football_analysis.…`,
+  the poster and folder-tidying tools live in `scripts/`, and the fitted xG
+  models in `data/models/`. Every Python file is formatted with `ruff format`.
+- Defensive midfielders (DMC, DML, DMR) are ranked with the midfield, not
+  with the back line.
 - QA contact sheet 01 is now a twelve-up match story, ordered result → rhythm
   → goals → context → territory → mechanism → people, with a line under each
   thumbnail carrying the narrative. A third row makes the sheet 14% taller

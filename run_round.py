@@ -12,6 +12,7 @@ Each fixture runs in its own process, because the renderers keep module-level
 state that one match configures and never puts back. A failure is reported and
 the round carries on; the summary at the end says which ones need another go.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,8 +24,12 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-MATCH_URL = re.compile(r"https?://(?:www\.)?whoscored\.com/matches/\d+/(?:live|show)/\S*",
-                       re.IGNORECASE)
+# Four times a normal fixture, so a slow provider or a big match is never cut
+# off, and a hung scrape costs half an hour instead of the rest of the round.
+FIXTURE_TIMEOUT_S = 30 * 60
+MATCH_URL = re.compile(
+    r"https?://(?:www\.)?whoscored\.com/matches/\d+/(?:live|show)/\S*", re.IGNORECASE
+)
 
 
 def read_urls(args) -> list[str]:
@@ -48,8 +53,12 @@ def read_urls(args) -> list[str]:
                 available = sorted(p.name for p in (ROOT / "rounds").glob("*.txt"))
                 raise SystemExit(
                     f"No URL file at {name!r}.\n"
-                    + (f"Saved rounds in rounds/: {', '.join(available)}"
-                       if available else "No saved rounds in rounds/ yet."))
+                    + (
+                        f"Saved rounds in rounds/: {', '.join(available)}"
+                        if available
+                        else "No saved rounds in rounds/ yet."
+                    )
+                )
         found.extend(MATCH_URL.findall(path.read_text(encoding="utf-8")))
     ordered, seen = [], set()
     for url in found:
@@ -59,6 +68,34 @@ def read_urls(args) -> list[str]:
             seen.add(url)
             ordered.append(url)
     return ordered
+
+
+def _light_missing(url: str, environment: dict) -> Path | None:
+    """The package this fixture just wrote, when its light copy did not arrive.
+
+    The renderer names the folder from the teams and the score, none of which
+    this process parsed, so the fixture is found by the one thing that is
+    certain: it is the newest package under the round it was shelved in.
+    """
+    from football_analysis.pipeline.match_fixture import shelf
+
+    where = ROOT / "output"
+    for part in shelf(url, environment.get("MATCH_ANALYSIS_ROUND", "")):
+        where = where / part
+    if not where.is_dir():
+        return None
+    packages = [
+        p
+        for p in where.iterdir()
+        if p.is_dir() and not p.name.startswith(".") and (p / "match_info.json").exists()
+    ]
+    if not packages:
+        return None
+    newest = max(packages, key=lambda p: p.stat().st_mtime)
+    light = newest / "light"
+    if light.is_dir() and list(light.glob("*.png")):
+        return None
+    return newest
 
 
 def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
@@ -80,11 +117,61 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
     # a missing log.
     environment["PYTHONIOENCODING"] = "utf-8"
     started = time.time()
-    finished = subprocess.run([sys.executable, "football_match_analysis.py"],
-                              cwd=ROOT, env=environment, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
+    # A fixture renders in about seven minutes. One Serie A fixture sat for
+    # three hours on six seconds of CPU, waiting on the provider mid-scrape,
+    # and with no limit here the whole round waited behind it. Past the limit
+    # the child is killed and reported, and the round moves on.
+    try:
+        finished = subprocess.run(
+            [sys.executable, "football_match_analysis.py"],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=FIXTURE_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        took = f"{(time.time() - started) / 60:.1f} min"
+        return False, f"{took} :: no result after {FIXTURE_TIMEOUT_S // 60} min, stopped"
     took = f"{(time.time() - started) / 60:.1f} min"
     if finished.returncode == 0:
+        # The light copy is a second full render, launched by the fixture's own
+        # process while it still holds every figure it drew. CPython does not
+        # give those pages back, so on a machine without several spare gigabytes
+        # matplotlib dies allocating the child's first canvas and the package
+        # ships with a dark half and no light one -- which looks finished from
+        # the outside. This process holds nothing, so a retry from here gets the
+        # clean allocation the first attempt could not. Nothing happens when the
+        # light copy is already there, which is the usual case.
+        missing = None if dark_only else _light_missing(url, environment)
+        if missing is not None:
+            retry = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "football_analysis.render.render_light",
+                    str(missing),
+                    "--child",
+                ],
+                cwd=ROOT,
+                env={
+                    **environment,
+                    "MATCH_ANALYSIS_THEME": "light",
+                    "MATCH_ANALYSIS_LIGHT_COPY": "0",
+                },
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if retry.returncode != 0:
+                tail = (retry.stderr or retry.stdout or "").strip().splitlines()[-2:]
+                return True, took + " :: light copy still missing :: " + " | ".join(
+                    line.strip() for line in tail
+                )
+            took += " (+light retried)"
         return True, took
     # The last few lines carry the reason; the whole log is rarely the point.
     tail = (finished.stderr or finished.stdout or "").strip().splitlines()[-3:]
@@ -92,20 +179,26 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--round", required=True,
-                        help='Matchweek number or name: 1, "Matchweek 1", "الجولة 1"')
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--round", required=True, help='Matchweek number or name: 1, "Matchweek 1", "الجولة 1"'
+    )
     parser.add_argument("--url", action="append", help="One fixture URL; repeatable")
-    parser.add_argument("--urls", action="append",
-                        help="A file holding fixture URLs; repeatable")
-    parser.add_argument("--dark-only", action="store_true",
-                        help="Skip the light copy (it is built by default)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="List what would run, and where it would be shelved")
+    parser.add_argument("--urls", action="append", help="A file holding fixture URLs; repeatable")
+    parser.add_argument(
+        "--dark-only", action="store_true", help="Skip the light copy (it is built by default)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="List what would run, and where it would be shelved"
+    )
+    parser.add_argument(
+        "--no-refit", action="store_true", help="Skip refitting the xG layer after the round"
+    )
     args = parser.parse_args()
 
-    from match_fixture import normalise_round, shelf
+    from football_analysis.pipeline.match_fixture import normalise_round, shelf
 
     round_name = normalise_round(args.round) or normalise_round(f"Matchweek {args.round}")
     if not round_name:
@@ -139,7 +232,47 @@ def main() -> int:
         print("Re-run these:")
         for url, detail in failures:
             print(f"  {url}\n      {detail}")
+    if len(failures) < len(urls) and not args.no_refit:
+        refit_xg()
     return 1 if failures else 0
+
+
+def refit_xg() -> None:
+    """Refit the xG layers on every Opta shot map stored so far.
+
+    Each fixture rendered keeps its shot map, so the archive the layers learn
+    from grows by a round at a time, and refitting here is what makes them
+    improve over the season rather than stay where they were fitted: the
+    pre-shot layer on top of the engine, and the post-shot model goalkeepers
+    are judged against. Each script writes nothing unless its new fit holds up.
+    """
+    jobs = (
+        (
+            "xG layer",
+            "scripts/fit_xg_reference.py",
+            ("shots paired", "Opta-fitted", "what ships", "The fit"),
+        ),
+        ("post-shot xG", "scripts/fit_psxg.py", ("on-target shots", "fitted (new)", "The fit")),
+    )
+    for name, script, shown in jobs:
+        print(f"\nRefitting the {name} on the stored Opta shot maps ...", flush=True)
+        try:
+            done = subprocess.run(
+                [sys.executable, script],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=FIXTURE_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired:
+            print("  refit took too long, stopped; the previous fit stays")
+            continue
+        for line in (done.stdout or done.stderr or "").strip().splitlines():
+            if any(token in line for token in shown + ("written",)):
+                print("  " + line.strip())
 
 
 if __name__ == "__main__":

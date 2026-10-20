@@ -49,10 +49,10 @@ page and does not replace the dark package.
 The theme is read when `visualization_components` is first imported and every
 renderer copies its colours into module constants there and then, so one
 process renders one page. The light copy is therefore rendered by a child
-process — `render_light.py`, which any finished match folder can be handed:
+process — `football_analysis/render/render_light.py`, which any finished match folder can be handed:
 
 ```bash
-python render_light.py output/PSG_vs_Aston_Villa_2-1
+python -m football_analysis.render.render_light output/PSG_vs_Aston_Villa_2-1
 ```
 
 A colour that reads on one page frequently does not read on the other, so the
@@ -85,15 +85,15 @@ is not the match you meant. Set it every time.
 Serie A with each fixture's WhoScored id, so the URL is a lookup:
 
 ```bash
-python fixtures.py arsenal --next
-python fixtures.py --on 2026-08-22
-python fixtures.py "aston villa" --last --url
+python -m football_analysis.pipeline.fixtures arsenal --next
+python -m football_analysis.pipeline.fixtures --on 2026-08-22
+python -m football_analysis.pipeline.fixtures "aston villa" --last --url
 ```
 
 Chained:
 
 ```powershell
-$env:MATCH_ANALYSIS_URL = (python fixtures.py arsenal --last --url)
+$env:MATCH_ANALYSIS_URL = (python -m football_analysis.pipeline.fixtures arsenal --last --url)
 python football_match_analysis.py
 ```
 
@@ -107,7 +107,7 @@ A France vs England dataset is committed under `sample_data/`, so the full
 visual package can be produced with no network:
 
 ```bash
-python visual_redesign_full.py
+python -m football_analysis.visuals.visual_redesign_full
 ```
 
 ---
@@ -135,8 +135,8 @@ Dark and light copies share the same layout. Rebuild only the posters from a
 saved match without downloading data or regenerating the report:
 
 ```bash
-python render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/dark
-python render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/light --theme light
+python scripts/render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/dark
+python scripts/render_posters.py output/Arsenal_vs_Coventry_3-0_Final --output output/poster_redesign/light --theme light
 ```
 
 Every panel is drawn straight onto the poster canvas from the event frame.
@@ -249,7 +249,7 @@ against.
 
 ## Metrics
 
-Thirty metric functions, each defined once in `match_metrics.py` and reused by
+Thirty metric functions, each defined once in `football_analysis/metrics/match_metrics.py` and reused by
 the visuals, the exports and the report text — so a number cannot disagree with
 itself between two pages.
 
@@ -285,12 +285,12 @@ provider payload under `output/raw_snapshots/`. One match is a sample of one;
 the history is what makes a claim about a team rather than about an afternoon.
 
 ```bash
-python team_history.py matches
-python team_history.py team Arsenal --last 6
-python team_history.py team Arsenal --last 6 --summary
-python team_history.py player "Bukayo Saka" --last 5
-python team_history.py player "Bukayo Saka" --last 10 --summary
-python team_history.py export Arsenal --last 10 --out arsenal_last10.csv
+python -m football_analysis.pipeline.team_history matches
+python -m football_analysis.pipeline.team_history team Arsenal --last 6
+python -m football_analysis.pipeline.team_history team Arsenal --last 6 --summary
+python -m football_analysis.pipeline.team_history player "Bukayo Saka" --last 5
+python -m football_analysis.pipeline.team_history player "Bukayo Saka" --last 10 --summary
+python -m football_analysis.pipeline.team_history export Arsenal --last 10 --out arsenal_last10.csv
 ```
 
 Every stored match carries its region, competition, season and round. Set
@@ -304,13 +304,13 @@ uses the newest 5 or 10 rows, reports recent averages, and shows the change
 against the preceding window when enough matches exist:
 
 ```powershell
-python team_history.py team Arsenal --last 10 --summary
-python team_history.py player "Bukayo Saka" --last 5 --summary --metrics xG,xA,progressions
+python -m football_analysis.pipeline.team_history team Arsenal --last 10 --summary
+python -m football_analysis.pipeline.team_history player "Bukayo Saka" --last 5 --summary --metrics xG,xA,progressions
 ```
 
 Counts remain available as per-match observations; rates are averaged. No
 metric is fabricated when its denominator or source value is missing. Run
-`python team_history.py replay` after adding a new metric to retrain the saved
+`python -m football_analysis.pipeline.team_history replay` after adding a new metric to retrain the saved
 history from the archived source payloads.
 
 A fixture is keyed on its provider id, so re-analysing a match replaces its row
@@ -322,7 +322,7 @@ Because the raw payloads are kept, a metric added today can be backfilled
 across every match already collected without going back to the network:
 
 ```bash
-python team_history.py replay
+python -m football_analysis.pipeline.team_history replay
 ```
 
 Percentiles stay silent below ten stored matches rather than dressing noise up
@@ -372,8 +372,59 @@ Set `MATCH_ANALYSIS_TEAM_COLORS` to change the mode:
 
 ## Project structure
 
-| File | Responsibility |
+```
+football_match_analysis.py    entry point: analyse one match (runs the pipeline below)
+run_round.py                  analyse a whole round from a list of match URLs
+football_analysis/
+  paths.py                    where output/, assets/ and data/ live
+  pipeline/                   scrape-to-package run, fixture calendar, history store
+  xg/                         xG calibration, provider alignment, Opta reference values
+  metrics/                    match, team and player measures
+  prose/                      the article and the sentences it is made of
+  reports/                    the PDF reports
+  visuals/                    charts, radars, posters, palettes, crests
+  render/                     offline re-renders: the light copy, saved snapshots
+scripts/                      maintenance jobs: refits, backfills, rebuilds
+tests/                        the suite, golden reference included
+data/                         fixtures calendar, crest cache, fitted xG models
+assets/  sample_data/  rounds/  docs/  examples/
+```
+
+| Module | Responsibility |
 | --- | --- |
+| `pipeline/football_match_analysis.py` | Collection fallbacks, parsing, colour resolution, export orchestration; the match URL and round defaults |
+| `pipeline/fixtures.py` | Season-calendar lookup from fixture to WhoScored URL |
+| `pipeline/match_store.py` | SQLite history and the gzipped payload archive |
+| `pipeline/team_history.py` | Command-line reader for the stored history |
+| `pipeline/match_sanity.py` | Coherence checks a fixture must pass before anything is written about it |
+| `xg/reference_xg.py` | Opta's shot map from FotMob: stored for training, or published |
+| `xg/xg_alignment.py`, `xg/xg_calibration.py` | The fitted layers on top of the local xG engine (`data/models/*.json`) |
+| `metrics/match_metrics.py` | The thirty canonical metric implementations |
+| `metrics/player_advanced.py` | Possession-adjusted, per-90 and like-for-like player measures |
+| `prose/match_article.py` | The publishable article and its Word output |
+| `reports/match_report.py` | Report pages, PPDA analysis, player tables, PDF assembly |
+| `reports/tactical_pdf_report.py` | Cover, tactical commentary and page chrome |
+| `visuals/visual_redesign_full.py` | Production chart renderer and package orchestration |
+| `visuals/visual_redesign_preview.py` | Shared fixture identity and page furniture |
+| `visuals/tactical_visualizations.py` | Metric adapters and chart helpers |
+| `visuals/advanced_profiles.py` | Advanced role profiles with direct values and eligible-peer dots |
+| `visuals/player_radar.py` | Shared participation/creation calculations and legacy export compatibility |
+| `visuals/poster_dashboard.py` | Production layout and charts for both poster sets |
+| `visuals/visualization_components.py` | Shared chart components and readability helpers |
+| `visuals/visualization_design.py` | Visual tokens, typography, reusable frames |
+| `visuals/scatter_labels.py` | Direct player labels, collision-aware placement and leader lines |
+| `visuals/crests.py` | Club crest fetch, cache, plate and fallback |
+| `visuals/team_palettes.py` | Kit colours for ~975 clubs and national teams |
+| `render/render_light.py` | The light-page copy of a finished package |
+| `render/render_snapshot.py` | Offline re-render of a saved fixture |
+| `scripts/render_posters.py` | Offline poster-only rebuild from saved match frames |
+| `scripts/freeze_golden.py` | Re-freezes the reference the golden test compares against |
+
+Library modules import each other by package path
+(`from football_analysis.metrics import match_metrics`), so run their
+command-line modes with `python -m`, from the project folder.
+
+--- | --- |
 | `football_match_analysis.py` | Entry point, collection fallbacks, parsing, colour resolution, export orchestration |
 | `match_metrics.py` | The thirty canonical metric implementations |
 | `match_report.py` | Report pages, PPDA analysis, player tables, PDF assembly |
@@ -550,7 +601,7 @@ with the provider's terms and applicable law.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). When adding a metric, define it once in
-`match_metrics.py` and reuse that implementation in the visuals, the exports and
+`football_analysis/metrics/match_metrics.py` and reuse that implementation in the visuals, the exports and
 the report text.
 
 ## License

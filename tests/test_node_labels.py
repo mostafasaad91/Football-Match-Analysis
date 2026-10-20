@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pytest
 
-from visual_redesign_full import (
+from football_analysis.visuals.visual_redesign_full import (
     _LABEL_HALF_HEIGHT,
     _LABEL_HALF_WIDTH_PER_CHAR,
     _network_node_radius,
@@ -34,9 +34,18 @@ def ax():
 def placed_label(ax, name, x, y, radius, neighbours):
     """Draw one label and return where it actually landed."""
     before = len(ax.texts)
-    draw_node_label(ax, x, y, name, touches=10, max_touch=10,
-                    node_color="#8899AA", shirt=None,
-                    node_radius=radius, neighbours=neighbours)
+    draw_node_label(
+        ax,
+        x,
+        y,
+        name,
+        touches=10,
+        max_touch=10,
+        node_color="#8899AA",
+        shirt=None,
+        node_radius=radius,
+        neighbours=neighbours,
+    )
     assert len(ax.texts) > before, "no label was drawn"
     return ax.texts[-1]
 
@@ -75,8 +84,9 @@ def test_the_label_moves_off_a_node_sitting_directly_above(ax):
 
 
 def test_a_node_boxed_in_above_and_below_goes_sideways(ax):
-    text = placed_label(ax, "Kelly", 0.0, 50.0, radius=3.0,
-                        neighbours=((0.0, 54.5, 3.0), (0.0, 45.5, 3.0)))
+    text = placed_label(
+        ax, "Kelly", 0.0, 50.0, radius=3.0, neighbours=((0.0, 54.5, 3.0), (0.0, 45.5, 3.0))
+    )
     assert text.get_va() == "center"
     assert text.get_ha() in {"left", "right"}
 
@@ -95,8 +105,7 @@ def test_every_label_in_a_congested_network_clears_every_other_node(ax):
         "González": (2.0, 55.0, 22.0),
     }
     max_touch = max(t for _x, _y, t in nodes.values())
-    radii = {name: _network_node_radius(t, max_touch)
-             for name, (_x, _y, t) in nodes.items()}
+    radii = {name: _network_node_radius(t, max_touch) for name, (_x, _y, t) in nodes.items()}
 
     for name, (x, y, touches) in nodes.items():
         neighbours = _node_neighbours(nodes, radii, name)
@@ -110,11 +119,10 @@ def test_every_label_in_a_congested_network_clears_every_other_node(ax):
 def test_a_wide_player_is_not_labelled_off_the_edge_of_the_pitch(ax):
     """A left-back's name pushed further left gets clipped by the axis, which
     is how "Kostic" rendered as "ostic"."""
-    from visual_redesign_full import PITCH_WIDTH
+    from football_analysis.visuals.visual_redesign_full import PITCH_WIDTH
 
     x = -PITCH_WIDTH / 2 + 2.4  # where the separator clamps a touchline player
-    text = placed_label(ax, "Kostic", x, 40.0, radius=3.4,
-                        neighbours=((x + 3.0, 44.0, 3.0),))
+    text = placed_label(ax, "Kostic", x, 40.0, radius=3.4, neighbours=((x + 3.0, 44.0, 3.0),))
     assert text.get_ha() != "right", "label pushed further into the touchline"
 
     cx, _cy = label_centre(text)
@@ -123,11 +131,12 @@ def test_a_wide_player_is_not_labelled_off_the_edge_of_the_pitch(ax):
 
 
 def test_a_label_never_leaves_the_pitch_on_either_flank(ax):
-    from visual_redesign_full import PITCH_WIDTH
+    from football_analysis.visuals.visual_redesign_full import PITCH_WIDTH
 
     for x in (-PITCH_WIDTH / 2 + 2.4, PITCH_WIDTH / 2 - 2.4):
-        text = placed_label(ax, "Koopmeiners", x, 50.0, radius=3.0,
-                            neighbours=((x, 54.0, 3.0), (x, 46.0, 3.0)))
+        text = placed_label(
+            ax, "Koopmeiners", x, 50.0, radius=3.0, neighbours=((x, 54.0, 3.0), (x, 46.0, 3.0))
+        )
         cx, _cy = label_centre(text)
         half_width = _LABEL_HALF_WIDTH_PER_CHAR * len(text.get_text())
         assert cx - half_width >= -PITCH_WIDTH / 2 - 1e-6
@@ -158,8 +167,7 @@ def test_substitution_rows_never_reach_the_footer(count):
     "Completed pass links" line, which the fixed 0.042 step could not see."""
     rows = substitution_row_positions(count)
     assert rows[-1] > FOOTER_Y, (
-        f"{count} substitutions put the last row at {rows[-1]:.3f}, "
-        f"on the footer at {FOOTER_Y}"
+        f"{count} substitutions put the last row at {rows[-1]:.3f}, on the footer at {FOOTER_Y}"
     )
     assert rows[-1] - FOOTER_Y >= 0.04, "last row sits too close to the footer"
 
@@ -170,9 +178,7 @@ def test_the_footer_still_clears_the_legend():
 
 def test_four_substitutions_keep_their_original_spacing():
     """The fix must not reflow the common case."""
-    assert substitution_row_positions(4) == pytest.approx(
-        [0.278, 0.236, 0.194, 0.152]
-    )
+    assert substitution_row_positions(4) == pytest.approx([0.278, 0.236, 0.194, 0.152])
 
 
 def test_rows_stay_in_order_and_never_collide_with_each_other():

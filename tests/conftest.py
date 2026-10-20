@@ -28,7 +28,10 @@ import importlib
 
 import pytest
 
-_STATEFUL_MODULES = ("visual_redesign_full", "visual_redesign_preview")
+_STATEFUL_MODULES = (
+    "football_analysis.visuals.visual_redesign_full",
+    "football_analysis.visuals.visual_redesign_preview",
+)
 
 
 def _module_constants(module) -> dict:
@@ -61,6 +64,7 @@ def _pristine_renderer_state():
 @pytest.fixture(autouse=True)
 def _restore_renderer_globals(_pristine_renderer_state):
     """Hand every test the renderers in the state the session started in."""
+
     def restore():
         for module, values in _pristine_renderer_state:
             for name, value in values.items():
@@ -109,6 +113,12 @@ def match_dir(name: str) -> _Path:
             # The light-theme package is a rendering of the same match, not a
             # second match: its frames live one level up.
             if candidate.parent.name == "light":
+                continue
+            # Dot-prefixed folders are transactional_package's staging and
+            # rollback trees. A render running while the suite collects leaves
+            # one on disk, and pointing a test at it means reading a package
+            # that is being written or is about to be renamed away.
+            if any(part.startswith(".") for part in candidate.parent.relative_to(_OUTPUT).parts):
                 continue
             found = candidate.parent
             break

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from match_store import rolling_summary
+from football_analysis.pipeline.match_store import rolling_summary
 
 
 def test_recent_form_compares_latest_window_with_previous_window():
@@ -16,5 +16,5 @@ def test_recent_form_compares_latest_window_with_previous_window():
 def test_form_keeps_zero_and_does_not_turn_missing_into_zero():
     frame = pd.DataFrame({"metric": [0, 1], "other": [None, None]})
     result = rolling_summary(frame, window=2)
-    assert result[result.metric.eq("metric")].iloc[0].recent_average == .5
+    assert result[result.metric.eq("metric")].iloc[0].recent_average == 0.5
     assert "other" not in result.metric.tolist()

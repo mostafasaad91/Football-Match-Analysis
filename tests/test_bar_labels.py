@@ -35,7 +35,7 @@ def rendered(tmp_path_factory):
     if not (out / "match_info.json").exists():
         pytest.skip(f"{MATCH} has not been rendered")
 
-    import visual_redesign_full as v
+    from football_analysis.visuals import visual_redesign_full as v
 
     info = json.loads((out / "match_info.json").read_text(encoding="utf-8"))
     target = tmp_path_factory.mktemp("bars")
@@ -79,8 +79,7 @@ def test_press_triggers_are_counted_in_whole_numbers(rendered):
         for ax in figure.axes:
             if ax.get_xlabel() != "High regains":
                 continue
-            ticks = [t for t in ax.get_xticks()
-                     if ax.get_xlim()[0] <= t <= ax.get_xlim()[1]]
+            ticks = [t for t in ax.get_xticks() if ax.get_xlim()[0] <= t <= ax.get_xlim()[1]]
             assert all(abs(t - round(t)) < 1e-9 for t in ticks), ticks
     plt.close("all")
 

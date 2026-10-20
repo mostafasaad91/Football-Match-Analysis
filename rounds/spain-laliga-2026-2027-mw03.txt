@@ -1,0 +1,12 @@
+# Spain LaLiga 2026-2027 - Matchweek 3  (28-31 Aug 2026)
+# Run with:  python run_round.py --round 3 --urls rounds/spain-laliga-2026-2027-mw03.txt
+https://www.whoscored.com/matches/1993923/live/spain-laliga-2026-2027-racing-santander-elche
+https://www.whoscored.com/matches/1993917/live/spain-laliga-2026-2027-deportivo-alaves-villarreal
+https://www.whoscored.com/matches/1993921/live/spain-laliga-2026-2027-levante-real-betis
+https://www.whoscored.com/matches/1993925/live/spain-laliga-2026-2027-real-sociedad-espanyol
+https://www.whoscored.com/matches/1993926/live/spain-laliga-2026-2027-sevilla-atletico-madrid
+https://www.whoscored.com/matches/1993924/live/spain-laliga-2026-2027-real-madrid-malaga
+https://www.whoscored.com/matches/1993919/live/spain-laliga-2026-2027-deportivo-de-a-coruna-valencia
+https://www.whoscored.com/matches/1993918/live/spain-laliga-2026-2027-celta-vigo-athletic-club
+https://www.whoscored.com/matches/1993922/live/spain-laliga-2026-2027-osasuna-getafe
+https://www.whoscored.com/matches/1993920/live/spain-laliga-2026-2027-barcelona-rayo-vallecano

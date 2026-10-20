@@ -26,7 +26,7 @@ import pandas as pd
 import pytest
 
 from conftest import match_dir
-from tactical_pdf_report import (
+from football_analysis.reports.tactical_pdf_report import (
     _section_copy,
     _visual_team,
     build_context,
@@ -39,8 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # A third fixture, added because it broke two things the first two could
 # not: a one-shot count printed as "1 shots", and a blank player name in
 # memory that refused the article.
-MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1",
-           "Casa_Pia_AC_vs_Benfica_0-7"]
+MATCHES = ["Arsenal_vs_Man_City_3-0", "PSG_vs_Aston_Villa_2-1", "Casa_Pia_AC_vs_Benfica_0-7"]
 
 GENERIC = "The deeper reading is the causal chain behind the pattern"
 
@@ -62,10 +61,10 @@ def _context(match):
 @pytest.mark.parametrize("match", MATCHES)
 def test_every_visual_has_its_own_reading(match):
     context, out = _context(match)
-    fell_back = [p.name for p in sorted(out.glob("[0-9]*.png"))
-                 if GENERIC in visual_explanation(p, context)]
-    assert not fell_back, (
-        f"{len(fell_back)} boards carry the generic ending: {fell_back}")
+    fell_back = [
+        p.name for p in sorted(out.glob("[0-9]*.png")) if GENERIC in visual_explanation(p, context)
+    ]
+    assert not fell_back, f"{len(fell_back)} boards carry the generic ending: {fell_back}"
 
 
 @pytest.mark.parametrize("match", MATCHES)
@@ -100,8 +99,9 @@ def test_no_explanation_repeats_another_boards_wording_verbatim(match):
     assert not duplicates, duplicates
 
 
-@pytest.mark.parametrize("writer", [visual_implication, visual_data_read],
-                         ids=["implication", "data_read"])
+@pytest.mark.parametrize(
+    "writer", [visual_implication, visual_data_read], ids=["implication", "data_read"]
+)
 @pytest.mark.parametrize("match", MATCHES)
 def test_every_visual_has_its_own_note_from_every_writer(match, writer):
     """Each paragraph writer had the same fifteen-way fallback.
@@ -120,7 +120,8 @@ def test_every_visual_has_its_own_note_from_every_writer(match, writer):
     shared = {note: names for note, names in notes.items() if len(names) > 2}
     assert not shared, (
         f"{writer.__name__} repeats one paragraph across unrelated boards: "
-        + "; ".join(f"{names}" for names in shared.values()))
+        + "; ".join(f"{names}" for names in shared.values())
+    )
 
 
 @pytest.mark.parametrize("match", MATCHES)
@@ -138,13 +139,12 @@ def test_no_machine_string_leaks_into_prose(match):
 def test_no_goal_is_reported_as_minute_zero(match):
     """Opta's opening minute is 0; nobody says a goal arrived in minute 0."""
     context, out = _context(match)
-    prose = " ".join(visual_explanation(p, context)
-                     for p in sorted(out.glob("[0-9]*.png")))
+    prose = " ".join(visual_explanation(p, context) for p in sorted(out.glob("[0-9]*.png")))
     for section in _section_copy(context).values():
         for group in ("performance", "data"):
             prose += " " + " ".join(t for _, t in section.get(group, []))
         prose += " " + str(section.get("implication", ""))
-    assert "minute 0" not in prose, prose[prose.find("minute 0") - 120:][:240]
+    assert "minute 0" not in prose, prose[prose.find("minute 0") - 120 :][:240]
     assert "0'" not in prose
 
 
@@ -168,7 +168,7 @@ def test_the_shot_volume_card_agrees_with_the_counts(match):
 
 @pytest.mark.parametrize("match", MATCHES)
 def test_the_match_story_does_not_assert_swings_that_did_not_happen(match):
-    """"The game never settled" was printed over every result, settled or not."""
+    """ "The game never settled" was printed over every result, settled or not."""
     context, _ = _context(match)
     cards = dict(_section_copy(context)["Match Story"]["performance"])
     if "The lead changed hands" not in cards:
@@ -178,8 +178,11 @@ def test_the_match_story_does_not_assert_swings_that_did_not_happen(match):
         scorers.add(row["team"])
         running[row["team"]] = running.get(row["team"], 0) + 1
         counts = [running.get(context["home"], 0), running.get(context["away"], 0)]
-        now = None if counts[0] == counts[1] else (
-            context["home"] if counts[0] > counts[1] else context["away"])
+        now = (
+            None
+            if counts[0] == counts[1]
+            else (context["home"] if counts[0] > counts[1] else context["away"])
+        )
         if now is not None and ahead is not None and now != ahead:
             changes += 1
         ahead = now

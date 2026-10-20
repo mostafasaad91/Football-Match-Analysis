@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import tactical_pdf_report as tp
+from football_analysis.reports import tactical_pdf_report as tp
 from conftest import match_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -110,9 +110,11 @@ def test_the_cover_page_carries_the_figures_and_no_verdict(match):
     for label, _key, _shape in tp.TacticalPDF.COVER_ROWS:
         assert label.replace(" ", "").upper() in squashed, label
 
-    for claim in ("created the better chances and lost",
-                  "won the execution battle",
-                  "played better in"):
+    for claim in (
+        "created the better chances and lost",
+        "won the execution battle",
+        "played better in",
+    ):
         assert claim.lower() not in text.lower(), claim
 
 

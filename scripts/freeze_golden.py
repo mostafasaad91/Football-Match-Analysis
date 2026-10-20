@@ -26,7 +26,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from match_metrics import advanced_metrics_frames  # noqa: E402
+from football_analysis.metrics.match_metrics import advanced_metrics_frames  # noqa: E402
 
 # Kept in step with tests/test_metrics_golden.py. A fixture is the events file
 # plus the match identity it was played under; the metrics need both.

@@ -13,6 +13,7 @@ already exists is left where it is and reported. A match whose URL is not in
 the history stays put too, because guessing its competition from the team names
 would be a guess.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -23,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from match_fixture import shelf  # noqa: E402
+from football_analysis.pipeline.match_fixture import shelf  # noqa: E402
 
 OUTPUT = ROOT / "output"
 # Not fixtures: the history database, the raw feed archive, and anything the
@@ -41,7 +42,8 @@ def _known_urls() -> dict[str, tuple[str, str]]:
     connection.row_factory = sqlite3.Row
     try:
         for row in connection.execute(
-                "SELECT home_team, away_team, score, url, played_on FROM matches"):
+            "SELECT home_team, away_team, score, url, played_on FROM matches"
+        ):
             score = str(row["score"] or "").replace(" ", "").replace(":", "-")
             name = f"{row['home_team']}_vs_{row['away_team']}"
             if score:
@@ -59,7 +61,7 @@ def _plan() -> list[tuple[Path, Path]]:
         if not folder.is_dir() or folder.name in SKIP:
             continue
         if not (folder / "match_info.json").exists():
-            continue                      # already a competition directory
+            continue  # already a competition directory
         url, played_on = urls.get(folder.name, ("", ""))
         if not url:
             print(f"  ? {folder.name}: no URL in the history, left where it is")
