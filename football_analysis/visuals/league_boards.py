@@ -252,6 +252,11 @@ def place_labels(
                 cost = (
                     clash(box, index) * 1000 + covers(box) * 60 + step * 10 + (0 if inside else 400)
                 )
+                if badges:
+                    # a name that sits nearer someone else's badge than its own reads as theirs
+                    middle = np.array([(box[0] + box[2]) / 2, (box[1] + box[3]) / 2])
+                    gaps = np.hypot(*(pixels - middle).T)
+                    cost += 200 if gaps.argmin() != index else 0
                 if best is None or cost < best[0]:
                     best = (cost, box, ha, va, cx, cy, step)
             if best[0] < 10:  # nothing in the way at this distance

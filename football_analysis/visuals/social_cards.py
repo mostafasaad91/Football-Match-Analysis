@@ -56,6 +56,8 @@ def frame(league, group, title, subtitle, note="", key=None, reading=None, right
     smaller until it fits in the panel, so nothing in the panel can run into another block
     or into the chart.
     """
+    if FOCUS:
+        note = note.replace("Top three in club colour.", f"{FOCUS} in club colour.")
     fig = plt.figure(figsize=SIZE, facecolor=base.BG)
     renderer = fig.canvas.get_renderer()
     height, width = SIZE[1] * fig.dpi, SIZE[0] * fig.dpi  # the canvas still measures at its own dpi
@@ -98,12 +100,16 @@ def frame(league, group, title, subtitle, note="", key=None, reading=None, right
     if reading:
         y -= 0.01
         for symbol, text in reading:
-            fig.text(0.037, y, symbol, color=lb.ACCENT, fontsize=9, va="top", fontweight="bold")
+            mark = fig.text(
+                0.037, y, symbol, color=lb.ACCENT, fontsize=9, va="top", fontweight="bold"
+            )
+            # an abbreviation is wider than an arrow: the words start after whichever it is
+            start = max(0.062, mark.get_window_extent(renderer).x1 / width + 0.008)
             _, y = put_at(
                 fig,
                 renderer,
                 height,
-                0.062,
+                start,
                 y,
                 textwrap.fill(text, 30),
                 color=base.MUTED,
@@ -130,8 +136,19 @@ def put_at(fig, renderer, height, x, y, text, **kw):
     return artist, artist.get_window_extent(renderer).y0 / height
 
 
+# A club to pick out. When set, every club chart greys the other nineteen and draws this one in
+# its own colour, which is what an article about one side needs; None gives the league view.
+FOCUS: str | None = None
+# Where cards are written, when not the block's own visuals folder (an article's image folder).
+OUT_DIR: Path | None = None
+
+
 def save(fig, league, scope, filename) -> Path:
-    path = league.folder / "visuals" / scope / f"{filename}.png"
+    path = (
+        (OUT_DIR / f"{filename}.png")
+        if OUT_DIR
+        else league.folder / "visuals" / scope / f"{filename}.png"
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=DPI, facecolor=base.BG)
     plt.close(fig)
@@ -160,6 +177,14 @@ def row_labels(ax, league, labels, teams, size=9.5, zoom=0.085):
     ax.tick_params(axis="y", pad=24)
     for i, team in enumerate(teams):
         lb.put_crest(ax, league, team, (-0.045, i), zoom=zoom, transform=ax.get_yaxis_transform())
+    if FOCUS:
+        for tick, team in zip(ax.get_yticklabels(), teams):
+            mine = team == FOCUS
+            tick.set_color(base.TEXT if mine else base.MUTED)
+            tick.set_fontweight("bold" if mine else "normal")
+        for i, team in enumerate(teams):
+            if team == FOCUS:
+                ax.axhspan(i - 0.46, i + 0.46, color="white", alpha=0.07, zorder=0)
 
 
 def value_labels(ax, ys, values, fmt, pad, size=9.5):
@@ -189,7 +214,12 @@ def ranked_teams(
     ax = list_axes(fig)
     clean(ax)
     n = len(teams)
-    colours = [league.colour(t) if i >= n - highlight else "#3A434C" for i, t in enumerate(teams)]
+    if FOCUS:
+        colours = [league.colour(t) if t == FOCUS else "#3A434C" for t in teams]
+    else:
+        colours = [
+            league.colour(t) if i >= n - highlight else "#3A434C" for i, t in enumerate(teams)
+        ]
     ax.barh(range(n), values, color=colours, height=0.68)
     row_labels(ax, league, teams, teams)
     top = float(np.nanmax(values))
@@ -395,6 +425,9 @@ def quadrant(
     ax.axhline(np.median(y), color=base.GRID, lw=1.1, ls=(0, (4, 4)))
     ax.set_xlabel(x_label, color=base.MUTED, fontsize=9, fontweight="bold")
     ax.set_ylabel(y_label, color=base.MUTED, fontsize=9, fontweight="bold")
+    if y.max() <= 0:
+        # A measure negated so that up is better still reads in its own units.
+        ax.yaxis.set_major_formatter(lambda value, _: f"{abs(value):.1f}")
     if as_teams:
         radius = 21.0
         moved = lb.spread_apart(ax, x, y, radius)
@@ -405,7 +438,16 @@ def quadrant(
                 if abs(mx - xv) / span_x + abs(my - yv) / span_y > 0.004:
                     ax.plot([xv, mx], [yv, my], color="#6B7580", lw=0.7, zorder=2)
                     ax.scatter([xv], [yv], s=12, color="#9AA4AB", zorder=3)
-            ax.scatter(mx, my, s=430, facecolor=base.BG, edgecolor=colour, linewidth=1.8, zorder=4)
+            mine = FOCUS is None or team == FOCUS
+            ax.scatter(
+                mx,
+                my,
+                s=620 if FOCUS and mine else 430,
+                facecolor=base.BG,
+                edgecolor=colour if mine else "#4A535C",
+                linewidth=2.6 if FOCUS and mine else (1.8 if mine else 1.2),
+                zorder=5 if FOCUS and mine else 4,
+            )
             if not lb.put_crest(ax, league, team, (mx, my), zoom=0.115):
                 ax.text(
                     mx,
@@ -418,8 +460,15 @@ def quadrant(
                     fontweight="bold",
                     zorder=6,
                 )
+        # the picked-out club is named first, so its label takes the spot nearest its badge
+        order = sorted(range(len(moved)), key=lambda i: frame_.index[i] != FOCUS)
         lb.place_labels(
-            ax, list(moved), list(frame_.index), radius_px=radius, fontsize=7.5, badges=True
+            ax,
+            [moved[i] for i in order],
+            [frame_.index[i] for i in order],
+            radius_px=radius,
+            fontsize=7.5,
+            badges=True,
         )
     else:
         spread = max(frame_["minutes"].max() - frame_["minutes"].min(), 1)
@@ -785,7 +834,15 @@ TEAM_RANKINGS = [
     ),
 ]
 # rankings already told by a curated card below, so they are not repeated
-TEAM_SKIP = {"xG_against", "ppda", "counterpress_success_rate", "passes_into_box"}
+TEAM_SKIP = {
+    "xG_against",
+    "ppda",
+    "counterpress_success_rate",
+    # the same figure under a second name: every regain's xG is a transition's, a pass into the
+    # final third is the only kind of entry the feed records, and likewise into the box
+    "regain_xG",
+    "passes_into_final_third",
+}
 
 
 def team_ranking_card(spec) -> Card | None:
@@ -1376,19 +1433,6 @@ def t_counterpress(league):
     )
 
 
-def t_into_box(league):
-    return ranked_teams(
-        league,
-        "Passing",
-        "passing_00_passes_into_box",
-        "Into the box",
-        "Completed passes into the penalty area per match",
-        per_match(league)["passes_into_box"],
-        "{:.1f}",
-        "Top three in club colour. Dashed line is the league average.",
-    )
-
-
 def heat_table(league):
     """The league on one page: points, goal difference and twelve per-match figures, shaded by rank."""
     columns = [
@@ -1461,7 +1505,7 @@ def heat_table(league):
             left + 0.045,
             y + row_h / 2,
             team,
-            color=base.TEXT,
+            color=league.colour(team) if team == FOCUS else base.TEXT,
             fontsize=8.5,
             fontweight="bold",
             va="center",
@@ -1510,7 +1554,7 @@ def _xg_quadrant(league):
         "xG",
         "fewer_conceded",
         "xG created per match  →",
-        "Fewer xG conceded  → (axis flipped)",
+        "xG conceded per match · fewer is higher  →",
         "Up is better on both axes.",
         ("DOMINANT", "SOLID BUT BLUNT", "OPEN GAMES", "STRUGGLING"),
     )
@@ -2139,7 +2183,6 @@ def cards(league: lb.League) -> list[Card]:
         Card("teams", "Pressing", "pressing_00_ppda", t_ppda),
         Card("teams", "Pressing", "pressing_00_counterpress", t_counterpress),
         Card("teams", "Passing", "passing_progressive_vs_line_breaking", t_progress),
-        Card("teams", "Passing", "passing_00_passes_into_box", t_into_box),
     ]
     out += _team_scatter_cards()
     out += [player_ranking_card(spec) for spec in PLAYER_RANKINGS]

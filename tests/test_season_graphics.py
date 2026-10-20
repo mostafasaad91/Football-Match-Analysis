@@ -157,3 +157,14 @@ def test_a_full_run_leaves_only_teams_and_players_folders(league, tmp_path, monk
     monkeypatch.setattr(league, "folder", tmp_path)
     sc.build_all(league, only=["attack_01_", "defence_00_goalkeepers"], with_profiles=False)
     assert sorted(p.name for p in (tmp_path / "visuals").iterdir()) == ["players", "teams"]
+
+
+def test_story_pages_have_ascii_file_names():
+    from football_analysis.visuals import team_story
+
+    assert team_story.ascii_slug("Ødegaard") == "odegaard"
+    assert team_story.ascii_slug("Magalhães") == "magalhaes"
+    pages = team_story.story("Arsenal", ["Martin Ødegaard", "Gabriel Magalhães"])
+    slugs = [slug for slug, _draw in pages]
+    assert slugs[0] == "profile" and slugs[-2:] == ["player_odegaard", "player_magalhaes"]
+    assert all(slug.isascii() for slug in slugs)
