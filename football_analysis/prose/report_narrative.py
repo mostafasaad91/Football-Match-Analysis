@@ -221,6 +221,39 @@ def _sides_by(facts: MatchFacts, attribute: str) -> tuple[Side, Side]:
     )
 
 
+def _chance_kind(xg) -> str:
+    """How good the chance was, by the model's value of it."""
+    value = float(xg or 0.0)
+    if value < 0.10:
+        return "a low-value chance, taken"
+    if value < 0.30:
+        return "a half-chance, taken"
+    return "a clear chance, taken"
+
+
+def _what_the_opener_framed(at) -> str:
+    """What the first goal's timing means for every total after it.
+
+    The sentence it replaces called a 79th-minute goal early and said the rest was
+    played "at a scoreline neither side had earned", which is true of no goal.
+    """
+    when = float(at or 0.0)
+    if when >= 75:
+        return (
+            "It came late, so most of the match was played level, and the level-score "
+            "figures are the fairer comparison of the two sides."
+        )
+    if when <= 30:
+        return (
+            "It came early, so most of the match was played with one side protecting a "
+            "lead, and that colours every total after it."
+        )
+    return (
+        "From then on one side was ahead, which the score-state splits further on "
+        "separate out from the level periods."
+    )
+
+
 @writes(
     "xg_flow", "Where those chances were taken from is the next question, and {next} answers it."
 )
@@ -243,9 +276,10 @@ def _xg_flow(v: Visual, f: MatchFacts) -> list[str]:
             + (
                 " — a set piece, so from a position the run of play was not producing"
                 if opener["set_piece"]
-                else " — a low-value chance taken early"
+                else f" — {_chance_kind(opener['xG'])}"
             )
-            + ". Everything after that was played at a scoreline neither side had earned yet."
+            + ". "
+            + _what_the_opener_framed(opener["minute"])
         )
     if f.goals:
         line = listed([f"{g['player']} {minute(g['minute'])} ({g['team']})" for g in f.goals])
