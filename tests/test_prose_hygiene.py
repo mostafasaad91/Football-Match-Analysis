@@ -100,6 +100,27 @@ def test_a_machine_string_is_reported_rather_than_patched(text):
     assert offences(text), text
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "None of that is the striker's doing.",
+        "Arsenal had the ball. None of it reached the box.",
+        "He asked for a pass. “None came.”",
+    ],
+)
+def test_the_english_word_none_is_not_a_missing_value(text):
+    """Opening a sentence and running on, None is the word, not a value."""
+    assert not offences(text), text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Arsenal created None.", "Expected goals: None.", "The best chance was None xG."],
+)
+def test_a_none_that_is_not_a_sentence_start_is_still_reported(text):
+    assert offences(text), text
+
+
 def test_a_clean_sentence_has_no_offences():
     assert not offences(
         "Arsenal reached the penalty area 22 times to 7, and 64.7% of those "

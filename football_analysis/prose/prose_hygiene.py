@@ -144,6 +144,22 @@ def clean(text) -> str:
     return out.strip()
 
 
+_SENTENCE_START = re.compile(r"(?:\A|[.!?]\s+)[\"'‘“(]?\Z")
+
+
+def _english_none(text: str, match: re.Match) -> bool:
+    """A capital None that opens a sentence and runs on is the English word.
+
+    "None of that is the striker's doing." is a sentence; "the value is None" and
+    "None xG" are a value that never arrived. Opening a sentence and followed by a
+    lower-case word is what only the English word does.
+    """
+    if match.group(0) != "None":
+        return False
+    before, after = text[: match.start()], text[match.end() :]
+    return bool(_SENTENCE_START.search(before)) and bool(re.match(r" [a-z]", after))
+
+
 def offences(text) -> list[str]:
     """What is wrong with a paragraph that cleaning cannot fix.
 
@@ -153,7 +169,7 @@ def offences(text) -> list[str]:
     reaching a reader.
     """
     text = str(text or "")
-    found = [m.group(0).strip() for m in _MACHINE.finditer(text)]
+    found = [m.group(0).strip() for m in _MACHINE.finditer(text) if not _english_none(text, m)]
     # Against the repaired text, not the raw: an empty label and an empty
     # bracket both have a correct published form, and clean() writes it. What
     # is left here is a colon or a bracket that survived the repair -- a label
