@@ -101,7 +101,14 @@ def team_rows(package: Path, round_number: int, info: dict) -> pd.DataFrame:
         ("home", info["home_name"], home_goals, away_goals),
         ("away", info["away_name"], away_goals, home_goals),
     ):
-        row = {"team": name, "match_id": package.name, "round": round_number}
+        row = {
+            "team": name,
+            "match_id": package.name,
+            "round": round_number,
+            "opponent": info["away_name"] if side == "home" else info["home_name"],
+            "venue": "H" if side == "home" else "A",
+            "date": info.get("date"),
+        }
         row.update({"goals_for": goals_for, "goals_against": goals_against})
         xg_row = xg[xg["team"].astype(str).eq(name)]
         if len(xg_row):
@@ -154,7 +161,7 @@ def player_rows(package: Path, info: dict) -> pd.DataFrame:
     lives outside the package folder so the package stays exactly what the renderer wrote.
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache = CACHE_DIR / f"v3__{package.parent.parent.parent.name}__{package.name}.csv"
+    cache = CACHE_DIR / f"v4__{package.parent.parent.parent.name}__{package.name}.csv"
     events_file = package / "events.csv"
     if cache.exists() and cache.stat().st_mtime >= events_file.stat().st_mtime:
         return pd.read_csv(cache)
@@ -243,6 +250,8 @@ def main(argv=None) -> int:
         "players_totals": player_totals,
         "players_per90": player_rates,
         "matches": matches,
+        # one row per club per match, for anything that needs the run of games and not the sum
+        "teams_by_match": all_teams.sort_values(["team", "round"]),
     }
     for name, table in tables.items():
         table.round(3).to_csv(folder / f"{name}.csv", index=False, encoding="utf-8-sig")

@@ -158,33 +158,33 @@ def defensive_height(events):
 
 
 def line_breaking(events):
-    """Passes that travel forward far enough to take a line of pressure out.
+    """Completed passes that started behind the opponent's line and ended beyond it.
 
-    Uses the recorded pass angle, so "forward" is the feed's own measure and
-    not a guess from coordinates. Twenty metres is roughly the gap between two
-    banks of players.
+    The same passes the team figure counts (``match_metrics.line_breaking_passes``), split by
+    who played them, so a side's players add up to the side. This used to be any completed
+    forward pass of twenty metres or more: a goalkeeper's every long kick qualified, the
+    players of one team summed to three times the team's own count, and the card's footnote
+    described the opponent-line definition while the number came from the other.
     """
-    passes = events[_flag(events, "is_pass")].copy()
-    if passes.empty:
+    from football_analysis.metrics.match_metrics import line_breaking_passes
+
+    teams = [t for t in pd.unique(events["team_id"].dropna())] if "team_id" in events else []
+    if len(teams) != 2:
         return {}
-    angle = _numeric(passes, "pass_angle")
-    length = _numeric(passes, "pass_length")
-    complete = (
-        passes.get("outcome", pd.Series("", index=passes.index))
-        .astype(str)
-        .str.lower()
-        .eq("successful")
-    )
-    # Angle is radians with 0 as straight ahead, so forward is the half circle
-    # around zero.
-    forward = (angle < np.pi / 2) | (angle > 3 * np.pi / 2)
-    breaking = forward & (length >= 20) & complete
-    passes = passes.assign(_breaking=breaking, _complete=complete)
     out = {}
-    for name, rows in passes.dropna(subset=["player"]).groupby("player"):
-        out[str(name)] = {
-            "line_breaking_passes": int(rows["_breaking"].sum()),
-        }
+    for team, opponent in ((teams[0], teams[1]), (teams[1], teams[0])):
+        breaks = line_breaking_passes(events, team, opponent)
+        if breaks.empty:
+            continue
+        completed = breaks[breaks["successful"].astype(bool)].dropna(subset=["player"])
+        for name, count in completed.groupby("player").size().items():
+            out[str(name)] = {"line_breaking_passes": int(count)}
+    # A player who passed but broke no line has a reading of zero, not a missing one.
+    passers = (
+        events[_flag(events, "is_pass")].dropna(subset=["player"])["player"].astype(str).unique()
+    )
+    for name in passers:
+        out.setdefault(name, {"line_breaking_passes": 0})
     return out
 
 
