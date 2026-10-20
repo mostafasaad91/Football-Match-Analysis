@@ -735,6 +735,112 @@ def advanced_metrics(team_metrics: pd.DataFrame) -> Path:
     return save(fig, "02_advanced_metrics_redesign.png")
 
 
+def _place_goal_labels(ax, goal_marks, curves) -> None:
+    """Name each goal where the label covers neither curve nor another label.
+
+    With one side's curve running just above the other's, a label fixed above its
+    marker lands on the other line or on the next goal's label. Each label tries a
+    ring of positions round its marker, nearest first, and keeps the one that covers
+    the fewest curve points and no label already placed; one that had to move away
+    is tied back to its marker with a hairline.
+    """
+    if not goal_marks:
+        return
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    to_px = ax.transData.transform
+    scale = fig.dpi / 72.0
+    # both step curves as a dense row of pixels: flat run, then the riser
+    dots = []
+    for minutes, cumulative in curves:
+        for i in range(len(minutes) - 1):
+            x0, y0 = to_px((minutes[i], cumulative[i]))
+            x1, y1 = to_px((minutes[i + 1], cumulative[i + 1]))
+            flat = max(int(abs(x1 - x0) / 3), 1)
+            rise = max(int(abs(y1 - y0) / 3), 1)
+            dots += [(x0 + (x1 - x0) * k / flat, y0) for k in range(flat + 1)]
+            dots += [(x1, y0 + (y1 - y0) * k / rise) for k in range(rise + 1)]
+    dots = np.asarray(dots)
+    marks = np.asarray([to_px((minute, value)) for minute, value, _ in goal_marks])
+    frame = ax.get_window_extent(renderer)
+    choices = [
+        (0, 12, "center", "bottom"),
+        (0, -12, "center", "top"),
+        (-11, 9, "right", "bottom"),
+        (11, -9, "left", "top"),
+        (-11, -9, "right", "top"),
+        (11, 9, "left", "bottom"),
+        (0, 30, "center", "bottom"),
+        (0, -30, "center", "top"),
+        (-26, 24, "right", "bottom"),
+        (26, -24, "left", "top"),
+        (-26, -24, "right", "top"),
+        (26, 24, "left", "bottom"),
+        (0, 50, "center", "bottom"),
+        (0, -50, "center", "top"),
+    ]
+    taken = []
+    for index, (minute, value, label) in enumerate(goal_marks):
+        best = None
+        for rank, (dx, dy, ha, va) in enumerate(choices):
+            text = ax.annotate(
+                label,
+                (minute, value),
+                xytext=(dx, dy),
+                textcoords="offset points",
+                ha=ha,
+                va=va,
+                **display(12.5),
+            )
+            box = text.get_window_extent(renderer)
+            text.remove()
+            pad = 3 * scale
+            x0, y0, x1, y1 = box.x0 - pad, box.y0 - pad, box.x1 + pad, box.y1 + pad
+            on_curve = int(
+                (
+                    (dots[:, 0] > x0) & (dots[:, 0] < x1) & (dots[:, 1] > y0) & (dots[:, 1] < y1)
+                ).sum()
+            )
+            others = np.delete(marks, index, axis=0)
+            on_mark = (
+                int(
+                    (
+                        (others[:, 0] > x0 - 6 * scale)
+                        & (others[:, 0] < x1 + 6 * scale)
+                        & (others[:, 1] > y0 - 6 * scale)
+                        & (others[:, 1] < y1 + 6 * scale)
+                    ).sum()
+                )
+                if len(others)
+                else 0
+            )
+            on_label = sum(x0 < o[2] and x1 > o[0] and y0 < o[3] and y1 > o[1] for o in taken)
+            outside = not (x0 >= frame.x0 and x1 <= frame.x1 and y0 >= frame.y0 and y1 <= frame.y1)
+            cost = on_label * 1000 + on_mark * 300 + (500 if outside else 0) + on_curve * 8 + rank
+            if best is None or cost < best[0]:
+                best = (cost, dx, dy, ha, va, (x0, y0, x1, y1))
+        _, dx, dy, ha, va, box = best
+        taken.append(box)
+        ax.annotate(
+            label,
+            (minute, value),
+            xytext=(dx, dy),
+            textcoords="offset points",
+            ha=ha,
+            va=va,
+            color=TEXT,
+            zorder=8,
+            path_effects=[path_effects.withStroke(linewidth=3, foreground=PANEL)],
+            arrowprops=(
+                {"arrowstyle": "-", "color": MUTED, "lw": 0.8, "shrinkA": 1, "shrinkB": 7}
+                if abs(dy) >= 24
+                else None
+            ),
+            **display(12.5),
+        )
+
+
 def xg_flow(events: pd.DataFrame) -> Path:
     work = events.copy()
     live = ~_bool(work.get("is_penalty_shootout", pd.Series(False, index=work.index)))
@@ -823,6 +929,8 @@ def xg_flow(events: pd.DataFrame) -> Path:
     from football_analysis.pipeline.match_clock import event_label
 
     end_labels = []
+    goal_marks = []  # (minute, cumulative xG at the goal, label)
+    curves = []  # each side's step curve, to keep the goal labels off both
     for team_id, marker in [(HOME_ID, "o"), (AWAY_ID, "s")]:
         team = shots[shots["team_id"].eq(team_id)].sort_values(["minute", "second"])
         minutes = [0.0] + team["minute"].tolist() + [max_minute]
@@ -865,29 +973,42 @@ def xg_flow(events: pd.DataFrame) -> Path:
             # looked up on a second strip. A missing name leaves the minute.
             surname = _surname(goal.get("player"))[:12]
             label = f"{surname}  {event_label(goal)}" if surname else event_label(goal)
-            ax.annotate(
-                label,
-                (goal["minute"], upto),
-                xytext=(0, 12),
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                color=TEXT,
-                zorder=8,
-                path_effects=[path_effects.withStroke(linewidth=3, foreground=PANEL)],
-                **display(12.5),
-            )
+            goal_marks.append((float(goal["minute"]), float(upto), label))
+        curves.append((minutes, cumulative))
     ax.axvline(45, color=GRID, lw=1.0, ls=(0, (3, 4)), zorder=1)
     ax.text(45.6, ymax * 0.985, "HT", color=MUTED, fontsize=8.5, fontweight="bold", va="top")
+    _place_goal_labels(ax, goal_marks, curves)
 
     # The totals are the headline of this page: large, in the team colour, with
-    # the supporting counts underneath instead of a second row of captions.
+    # the supporting counts underneath instead of a second row of captions. Two
+    # sides that finish level would print one total on the other, so each block
+    # (figure and caption) keeps its own height and a hairline ties it to its curve.
+    block = ymax * 0.24
+    spots = {team_id: total for team_id, total, _ in end_labels}
+    if len(end_labels) == 2:
+        (id_a, total_a, _), (id_b, total_b, _) = end_labels
+        if abs(total_a - total_b) < block:
+            upper, lower = (id_a, id_b) if total_a >= total_b else (id_b, id_a)
+            middle = (total_a + total_b) / 2
+            middle = min(max(middle, ymax * 0.12 + block / 2), ymax * 0.97 - block / 2)
+            spots[upper], spots[lower] = middle + block / 2, middle - block / 2
     for team_id, total, color in end_labels:
         shots_n = int(shot_counts.get(team_id, 0))
         got = team_post_shot_xg(events, team_id)
+        spot = spots[team_id]
+        if abs(spot - total) > ymax * 0.01:
+            ax.plot(
+                [max_minute + 0.4, max_minute + 2.8],
+                [total, spot],
+                color=color,
+                lw=1.0,
+                alpha=0.7,
+                clip_on=False,
+                zorder=3,
+            )
         ax.text(
             max_minute + 3.2,
-            total,
+            spot,
             f"{total:.2f}",
             color=color,
             ha="left",
@@ -897,7 +1018,7 @@ def xg_flow(events: pd.DataFrame) -> Path:
         )
         ax.text(
             max_minute + 3.4,
-            total - ymax * 0.085,
+            spot - ymax * 0.085,
             f"xG  ·  {shots_n} shots  ·  xGOT {got:.2f}",
             color=MUTED,
             fontsize=8.5,
