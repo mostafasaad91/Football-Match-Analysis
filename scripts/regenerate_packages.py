@@ -50,6 +50,10 @@ def fixtures(patterns: list[str]) -> list[Path]:
         out = info.parent
         if out.name == "light":
             continue
+        # A failed build leaves a ".<name>.stage-*" folder behind, and matching
+        # it rebuilt a half-written copy beside the real package.
+        if any(part.startswith(".") for part in out.relative_to(OUTPUT).parts):
+            continue
         if not all((out / name).exists() for name in FRAMES):
             continue
         if patterns and not any(p.lower() in out.name.lower() for p in patterns):
@@ -78,6 +82,17 @@ def rebuild(out: Path) -> dict:
         info["home_color"], info["away_color"] = home_color, away_color
         info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
     frames = {name: pd.read_csv(out / name) for name in FRAMES}
+    # The two metric exports are derived, not parsed: recompute them from the
+    # events, as the pipeline does. Reusing the stored copies left the posters
+    # a metric fix behind the pages beside them -- 23 high regains on the poster
+    # against 20 on the statistics page of the same rebuild.
+    from football_analysis.metrics.match_metrics import advanced_metrics_frames
+
+    team_frame, player_frame = advanced_metrics_frames(frames["events.csv"], info)
+    if not team_frame.empty:
+        frames["team_advanced_metrics.csv"] = team_frame
+    if not player_frame.empty:
+        frames["player_sequence_metrics.csv"] = player_frame
     return generate_match_package(
         frames["events.csv"],
         frames["players.csv"],

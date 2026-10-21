@@ -40,6 +40,23 @@ DEFENSIVE_ACTIONS = (
 PRESSING_ACTIONS = ("Tackle", "Interception", "Challenge", "Foul")
 
 
+
+# Names the feed gives as the legal name, mapped to the one the game uses. The
+# cover at Paris read "Luis Enrique Martínez García" against "Hansi Flick".
+MANAGER_KNOWN_AS = {
+    "Luis Enrique Martínez García": "Luis Enrique",
+    "Josep Guardiola i Sala": "Pep Guardiola",
+    "Josep Guardiola": "Pep Guardiola",
+    "Diego Pablo Simeone": "Diego Simeone",
+    "Carlo Ancelotti": "Carlo Ancelotti",
+}
+
+
+def manager_display_name(name) -> str:
+    """The name a manager is known by, from the feed's possibly legal one."""
+    text = str(name or "").strip()
+    return MANAGER_KNOWN_AS.get(text, text)
+
 def slugify(name: str) -> str:
     """The filename form of a club name: ``Aston Villa`` -> ``aston_villa``."""
     folded = unicodedata.normalize("NFKD", str(name))
@@ -330,7 +347,7 @@ def load_match(directory: str | Path) -> MatchFacts:
             slug=slugify(name),
             colour=str(info.get(f"{key}_color") or ("#C8102E" if key == "home" else "#1D4ED8")),
             formation=_formation(info, key),
-            manager=str((info.get("managers") or {}).get(key) or ""),
+            manager=manager_display_name((info.get("managers") or {}).get(key)),
         )
 
     for side in sides.values():

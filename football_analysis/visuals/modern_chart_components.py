@@ -34,7 +34,9 @@ def stage_flow(ax, counts, color, fg, muted):
     y = np.arange(len(counts))
     ax.plot(counts, y, color=color, lw=2, alpha=0.65)
     ax.scatter(counts, y, s=95, color=color, edgecolor=fg, lw=0.6, zorder=3)
-    ax.set_yticks(y, ["Possessions", "Final third", "Then box", "Then shot", "On target"], color=fg)
+    ax.set_yticks(
+        y, ["Possessions", "Reached\nfinal third", "Then box", "Then shot", "On target"], color=fg
+    )
     ax.set_ylim(4.55, -0.55)
     ax.set_xlim(-max(counts[0], 1) * 0.04, max(counts[0], 1) * 1.4)
     for i, n in enumerate(counts):

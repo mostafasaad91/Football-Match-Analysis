@@ -754,12 +754,15 @@ class Poster:
         span = self.width(i)
         big = self.layout == "thread"
         ax.remove()
+        # Smaller and lower than the panel allows on paper: the axis names and
+        # the two figures sit up to half a radius outside the ring, and at the
+        # old size the top axis printed over the panel's two-line subtitle.
         ax = self.fig.add_axes(
             [
-                left + span * 0.22,
-                top - (0.215 if big else 0.180),
-                span * 0.56,
-                (0.160 if big else 0.126),
+                left + span * 0.25,
+                top - (0.232 if big else 0.192),
+                span * 0.50,
+                (0.140 if big else 0.110),
             ],
             projection="polar",
         )
@@ -787,7 +790,7 @@ class Poster:
         for angle, row in zip(angles, rows):
             ax.text(
                 angle,
-                1.20,
+                1.17,
                 row[0].upper(),
                 ha="center",
                 va="center",
@@ -799,16 +802,21 @@ class Poster:
             # One figure a line, each in its own side's colour: side by side
             # they overlap at the top and bottom of the ring, where a small
             # rotation is almost no horizontal distance.
-            for radius, value, tid in ((1.40, row[1], sides[0]), (1.56, row[2], sides[1])):
-                ax.text(
-                    angle,
-                    radius,
+            # Under the axis name, side by side, offset in points so the gap
+            # holds at every angle: stacked outward along the radius they ran
+            # into the name beside them on the left and right axes ("23HIGH").
+            for dx, value, tid in ((-14, row[1], sides[0]), (14, row[2], sides[1])):
+                ax.annotate(
                     f"{value:.{row[6]}f}",
+                    (angle, 1.17),
+                    xytext=(dx, -(7 + 6 * (row[0].count(chr(10)) + 1)) * (1.2 if big else 1.0)),
+                    textcoords="offset points",
                     ha="center",
                     va="center",
                     color=self.colors[tid],
                     size=9 if big else 7.5,
                     weight="bold",
+                    annotation_clip=False,
                 )
         ax.set_ylim(0, 1)
         ax.set_xticks([])
@@ -1260,7 +1268,7 @@ def build_match_posters(
     b.bars(
         4,
         "Nested possession stages",
-        ["Possessions", "Third", "Then box", "Then shot", "On target"],
+        ["Possessions", "Reached third", "Then box", "Then shot", "On target"],
         *counts,
         "Same possession at every stage; long shots without box access excluded",
     )
@@ -1303,7 +1311,10 @@ def build_match_posters(
                 *(format_value(ppda[s].get("ppda"), digits=2) for s in ["home", "away"]),
                 True,
             ),
-            kpi("Counterpress attempts", "counterpress_attempts"),
+            # The metric counts every open-play loss as a chance to counter-press,
+            # so it equalled the losses exactly and "attempts" claimed pressure
+            # the feed never recorded.
+            kpi("Losses to win back", "counterpress_attempts"),
             kpi("Counterpress regains", "counterpress_regains"),
             kpi("Regain-to-shot rate", "regain_to_shot_rate", 1, "%"),
             kpi("Transition-to-shot rate", "transition_shot_rate", 1, "%"),
@@ -1345,13 +1356,16 @@ def build_match_posters(
         "Shared xG axis | rate withheld below 5 minutes in a state",
     )
     b.axes[4].set_xlabel("xG / 30 minutes", size=10)
+    # A state the side never reached is not a short one: "<5 min" against a
+    # lead that never came read as if Barcelona had led briefly at Paris.
+    never = ["never level", "never led", "never trailed"]
     for j, series in enumerate(state_xg):
         for row, v in enumerate(series):
             if not np.isfinite(v):
                 b.axes[4].text(
                     0.98,
                     row + (-0.15 if j == 0 else 0.15),
-                    names[j] + ": <5 min",
+                    names[j] + (": " + never[row] if minutes[j].iloc[row] <= 0 else ": <5 min"),
                     transform=b.axes[4].get_yaxis_transform(),
                     ha="right",
                     color=b.colors[tids[j]],
@@ -1443,7 +1457,7 @@ def build_match_posters(
         "Player contribution and finishing",
         "Chance involvement, how the ball was moved to get there, and what the keepers saw.",
         [
-            kpi("Sequence threat xT", "sequence_xT", 2),
+            kpi("Sequence xT", "sequence_xT", 2),
             kpi("Progressive passes", "progressive_passes"),
             kpi("Deep completions", "deep_completions"),
             kpi("Box entries", "box_entries"),
@@ -1503,7 +1517,9 @@ def build_match_posters(
             kpi("Crosses completed", "completed_crosses"),
             kpi("Deep completions", "deep_completions"),
             kpi("Build-up success", "build_up_success_rate", 1, "%"),
-            kpi("Box-to-shot rate", "box_entry_to_shot_rate", 1, "%"),
+            # Per possession that reached the box, not per entry: Barcelona's 2 of 8
+            # possessions read 25.0% beside the entry-route board's 2 of 9.
+            kpi("Box possessions to shot", "box_entry_to_shot_rate", 1, "%"),
         ],
         "Shared scale per row | rates use their own denominators, out of 100%",
     )

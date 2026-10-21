@@ -933,11 +933,20 @@ def _pass_sonar(v: Visual, f: MatchFacts) -> list[str]:
 def _finishing_quality(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
-        lost = s.xg - s.xgot
+        # xGoT is post-shot xG, zero off target, so it is the chances' worth
+        # once struck and can sit above xG. Reading the difference as value
+        # that "never reached the frame" printed negative shares for any side
+        # that placed its shots well.
+        gap = s.xgot - s.xg
+        if abs(gap) < 0.15:
+            struck = "about what the chances were worth"
+        elif gap > 0:
+            struck = f"{n2(gap)} more than the chances were worth"
+        else:
+            struck = f"{n2(-gap)} less than the chances were worth"
         out.append(
-            f"{s.name}: {n2(s.xg)} expected goals became {n2(s.xgot)} on target and "
-            f"{s.goals} actual goals. {ratio(lost, s.xg)} of the pre-shot value never reached "
-            f"the frame."
+            f"{s.name}: {n2(s.xg)} expected goals were worth {n2(s.xgot)} once struck, "
+            f"{struck}, and became {s.goals} actual goals."
         )
     over = [s for s in f.sides if s.goals > s.xgot + 0.3]
     if over:

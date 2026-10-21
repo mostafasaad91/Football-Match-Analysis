@@ -136,7 +136,16 @@ def player_observations(events, players):
                 tackles_won=int((g["type"].eq("Tackle") & g["_good"]).sum()),
                 clearances=int(g["type"].eq("Clearance").sum()),
                 goals=int(g["_goal"].sum()),
-                saves=int(g["type"].eq("Save").sum()),
+                # Without the outfielder blocks the feed files as "Save": more
+                # than half of all Save rows are a defender in front of a shot.
+                saves=int(
+                    (
+                        g["type"].eq("Save")
+                        & ~g.get("qualifier_names", pd.Series("", index=g.index))
+                        .astype(str)
+                        .str.contains("OutfielderBlock", na=False)
+                    ).sum()
+                ),
                 claims=int(g["type"].eq("Claim").sum()),
                 sweeps=int(g["type"].eq("KeeperSweeper").sum()),
                 # Post-shot xG faced minus goals conceded; a keeper's figure only.

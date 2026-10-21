@@ -876,7 +876,7 @@ def xg_flow(events: pd.DataFrame) -> Path:
     amoled_header(
         fig,
         "Expected Goals Through the Match",
-        "Cumulative shot xG · each step is one attempt · circles are goals · shootout excluded",
+        "Cumulative shot xG · each step is one attempt · large filled markers are goals · shootout excluded",
     )
 
     # One card holds the curves, so the page reads as a panel with a header
@@ -1089,6 +1089,19 @@ def xg_flow(events: pd.DataFrame) -> Path:
                 va="center",
                 **display(14),
             )
+        elif finish - begin > 0:
+            # Too short to hold the score: it goes above the strip instead of
+            # nowhere. The two minutes at 2-2 in Paris were a blank grey slot.
+            state_ax.text(
+                (begin + finish) / 2,
+                1.08,
+                f"{home_now}–{away_now}",
+                color=MUTED,
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                fontweight="bold",
+            )
 
     home_score = away_score = 0
     start = 0.0
@@ -1173,8 +1186,11 @@ def xt_per_minute(events: pd.DataFrame) -> Path:
     ax.plot(minutes, home_roll, color=HOME, lw=2.8)
     ax.plot(minutes, -away_roll, color=AWAY, lw=2.8, ls=(0, (7, 4)))
     max_abs = max(float(home.max()), float(away.max()), 0.02)
-    ax.set_ylim(-max_abs * 1.55, max_abs * 1.55)
-    ax.set_xlim(0, max_min + 18)
+    ax.set_ylim(-max_abs * 1.72, max_abs * 1.72)
+    # Room on the right for the two curve labels, but no ticks past the final
+    # whistle: the axis printed 100 and ran to 112 over a 96-minute match.
+    ax.set_xlim(0, max_min + 16)
+    ax.set_xticks([t for t in range(0, int(max_min) + 1, 15)])
     ax.set_xlabel("Match minute")
     # A scale, and the match's own landmarks: both sides read from the same
     # zero line, so the axis prints magnitudes, and the half-time line and the
@@ -1192,11 +1208,18 @@ def xt_per_minute(events: pd.DataFrame) -> Path:
         _bool(work.get("is_goal", pd.Series(False, index=work.index)))
         & ~_bool(work.get("is_own_goal", pd.Series(False, index=work.index)))
     ]
-    for _, goal in goals.iterrows():
+    # Goals close together on one side take turns at two heights: 80' Vitinha
+    # and 85' Ruiz printed as one run of text, "80' Vitinh85' Ruiz".
+    last_label = {True: -99.0, False: -99.0}
+    raised = {True: False, False: False}
+    for _, goal in goals.sort_values(["minute", "second"]).iterrows():
         mine = goal["team_id"] == HOME_ID
         colour = HOME if mine else AWAY
         minute = float(goal["minute"])
-        height = max_abs * (1.32 if mine else -1.32)
+        raised[mine] = (minute - last_label[mine] < 9) and not raised[mine]
+        last_label[mine] = minute
+        lift = 1.32 + (0.14 if raised[mine] else 0.0)
+        height = max_abs * (lift if mine else -lift)
         ax.vlines(minute, 0, height, color=colour, lw=1.0, alpha=0.5, zorder=1)
         ax.scatter(
             [minute],
@@ -1223,18 +1246,20 @@ def xt_per_minute(events: pd.DataFrame) -> Path:
     ax.text(
         max_min + 1,
         float(home_roll.iloc[-1]),
-        f"{HOME_NAME} · 5-min rolling",
+        f"{HOME_NAME} · 5-min avg",
         color=HOME,
         va="center",
         fontweight="bold",
+        fontsize=9,
     )
     ax.text(
         max_min + 1,
         -float(away_roll.iloc[-1]),
-        f"{AWAY_NAME} · mirrored rolling",
+        f"{AWAY_NAME} · 5-min avg",
         color=AWAY,
         va="center",
         fontweight="bold",
+        fontsize=9,
     )
     ax.grid(axis="x", color=GRID, alpha=0.5, lw=0.7)
     return save(fig, "05_xt_per_minute_redesign.png")

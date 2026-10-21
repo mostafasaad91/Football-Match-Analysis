@@ -48,6 +48,31 @@ def share_limits(axes, axis="x"):
         (a.set_xlim if axis == "x" else a.set_ylim)(low, high)
 
 
+_SMALL_WORDS = {"a", "an", "and", "the", "to", "of", "in", "on", "by", "per", "v", "vs", "at"}
+
+
+def _headline(title):
+    """Title case, as on every other page of the package.
+
+    These titles were sentence case ("Shot volume and average quality") under
+    the same strip that sets every other page in title case, which was half of
+    what made the last eleven pages look like a different publication.
+    """
+    words = title.split(" ")
+    out = []
+    for i, word in enumerate(words):
+        if i and word.lower() in _SMALL_WORDS:
+            out.append(word.lower())
+        else:
+            out.append(
+                "-".join(
+                    part[:1].upper() + part[1:] if part[:1].islower() else part
+                    for part in word.split("-")
+                )
+            )
+    return " ".join(out)
+
+
 class Charts:
     def __init__(self, out, info):
         self.out = Path(out)
@@ -84,7 +109,7 @@ class Charts:
         fig.subplots_adjust(left=0.09, right=0.955, bottom=0.17, top=0.79, wspace=0.30)
         from football_analysis.visuals.visual_redesign_preview import amoled_header
 
-        amoled_header(fig, title, subtitle)
+        amoled_header(fig, _headline(title), subtitle)
         for ax in axes.flat:
             ax.set_facecolor(BG)
             ax.tick_params(colors=MUTED, labelsize=10)
@@ -98,8 +123,14 @@ class Charts:
         return fig, axes[0]
 
     def save(self, fig, filename, title, reading, method, n):
-        footer = f"{self.info['home_name']} v {self.info['away_name']}  |  {method}"
-        fig.text(0.055, 0.055, textwrap.fill(footer, 145), color=MUTED, size=9, va="bottom")
+        # The method note alone, and the package's own signature beside it: the
+        # "PSG v Barcelona |" prefix repeated the header's scoreline and these
+        # were the only pages without the signature every other page carries.
+        fig.text(0.055, 0.055, textwrap.fill(method, 125), color=MUTED, size=9, va="bottom")
+        fig.text(
+            0.945, 0.055, "FULL VISUAL REDESIGN · REAL MATCH DATA",
+            color=MUTED, size=8, ha="right", va="bottom",
+        )
         path = self.out / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=150, facecolor=BG)
@@ -157,6 +188,16 @@ class Charts:
                 }
             )
             return
+        # Counts make exact ties common -- one shot at 0.05 xG, two progressions
+        # and no xA -- and a tied marker sat whole under the other: Rodri under
+        # Marquinhos, Bernal under Pacho, Yamal under Doué. Tied points are
+        # spread sideways by a sliver of the axis so every player shows.
+        if len(data) > 1:
+            key = data[x].round(6).astype(str) + "|" + data[y].round(6).astype(str)
+            rank = data.groupby(key).cumcount()
+            size_of = data.groupby(key)[x].transform("size")
+            span = float(data[x].max() - data[x].min()) or 1.0
+            data[x] = data[x] + (rank - (size_of - 1) / 2) * span * 0.018
         # "1 observations" reached a shipped article; a single eligible point
         # is rare but legal, so the noun agrees with the count.
         observed = len(data)
@@ -203,8 +244,9 @@ class Charts:
             labelcolor=FG,
             edgecolor="none",
             fontsize=9,
-            loc="upper right",
-            bbox_to_anchor=(1, 1.14),
+            # Just above the plot, under the header strip rather than inside it.
+            loc="lower right",
+            bbox_to_anchor=(1, 1.01),
             ncol=2,
         )
         method = (
@@ -283,12 +325,67 @@ def role_group(role):
         return "Goalkeeper"
     if role.startswith("D") and not role.startswith("DM"):
         return "Defender"
-    if role.startswith("F") or role in ["ST", "SS", "STRIKER"]:
+    # AML / AMR are the wide forwards of a 4-3-3 written in a 4-2-3-1 grid:
+    # Yamal and Gordon at Paris were filed as midfielders and ranked against
+    # Pedri and Bernal, while Doué on the same wing as FWR was a forward.
+    if role.startswith("F") or role in ["ST", "SS", "STRIKER", "AML", "AMR"]:
         return "Forward"
     if role.startswith(("M", "AM", "DM")):
         return "Midfielder"
     return "Unknown"
 
+
+
+def _history_rows(directory, match, events=None):
+    """One row per side of a stored fixture for the history boards."""
+    from football_analysis.reports.match_report import compute_ppda_both
+
+    directory = Path(directory)
+    tm = pd.read_csv(directory / "team_advanced_metrics.csv")
+    xg = pd.read_csv(directory / "xg.csv")
+    if events is None:
+        events = pd.read_csv(directory / "events.csv")
+    ppda = compute_ppda_both(match, events)
+    rows = []
+    for side in ["home", "away"]:
+        name = match[side + "_name"]
+        t = tm[tm.side.eq(side)]
+        shot = xg[xg.team.eq(name)]
+        if t.empty or shot.empty:
+            continue
+        rows.append(
+            dict(
+                team_id=match[side + "_id"],
+                team=name,
+                date=match.get("date", ""),
+                field_tilt=float(t.iloc[0].field_tilt),
+                xG=float(shot.iloc[0].xG),
+                ppda=ppda[side].get("ppda"),
+                risk=float(t.iloc[0].rest_defence_vulnerability),
+            )
+        )
+    return rows
+
+
+def _mark_today(ax, charts, hist, today, x, y):
+    """The two sides' other matches small, this one large and named."""
+    for tid, name in charts.names.items():
+        g = hist[hist.team.eq(name)]
+        if len(g):
+            ax.scatter(
+                g[x], g[y], color=charts.colors[tid], s=40, alpha=0.75,
+                label=f"{name} · other matches",
+            )
+        t = today[today.team.eq(name)] if len(today) else today
+        if len(t):
+            ax.scatter(
+                t[x], t[y], color=charts.colors[tid], s=150, edgecolor=FG, linewidth=1.4,
+                zorder=5, label=f"{name} · this match",
+            )
+            ax.annotate(
+                "this match", (float(t[x].iloc[0]), float(t[y].iloc[0])),
+                xytext=(8, 8), textcoords="offset points", color=FG, size=8,
+            )
 
 from football_analysis.visuals.advanced_profiles import compact_profiles
 
@@ -370,7 +467,13 @@ def build_insight_visuals(events, players, info, out):
                 for label, v in zip(["0–10s", "10–20s", "20–40s", "40s+"], groups)
             ],
         )
-        ax.set_title(name, color=FG)
+        # Say which possessions the bands hold: only those with a pass or carry
+        # carry an xT figure, so the counts summed to 88 beside the funnel's 123.
+        valued = sum(len(v) for v in groups)
+        ax.set_title(
+            f"{name} · {valued} of {len(own)} possessions had a pass or carry",
+            color=FG,
+        )
         ax.set_ylabel("Positive xT")
         ax.set_xlim(-0.6, 3.6)
     share_limits(axes, "y")
@@ -388,6 +491,9 @@ def build_insight_visuals(events, players, info, out):
         "All regains included; time starts at the recorded regain, including immediate final-third access.",
         columns=2,
     )
+    # Room for the category names: at the shared left margin "Over 12 seconds"
+    # began off the canvas and the second panel's labels ran into the first.
+    fig.subplots_adjust(left=0.14, wspace=0.42)
     for ax, (tid, name) in zip(axes, charts.names.items()):
         times = regains.loc[regains.team_id.eq(tid), "seconds_to_third"]
         counts = [
@@ -572,6 +678,10 @@ def build_insight_visuals(events, players, info, out):
         ax.add_patch(Rectangle((88.5, 13.84), 16.5, 40.32, fill=False, ec=MUTED, lw=0.7))
         ax.add_patch(Rectangle((0, 13.84), 16.5, 40.32, fill=False, ec=MUTED, lw=0.7))
         # Highest consequence wins the colour, so each loss is plotted once.
+        # The outcome is the opponent's, so no category may wear either team's
+        # colour: "Final third" in the losing side's kit made one legend wrong
+        # for the other panel and read as that side's own attack. The shot is
+        # the foreground colour rather than coral, which sat beside crimson.
         categories = [
             (
                 "No listed outcome",
@@ -582,11 +692,11 @@ def build_insight_visuals(events, players, info, out):
             (
                 "Final third",
                 g.third_within_12 & ~g.box_within_12 & ~g.shot_within_12,
-                charts.colors[tid],
+                "#9B8AE0",
                 "o",
             ),
             ("Box", g.box_within_12 & ~g.shot_within_12, "#F2B84B", "s"),
-            ("Shot", g.shot_within_12, "#F06A6A", "*"),
+            ("Shot", g.shot_within_12, FG, "*"),
         ]
         for label_text, mask, color, marker in categories:
             h = g[mask]
@@ -614,13 +724,16 @@ def build_insight_visuals(events, players, info, out):
                         label=label_text,
                     )
                 )
+        # Under the pitch: inside it the caption sat on the losses along the
+        # touchline.
         ax.text(
-            0.02,
-            0.02,
+            0.0,
+            -0.05,
             "Loss location · attacking direction →",
             transform=ax.transAxes,
             color=MUTED,
             size=8,
+            va="top",
         )
         summaries.append(
             f"{name}: {values[0]} open-play losses; {values[1]} followed by final-third presence, {values[2]} by box presence and {values[3]} by a shot within 12 seconds, totaling {g.xG_conceded.sum():.2f} xG."
@@ -772,47 +885,33 @@ def build_insight_visuals(events, players, info, out):
                     != info["xg_model_version"]
                 ):
                     continue
-                directory = manifest_path.parent
-                tm = pd.read_csv(directory / "team_advanced_metrics.csv")
-                xg = pd.read_csv(directory / "xg.csv")
-                for side in ["home", "away"]:
-                    match = manifest["fixture"]
-                    name = match[side + "_name"]
-                    t = tm[tm.side.eq(side)]
-                    shot = xg[xg.team.eq(name)]
-                    if t.empty or shot.empty:
-                        continue
-                    from football_analysis.reports.match_report import compute_ppda_both
-
-                    ppda = compute_ppda_both(match, pd.read_csv(directory / "events.csv"))
-                    history.append(
-                        dict(
-                            team_id=match[side + "_id"],
-                            team=name,
-                            date=match.get("date", ""),
-                            field_tilt=float(t.iloc[0].field_tilt),
-                            xG=float(shot.iloc[0].xG),
-                            ppda=ppda[side].get("ppda"),
-                            risk=float(t.iloc[0].rest_defence_vulnerability),
-                        )
-                    )
+                history.extend(_history_rows(manifest_path.parent, manifest["fixture"]))
             except (ValueError, KeyError, OSError):
                 continue
     hist = pd.DataFrame(history)
     if len(hist):
         hist = hist.drop_duplicates(["team", "date"])
+    # This fixture, from the frames this render has just written. The history
+    # walk can only find packages already published, and this one is either
+    # absent or a version behind, so the coloured dots were the two sides'
+    # other matches: PSG 4-2 Barcelona sat at no point on its own board.
+    today = pd.DataFrame()
+    try:
+        today = pd.DataFrame(_history_rows(Path(out), info, events))
+    except (ValueError, KeyError, OSError):
+        pass
+    if len(hist) and len(today):
+        hist = hist[~(hist.date.eq(info.get("date", "")) & hist.team.isin(today.team))]
     data["history_comparisons"] = hist
     # Ten matches means at least twenty team observations, not ten points.
     if len(hist) >= 20:
         fig, axes = charts.figure(
-            "Territory and chances in the saved competition",
+            "Territory and chances across the competition",
             "Comparable metric version; one point per team-match, not the two teams of one fixture",
         )
         ax = axes[0]
         ax.scatter(hist.field_tilt, hist.xG, color=MUTED, alpha=0.45, s=28)
-        for tid, name in charts.names.items():
-            g = hist[hist.team.eq(name)]
-            ax.scatter(g.field_tilt, g.xG, color=charts.colors[tid], s=55, label=name)
+        _mark_today(ax, charts, hist, today, "field_tilt", "xG")
         ax.set_xlabel("Field tilt (%)")
         ax.set_ylabel("xG")
         ax.legend(facecolor=BG, labelcolor=FG)
@@ -832,9 +931,7 @@ def build_insight_visuals(events, players, info, out):
             )
             ax = axes[0]
             ax.scatter(valid.ppda, valid.risk, color=MUTED, alpha=0.55, s=30)
-            for tid, name in charts.names.items():
-                g = valid[valid.team.eq(name)]
-                ax.scatter(g.ppda, g.risk, color=charts.colors[tid], s=55, label=name)
+            _mark_today(ax, charts, valid, today.dropna(subset=["ppda", "risk"]) if len(today) else today, "ppda", "risk")
             ax.set_xlabel("PPDA (lower = fewer opponent passes per action)")
             ax.set_ylabel("Dangerous counters / advanced losses (%)")
             ax.legend(facecolor=BG, labelcolor=FG)

@@ -2,6 +2,7 @@
 
 from football_analysis.visuals.typography import display
 import re
+import textwrap
 import numpy as np
 import pandas as pd
 from matplotlib.patches import Rectangle, Wedge, Circle
@@ -800,6 +801,12 @@ def compact_profiles(charts, players, events):
             if figure is None:
                 figure = f"{score:.0f}"
                 under = "percentile"
+            elif p.role_group == "Goalkeeper" or p.minutes < 30:
+                # A place is only worth printing against people who could have
+                # done the same thing. A keeper's "3 of 27 saves" was a rank
+                # among outfielders, and a 19-minute substitute was "1 of 27"
+                # in a 30-minute pool he is not in, on one pass of two.
+                under = "keeper · not ranked" if p.role_group == "Goalkeeper" else "under 30 min · not ranked"
             else:
                 ahead = int(round((100 - score) / 100 * max(len(basis), 1)))
                 under = (
@@ -825,11 +832,14 @@ def compact_profiles(charts, players, events):
                 ha="left",
                 va="baseline",
             )
-        caption = (
-            f"Ranked against {len(pool)} players in the same role (30+ min)"
-            if compare
-            else f"Only {len(pool)} in this role · ranked against all {len(basis)} players over 30 min"
-        )
+        if compare:
+            caption = f"Ranked against {len(pool)} players in the same role (30+ min)"
+        elif p.role_group == "Goalkeeper":
+            caption = f"No keeper pool · ring drawn against all {len(basis)} players over 30 min, read the figures"
+        elif p.minutes < 30:
+            caption = f"{p.minutes:.0f} min, below the 30-min pool · ring for reference only"
+        else:
+            caption = f"Only {len(pool)} in this role · ranked against all {len(basis)} players over 30 min"
         fig.text(
             0.24, 0.408, caption + " · grey ring = pool average", ha="center", color=MUTED, size=8
         )
@@ -1298,13 +1308,14 @@ def compact_profiles(charts, players, events):
                                 "xGChain",
                                 "xGBuildup",
                                 "xA_per_100_passes",
-                                "pass_pct",
-                                "progressive_pass_pct",
-                                "takeon_success_pct",
                             }
                             else 0,
                         )
                     )
+                    # Rates read as whole percentages, as on the ring: the
+                    # table printed "Completion % 75.00".
+                    if key in {"pass_pct", "progressive_pass_pct", "takeon_success_pct"} and pd.notna(value):
+                        shown = f"{float(value):.0f}%"
                 panel.text(0, y, caption, color=MUTED, size=10, va="center")
                 panel.text(1, y, shown, color=FG, size=11, weight="bold", ha="right", va="center")
                 panel.plot([0, 1], [y - 0.052, y - 0.052], color=MUTED, lw=0.35, alpha=0.25)
@@ -1316,8 +1327,12 @@ def compact_profiles(charts, players, events):
         )
         # The method footer is drawn at y=.055 and grows upward, so this block
         # has to finish above it. At .132 and five lines it did not, and the
-        # two ran through each other.
-        fig.text(0.055, 0.152, definitions, color=MUTED, size=7.6, linespacing=1.4, va="top")
+        # two ran through each other. Wrapped to the page: the third line ran
+        # off the right edge mid-word ("threat added by success").
+        definitions = "\n".join(
+            textwrap.fill(paragraph, 190) for paragraph in definitions.split("\n")
+        )
+        fig.text(0.055, 0.185, definitions, color=MUTED, size=7.6, linespacing=1.4, va="top")
         method = "Role and minutes govern comparisons; these are match observations, not a season ability rating. Nominal pitch 105 × 68 m."
         filename = (
             "player_profiles/"

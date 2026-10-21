@@ -166,8 +166,11 @@ PITCH_LINE_WIDTH = 1.25
 # ── Shot-outcome palette ────────────────────────────────────────────────
 # Outcome, not team, is what a shot map encodes: one fixed colour per result
 # so the reader learns the key once and it holds for every match and player.
-SHOT_GOAL = "#D62728"  # red
-SHOT_SAVED = "#2077B4"  # steel blue
+# Goal and save keep clear of the two colours most kits are built on. Red and
+# steel blue were both a side's colour at PSG 4-2 Barcelona, so a PSG save on
+# Barcelona's map read as PSG and every goal star looked like Barcelona's.
+SHOT_GOAL = "#C98A00" if IS_LIGHT_THEME else "#FFC23C"  # gold
+SHOT_SAVED = "#1A9E8F" if IS_LIGHT_THEME else "#2BB5A3"  # teal
 SHOT_MISS = "#F0A05A"  # sand orange
 SHOT_BLOCKED = "#B4B4B4"  # neutral grey
 SHOT_POST = "#8B5FBF"  # violet

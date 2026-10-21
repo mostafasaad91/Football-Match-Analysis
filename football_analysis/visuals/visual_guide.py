@@ -1,6 +1,25 @@
 """Reader-facing metric purpose for every production chart family."""
 
 GUIDES = [
+    # Specific families first: the lookup takes the first token found in the
+    # file name, and "defensive_shape" was answered by "defensive_activity"'s
+    # text about tackles, while three pages fell through to the generic line.
+    (
+        "defensive_shape",
+        "Lines are a rolling median of five-minute windows: how high each side made its defensive actions, and how far apart its touches were spread up the pitch. Higher on the first panel is a higher block; lower on the second is a more compact team.",
+    ),
+    (
+        "press_profile",
+        "Six measures of one press on fixed floors and ceilings, so two matches can be compared. PPDA and losses punished are inverted, so further from the centre is better on every axis; the figures beside each axis are the raw values.",
+    ),
+    (
+        "pass_sonar",
+        "Each wedge is a direction of pass: its length the median distance, its opacity the completion rate, the figure the number attempted. Direction is the pass angle, not the passer's body shape.",
+    ),
+    (
+        "finishing_quality",
+        "Pre-shot xG prices the chance, post-shot xG prices the strike once its placement is known, and goals are what the keeper let through. The verdict compares the strike with every chance created, misses included.",
+    ),
     (
         "xg_flow",
         "Each step adds the xG of a shot; flat sections contain no new shot xG. Compare the timing and quality of chances with the score.",

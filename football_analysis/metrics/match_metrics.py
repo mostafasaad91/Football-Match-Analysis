@@ -181,6 +181,40 @@ def is_restart_event(row: pd.Series | dict[str, Any]) -> bool:
     return bool(qualifiers & RESTART_QUALIFIERS)
 
 
+def kickoff_mask(events: pd.DataFrame) -> pd.Series:
+    """Passes that are kick-offs, whether or not the feed says so.
+
+    Not every feed tags a kick-off: at PSG 4-2 Barcelona both of PSG's -- the
+    opening one and the restart after Espart's goal -- came through as plain
+    long balls from the centre spot. A pass from the spot that is the first
+    live action of its period, or the first after a goal, is one.
+    """
+    out = pd.Series(False, index=events.index)
+    if events is None or events.empty:
+        return out
+    x = _numeric_series(events, "x", np.nan)
+    y = _numeric_series(events, "y", np.nan)
+    spot = _bool_series(events, "is_pass") & (x - 50).abs().le(1.5) & (y - 50).abs().le(2.0)
+    if not spot.any():
+        return out
+    tagged = events.get("qualifier_names", pd.Series("", index=events.index)).map(
+        lambda value: "kickoff" in _qualifier_tokens(value)
+    )
+    live = live_event_mask(events)
+    period = events.get("period_code", pd.Series("", index=events.index)).map(_normalise_period)
+    clock = _numeric_series(events, "minute", 0.0) * 60 + _numeric_series(events, "second", 0.0)
+    order = pd.DataFrame({"period": period, "clock": clock, "pos": np.arange(len(events))})
+    order = order[live].sort_values(["period", "clock", "pos"], kind="stable")
+    goal = _bool_series(events, "is_goal").reindex(order.index)
+    passes = _bool_series(events, "is_pass").reindex(order.index)
+    # First pass of the period: stray rows can precede it (Paris logged an
+    # OffsideGiven at 45:00), so "first live event" missed the second half.
+    first = passes.astype(int).groupby(order["period"]).cumsum().eq(1) & passes
+    previous_goal = goal.groupby(order["period"]).shift(1).fillna(False).astype(bool)
+    candidate = (first | previous_goal).reindex(events.index, fill_value=False)
+    return (spot & candidate) | (spot & tagged)
+
+
 def live_event_mask(events: pd.DataFrame) -> pd.Series:
     periods = events.get("period_code", pd.Series("", index=events.index)).map(_normalise_period)
     types = events.get("type", pd.Series("", index=events.index)).fillna("").astype(str)
@@ -403,6 +437,14 @@ def _control_team(row: pd.Series) -> Any:
         return team
     if event_type == "Tackle" and successful:
         return team
+    # The provider files a defender throwing a body in front of a shot as a
+    # "Save" with an OutfielderBlock qualifier -- 2320 of 4268 Save events
+    # across 300 stored matches. A block is not control: reading it as the
+    # keeper's took the ball off the attacking side, so Vitinha's goal at
+    # Paris, struck from the clearance of Ruiz's blocked shot, began a new
+    # "counter" possession with no passes in it.
+    if event_type == "Save" and "outfielderblock" in _qualifier_tokens(row.get("qualifier_names")):
+        return None
     if event_type in KEEPER_CONTROL_TYPES and successful:
         return team
     if event_type in {"Pass", "KeyPass", "Carry", "TakeOn", "BallTouch", "Aerial"}:
@@ -2247,6 +2289,11 @@ def line_breaking_passes(
         & (events.get("team_id") == team_id)
         & live_event_mask(events)
     ].dropna(subset=["x", "end_x"])
+    # A restart is not played through a set line: kick-offs launched from the
+    # centre spot were being counted as failed line-breaking passes, and goal
+    # kicks and free kicks clear the line from a dead ball, not through it.
+    passes = passes[~passes.apply(is_restart_event, axis=1)] if not passes.empty else passes
+    passes = passes[~kickoff_mask(events).reindex(passes.index, fill_value=False)]
     if passes.empty:
         return pd.DataFrame(columns=columns)
 
@@ -2556,7 +2603,13 @@ def classify_sequence(possession: Any) -> str:
     reason = str(get("start_reason", "") or "")
     duration = float(get("duration", 0.0) or 0.0)
 
-    if reason == "restart":
+    # A restart makes a set piece only while the delivery is still the play:
+    # the same three-touch reach shot_origin uses for the set-piece board.
+    # Every possession off a throw-in or goal kick used to land here, so
+    # Espart's goal at Paris -- a free kick in Barcelona's own half, then six
+    # passes and a through ball -- was a "set piece" on one board and open play
+    # on the next, and set pieces carried 26% of Barcelona's xG against 1%.
+    if reason == "restart" and passes <= SET_PIECE_LOOKBACK_EVENTS:
         return "set_piece"
     if bool(get("is_transition", False)) and duration <= TRANSITION_WINDOW_SECONDS:
         return "counter"
@@ -2801,6 +2854,11 @@ def pressing_triggers(events: pd.DataFrame, team_id: Any) -> pd.DataFrame:
         previous = ordered.iloc[index - 1]
         if previous.get("team_id") == team_id:
             continue
+        # A ball won back off the opponent's save or block of this side's own
+        # shot is a rebound, not something the press fed on. "save" was
+        # Barcelona's leading press trigger at Paris, five of twelve.
+        if str(previous.get("type")) in KEEPER_CONTROL_TYPES | {"Punch"}:
+            continue
         tokens = _qualifier_tokens(previous.get("qualifier_names"))
         if "throwin" in tokens:
             label = "throw-in"
@@ -2871,6 +2929,44 @@ def rest_defence_structure(events: pd.DataFrame, team_id: Any) -> dict[str, floa
 # ═════════════════════════════════════════════════════════════════════════════
 # Goal origin, substitution impact, combinations, second balls, tilt timeline
 # ═════════════════════════════════════════════════════════════════════════════
+SECOND_BALL_SECONDS = 4.0
+
+
+def goal_build_possession(possessions: pd.DataFrame, possession_id: Any, team_id: Any) -> int:
+    """The possession a goal was built in, looking through a second ball.
+
+    A goal can sit alone in its possession because the defending side got one
+    touch to the ball first: Martín's touch from Hakimi's ball across, a yard
+    before Ruiz scored at Paris, ended a two-minute PSG spell and left the goal
+    with no passes, read as a counter from a turnover. When the scoring
+    possession has no completed pass and the opponent's spell before it was a
+    touch -- no completed pass, a few seconds -- the build-up is the scorer's
+    possession before that.
+    """
+    pid = int(possession_id)
+    if possessions is None or possessions.empty:
+        return pid
+    by_id = possessions.set_index("possession_id")
+    while pid in by_id.index:
+        own = by_id.loc[pid]
+        if int(own["completed_passes"]) > 0 or str(own["start_reason"]) == "restart":
+            break
+        broken, before = pid - 1, pid - 2
+        if broken not in by_id.index or before not in by_id.index:
+            break
+        touch, built = by_id.loc[broken], by_id.loc[before]
+        if touch["team_id"] == team_id or built["team_id"] != team_id:
+            break
+        if built["period_code"] != own["period_code"]:
+            break
+        if int(touch["completed_passes"]) > 0 or float(touch["duration"]) > SECOND_BALL_SECONDS:
+            break
+        if float(own["start_time"]) - float(built["end_time"]) > 2 * SECOND_BALL_SECONDS:
+            break
+        pid = before
+    return pid
+
+
 def goal_origin_chains(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.DataFrame:
     """Return the sequence behind every goal: where it began and how it was built.
 
@@ -2904,19 +3000,33 @@ def goal_origin_chains(events: pd.DataFrame, home_id: Any, away_id: Any) -> pd.D
         possession_id = getattr(goal, "possession_id", None)
         if possession_id is None or pd.isna(possession_id):
             continue
-        possession = by_id.get(int(possession_id))
+        team_id = getattr(goal, "team_id", None)
+        built_id = goal_build_possession(possessions, possession_id, team_id)
+        possession = by_id.get(built_id)
         if possession is None:
             continue
-        window = annotated[annotated["possession_id"].eq(int(possession_id))]
+        chain_ids = range(built_id, int(possession_id) + 1)
+        window = annotated[
+            annotated["possession_id"].isin(chain_ids) & annotated["team_id"].eq(team_id)
+        ]
         players = window.get("player").dropna().astype(str).nunique()
+        goal_time = float(
+            _numeric_series(goals, "minute", 0.0).loc[goal.Index] * 60.0
+            + _numeric_series(goals, "second", 0.0).loc[goal.Index]
+        )
+        duration = (
+            float(possession.duration)
+            if built_id == int(possession_id)
+            else max(goal_time - float(possession.start_time), float(possession.duration))
+        )
         rows.append(
             {
                 "minute": int(_numeric_series(goals, "minute", 0.0).loc[goal.Index]),
                 "scorer": str(getattr(goal, "player", "") or ""),
-                "team_id": getattr(goal, "team_id", None),
+                "team_id": team_id,
                 "sequence_type": classify_sequence(possession._asdict()),
                 "passes": int(possession.passes),
-                "duration": round(float(possession.duration), 1),
+                "duration": round(duration, 1),
                 "start_x": round(float(possession.start_x), 1),
                 "start_y": round(float(possession.start_y), 1),
                 "players": int(players),

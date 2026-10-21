@@ -3989,7 +3989,11 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         ("xGOT", home_advanced["xGoT"], away_advanced["xGoT"]),
         ("Shots", _shots_for(home_id), _shots_for(away_id)),
         ("Big chances", _big_chances_for(home_id), _big_chances_for(away_id)),
-        ("xT", _xt_for(home_id), _xt_for(away_id)),
+        # Named for what it counts. Three different xT totals reached the reader
+        # under one name -- this one, the possession-level "Sequence xT" on the
+        # posters and the per-player credits that overlap across team-mates --
+        # and 11.79 beside 20.35 for the same side read as an error.
+        ("Pass xT", _xt_for(home_id), _xt_for(away_id)),
         (
             "Passes attempted",
             _count(home_id, lambda d: d.get("is_pass", False) == True),  # noqa: E712
@@ -4121,8 +4125,10 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
             _count(home_id, lambda d: d["type"] == "Clearance"),
             _count(away_id, lambda d: d["type"] == "Clearance"),
         ),
+        # "Provider" is our word for the feed, not the reader's. These are the
+        # BallRecovery events; possession regains below are every won-back ball.
         (
-            "Provider recoveries",
+            "Ball recoveries",
             home_advanced["provider_recoveries"],
             away_advanced["provider_recoveries"],
         ),
@@ -4138,7 +4144,9 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
         ),
         ("Fouls", _fouls_committed(home_id), _fouls_committed(away_id)),
         ("Aerial duels", _h_aer, _a_aer),
-        ("Ground duels", _h_grd, _a_grd),
+        # Take-on contests only (see above), so named: "Ground duels" read as
+        # every ground duel and disagreed with the 40 the duel map counts.
+        ("Take-on duels", _h_grd, _a_grd),
     ]
 
     h_ppda = ppda.get("home", {}).get("ppda")
@@ -4353,9 +4361,11 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
                 fontweight="bold",
                 family=FONT_SANS,
                 transform=ax.transAxes,
+                # The panel's own colour: BG_MID is a lighter grey than the
+                # light-theme panel, and every label sat on a visible chip.
                 bbox=dict(
                     boxstyle="round,pad=0.18,rounding_size=0.02",
-                    facecolor=BG_MID,
+                    facecolor=ax.get_facecolor(),
                     edgecolor="none",
                     alpha=0.96,
                 ),

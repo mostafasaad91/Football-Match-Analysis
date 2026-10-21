@@ -1021,10 +1021,14 @@ def shot_map(events, xg, team_id, number):
             continue
         named.append((lx_[0], ly_[0]))
         lx, ly = attack_xy([row["x"]], [row["y"]])
+        # Clear of the mark's own edge: the mark grows with xG, so a fixed
+        # 11-point offset put "0.44" on top of the disc it named.
+        is_goal = outcome.loc[index] == "Goal"
+        radius = np.sqrt((90 + row["xG"] * 900) * (2.4 if is_goal else 1.0)) / 2
         pitch.annotate(
             f"{row['xG']:.2f}",
             (lx[0], ly[0]),
-            xytext=(11, -4),
+            xytext=(radius + 3, -4),
             textcoords="offset points",
             color=TEXT,
             fontsize=8.5,
@@ -1032,7 +1036,7 @@ def shot_map(events, xg, team_id, number):
             zorder=8,
             path_effects=[path_effects.withStroke(linewidth=3, foreground=BG)],
         )
-    pitch.legend(
+    legend = pitch.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.025),
         ncol=5,
@@ -1040,8 +1044,15 @@ def shot_map(events, xg, team_id, number):
         labelcolor=TEXT,
         fontsize=8.5,
         columnspacing=1.4,
-        handletextpad=0.4,
+        handletextpad=0.6,
     )
+    # One key size for every outcome: the handles inherited the size of the
+    # first mark in each series, so a big woodwork chance gave a diamond twice
+    # the others and the goal star ran into its own label.
+    handles = getattr(legend, "legend_handles", None) or getattr(legend, "legendHandles", [])
+    for handle, text in zip(handles, legend.get_texts()):
+        if hasattr(handle, "set_sizes"):
+            handle.set_sizes([150 if text.get_text().startswith("Goal") else 70])
     shot_timeline(fig, shots, outcome, pitch_bottom - 0.115, team_id)
     xr = xg_row(xg, TEAM_NAME[team_id])
     side_title(side, "SHOT OUTPUT")
@@ -1067,7 +1078,11 @@ def shot_map(events, xg, team_id, number):
         side.text(
             0.08, heading_y, "GOAL FRAME TARGETED", color=MUTED, fontsize=7.5, fontweight="bold"
         )
-        ranked = [item for item in sorted(zones.items(), key=lambda pair: -pair[1]) if item[1]][:3]
+        ranked = [item for item in sorted(zones.items(), key=lambda pair: -pair[1]) if item[1]]
+        # The top three, then the rest in one line: three rows summing to 11
+        # under "ON TARGET 14" read as three shots gone missing.
+        rest = sum(count for _, count in ranked[3:])
+        ranked = ranked[:3] + ([("Other zones", rest)] if rest else [])
         for idx, (zone, count) in enumerate(ranked):
             y = heading_y - 0.05 - idx * 0.055
             side.text(0.08, y, zone.replace("_", " ").title(), color=TEXT, fontsize=8, va="center")
@@ -1468,7 +1483,20 @@ def pass_network(events, players, team_id, number, half):
         pair_total[key] = pair_total.get(key, 0) + int(edge["passes"])
     ranked = sorted(pair_total.items(), key=lambda item: -item[1])
     top_count = float(ranked[0][1]) if ranked else 1.0
-    for (a, b), count in ranked[:9]:
+    # The strongest nine, and then each player's own strongest link if the nine
+    # left him unconnected: Neves was named the top connector of PSG's first
+    # half while standing alone on the pitch, because his links were spread
+    # over many partners and none made the top nine.
+    shown = list(ranked[:9])
+    linked = {name for (a, b), _ in shown for name in (a, b)}
+    for name in names:
+        if name in linked:
+            continue
+        own = [(pair, count) for pair, count in ranked if name in pair and count >= 3]
+        if own:
+            shown.append(own[0])
+            linked.update(own[0][0])
+    for (a, b), count in shown:
         if a in pos and b in pos:
             share = count / top_count
             pitch.plot(
@@ -1636,7 +1664,11 @@ def pass_network(events, players, team_id, number, half):
 
     card(0, 0.125, 1, 0.48)
     changes = len(substitutions)
-    head(0.572, "Line-up", f"{changes} changes" if changes else "no changes")
+    head(
+        0.572,
+        "Line-up",
+        f"{changes} change{'' if changes == 1 else 's'}" if changes else "no changes",
+    )
     panel.text(
         0.045,
         0.527,
@@ -1757,7 +1789,9 @@ def pass_network(events, players, team_id, number, half):
         tiles.append(
             (
                 (str(top_row["player"]).split() or [""])[-1].upper(),
-                f"top connector · {float(top_row['betweenness']):.3f}",
+                # What it means, not the betweenness score: "0.169" beside
+                # "0.070" on the other side's card had no unit a reader knew.
+                "most passing routes ran through him",
             )
         )
     for i, (value, label) in enumerate(tiles):
@@ -2083,6 +2117,10 @@ def draw_zone_flow(
 
 def pass_map(events, team_id, number):
     frame = events[events["team_id"].eq(team_id) & events["type"].astype(str).eq("Pass")].copy()
+    # Counted before the rows without an end point are dropped: a key pass the
+    # feed did not place still happened, and the legend read 16 against the
+    # match statistics' 17.
+    all_keys = int(as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index))).sum())
     frame = frame.dropna(subset=["x", "y", "end_x", "end_y"])
     completed = frame["outcome"].astype(str).str.lower().eq("successful")
     key_pass = as_bool(frame.get("is_key_pass", pd.Series(False, index=frame.index)))
@@ -2196,7 +2234,14 @@ def pass_map(events, team_id, number):
     legend_items = [
         ("Completed pass", team_mark, "-", ">"),
         ("Incomplete pass", EVENT_NEUTRAL, (0, (3, 2)), ">"),
-        (f"Key pass ({int(key_pass.sum())})", EVENT_HIGHLIGHT, "-", "*"),
+        (
+            f"Key pass ({all_keys})"
+            if int(key_pass.sum()) == all_keys
+            else f"Key pass ({all_keys}, {int(key_pass.sum())} placed)",
+            EVENT_HIGHLIGHT,
+            "-",
+            "*",
+        ),
     ]
     for y, (label, color, style, marker) in zip(legend_y, legend_items):
         side.plot([0.09, 0.25], [y, y], color=color, lw=2.0, ls=style)
@@ -2409,16 +2454,34 @@ def gk_saves(events, xg, players):
         fig.text(
             x0,
             0.788,
-            f"{keeper_team_name} · {int(shot_type.isin(['Goal', 'SavedShot']).sum())} of "
-            f"{len(faced)} shots faced on target · {int(shot_type.eq('MissedShots').sum())} off target"
+            # The on-target count lives on the FACED card, from the keeper's own
+            # saves; the feed's figure here said 5 beside a card reading 6.
+            f"{keeper_team_name} · {len(faced)} shots faced"
+            f" · {int(shot_type.eq('MissedShots').sum())} off target"
+            f" · {int(shot_type.eq('ShotOnPost').sum())} woodwork"
             f" · {int(shot_type.eq('BlockedShot').sum())} blocked",
             color=MUTED,
             fontsize=8,
         )
 
-        on_target = int(shot_type.isin(["Goal", "SavedShot"]).sum())
         conceded = int(shot_type.eq("Goal").sum())
-        saves = int(shot_type.eq("SavedShot").sum())
+        # The keeper's own saves, as his profile and the poster count them.
+        # "SavedShot" is the shot's outcome, not who stopped it: at Paris it
+        # credited Safonov with Neves's block of Yamal at 65:00 and missed his
+        # save from Cancelo eleven seconds later, filed as a missed shot -- 3
+        # here against 4 on his card. The keeper's Save events, without the
+        # outfielder blocks the feed files under the same type, are what he did.
+        keeper_name = _keeper_name(players, keeper_team)
+        save_rows = events[
+            events["team_id"].eq(keeper_team)
+            & events["type"].astype(str).eq("Save")
+            & events["player"].astype(str).eq(str(keeper_name))
+            & ~events.get("qualifier_names", pd.Series("", index=events.index))
+            .astype(str)
+            .str.contains("OutfielderBlock", na=False)
+        ]
+        saves = int(len(save_rows))
+        on_target = saves + conceded
         # Goals prevented: post-shot xG of the shots this keeper faced, from
         # the fitted model, minus what went in. Penalties and own goals are
         # left out, so it is not always the CONCEDED card subtracted from
@@ -2426,7 +2489,7 @@ def gk_saves(events, xg, players):
         stopping = goalkeeper_shot_stopping(events, keeper_team, _keeper_name(players, keeper_team))
         prevented = f"{stopping['goals_prevented']:+.2f}".replace("-", "\N{MINUS SIGN}")
         cards = [
-            ("On target", f"{on_target}"),
+            ("Faced", f"{on_target}"),
             ("Saves", f"{saves}"),
             ("Conceded", f"{conceded}"),
             ("Prevented", prevented),
@@ -2601,7 +2664,7 @@ def zone14(events, team_id, number):
     ]
     fig, pitch, side = pitch_axes(
         f"Zone 14 & Five Lanes · {TEAM_NAME[team_id]}",
-        "Final-third actions per lane · arrows = Zone 14 access, coloured by the lane they started in",
+        "Completed actions ending in the final third, per lane · arrows = Zone 14 access, by starting lane",
     )
     draw_long_pitch(pitch)
     crop_to_attack(pitch, side, 62.0)
@@ -2651,6 +2714,8 @@ def zone14(events, team_id, number):
             zorder=1,
         )
     )
+    # Above the arrows and on a plate: seventeen accesses into the box the label
+    # names buried it under their lines.
     pitch.text(
         0,
         min(zy1[0], zy2[0]) + 0.9,
@@ -2660,7 +2725,8 @@ def zone14(events, team_id, number):
         fontweight="bold",
         ha="center",
         va="bottom",
-        zorder=5,
+        bbox=dict(boxstyle="round,pad=0.22", fc=PANEL, ec="none", alpha=0.85),
+        zorder=7,
     )
 
     def lane_index(width_value):
@@ -2691,6 +2757,13 @@ def zone14(events, team_id, number):
             arrow.arrow_patch.set_path_effects(
                 [path_effects.Stroke(linewidth=3.6, foreground=BG), path_effects.Normal()]
             )
+            # The pitch is cropped to the attacking end and an annotation is not
+            # clipped by default, so an access that began in the team's own half
+            # ran off the crop and through the caption at the foot of the page
+            # (PSG 4-2 Barcelona drew one to the bottom of the figure). Cut it at
+            # the crop: the arrow then enters from the edge, which is what it did.
+            arrow.arrow_patch.set_clip_box(pitch.bbox)
+            arrow.arrow_patch.set_clip_on(True)
     top = actions.groupby("player").size().sort_values(ascending=False).head(3)
     side_title(side, "FIVE ATTACKING LANES")
     for idx, ((label, _, _), value, color) in enumerate(zip(lane_defs, lane_counts, lane_colors)):
@@ -2726,8 +2799,15 @@ def zone14(events, team_id, number):
             ha="right",
             va="center",
         )
+    # The list stops at three names, so say who it leaves out: "9 entries" under
+    # a list adding to four read as a count that did not reconcile.
+    rest = len(actions) - int(top.sum())
+    if rest > 0:
+        y = 0.285 - len(top) * 0.06
+        side.text(0.08, y, "Others", color=MUTED, fontsize=8, va="center")
+        side.text(0.92, y, str(rest), color=MUTED, fontsize=8, ha="right", va="center")
     side.text(
-        0.08, 0.075, f"Zone 14 entries: {len(actions)}", color=TEXT, fontsize=9.5, fontweight="bold"
+        0.08, 0.04, f"Zone 14 entries: {len(actions)}", color=TEXT, fontsize=9.5, fontweight="bold"
     )
     return save(fig, f"{number:02d}_zone14_{_team_slug(team_id)}.png")
 
@@ -3239,7 +3319,16 @@ def defensive_activity(events, team_id, number):
             else [0.0]
         )
     )
-    pitch.axhline(average_height, color=FOCUS, lw=1.2, ls=(0, (5, 4)), alpha=0.9, zorder=4)
+    # Touchline to touchline, not the width of the axes.
+    pitch.plot(
+        [-PITCH_WIDTH / 2, PITCH_WIDTH / 2],
+        [average_height, average_height],
+        color=FOCUS,
+        lw=1.2,
+        ls=(0, (5, 4)),
+        alpha=0.9,
+        zorder=4,
+    )
     marker_map = {
         "Tackle": "o",
         "Interception": "D",
@@ -3254,7 +3343,8 @@ def defensive_activity(events, team_id, number):
         "BallRecovery": "#86EFAC",
         "Clearance": "#FDE68A",
         "BlockedShot": "#F9A8D4",
-        "Foul": "#F9A8D4",
+        # Fouls apart from blocks: the two shared one pink and a + from an x.
+        "Foul": "#FB923C",
     }
     for event_type, marker in marker_map.items():
         subset = actions[actions["type"].astype(str).eq(event_type)]
@@ -3453,7 +3543,7 @@ def dominating_zones(events):
     counts = hh - ah
     fig, pitch, side = pitch_axes(
         "Dominating Zones",
-        "Touch-share difference · diverging scale centred on an even 50/50 split",
+        f"Colour = each side's share of the zone's touches · figure = {HOME_NAME} touches minus {AWAY_NAME}'s",
     )
     cmap = LinearSegmentedColormap.from_list("dom_full", [AWAY, PANEL_2, HOME])
     image = pitch.imshow(
@@ -3483,6 +3573,10 @@ def dominating_zones(events):
                 fontsize=9.5,
                 fontweight="bold",
                 path_effects=label_outline(cell_fill),
+                # Over the markings, on a plate of the cell's own colour: the
+                # middle row sits on the halfway line, which struck through it.
+                bbox=dict(boxstyle="round,pad=0.18", fc=cell_fill, ec="none"),
+                zorder=10,
             )
     cbar = fig.colorbar(image, ax=pitch, fraction=0.035, pad=0.02, ticks=[-1, 0, 1])
     cbar.ax.set_yticklabels([AWAY_NAME, "Balanced", HOME_NAME])
@@ -3613,7 +3707,11 @@ def match_statistics(events, match_info):
     """
     from football_analysis.visuals.tactical_visualizations import make_match_stats_v2
 
-    fig = make_match_stats_v2(events, match_info, compute_ppda_both(match_info, events))
+    # The package's own side colours, lifted off the black page. The report
+    # read the raw kit colours from match_info, so PSG's navy bars and labels
+    # sat at a fraction of the contrast they have on every other page.
+    info = {**match_info, "home_color": HOME, "away_color": AWAY}
+    fig = make_match_stats_v2(events, info, compute_ppda_both(info, events))
 
     # The captured figure arrives wearing match_report's own chrome: an eyebrow
     # and title at the top, a score and report tag at the foot. Both are
@@ -3676,7 +3774,7 @@ def attacking_zones(events):
     base.amoled_header(
         fig,
         "Attacking Zones",
-        "Share of each side's final-third entries by corridor · corridor read where the entry landed",
+        "Passes and carries from outside into the final third · share by the corridor where each landed",
     )
     ax = fig.add_axes([0.055, 0.105, 0.89, 0.68])
     base.draw_pitch(ax)
@@ -3860,7 +3958,7 @@ def box_entries(events, team_id, number):
     side_title(side, "ENTRY CONTRIBUTORS")
     side_rows(
         side,
-        [(_surname(name), str(int(value))) for name, value in top.items()],
+        _with_others([(_surname(name), str(int(value))) for name, value in top.items()], len(frame)),
         start=0.81,
         gap=0.083,
     )
@@ -3884,6 +3982,19 @@ def box_entries(events, team_id, number):
     return save(fig, f"{number:02d}_box_entries_{_team_slug(team_id)}.png")
 
 
+def _with_others(rows, total):
+    """A leader list plus one line for everyone it leaves out.
+
+    A top-five beside a total reads as a list that should add up to it: eight
+    named entries under "Total entries: 9" looked like a lost entry, not a
+    sixth player and an action the feed credited to no one.
+    """
+    shown = sum(int(value) for _, value in rows)
+    if total > shown:
+        rows = list(rows) + [("Others", str(int(total - shown)))]
+    return rows
+
+
 def high_regains(events, team_id, number):
     frame = high_regain_events(events, team_id).dropna(subset=["x", "y"]).copy()
     fig, pitch, side = pitch_axes(
@@ -3893,45 +4004,69 @@ def high_regains(events, team_id, number):
     draw_long_pitch(pitch)
     threshold_y = 60 * PITCH_LENGTH / 100
     crop_to_attack(pitch, side, threshold_y - 12.0)
-    pitch.axhspan(threshold_y, PITCH_LENGTH, color=FOCUS, alpha=0.055)
-    pitch.axhline(threshold_y, color=FOCUS, lw=1.0, ls=(0, (5, 4)))
-    marker_map = {"Tackle": "o", "Interception": "D", "BallRecovery": "s"}
+    # On the grass only: axhspan and axhline ran past both touchlines.
+    pitch.add_patch(
+        Rectangle(
+            (-PITCH_WIDTH / 2, threshold_y),
+            PITCH_WIDTH,
+            PITCH_LENGTH - threshold_y,
+            facecolor=FOCUS,
+            edgecolor="none",
+            alpha=0.055,
+        )
+    )
+    pitch.plot(
+        [-PITCH_WIDTH / 2, PITCH_WIDTH / 2],
+        [threshold_y, threshold_y],
+        color=FOCUS,
+        lw=1.0,
+        ls=(0, (5, 4)),
+    )
+    # Named for the reader, and the "Other" bucket opened up: at Paris it held
+    # twelve of PSG's twenty-three, and they were loose balls played first time
+    # and second balls shot at once -- two things a coach wants told apart.
+    kinds = frame["type"].astype(str)
+    shot_kinds = {"Goal", "SavedShot", "MissedShots", "BlockedShot", "ShotOnPost"}
+    groups = [
+        ("Tackle", kinds.eq("Tackle"), "o"),
+        ("Interception", kinds.eq("Interception"), "D"),
+        ("Ball recovery", kinds.eq("BallRecovery"), "s"),
+        ("Won and shot", kinds.isin(shot_kinds), "*"),
+        (
+            "Loose ball played",
+            ~kinds.isin({"Tackle", "Interception", "BallRecovery"} | shot_kinds),
+            "^",
+        ),
+    ]
     team_mark = _team_mark_color(team_id)
-    for event_type, marker in marker_map.items():
-        subset = frame[frame["type"].astype(str).eq(event_type)]
+    for label, mask, marker in groups:
+        subset = frame[mask]
         if subset.empty:
             continue
         px, py = attack_xy(subset["x"], subset["y"])
         pitch.scatter(
             px,
             py,
-            s=130,
+            s=200 if marker == "*" else 130,
             marker=marker,
             color=team_mark,
             edgecolor=TEXT,
             linewidth=0.9,
-            label=f"{event_type} ({len(subset)})",
-        )
-    other = frame[~frame["type"].astype(str).isin(marker_map)]
-    if not other.empty:
-        px, py = attack_xy(other["x"], other["y"])
-        pitch.scatter(
-            px,
-            py,
-            s=130,
-            marker="^",
-            color=team_mark,
-            edgecolor=TEXT,
-            linewidth=0.9,
-            label=f"Other ({len(other)})",
+            label=f"{label} ({len(subset)})",
         )
     # The minute beside each regain, so the dot can be found in the match.
+    # Neighbours take the other side of their mark: three regains at 28' in
+    # the box printed as one smear.
+    placed = []
     for _, row in frame.iterrows():
         rx, ry = attack_xy([row["x"]], [row["y"]])
+        crowded = sum(np.hypot(rx[0] - qx, ry[0] - qy) < 5 for qx, qy in placed)
+        placed.append((rx[0], ry[0]))
+        offset = [(8, 5), (-20, 5), (8, -12), (-20, -12)][crowded % 4]
         pitch.annotate(
             f"{int(float(row['minute']))}′",
             (rx[0], ry[0]),
-            xytext=(8, 5),
+            xytext=offset,
             textcoords="offset points",
             color=TEXT,
             fontsize=7,
@@ -3952,7 +4087,10 @@ def high_regains(events, team_id, number):
         else pd.Series(dtype=int)
     )
     side_title(side, "HIGH-REGAIN LEADERS")
-    side_rows(side, [(_surname(name), str(int(value))) for name, value in top.items()])
+    side_rows(
+        side,
+        _with_others([(_surname(name), str(int(value))) for name, value in top.items()], len(frame)),
+    )
     side.text(
         0.08, 0.14, f"Total high regains: {len(frame)}", color=TEXT, fontsize=9, fontweight="bold"
     )
@@ -4031,7 +4169,12 @@ def _ppda_by_state(events, info):
     ]:
         for state in ("level", "leading", "trailing"):
             windows = spells[spells.team_id.eq(team_id) & spells.state.eq(state)]
-            if windows.empty:
+            # A state the side was never in is recorded as None, so the board
+            # can say "never led" instead of blaming a thin sample: Barcelona
+            # lost 4-2 without leading and were told they had "under 30
+            # opponent passes" while ahead.
+            if windows.empty or float(windows.minutes.sum()) <= 0:
+                out[(side, state)] = None
                 continue
             mask = pd.Series(False, index=events.index)
             for row in windows.itertuples():
@@ -4147,17 +4290,22 @@ def ppda(events):
         )
 
     height = 0.30
+    never = {"level": "was never level", "leading": "never led", "trailing": "never trailed"}
     for row, (label, home, home_min, away, away_min) in enumerate(rows):
         y = len(rows) - 1 - row
-        for value, minutes, colour, name, offset in (
-            (home, home_min, HOME, HOME_NAME, +height / 1.85),
-            (away, away_min, AWAY, AWAY_NAME, -height / 1.85),
+        state = label.lower()
+        for value, minutes, colour, name, offset, key in (
+            (home, home_min, HOME, HOME_NAME, +height / 1.85, "home"),
+            (away, away_min, AWAY, AWAY_NAME, -height / 1.85, "away"),
         ):
             if not value:
+                absent = (key, state) in by_state and by_state[(key, state)] is None
                 ax.text(
                     ceiling * 0.012,
                     y + offset,
-                    f"{name} — under 30 opponent passes in this state",
+                    f"{name} {never[state]}"
+                    if absent
+                    else f"{name} — under 30 opponent passes in this state",
                     va="center",
                     ha="left",
                     fontsize=8.5,
@@ -4589,8 +4737,22 @@ def transition_outcomes(events):
             ha="center",
         )
         pitch = fig.add_axes(pitch_rect)
-        pitch.axhspan(66.7 * PITCH_LENGTH / 100, PITCH_LENGTH, color=FOCUS, alpha=0.035, zorder=0)
+        # The final third as a patch on the grass: an axhspan ran the shading
+        # past both touchlines to the edge of the axes.
+        third_y = 66.7 * PITCH_LENGTH / 100
+        pitch.add_patch(
+            Rectangle(
+                (-PITCH_WIDTH / 2, third_y),
+                PITCH_WIDTH,
+                PITCH_LENGTH - third_y,
+                facecolor=FOCUS,
+                edgecolor="none",
+                alpha=0.035,
+                zorder=0,
+            )
+        )
         draw_long_pitch(pitch)
+        team_mark = _team_mark_color(team_id)
         # The transitions that went nowhere are a flow, not forty separate lines:
         # one average arrow per zone, so the few that made a chance stand out.
         quiet = pd.DataFrame(
@@ -4627,8 +4789,10 @@ def transition_outcomes(events):
                     "-",
                 )
             elif path["shot"]:
+                # In the side's own colour. One shared blue for both made
+                # Barcelona's chances read as PSG's.
                 color, alpha, width, marker, size, line_style = (
-                    EVENT_SUCCESS,
+                    team_mark,
                     0.82,
                     1.35,
                     "D",
@@ -4723,17 +4887,23 @@ def transition_outcomes(events):
         )
 
     legend = [
+        # Solid, as drawn: draw_zone_flow paints full arrows, and the dashed
+        # key described a line that was not on the pitch.
         Line2D(
             [0],
             [0],
-            color=EVENT_NEUTRAL,
-            lw=1.35,
-            alpha=0.55,
-            linestyle=QUIET_DASH,
+            color=_mix(EVENT_NEUTRAL, BG, 0.45),
+            lw=2.2,
             label="Average transition without a shot, by zone",
         ),
         Line2D(
-            [0], [0], color=EVENT_SUCCESS, lw=2, marker="D", markersize=5, label="Created a chance"
+            [0],
+            [0],
+            color=TEXT,
+            lw=2,
+            marker="D",
+            markersize=5,
+            label="Created a chance (side's colour)",
         ),
         Line2D(
             [0],
@@ -4768,45 +4938,25 @@ def transition_outcomes(events):
 
 
 def _game_state_durations(events):
-    period = events.get("period_code", pd.Series("", index=events.index)).astype(str).str.lower()
-    live = events[
-        ~period.isin(["pre", "prematch", "post", "postgame", "pso", "penaltyshootout"])
-    ].copy()
-    live["_clock"] = pd.to_numeric(live["minute"], errors="coerce").fillna(0) * 60 + pd.to_numeric(
-        live["second"], errors="coerce"
-    ).fillna(0)
-    shootout = as_bool(live.get("is_penalty_shootout", pd.Series(False, index=live.index)))
-    goals = (
-        live[as_bool(live.get("is_goal", pd.Series(False, index=live.index))) & ~shootout]
-        .sort_values(["_clock", "event_id"], kind="stable")
-        .copy()
-    )
-    # Game state is driven by the scoreline, so own goals must be credited to
-    # the side that benefits from them.
-    goals["_credited_team"] = (
-        base.credited_team(goals) if not goals.empty else pd.Series(dtype=float)
-    )
-    end_time = float(live["_clock"].max()) if not live.empty else 0.0
+    """Seconds spent level, home ahead and away ahead, period by period.
+
+    Read from score_spells, the same spells the pressing board splits PPDA by.
+    This used to run one clock from the first event to the last, and the
+    second half restarts at 45:00, so first-half added time was laid over the
+    second half and lost: Paris totalled 93.1 minutes here and 96 on the PPDA
+    board, with PSG ahead for 36.9 and 40 of them.
+    """
+    from football_analysis.metrics.match_insights import score_spells
+
     durations = {"drawing": 0.0, "home_ahead": 0.0, "away_ahead": 0.0}
-    home_score = away_score = 0
-    previous = 0.0
-
-    def current_state():
-        if home_score == away_score:
-            return "drawing"
-        return "home_ahead" if home_score > away_score else "away_ahead"
-
-    for _, goal in goals.iterrows():
-        clock = float(goal["_clock"])
-        durations[current_state()] += max(clock - previous, 0.0)
-        credited = int(float(goal.get("_credited_team", 0) or 0))
-        if credited == HOME_ID:
-            home_score += 1
-        elif credited == AWAY_ID:
-            away_score += 1
-        previous = clock
-    durations[current_state()] += max(end_time - previous, 0.0)
-    return durations, end_time
+    spells = score_spells(events, {"home_id": HOME_ID, "away_id": AWAY_ID})
+    if spells is None or spells.empty:
+        return durations, 0.0
+    home = spells[spells.side.eq("home")]
+    key = {"level": "drawing", "leading": "home_ahead", "trailing": "away_ahead"}
+    for state, minutes in home.groupby("state")["minutes"].sum().items():
+        durations[key[state]] += float(minutes) * 60
+    return durations, float(home["minutes"].sum()) * 60
 
 
 def game_state(events, team_metrics):
@@ -4920,7 +5070,8 @@ def game_state(events, team_metrics):
         fig.text(
             x + 0.020,
             0.742,
-            f"{scenario['title'].title()} · {minutes:.1f} min",
+            # Not .title(): it turned "PSG AHEAD" into "Psg Ahead".
+            f"{scenario['title'].capitalize().replace(HOME_NAME.upper().capitalize(), HOME_NAME).replace(AWAY_NAME.upper().capitalize(), AWAY_NAME)} · {minutes:.0f} min",
             color=TEXT,
             fontsize=8,
             va="center",
@@ -5060,7 +5211,7 @@ def game_state(events, team_metrics):
     fig.text(
         0.055,
         0.066,
-        "Game state is assigned at possession start · Timeline duration is reconstructed from goal times.",
+        "Game state is assigned at possession start · minutes are counted per half, added time included.",
         color=NEUTRAL,
         fontsize=7.5,
     )
@@ -5281,12 +5432,15 @@ def momentum(events):
     ax.axvline(45, color=MUTED, lw=0.9, ls=(0, (3, 4)), zorder=2)
     ax.text(45.5, top * 0.95, "HT", color=MUTED, fontsize=7.5, va="top")
     ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.55, zorder=0)
-    marks = np.linspace(-top, top, 5)
+    # Round steps, not the limit split in four: the axis read 4.1 / 2.0 / 0.0.
+    step = 0.5 if top <= 2.5 else (1.0 if top <= 6 else 2.0)
+    reach = np.floor(top / step) * step
+    marks = np.arange(-reach, reach + step / 2, step)
     ax.set_yticks(marks)
     ax.set_yticklabels([f"{abs(v):.1f}" for v in marks])
     ax.set_xticks([])
     ax.tick_params(labelsize=8)
-    ax.set_ylabel("threat built in the window", fontsize=8.5, color=MUTED)
+    ax.set_ylabel("xT built in the window", fontsize=8.5, color=MUTED)
     ax.text(
         0.004,
         0.97,
@@ -5658,15 +5812,24 @@ def finishing_quality(events):
         framed_xg = float(framed_rows["xG"].sum())
         post = float(framed_rows["_psxg"].sum())
         goals = int(as_bool(own.get("is_goal", pd.Series(False, index=own.index))).sum())
-        # Both figures in this comparison now cover the same attempts. The old
-        # one read post-shot xG against the xG of every shot including the
-        # eleven that never reached the frame, and so called every side in
-        # every match a poor finishing team.
-        verdict = (
-            "struck them better than they arrived"
-            if post > framed_xg
-            else "struck them worse than they arrived"
-        )
+        # The verdict reads post-shot xG against the xG of every attempt, not
+        # against the on-target subset. Post-shot xG is zero off target, so its
+        # total is what the chances were worth once struck -- misses included
+        # -- and across 841 stored matches it sums to 2657.9 against 2715.3 xG
+        # and 2596 goals. The on-target subset is not a fair baseline: a shot
+        # that reached the frame has already beaten the chance of missing that
+        # pre-shot xG prices in, so it out-priced its own xG in 95.5% of
+        # team-matches and the line praised nearly every side. Against all
+        # attempts the same data splits 47.7% / 52.3%. (The comparison once
+        # ran low the other way, when the placement heuristic underpriced
+        # post-shot xG; the fitted model replaced it.)
+        gap = post - pre
+        if abs(gap) < 0.15:
+            verdict = "struck them about as well as the chances were worth"
+        elif gap > 0:
+            verdict = "struck them better than the chances were worth"
+        else:
+            verdict = "struck them worse than the chances were worth"
         lines.append(
             f"{TEAM_NAME[team_id]}: {pre:.2f} xG created, {framed_xg:.2f} of it reached the "
             f"frame, worth {post:.2f} once struck, {goals} scored - {verdict}."
@@ -5747,7 +5910,20 @@ def pass_sonar(events):
     )
     passes["_ok"] = completed
 
-    reach = float(passes["pass_length"].quantile(0.92)) if not passes.empty else 30.0
+    # The scale ends just past the longest wedge, which is a median: set at the
+    # 92nd percentile of single passes it ran to 34 m while no wedge passed 23,
+    # and a third of each sonar was empty rings.
+    if passes.empty:
+        reach = 30.0
+    else:
+        sector = np.clip(
+            np.searchsorted(edges, np.mod(passes["pass_angle"].to_numpy(), 2 * np.pi), side="right")
+            - 1,
+            0,
+            BINS - 1,
+        )
+        medians = passes.groupby([passes["team_id"].to_numpy(), sector])["pass_length"].median()
+        reach = float(medians.max()) * 1.18
     reach = max(reach, 12.0)
 
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
@@ -5944,6 +6120,11 @@ def set_pieces(events):
         ax.tick_params(labelsize=8)
         for position, (count, value, (key, _label)) in enumerate(zip(shots, xgs, sources)):
             if count == 0:
+                # A row the other side filled: say none, rather than leave a
+                # label over an empty lane that reads as missing data.
+                ax.text(
+                    shot_max * 0.03, position, "none", color=MUTED, fontsize=8, va="center"
+                )
                 continue
             ax.text(
                 count + shot_max * 0.03,
@@ -6063,11 +6244,14 @@ def shape_over_time(events):
         ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.7)
         ax.tick_params(labelsize=8)
         ax.axvline(45, color=GRID, lw=0.9, ls=(0, (3, 4)))
-    height_ax.text(45.6, 2, "half time", color=NEUTRAL, fontsize=6.5, va="bottom")
+    height_ax.text(
+        45.6, 0.02, "half time", color=NEUTRAL, fontsize=6.5, va="bottom",
+        transform=height_ax.get_xaxis_transform(),
+    )
 
     panels = [
         (height_ax, defensive_line_height, "height", "Mean x of defensive actions"),
-        (spread_ax, team_compactness, "vertical_spread", "Vertical spread of touches (IQR)"),
+        (spread_ax, team_compactness, "vertical_spread", "Length of the team, up the pitch (IQR)"),
     ]
     for ax, source, column, label in panels:
         series = {}
@@ -6093,10 +6277,22 @@ def shape_over_time(events):
         # fill changes hands rather than a point the reader has to hunt for.
         if len(series) == 2:
             home_frame, away_frame = series[HOME_ID], series[AWAY_ID]
-            shared = sorted(set(home_frame["window_start"]) & set(away_frame["window_start"]))
+            # Both lines on every window either side has, interpolated across a
+            # window one side is missing. On the shared windows alone, a gap in
+            # one series became a straight cut through the other's curve and
+            # the fill drew a wedge where neither line went.
+            shared = sorted(set(home_frame["window_start"]) | set(away_frame["window_start"]))
             if shared:
-                home_line = home_frame.set_index("window_start").loc[shared, "_smooth"]
-                away_line = away_frame.set_index("window_start").loc[shared, "_smooth"]
+                home_line = (
+                    home_frame.set_index("window_start")["_smooth"]
+                    .reindex(shared)
+                    .interpolate(limit_direction="both")
+                )
+                away_line = (
+                    away_frame.set_index("window_start")["_smooth"]
+                    .reindex(shared)
+                    .interpolate(limit_direction="both")
+                )
                 minutes = np.array(shared, dtype=float) + 2.5
                 ax.fill_between(
                     minutes,
@@ -6122,7 +6318,17 @@ def shape_over_time(events):
                 )
         ax.set_ylabel(label, fontsize=8.5, color=MUTED)
 
-    height_ax.set_ylim(0, 100)
+    # The data's own range, halfway always in view: on 0-100 the two lines
+    # sat in a band from 25 to 60 and the differences were flattened.
+    heights = pd.concat(
+        [defensive_line_height(events, HOME_ID), defensive_line_height(events, AWAY_ID)]
+    )
+    if not heights.empty:
+        low = min(float(heights["height"].min()) - 5, 45.0)
+        high = max(float(heights["height"].max()) + 8, 55.0)
+        height_ax.set_ylim(max(low, 0), min(high, 100))
+    else:
+        height_ax.set_ylim(0, 100)
     height_ax.axhline(50, color=PITCH_LINE, lw=0.8, alpha=0.35)
     height_ax.text(
         0.995,
@@ -6241,7 +6447,9 @@ def playing_through(events, team_id, opponent_id, number):
     breaks = line_breaking_passes(events, team_id, opponent_id)
     fig, pitch, side = pitch_axes(
         f"Reception and Progression Routes \u00b7 {TEAM_NAME[team_id]}",
-        "Passes starting behind the opponent's defensive line and finishing beyond it \u00b7 line height per five-minute window",
+        # The line is measured per five-minute window but drawn once, at its
+        # average; the subtitle promised the windows the board never showed.
+        "Passes from behind the opponent's defensive line to beyond it \u00b7 dashed line = that line's average height",
     )
     draw_long_pitch(pitch)
     team_mark = _team_mark_color(team_id)
@@ -6321,7 +6529,10 @@ def playing_through(events, team_id, opponent_id, number):
         side.text(
             0.08,
             0.04,
-            f"{won}/{len(duels)} won  \u00b7  aerial {int(aerial['won'].sum())}/{len(aerial)}",
+            # Ground and air apart: one "16/46" beside the statistics page's
+            # 14/34 take-on contests and 2/6 aerials could not be reconciled.
+            f"ground {won - int(aerial['won'].sum())}/{len(duels) - len(aerial)}"
+            f"  \u00b7  aerial {int(aerial['won'].sum())}/{len(aerial)}",
             color=TEXT,
             fontsize=8,
             va="center",
@@ -6459,7 +6670,7 @@ def control_surface(events, players=None):
     grid, shares = pitch_control(events, HOME_ID, AWAY_ID)
     fig, pitch, side = pitch_axes(
         "Average-position Influence",
-        "Time-weighted touch windows split at substitutions · illustrative event model, not tracking",
+        "Time-weighted touch windows split at substitutions · discs: each side's 11 most-involved players",
     )
     cmap = LinearSegmentedColormap.from_list("control", [AWAY, PANEL_2, HOME])
     # grid is indexed [pitch_y, pitch_x]; this display puts pitch x up the page,
@@ -6477,23 +6688,56 @@ def control_surface(events, players=None):
     )
     draw_long_pitch(pitch)
 
+    # Eleven a side, the players with most touches, and pushed apart where two
+    # discs would land on each other. All twenty-six who played at Paris were
+    # drawn, and "2", "11", "8" and "20" printed through one another around the
+    # centre circle.
+    marks = []
     for team_id, color in [(HOME_ID, HOME), (AWAY_ID, AWAY)]:
         positions = team_average_positions(events, team_id)
         if positions.empty:
             continue
+        positions = positions.nlargest(11, "touches")
         # Both sides are plotted in the home team's attacking frame, which is
         # the frame the control grid was built in.
         xs = positions["x"] if team_id == HOME_ID else 100 - positions["x"]
         ys = positions["y"] if team_id == HOME_ID else 100 - positions["y"]
         px, py = attack_xy(xs, ys)
-        # Shirt numbers in the marks, so the white dots are people and not a cloud.
-        numbers = {}
-        if players is not None and "shirt_no" in players.columns:
-            numbers = dict(zip(players["name"].astype(str), players["shirt_no"]))
-        pitch.scatter(
-            px, py, s=230, marker="o", facecolors=color, edgecolors=BG, linewidths=1.2, zorder=6
-        )
         for name, x_, y_ in zip(positions["player"], px, py):
+            marks.append([float(x_), float(y_), str(name), color])
+    gap = 4.6
+    for _ in range(60):
+        moved = False
+        for i in range(len(marks)):
+            for j in range(i + 1, len(marks)):
+                dx = marks[j][0] - marks[i][0]
+                dy = marks[j][1] - marks[i][1]
+                dist = float(np.hypot(dx, dy))
+                if dist < gap:
+                    if dist < 1e-6:
+                        dx, dy, dist = 1.0, 0.0, 1.0
+                    push = (gap - dist) / 2
+                    marks[i][0] -= dx / dist * push
+                    marks[i][1] -= dy / dist * push
+                    marks[j][0] += dx / dist * push
+                    marks[j][1] += dy / dist * push
+                    moved = True
+        if not moved:
+            break
+    # Shirt numbers in the marks, so the white dots are people and not a cloud.
+    numbers = {}
+    if players is not None and "shirt_no" in players.columns:
+        numbers = dict(zip(players["name"].astype(str), players["shirt_no"]))
+    for color in (HOME, AWAY):
+        own = [m for m in marks if m[3] == color]
+        if not own:
+            continue
+        px = [m[0] for m in own]
+        py = [m[1] for m in own]
+        pitch.scatter(
+            px, py, s=200, marker="o", facecolors=color, edgecolors=BG, linewidths=1.2, zorder=6
+        )
+        for name, x_, y_ in ((m[2], m[0], m[1]) for m in own):
             shirt = numbers.get(str(name))
             if shirt is None or pd.isna(shirt):
                 continue
@@ -6551,7 +6795,9 @@ def sequence_types(events):
     base.amoled_header(
         fig,
         "How the Danger Was Built",
-        "Every possession classified by how it was constructed \u00b7 two sides can reach the same xG by completely different routes",
+        # Under the header's 115-character cap; the longer wording was cut to
+        # "...completely different ro\u2026".
+        "Every possession classified by how it was built \u00b7 two sides can reach the same xG by different routes",
     )
     labels = {
         "build_up": "Build-up",
@@ -6638,14 +6884,20 @@ def sequence_types(events):
     return save(fig, "45_sequence_types.png")
 
 
-def _goal_sequence(annotated, goal_row):
+def _goal_sequence(annotated, goal_row, possessions=None):
     """The scoring side's own touches in the possession a goal ended, in order.
 
     Passes and carries that reached a team-mate, plus the shot itself. Events by
     the opponent inside the same possession window (a clearance that dropped to
-    the scorer, say) are not part of the build-up and are left out.
+    the scorer, say) are not part of the build-up and are left out. A goal
+    scored from a second ball is traced back through the opponent's touch to
+    the possession that built it, as goal_origin_chains does.
     """
-    window = annotated[annotated["possession_id"].eq(goal_row["possession_id"])]
+    from football_analysis.metrics.match_metrics import goal_build_possession
+
+    goal_id = int(goal_row["possession_id"])
+    built_id = goal_build_possession(possessions, goal_id, goal_row["team_id"])
+    window = annotated[annotated["possession_id"].between(built_id, goal_id)]
     window = window[window["team_id"].eq(goal_row["team_id"])]
     shot = window[as_bool(window["is_goal"])].tail(1)
     moves = window[window["type"].astype(str).isin(["Pass", "Carry"])].dropna(
@@ -6668,12 +6920,14 @@ def goal_origins(events):
         fig.text(0.5, 0.5, "No goals from open sequences", color=MUTED, ha="center")
         return save(fig, "46_goal_origins.png")
 
-    annotated, _possessions = build_possessions(events)
+    annotated, possessions = build_possessions(events)
     goals = annotated[as_bool(annotated["is_goal"]) & ~as_bool(annotated["is_own_goal"])]
     goals = goals.dropna(subset=["possession_id"]).sort_values(["minute", "second"], kind="stable")
 
     count = len(chains)
-    columns = min(count, 4)
+    # Rows as even as the count allows: six goals in fours left two empty
+    # slots and a half-blank page.
+    columns = count if count <= 4 else min(int(np.ceil(count / 2)), 4)
     rows_n = int(np.ceil(count / columns))
     area_top, area_bottom = 0.84, 0.07
     cell_h = (area_top - area_bottom) / rows_n
@@ -6695,8 +6949,18 @@ def goal_origins(events):
         ax.set_facecolor(BG)
         draw_long_pitch(ax)
         ax.axis("off")
+        # A margin round the grass on these small pitches: a goal on the goal
+        # line put its star through the ATTACK label (Ruiz, 85'), and a chain
+        # that began at the corner flag had its first disc cut by the axes
+        # edge (Hernández, 71'). The spans grow in proportion, so the grass
+        # keeps its shape.
+        for text in ax.texts:
+            if text.get_text() == "ATTACK":
+                text.set_position((0, PITCH_LENGTH + 7))
+        ax.set_xlim(-PITCH_WIDTH / 2 - 8, PITCH_WIDTH / 2 + 8)
+        ax.set_ylim(-3, PITCH_LENGTH + 12)
 
-        moves, shot = _goal_sequence(annotated, goal._asdict())
+        moves, shot = _goal_sequence(annotated, goal._asdict(), possessions)
         for step, (_, move) in enumerate(moves.iterrows(), start=1):
             sx, sy = attack_xy([move["x"]], [move["y"]])
             ex, ey = attack_xy([move["end_x"]], [move["end_y"]])
@@ -6792,9 +7056,10 @@ def goal_origins(events):
             fontweight="bold",
             va="top",
         )
+        passes, players_n = int(row.passes), int(row.players)
         facts = (
-            f"{int(row.passes)} passes  ·  {float(row.duration):.0f} s  ·  "
-            f"{int(row.players)} players"
+            f"{passes} pass{'' if passes == 1 else 'es'}  ·  {float(row.duration):.0f} s  ·  "
+            f"{players_n} player{'' if players_n == 1 else 's'}"
         )
         fig.text(text_x, caption_top - 0.066, facts, color=TEXT, fontsize=8.5, va="top")
         fig.text(
@@ -6942,7 +7207,19 @@ def press_and_rest(events):
         left = 0.075 + column * 0.475
         fig.text(left, 0.80, team_name.upper(), color=color, fontsize=13, fontweight="bold")
 
-        triggers = pressing_triggers(events, team_id).head(6)
+        all_triggers = pressing_triggers(events, team_id)
+        triggers = all_triggers.head(6)
+        # Not every high regain has a trigger: some follow the side's own
+        # action, or a rebound off its own shot. Say how many the bars cover,
+        # so 20 bars' worth under 23 high regains elsewhere is not a gap.
+        covered = int(all_triggers["regains"].sum()) if not all_triggers.empty else 0
+        fig.text(
+            left,
+            0.775,
+            f"{covered} of {len(high_regain_events(events, team_id))} high regains followed an opponent action",
+            color=MUTED,
+            fontsize=8,
+        )
         ax = fig.add_axes([left, 0.40, 0.39, 0.33])
         base.clean_ax(ax)
         if triggers.empty:

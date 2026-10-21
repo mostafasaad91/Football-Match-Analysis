@@ -1597,7 +1597,9 @@ class TacticalPDF:
                 c.drawCentredString(x_crest, mid - 7, _club_initials(name))
             measure = centre - 95 - (left + 110)
             size = self._cv2_fit(name, COVER_TEXT, 22, measure)
-            manager = str(managers.get(side) or "").strip() if isinstance(managers, dict) else ""
+            from football_analysis.metrics.match_facts import manager_display_name
+
+            manager = manager_display_name(managers.get(side)) if isinstance(managers, dict) else ""
             sub = "  ·  ".join(p for p in (manager, self._cv2_shape(side)) if p)
             c.setFillColor(TEXT)
             c.setFont(COVER_TEXT, size)
