@@ -237,6 +237,7 @@ def build_square_poster(events, xg, team_metrics, info, out_dir, allow_download=
     )
     end_minute = max(90.0, float(minute.max()))
     ceiling = 0.4
+    finals = {}
     for side in (home_id, away_id):
         shots = events[
             events["team_id"].eq(side)
@@ -274,17 +275,27 @@ def build_square_poster(events, xg, team_metrics, info, out_dir, allow_download=
                 fontsize=9,
                 fontweight="bold",
             )
+        finals[side] = float(ys[-1])
+    flow.set_xlim(0, end_minute + 1)
+    flow.set_ylim(0, ceiling * 1.18)
+    # The two end figures, pushed apart when the totals finish close: 2.14 and
+    # 2.05 at Levante printed one on top of the other. 26pt display type needs
+    # about a tenth of the axis height between centres.
+    gap = ceiling * 1.18 * 0.11
+    (low_side, low), (high_side, high) = sorted(finals.items(), key=lambda kv: kv[1])
+    if high - low < gap:
+        middle = (high + low) / 2
+        low, high = middle - gap / 2, middle + gap / 2
+    for side, at in ((low_side, low), (high_side, high)):
         flow.text(
             end_minute + 2.2,
-            float(ys[-1]),
-            f"{ys[-1]:.2f}",
+            at,
+            f"{finals[side]:.2f}",
             color=colours[side],
             va="center",
             clip_on=False,
             **display(26),
         )
-    flow.set_xlim(0, end_minute + 1)
-    flow.set_ylim(0, ceiling * 1.18)
     flow.grid(axis="y", color=v.GRID, lw=0.9)
     flow.set_axisbelow(True)
     flow.axvline(45, color=v.GRID, lw=1.0, ls=(0, (3, 4)))

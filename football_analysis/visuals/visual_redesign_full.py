@@ -7047,10 +7047,21 @@ def goal_origins(events):
             va="top",
             **display(18),
         )
+        # A goal from the spot or straight from a free kick has no build-up to
+        # draw, and "SET PIECE · 0 passes · 0 s" read as a missing chain
+        # (Berenguer's penalty at Levante, 66').
+        tokens = str(getattr(goal, "qualifier_names", "")).lower()
+        direct = (
+            "penalty"
+            if "'penalty'" in tokens
+            else "direct free kick"
+            if "directfreekick" in tokens
+            else ""
+        )
         fig.text(
             text_x + 0.062,
             caption_top - 0.034,
-            str(row.sequence_type).replace("_", " ").upper(),
+            (direct or str(row.sequence_type).replace("_", " ")).upper(),
             color=MUTED,
             fontsize=7.5,
             fontweight="bold",
@@ -7058,14 +7069,16 @@ def goal_origins(events):
         )
         passes, players_n = int(row.passes), int(row.players)
         facts = (
-            f"{passes} pass{'' if passes == 1 else 'es'}  ·  {float(row.duration):.0f} s  ·  "
+            ("From the spot" if direct == "penalty" else "Straight from the free kick")
+            if direct
+            else f"{passes} pass{'' if passes == 1 else 'es'}  ·  {float(row.duration):.0f} s  ·  "
             f"{players_n} player{'' if players_n == 1 else 's'}"
         )
         fig.text(text_x, caption_top - 0.066, facts, color=TEXT, fontsize=8.5, va="top")
         fig.text(
             text_x,
             caption_top - 0.088,
-            "Started: " + str(row.started_from).replace("_", " "),
+            "" if direct else "Started: " + str(row.started_from).replace("_", " "),
             color=MUTED,
             fontsize=8,
             va="top",
