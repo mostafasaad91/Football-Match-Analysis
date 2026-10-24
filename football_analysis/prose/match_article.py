@@ -2435,12 +2435,30 @@ def render_pdf(article: Article, path: Path | str) -> Path:
 
     path = Path(path)
     regular, bold, italic, _bold_italic = _pdf_fonts()
-    ink, body_ink, grey, teal = (
-        HexColor("#172C36"),
-        HexColor("#333333"),
-        HexColor("#6B7280"),
-        HexColor("#137F82"),
-    )
+    # The dark package's PDF on black, as its boards are: white pages around
+    # AMOLED figures read as two documents bound together. The light package
+    # keeps paper.
+    import os
+
+    dark = os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower() != "light"
+    if dark:
+        page, ink, body_ink, text_ink, grey, teal = (
+            HexColor("#000000"),
+            HexColor("#FFFFFF"),
+            HexColor("#D4D4D4"),
+            HexColor("#E8E8E8"),
+            HexColor("#9CA3AF"),
+            HexColor("#2BB5A3"),
+        )
+    else:
+        page, ink, body_ink, text_ink, grey, teal = (
+            HexColor("#FFFFFF"),
+            HexColor("#172C36"),
+            HexColor("#333333"),
+            HexColor("#000000"),
+            HexColor("#6B7280"),
+            HexColor("#137F82"),
+        )
     style = {
         "strap": ParagraphStyle("strap", fontName=bold, fontSize=9, leading=12, textColor=grey),
         "title": ParagraphStyle(
@@ -2460,10 +2478,10 @@ def render_pdf(article: Article, path: Path | str) -> Path:
             keepWithNext=1,
         ),
         "body": ParagraphStyle(
-            "body", fontName=regular, fontSize=11, leading=13.75, spaceAfter=10, textColor=HexColor("#000000")
+            "body", fontName=regular, fontSize=11, leading=13.75, spaceAfter=10, textColor=text_ink
         ),
         "quote": ParagraphStyle(
-            "quote", fontName=bold, fontSize=13, leading=17, leftIndent=0.35 * inch, spaceAfter=10
+            "quote", fontName=bold, fontSize=13, leading=17, leftIndent=0.35 * inch, spaceAfter=10, textColor=ink
         ),
         "caption": ParagraphStyle(
             "caption", fontName=bold, fontSize=11.5, leading=14, textColor=ink, spaceBefore=10, spaceAfter=6
@@ -2510,7 +2528,7 @@ def render_pdf(article: Article, path: Path | str) -> Path:
         for visual in section.visuals:
             number = re.match(r"(\d+)", Path(visual).stem)
             mark = (
-                f'<font name="{bold}" size="8" color="#137F82">FIGURE {int(number.group(1)):02d}</font>&nbsp;&nbsp;&nbsp;'
+                f'<font name="{bold}" size="8" color="#{teal.hexval()[2:]}">FIGURE {int(number.group(1)):02d}</font>&nbsp;&nbsp;&nbsp;'
                 if number
                 else ""
             )
@@ -2534,6 +2552,8 @@ def render_pdf(article: Article, path: Path | str) -> Path:
 
     def chrome(canvas, doc):
         canvas.saveState()
+        canvas.setFillColor(page)
+        canvas.rect(0, 0, letter[0], letter[1], stroke=0, fill=1)
         canvas.setFont(regular, 9)
         canvas.setFillColor(teal)
         canvas.drawString(margin, letter[1] - 0.55 * inch, "MOSTAFA SAAD  /  MATCH STUDY")
