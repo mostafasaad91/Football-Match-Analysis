@@ -37,7 +37,6 @@ DEFENSIVE_ACTIONS = (
     "Challenge",
     "BlockedPass",
 )
-PRESSING_ACTIONS = ("Tackle", "Interception", "Challenge", "Foul")
 
 
 
@@ -528,18 +527,21 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
     side.def_actions_low = int((dx < THIRD).sum())
     side.def_action_avg_x = float(dx.mean()) if len(dx.dropna()) else 0.0
 
-    # PPDA: the opponent's passes in their own 60%, per pressing action of ours
-    # in the same area of the pitch.
-    opponent_passes = (
-        opponent[_truthy(opponent["is_pass"])]
-        if "is_pass" in opponent.columns
-        else opponent.iloc[0:0]
+    # PPDA from the one definition the boards and posters use. This kept its
+    # own -- a different list of pressing actions -- and the article printed
+    # 14.29 and 12.04 for Bayern and Arsenal in the same piece that quoted the
+    # statistics page's 10.4 and 7.7.
+    from football_analysis.reports.match_report import calculate_ppda
+
+    opponent_id = opponent["team_id"].dropna().iloc[0] if len(opponent) else None
+    own_id = own["team_id"].dropna().iloc[0] if len(own) else None
+    both = pd.concat([own, opponent])
+    ppda = (
+        calculate_ppda(both, own_id, opponent_id).get("ppda")
+        if own_id is not None and opponent_id is not None
+        else None
     )
-    deep = pd.to_numeric(opponent_passes.get("x"), errors="coerce") <= 60
-    pressing = own[own["type"].astype(str).isin(PRESSING_ACTIONS)]
-    high = pd.to_numeric(pressing.get("x"), errors="coerce") >= 40
-    actions = int(high.sum())
-    side.ppda = float(int(deep.sum()) / actions) if actions else 0.0
+    side.ppda = float(ppda) if ppda else 0.0
 
     crosses = own[_truthy(own["is_cross"])] if "is_cross" in own.columns else own.iloc[0:0]
     if len(crosses) and not side.crosses:

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -234,6 +235,10 @@ class _Match:
         self.hx, self.ax = _xg_row(xg, self.home), _xg_row(xg, self.away)
         self.players = player_metrics
         self.competition = _text(info.get("competition"))
+        # A headline the editor chose for this fixture, kept in its
+        # match_info.json; it outranks the generated one.
+        self.headline = _text(info.get("headline"))
+        self.standfirst = _text(info.get("standfirst"))
 
         self.home_goals = int(_num(self.hx, "goals"))
         self.away_goals = int(_num(self.ax, "goals"))
@@ -1462,12 +1467,93 @@ BUILDERS = (
 
 
 def _title(m: _Match) -> tuple[str, str]:
-    """The headline, taken from whatever actually separated the two sides."""
-    _strength, headline, standfirst = max(_title_candidates(m), key=lambda row: row[0])
+    """The headline: the match as a whole where the data allows it.
+
+    The single strongest finding used to be the headline, so a match two sides
+    shared was published as one side's story -- Bayern 2-2 Arsenal went out as
+    "Arsenal Left The Space Behind Them. Bayern Ran Into It.", which is the
+    counter-attacks and nothing of Arsenal's control. When the two strongest
+    findings belong to different sides, the headline names both and says what
+    the result made of them; a match one side owned keeps a one-sided headline.
+    """
+    themes: list = []
+    candidates = _title_candidates(m, themes)
+    _strength, headline, standfirst = max(candidates, key=lambda row: row[0])
+    combined = _combined_title(m, themes)
+    if combined:
+        headline, standfirst = combined
+    if m.headline:
+        headline = m.headline
+    if m.standfirst:
+        standfirst = m.standfirst
+    # A finding that opens on a lower-case word ("every goal came from a
+    # restart") follows the result clause; each sentence starts upper-case.
+    standfirst = re.sub(r"(^|[.!?] )([a-z])", lambda g: g.group(1) + g.group(2).upper(), standfirst)
     return headline, standfirst
 
 
-def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
+def _combined_title(m: _Match, themes: list) -> tuple[str, str] | None:
+    """Both sides' strongest findings in one headline, or None.
+
+    The phrasing rotates by fixture so a round of articles does not open on
+    one sentence with the names swapped, and it is fixed per fixture: the same
+    match always gets the same headline.
+    """
+    ranked = sorted(themes, key=lambda row: -row[0])
+    if not ranked:
+        return None
+    first = ranked[0]
+    second = next((row for row in ranked[1:] if row[1] != first[1] and row[2] != first[2]), None)
+    if second is None:
+        return None
+    _s1, a_side, a_word, a_have, a_stand = first
+    _s2, b_side, b_word, b_have, b_stand = second
+    score = str(m.winner_score if m.winner else m.score)
+    pick = zlib.crc32(f"{m.home}|{m.away}|{m.score}".encode("utf-8"))
+
+    if m.winner:
+        if a_side == m.winner:
+            w_side, w_word, w_have, l_side, l_word, l_have = (
+                a_side, a_word, a_have, b_side, b_word, b_have,
+            )
+        else:
+            w_side, w_word, w_have, l_side, l_word, l_have = (
+                b_side, b_word, b_have, a_side, a_word, a_have,
+            )
+        options = [
+            f"{l_word} for {l_side}, {w_word} for {w_side}: How {w_side} Won {score}",
+            f"{w_side}'s {w_word} Beat {l_side}'s {l_word}",
+            f"{l_side} Had {_cap(l_have)}, {w_side} Had {_cap(w_have)} and the Win",
+            f"{w_word} Over {l_word}: How {w_side} Beat {l_side} {score}",
+        ]
+    else:
+        options = [
+            f"{a_word} Against {b_word}: How {m.home} and {m.away} Cancelled Each Other Out",
+            f"{a_word} to {a_side}, {b_word} to {b_side}: Inside a {score} Neither Side Settled",
+            f"{a_side} Had {_cap(a_have)}, {b_side} Had {_cap(b_have)}, and Neither Could Win It",
+            f"{a_side}'s {a_word}, {b_side}'s {b_word}, and a {score} That Split the Difference",
+        ]
+        if {a_word, b_word} == {"Control", "Counter-Attacks"}:
+            controller = a_side if a_word == "Control" else b_side
+            breaker = b_side if controller == a_side else a_side
+            options.append(f"{controller} Ran the Match, {breaker} Ran at {controller}")
+    headline = options[pick % len(options)]
+    # Both findings in the standfirst: the first in full, the second without
+    # the result clause the two share.
+    tail = b_stand.split(". ", 1)[1] if ". " in b_stand else b_stand
+    return headline, f"{a_stand} {tail}"
+
+
+def _cap(phrase: str) -> str:
+    """Title-case a short phrase the way the headlines are set."""
+    small = {"the", "a", "an", "of", "into", "to", "and", "for", "at", "in"}
+    words = phrase.split()
+    # The phrase always sits mid-headline, so a small word stays lower-case
+    # even when it opens the phrase ("Had the Ball", not "Had The Ball").
+    return " ".join(w if w in small else w[:1].upper() + w[1:] for w in words)
+
+
+def _title_candidates(m: _Match, themes: list | None = None) -> list[tuple[float, str, str]]:
     """Every headline this match supports, with the weight that ranks it.
 
     There used to be three titles in the whole file — one per result shape — so
@@ -1488,9 +1574,13 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
     """
     candidates: list[tuple[float, str, str]] = []
 
-    def offer(strength: float, headline: str, standfirst: str) -> None:
+    def offer(strength: float, headline: str, standfirst: str, theme=None) -> None:
         if strength > 0:
             candidates.append((strength, headline, standfirst))
+            # (side, word, what they had): the same finding as one side's
+            # share of the match, for the combined headline in _title.
+            if themes is not None and theme and theme[0] in (m.home, m.away):
+                themes.append((strength, theme[0], theme[1], theme[2], standfirst))
 
     result = (
         f"{m.winner} beat {m.loser} {m.winner_score}"
@@ -1525,6 +1615,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
             f"{result}. The expected goals finished "
             f"{m.of(m.loser, m.home_xg, m.away_xg):.2f} to "
             f"{m.of(m.winner, m.home_xg, m.away_xg):.2f} the other way.",
+            theme=(m.loser, "Chances", "the chances"),
         )
 
     # -- territory that never became threat -------------------------------
@@ -1539,6 +1630,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
             f"{result}. {tilt_leader} held "
             f"{m.of(tilt_leader, home_tilt, away_tilt):.1f}% of the final-third "
             f"passing and {tilt_xg:.2f} expected goals for it.",
+            theme=(tilt_leader, "Control", "the ball"),
         )
 
     # -- the last twenty metres ------------------------------------------
@@ -1570,6 +1662,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
                 f"{m.of(better, home_survival, away_survival):.0f}% of its "
                 f"final-third entries into the box; {worse} "
                 f"{m.of(worse, home_survival, away_survival):.0f}%.",
+                theme=(better, "Penetration", "the way into the box"),
             )
 
     # -- what a shot was worth -------------------------------------------
@@ -1591,6 +1684,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
             f"{result}. {quality} averaged "
             f"{m.of(quality, home_per, away_per):.3f} expected goals an attempt "
             f"against {m.of(blunt, home_per, away_per):.3f}, from fewer shots.",
+            theme=(quality, "Danger", "the better chances"),
         )
 
     # -- broken play ------------------------------------------------------
@@ -1626,16 +1720,31 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
         scored_there = _num(m.of(breaker, m.hm, m.am), "transition_goals") >= 1
         if not transition_level and share >= TRANSITION_SHARE:
             if breaker == m.winner and scored_there:
-                offer(0.9 + share, f"{breaker} Won The Match In The Broken Moments", reading)
+                offer(
+                    0.9 + share,
+                    f"{breaker} Won The Match In The Broken Moments",
+                    reading,
+                    theme=(breaker, "Counter-Attacks", "the counters"),
+                )
             elif breaker == m.winner:
                 # Led the turnovers and won, but the goals came from somewhere
                 # else: a claim about where the threat was, not about the win.
-                offer(0.8 + share, f"{breaker}'s Threat Lived In The Turnovers", reading)
+                offer(
+                    0.8 + share,
+                    f"{breaker}'s Threat Lived In The Turnovers",
+                    reading,
+                    theme=(breaker, "Counter-Attacks", "the counters"),
+                )
             else:
                 # Still worth the headline — a side whose threat was almost all
                 # turnovers played a particular way — but it did not win, so
                 # the sentence must not say it did.
-                offer(0.7 + share, f"{breaker} Broke Well And Still Did Not Win", reading)
+                offer(
+                    0.7 + share,
+                    f"{breaker} Broke Well And Still Did Not Win",
+                    reading,
+                    theme=(breaker, "Counter-Attacks", "the counters"),
+                )
 
     # -- chances a side had to keep making ---------------------------------
     #
@@ -1695,6 +1804,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
                 f"{result}. {how} came from a restart, which is the part of "
                 f"a match a side can rehearse and the part an opponent can "
                 f"defend without ever touching the ball in open play.",
+                theme=(m.winner, "Set Pieces", "the set pieces"),
             )
         elif total == 1 and dead == 1:
             # Named, because two 1-0s decided by a restart would otherwise
@@ -1722,6 +1832,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
                 f"distance it travelled, against "
                 f"{m.of(shorter, home_direct, away_direct):.0f}% — two "
                 f"different answers to the same pitch.",
+                theme=(longer, "Directness", "the long ball"),
             )
 
     # -- crosses that bought nothing ---------------------------------------
@@ -1737,6 +1848,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
             f"produced {_spell(int(crosser_big))} big "
             f"{_plural(int(crosser_big), 'chance')}, which is a route into "
             f"the box rather than a way through it.",
+            theme=(crosser, "Width", "the width"),
         )
 
     # -- the space behind the press ----------------------------------------
@@ -1752,6 +1864,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
             f"dangerous counter, against {m.of(solid, home_rest, away_rest):.1f}% "
             f"for {solid}. That is the bill for committing bodies, and it "
             f"comes due whether or not the press works.",
+            theme=(solid, "Counter-Attacks", "the counters"),
         )
 
     # -- one side living in the other's half --------------------------------
@@ -1767,6 +1880,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
             f"{m.of(pinned, home_att, away_att):.0f}%. Territory that "
             f"one-sided decides what the match looked like; whether it "
             f"decided the result is the rest of this piece.",
+            theme=(camped, "Territory", "the territory"),
         )
 
     # -- the press, and what it was turned into -----------------------------
@@ -1811,6 +1925,7 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
                 f"{_spell(press_goals).title()} "
                 f"{_plural(press_goals, 'Goal').title()}",
                 reading,
+                theme=(presser, "Pressing", "the press"),
             )
         elif press_shots >= 6:
             offer(
@@ -1818,9 +1933,15 @@ def _title_candidates(m: _Match) -> list[tuple[float, str, str]]:
                 f"How {presser}'s Press Turned {pressed}'s Build-Up Into "
                 f"{_spell(int(press_shots)).title()} Shots",
                 reading,
+                theme=(presser, "Pressing", "the press"),
             )
         else:
-            offer(1.7, f"{presser} Pressed High And {pressed} Kept Playing Into It", reading)
+            offer(
+                1.7,
+                f"{presser} Pressed High And {pressed} Kept Playing Into It",
+                reading,
+                theme=(presser, "Pressing", "the press"),
+            )
 
     # -- everything built, and what reached the goalkeeper ------------------
     #
@@ -2241,6 +2362,212 @@ def render_docx(article: Article, path: Path | str, home: str = "", away: str = 
     return path
 
 
+# --------------------------------------------------------------------------
+# PDF output
+# --------------------------------------------------------------------------
+
+
+def _pdf_fonts() -> tuple[str, str, str, str]:
+    """Calibri where Windows has it, as the Word copy uses; DejaVu otherwise.
+
+    Both carry the accents player names need (Ødegaard, Zaïre-Emery,
+    Kvaratskhelia's transliterations), which the PDF base-14 fonts do not.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    names = ("ArticleSans", "ArticleSans-Bold", "ArticleSans-Italic", "ArticleSans-BoldItalic")
+    if names[0] in pdfmetrics.getRegisteredFontNames():
+        return names
+    windows = Path("C:/Windows/Fonts")
+    calibri = [windows / f for f in ("calibri.ttf", "calibrib.ttf", "calibrii.ttf", "calibriz.ttf")]
+    if all(p.exists() for p in calibri):
+        files = calibri
+    else:
+        from matplotlib import get_data_path
+
+        root = Path(get_data_path()) / "fonts" / "ttf"
+        files = [
+            root / f
+            for f in (
+                "DejaVuSans.ttf",
+                "DejaVuSans-Bold.ttf",
+                "DejaVuSans-Oblique.ttf",
+                "DejaVuSans-BoldOblique.ttf",
+            )
+        ]
+    for name, file in zip(names, files):
+        pdfmetrics.registerFont(TTFont(name, str(file)))
+    pdfmetrics.registerFontFamily(
+        names[0], normal=names[0], bold=names[1], italic=names[2], boldItalic=names[3]
+    )
+    return names
+
+
+def render_pdf(article: Article, path: Path | str) -> Path:
+    """Write the article as the package's PDF: the Word copy, page for page.
+
+    The report PDF and the article were two documents. They argued from the
+    same frames but in different words, so a reader holding both met the same
+    figure described twice and, now and then, two different numbers for it.
+    The PDF is now the article: the same strap, title, standfirst, sections,
+    figures, captions and readings, in the same order, built from the same
+    Article object as render_docx.
+
+    The first page is the report's cover card -- the page article_cover.png is
+    rendered from, which the Word copy opens on as a picture. It is taken from
+    the PDF already at ``path`` (build_tactical_pdf writes it first), so it
+    stays a vector page rather than a pasted image.
+    """
+    import shutil
+    import tempfile
+    from xml.sax.saxutils import escape
+
+    import fitz
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer
+
+    from football_analysis.prose.match_editorial import commentary_title
+    from football_analysis.prose.prose_hygiene import clean
+
+    path = Path(path)
+    regular, bold, italic, _bold_italic = _pdf_fonts()
+    ink, body_ink, grey, teal = (
+        HexColor("#172C36"),
+        HexColor("#333333"),
+        HexColor("#6B7280"),
+        HexColor("#137F82"),
+    )
+    style = {
+        "strap": ParagraphStyle("strap", fontName=bold, fontSize=9, leading=12, textColor=grey),
+        "title": ParagraphStyle(
+            "title", fontName=regular, fontSize=25, leading=30, textColor=ink, spaceAfter=10
+        ),
+        "stand": ParagraphStyle(
+            "stand", fontName=italic, fontSize=13.5, leading=18, textColor=body_ink, spaceAfter=12
+        ),
+        "h2": ParagraphStyle(
+            "h2",
+            fontName=bold,
+            fontSize=16,
+            leading=20,
+            textColor=ink,
+            spaceBefore=14,
+            spaceAfter=8,
+            keepWithNext=1,
+        ),
+        "body": ParagraphStyle(
+            "body", fontName=regular, fontSize=11, leading=13.75, spaceAfter=10, textColor=HexColor("#000000")
+        ),
+        "quote": ParagraphStyle(
+            "quote", fontName=bold, fontSize=13, leading=17, leftIndent=0.35 * inch, spaceAfter=10
+        ),
+        "caption": ParagraphStyle(
+            "caption", fontName=bold, fontSize=11.5, leading=14, textColor=ink, spaceBefore=10, spaceAfter=6
+        ),
+        "note": ParagraphStyle(
+            "note", fontName=regular, fontSize=10.5, leading=13.5, textColor=body_ink, spaceAfter=12
+        ),
+        "footer": ParagraphStyle(
+            "footer", fontName=italic, fontSize=9, leading=12, textColor=grey, spaceBefore=8
+        ),
+    }
+
+    def para(text: str, key: str) -> Paragraph:
+        return Paragraph(escape(clean(text)), style[key])
+
+    margin = 0.9 * inch
+    frame_w = letter[0] - 2 * margin
+    frame_h = letter[1] - 2 * inch
+
+    def picture(file: Path, width_in: float) -> Image:
+        from PIL import Image as PILImage
+
+        with PILImage.open(file) as image:
+            w, h = image.size
+        width = min(width_in * inch, frame_w)
+        height = width * h / w
+        if height > frame_h * 0.82:
+            height = frame_h * 0.82
+            width = height * w / h
+        return Image(str(file), width=width, height=height)
+
+    cover_source = path if path.exists() else None
+    story = []
+    if cover_source is None and article.cover is not None and Path(article.cover).exists():
+        story.append(picture(Path(article.cover), 6.4))
+    story += [para(article.strap, "strap"), para(article.title, "title"), para(article.standfirst, "stand")]
+
+    for section in article.sections:
+        story.append(para(section.heading, "h2"))
+        for paragraph in section.paragraphs:
+            story.append(para(paragraph, "body"))
+        if section.pull_quote:
+            story.append(para(section.pull_quote, "quote"))
+        for visual in section.visuals:
+            number = re.match(r"(\d+)", Path(visual).stem)
+            mark = (
+                f'<font name="{bold}" size="8" color="#137F82">FIGURE {int(number.group(1)):02d}</font>&nbsp;&nbsp;&nbsp;'
+                if number
+                else ""
+            )
+            title = escape(clean(commentary_title(visual, article.context or {})))
+            block = [picture(Path(visual), 6.2), Paragraph(mark + title, style["caption"])]
+            note = _analysis(visual, article.context)
+            if note:
+                block.append(para(note, "note"))
+            story.append(KeepTogether(block[:2]))
+            story.extend(block[2:])
+
+    story.append(
+        para(
+            "All figures derived from match event data. Visuals generated with an "
+            "open-source pipeline.",
+            "footer",
+        )
+    )
+
+    offset = 1 if cover_source is not None else 0
+
+    def chrome(canvas, doc):
+        canvas.saveState()
+        canvas.setFont(regular, 9)
+        canvas.setFillColor(teal)
+        canvas.drawString(margin, letter[1] - 0.55 * inch, "MOSTAFA SAAD  /  MATCH STUDY")
+        canvas.setFillColor(grey)
+        canvas.drawRightString(letter[0] - margin, 0.55 * inch, str(doc.page + offset))
+        canvas.restoreState()
+
+    with tempfile.TemporaryDirectory() as scratch:
+        body = Path(scratch) / "article_body.pdf"
+        SimpleDocTemplate(
+            str(body),
+            pagesize=letter,
+            leftMargin=margin,
+            rightMargin=margin,
+            topMargin=inch,
+            bottomMargin=inch,
+            title=clean(article.title),
+            author="Mostafa Saad",
+        ).build(story, onFirstPage=chrome, onLaterPages=chrome)
+
+        merged = fitz.open()
+        if cover_source is not None:
+            with fitz.open(cover_source) as source:
+                merged.insert_pdf(source, from_page=0, to_page=0)
+        with fitz.open(body) as pages:
+            merged.insert_pdf(pages)
+        staged = Path(scratch) / "merged.pdf"
+        merged.save(str(staged), garbage=3, deflate=True)
+        merged.close()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(staged, path)
+    return path
+
+
 # What each board actually shows. Every visual the package produces has an
 # entry: the fallback turned a filename into title case, so thirty-six of the
 # fifty-three carried "Xt Map Arsenal" where a caption belonged.
@@ -2381,7 +2708,13 @@ def build_match_article(
         from football_analysis.prose.publication_v2 import write_markdown
 
         write_markdown(article, Path(out_dir))
-        return render_docx(article, target, article.home, article.away)
+        docx = render_docx(article, target, article.home, article.away)
+        # The package PDF is the same article, so the two cannot differ.
+        try:
+            render_pdf(article, Path(out_dir) / "full_visual_redesign_real_data.pdf")
+        except Exception as error:
+            print(f"  ! article PDF not written — {type(error).__name__}: {error}")
+        return docx
     except Exception as error:
         # The article is optional — a failure here must not take the package
         # down with it — but a silent None is indistinguishable from a refusal,
