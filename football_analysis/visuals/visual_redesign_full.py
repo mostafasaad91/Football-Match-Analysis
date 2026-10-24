@@ -6670,7 +6670,7 @@ def control_surface(events, players=None):
     grid, shares = pitch_control(events, HOME_ID, AWAY_ID)
     fig, pitch, side = pitch_axes(
         "Average-position Influence",
-        "Time-weighted touch windows split at substitutions · discs: each side's 11 most-involved players",
+        "Time-weighted touch windows split at substitutions · disc = starter, square = substitute",
     )
     cmap = LinearSegmentedColormap.from_list("control", [AWAY, PANEL_2, HOME])
     # grid is indexed [pitch_y, pitch_x]; this display puts pitch x up the page,
@@ -6688,23 +6688,28 @@ def control_surface(events, players=None):
     )
     draw_long_pitch(pitch)
 
-    # Eleven a side, the players with most touches, and pushed apart where two
-    # discs would land on each other. All twenty-six who played at Paris were
-    # drawn, and "2", "11", "8" and "20" printed through one another around the
-    # centre circle.
+    # Everyone who played, starters as discs and substitutes as squares, the
+    # mark used for a man who came on in the pass networks. Pushed apart where
+    # two would land on each other: drawn as they fell, "2", "11", "8" and "20"
+    # printed through one another around the centre circle at Paris. An
+    # earlier cut to the eleven with most touches dropped a starting
+    # centre-forward first -- Gyökeres, 67 minutes and 16 touches against
+    # Everton.
+    came_on = set(
+        events.loc[events["type"].astype(str).eq("SubstitutionOn"), "player"].astype(str)
+    )
     marks = []
     for team_id, color in [(HOME_ID, HOME), (AWAY_ID, AWAY)]:
         positions = team_average_positions(events, team_id)
         if positions.empty:
             continue
-        positions = positions.nlargest(11, "touches")
         # Both sides are plotted in the home team's attacking frame, which is
         # the frame the control grid was built in.
         xs = positions["x"] if team_id == HOME_ID else 100 - positions["x"]
         ys = positions["y"] if team_id == HOME_ID else 100 - positions["y"]
         px, py = attack_xy(xs, ys)
         for name, x_, y_ in zip(positions["player"], px, py):
-            marks.append([float(x_), float(y_), str(name), color])
+            marks.append([float(x_), float(y_), str(name), color, str(name) in came_on])
     gap = 4.6
     for _ in range(60):
         moved = False
@@ -6732,11 +6737,19 @@ def control_surface(events, players=None):
         own = [m for m in marks if m[3] == color]
         if not own:
             continue
-        px = [m[0] for m in own]
-        py = [m[1] for m in own]
-        pitch.scatter(
-            px, py, s=200, marker="o", facecolors=color, edgecolors=BG, linewidths=1.2, zorder=6
-        )
+        for substitute, marker, size in ((False, "o", 200), (True, "s", 165)):
+            group = [m for m in own if m[4] == substitute]
+            if group:
+                pitch.scatter(
+                    [m[0] for m in group],
+                    [m[1] for m in group],
+                    s=size,
+                    marker=marker,
+                    facecolors=color,
+                    edgecolors=FOCUS if substitute else BG,
+                    linewidths=1.4 if substitute else 1.2,
+                    zorder=6,
+                )
         for name, x_, y_ in ((m[2], m[0], m[1]) for m in own):
             shirt = numbers.get(str(name))
             if shirt is None or pd.isna(shirt):
@@ -6761,9 +6774,10 @@ def control_surface(events, players=None):
             ("patch", HOME, f"{HOME_NAME} holds"),
             ("patch", PANEL_2, "Contested"),
             ("patch", AWAY, f"{AWAY_NAME} holds"),
-            ("o", TEXT, "Average position"),
+            ("o", TEXT, "Starter"),
+            ("s", TEXT, "Substitute"),
         ],
-        ncol=4,
+        ncol=5,
     )
 
     side_title(side, "TERRITORY")

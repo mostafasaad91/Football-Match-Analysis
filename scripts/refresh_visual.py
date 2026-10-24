@@ -11,6 +11,7 @@ reparsed and nothing else in the package is touched.
 
     python scripts/refresh_visual.py finishing_quality
     python scripts/refresh_visual.py finishing_quality Napoli Arsenal
+    python scripts/refresh_visual.py control_surface:pitch_control Arsenal_vs_Everton
 
 Both themes are done: the dark copy in this process and the light copy in a
 child, because visualization_components reads MATCH_ANALYSIS_THEME once when
@@ -71,11 +72,18 @@ def redraw(package: Path, theme_dir: Path, function: str, token: str) -> str:
 
     info = json.loads((package / "match_info.json").read_text(encoding="utf-8"))
     events = pd.read_csv(package / "events.csv")
+    import inspect
+
+    draw = getattr(full, function)
+    # A board that names players needs the squad: without it the average-
+    # position map drew discs with no shirt numbers in them.
+    wants_players = "players" in inspect.signature(draw).parameters
+    players = pd.read_csv(package / "players.csv") if wants_players else None
 
     staging = Path(tempfile.mkdtemp(prefix="refresh-"))
     try:
         full.configure_match(info, staging)
-        drawn = getattr(full, function)(events)
+        drawn = draw(events, players) if wants_players else draw(events)
         if drawn is None or not Path(drawn).exists():
             return "draw produced nothing"
         for target in existing:
@@ -91,7 +99,10 @@ def main() -> int:
         print(__doc__)
         return 2
     function, patterns = arguments[0], arguments[1:]
-    token = function
+    # "control_surface:pitch_control" when the published file is not named
+    # after the function that draws it.
+    function, _, token = function.partition(":")
+    token = token or function
 
     theme = os.environ.get("MATCH_ANALYSIS_THEME", "dark")
     light = theme == "light"
@@ -128,7 +139,7 @@ def main() -> int:
         print("\n--- light copies ---", flush=True)
         child = {**os.environ, "MATCH_ANALYSIS_THEME": "light", "PYTHONIOENCODING": "utf-8"}
         done = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve()), function, *patterns],
+            [sys.executable, str(Path(__file__).resolve()), f"{function}:{token}", *patterns],
             cwd=ROOT,
             env=child,
         )
