@@ -97,19 +97,23 @@ def match_log(league: lb.League, team: str) -> Path:
             fontsize=9,
             fontweight="bold",
         )
+        # On two lines, name over venue, and shortened to what the column holds:
+        # with eight games "Parma Calcio 1913 (H)" ran through both neighbours.
+        opponent = str(game.opponent).replace(" Calcio 1913", "").replace("Borussia ", "B. ")
         ax.text(
             x,
             -top * 0.06,
-            f"{game.opponent} ({game.venue})",
+            f"{opponent}\n({game.venue})",
             ha="center",
             va="top",
             color=base.TEXT,
-            fontsize=10,
+            fontsize=10 if len(games) <= 6 else 9,
             fontweight="bold",
+            linespacing=1.15,
         )
         ax.text(
             x,
-            -top * 0.14,
+            -top * 0.20,
             f"Round {int(game.round)}",
             ha="center",
             va="top",
@@ -118,7 +122,7 @@ def match_log(league: lb.League, team: str) -> Path:
         )
         ax.text(
             x,
-            -top * 0.215,
+            -top * 0.27,
             f"shots {int(game.shots)}–{int(game.shots_against)}",
             ha="center",
             va="top",
@@ -128,7 +132,7 @@ def match_log(league: lb.League, team: str) -> Path:
         press = game.ppda_passes_allowed / max(game.ppda_defensive_actions, 1)
         ax.text(
             x,
-            -top * 0.285,
+            -top * 0.34,
             f"PPDA {press:.1f}",
             ha="center",
             va="top",
