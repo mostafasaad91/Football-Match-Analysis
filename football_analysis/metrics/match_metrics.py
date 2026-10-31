@@ -1420,6 +1420,23 @@ def shot_set_piece_source(row: Any) -> str:
 
 SET_PIECE_LOOKBACK_EVENTS = 3
 
+# A free kick taken in the taker's own half restarts play; it does not deliver
+# the ball. Brighton's winner at City came from Dunk launching one from his own
+# half, a cross from the left and a Nunes error -- WhoScored tagged the goal
+# SetPiece and FreekickTaken sat inside the lookback, so it was published as a
+# dead-ball goal when every analyst watching called it open play.
+DEEP_RESTART_MAX_X = 50.0
+
+
+def is_deep_free_kick(row: Any) -> bool:
+    """True for a free kick taken short of halfway, which starts open play."""
+    getter = row.get if hasattr(row, "get") else (lambda key, default=None: default)
+    tokens = _qualifier_tokens(getter("qualifier_names"))
+    if "directfreekick" in tokens or not tokens.intersection({"freekicktaken"}):
+        return False
+    x = pd.to_numeric(getter("x"), errors="coerce")
+    return bool(pd.notna(x) and float(x) < DEEP_RESTART_MAX_X)
+
 
 def shot_origin(events: pd.DataFrame, index: Any, lookback: int = SET_PIECE_LOOKBACK_EVENTS) -> str:
     """Classify a shot's origin, looking back over the events that produced it.
@@ -1442,6 +1459,8 @@ def shot_origin(events: pd.DataFrame, index: Any, lookback: int = SET_PIECE_LOOK
 
     tokens: set[str] = set()
     for _, row in window.iterrows():
+        if is_deep_free_kick(row):
+            continue
         tokens |= _qualifier_tokens(row.get("qualifier_names"))
     if "penalty" in tokens:
         return "penalty"
@@ -1449,6 +1468,29 @@ def shot_origin(events: pd.DataFrame, index: Any, lookback: int = SET_PIECE_LOOK
         if tokens.intersection(markers):
             return source
     return "open_play"
+
+
+def is_set_piece_shot(events: pd.DataFrame, index: Any) -> bool:
+    """Whether a shot came from a dead ball, reading the move as well as the shot.
+
+    The feed's bare ``SetPiece`` marker on a shot says a restart began the
+    move without saying which or where. It is trusted unless the restart the
+    shooting side took inside the lookback was a free kick from its own half.
+    """
+    if shot_origin(events, index) != "open_play":
+        return True
+    row = events.loc[index]
+    if "setpiece" not in _qualifier_tokens(row.get("qualifier_names")):
+        return False
+    positions = events.index.get_indexer([index])
+    if len(positions) == 0 or positions[0] < 0:
+        return True
+    prior = events.iloc[: int(positions[0])]
+    if "team_id" in prior.columns:
+        prior = prior[prior["team_id"] == row.get("team_id")]
+    return not any(
+        is_deep_free_kick(prev) for _, prev in prior.tail(SET_PIECE_LOOKBACK_EVENTS).iterrows()
+    )
 
 
 def set_piece_breakdown(events: pd.DataFrame, team_id: Any) -> dict[str, dict[str, float]]:
@@ -2609,7 +2651,13 @@ def classify_sequence(possession: Any) -> str:
     # Espart's goal at Paris -- a free kick in Barcelona's own half, then six
     # passes and a through ball -- was a "set piece" on one board and open play
     # on the next, and set pieces carried 26% of Barcelona's xG against 1%.
-    if reason == "restart" and passes <= SET_PIECE_LOOKBACK_EVENTS:
+    # A restart short of halfway -- a goal kick, a free kick in the side's own
+    # half -- hands the ball back and starts open play like any other.
+    if (
+        reason == "restart"
+        and passes <= SET_PIECE_LOOKBACK_EVENTS
+        and start_x >= DEEP_RESTART_MAX_X
+    ):
         return "set_piece"
     if bool(get("is_transition", False)) and duration <= TRANSITION_WINDOW_SECONDS:
         return "counter"
@@ -3281,6 +3329,8 @@ __all__ = [
     "set_piece_breakdown",
     "shot_origin",
     "shot_set_piece_source",
+    "is_set_piece_shot",
+    "is_deep_free_kick",
     "xg_momentum",
     "defensive_line_height",
     "team_compactness",

@@ -397,6 +397,36 @@ def test_set_piece_breakdown_reads_the_source_off_the_delivery():
     assert total == int(((events["is_shot"] == True) & (events["team_id"] == 345)).sum())  # noqa: E712
 
 
+def test_a_free_kick_from_own_half_does_not_make_a_set_piece_goal():
+    """Brighton's winner at City: Dunk's free kick from his own half, a cross,
+    a Nunes error, a finish tagged SetPiece. That is open play on every board."""
+    from football_analysis.metrics.match_metrics import is_set_piece_shot, shot_origin
+    from football_analysis.reports.match_report import classify_goal_type
+
+    def row(team, kind, x, qualifiers, **extra):
+        return {"team_id": team, "type": kind, "x": x, "y": 50.0,
+                "qualifier_names": str(qualifiers), "is_shot": False,
+                "is_goal": False, "is_penalty": False, "is_own_goal": False, **extra}
+
+    def goal_after(free_kick_x):
+        return pd.DataFrame([
+            row(211, "Pass", free_kick_x, ["Longball", "FreekickTaken"]),
+            row(211, "Pass", 88.0, ["Longball", "Cross"]),
+            row(211, "BallTouch", 91.0, []),
+            row(167, "Error", 10.0, ["LeadingToGoal"]),
+            row(211, "Goal", 93.0, ["BoxCentre", "SetPiece"], is_shot=True, is_goal=True),
+        ])
+
+    deep = goal_after(44.6)
+    assert classify_goal_type(deep.iloc[-1], deep) == ("Open Play", "Open Play")
+    assert not is_set_piece_shot(deep, deep.index[-1])
+    assert shot_origin(deep, deep.index[-1]) == "open_play"
+
+    attacking = goal_after(72.0)
+    assert classify_goal_type(attacking.iloc[-1], attacking) == ("Set Piece", "Free Kick")
+    assert is_set_piece_shot(attacking, attacking.index[-1])
+
+
 def test_windowed_metrics_cover_the_match():
     from football_analysis.metrics.match_metrics import (
         defensive_line_height,

@@ -29,7 +29,11 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LinearSegmentedColormap
-from football_analysis.metrics.match_metrics import defensive_blocks_count, team_advanced_metrics
+from football_analysis.metrics.match_metrics import (
+    defensive_blocks_count,
+    is_deep_free_kick,
+    team_advanced_metrics,
+)
 
 # Unified design system (AMOLED pure-black frame, fonts, palette)
 try:
@@ -793,12 +797,24 @@ def _previous_restart_subtype(row: pd.Series, events: pd.DataFrame | None = None
     # two classifiers now read the same evidence. The most specific label in
     # the window wins, which is why the search does not stop at the first hit:
     # a bare SetPiece on the cross must not beat the FreekickTaken behind it.
+    #
+    # A free kick from the side's own half is the exception: it restarts open
+    # play, so finding one is evidence against a dead-ball goal, not for it.
     best = None
+    deep_restart = False
     for _, prev in same_team.tail(SET_PIECE_LOOKBACK).iloc[::-1].iterrows():
+        if is_deep_free_kick(prev):
+            deep_restart = True
+            continue
         subtype = _set_piece_subtype_from_event(prev)
         if subtype and (best is None or best == "Set Piece"):
             best = subtype
+    if deep_restart and best in (None, "Set Piece"):
+        return _OPEN_PLAY_RESTART
     return best
+
+
+_OPEN_PLAY_RESTART = "open play restart"
 
 
 def goal_body_part_label(row: pd.Series) -> str:
@@ -828,11 +844,17 @@ def classify_goal_type(row: pd.Series, events: pd.DataFrame | None = None) -> tu
     if _truthy_flag(row.get("is_direct_fk", False)) or "DirectFreekick" in qset:
         return "Set Piece", "Direct Free Kick"
     direct_subtype = _set_piece_subtype_from_event(row)
-    if direct_subtype:
+    if direct_subtype and direct_subtype != "Set Piece":
         return "Set Piece", direct_subtype
+    # A bare SetPiece on the goal names no restart, so the move behind it
+    # decides: the delivery that produced it, or a deep free kick that didn't.
     previous_subtype = _previous_restart_subtype(row, events)
+    if previous_subtype == _OPEN_PLAY_RESTART:
+        return "Open Play", "Open Play"
     if previous_subtype:
         return "Set Piece", previous_subtype
+    if direct_subtype:
+        return "Set Piece", direct_subtype
     return "Open Play", "Open Play"
 
 

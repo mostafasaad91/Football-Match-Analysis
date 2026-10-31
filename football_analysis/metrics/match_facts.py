@@ -22,6 +22,8 @@ from typing import Any
 
 import pandas as pd
 
+from football_analysis.metrics.match_metrics import is_set_piece_shot
+
 # Pitch thirds and the box, in the 0-100 coordinates the package stores.
 THIRD = 100.0 / 3.0
 FINAL_THIRD = 2 * THIRD
@@ -558,10 +560,7 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
     side.lane_right = int((end_y < THIRD).sum())
 
     shots = own[_truthy(own["is_shot"])] if "is_shot" in own.columns else own.iloc[0:0]
-    qualifiers = shots.get("qualifier_names", pd.Series(dtype=str)).astype(str)
-    set_piece = shots[
-        qualifiers.str.contains("SetPiece|Corner|FreeKick|ThrowIn", case=False, na=False)
-    ]
+    set_piece = shots[[is_set_piece_shot(events, idx) for idx in shots.index]]
     side.set_piece_shots = len(set_piece)
     side.set_piece_xg = float(pd.to_numeric(set_piece.get("xG"), errors="coerce").sum() or 0.0)
 
@@ -823,7 +822,7 @@ def _fill_timeline(facts: MatchFacts, events: pd.DataFrame, sides: dict[str, Sid
                 "big_chance": str(row.get("big_chance")).lower() == "true",
                 "header": str(row.get("is_header")).lower() == "true",
                 "penalty": str(row.get("is_penalty")).lower() == "true",
-                "set_piece": bool(re.search(r"SetPiece|Corner|FreeKick", qualifiers, re.I)),
+                "set_piece": is_set_piece_shot(events, row.name),
                 # NaN is truthy, so `row.get("body_part") or ""` never fired on a
                 # missing value and str(nan) reached the page: "0.00 expected
                 # goals, nan".
