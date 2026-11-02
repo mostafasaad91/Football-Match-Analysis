@@ -20,9 +20,9 @@ from football_analysis.visuals.visualization_components import (
     TEXT_MAIN,
     TEXT_DIM,
     IS_LIGHT_THEME,
-    slope_label_offsets,
 )
 from football_analysis.metrics.metric_registry import format_value
+from football_analysis.metrics.frame_values import short_name as _short_name
 from football_analysis.visuals.typography import display_family
 
 POSTERS = (
@@ -500,7 +500,7 @@ class Poster:
             columnspacing=1,
         )
 
-    def bars(self, i, title, categories, home, away, note):
+    def bars(self, i, title, categories, home, away, note, keys=None):
         ax = self.panel(i, title, note)
         left, top = self.slots[i]
         ax.set_position([left + 0.096, top - 0.177, 0.332, 0.126])
@@ -516,6 +516,17 @@ class Poster:
             TEXT_DIM,
             labels=tuple(self.names.values()),
         )
+        # Which dot is which side: the panel carried no key, so a reader had to
+        # remember that circles were the home team -- and on the keeper panel,
+        # which goalkeeper each mark belonged to.
+        keys = keys or list(self.names.values())
+        handles = [
+            Line2D([], [], marker=m, ls="none", color=c, markersize=7, label=k)
+            for m, c, k in zip(["o", "s"], self.colors.values(), keys)
+        ]
+        ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2,
+                  frameon=False, fontsize=8, labelcolor=TEXT_MAIN, handletextpad=0.3,
+                  columnspacing=1.0, borderaxespad=0.2)
 
     def _heat(self, ax, heat, tid):
         """Touch density under the marks, in the team's own colour.
@@ -725,7 +736,14 @@ class Poster:
             ax.set_ylim(bottom=-max(g[y].max(), 0.01) * 0.10)
             from football_analysis.visuals.scatter_labels import label_players
 
-            label_players(ax, g, x, y, color=TEXT_MAIN, background=BG_DARK, fontsize=8)
+            # Name the standouts only. Twenty-odd names on a phone-sized panel
+            # piled into the zero corner with leaders crossing each other; the
+            # eight furthest from the origin on the two shared scales are the
+            # players the panel is about.
+            reach = g[x] / max(float(g[x].max()), 1e-9) + g[y] / max(float(g[y].max()), 1e-9)
+            notable = g.loc[reach.sort_values(ascending=False).index[:8]]
+            notable = notable.assign(player=notable["player"].map(_short_name))
+            label_players(ax, notable, x, y, color=TEXT_MAIN, background=BG_DARK, fontsize=8)
 
     def press_radar(self, i, rows):
         """The whole press as one shape: six questions, both sides.
@@ -788,11 +806,22 @@ class Poster:
                 angles, values, color=colour, s=22, zorder=5, edgecolors=BG_DARK, linewidths=1.0
             )
         for angle, row in zip(angles, rows):
+            # The figures go on the outside of the name: below it at the foot
+            # of the ring, above it at the head, where "below" put them on the
+            # polygon's own markers ("5.4 8.5" over the press-intensity dots).
+            # Side axes anchor the name on its inner edge and grow away from
+            # the ring; centred, a two-line name reached back over the vertex
+            # ("HIGH RECOVERIES" printed across Bayern's polygon point).
+            outward = 1 if np.sin(angle) > 0.6 else -1
+            lines = row[0].count(chr(10)) + 1
+            across = np.cos(angle)
+            ha = "right" if across < -0.3 else "left" if across > 0.3 else "center"
+            radius = 1.17 if ha == "center" else 1.10
             ax.text(
                 angle,
-                1.17,
+                radius,
                 row[0].upper(),
-                ha="center",
+                ha=ha,
                 va="center",
                 color=TEXT_MAIN,
                 size=9 if big else 7.5,
@@ -805,13 +834,14 @@ class Poster:
             # Under the axis name, side by side, offset in points so the gap
             # holds at every angle: stacked outward along the radius they ran
             # into the name beside them on the left and right axes ("23HIGH").
-            for dx, value, tid in ((-14, row[1], sides[0]), (14, row[2], sides[1])):
+            shifts = {"center": (-14, 14), "right": (-26, 0), "left": (0, 26)}[ha]
+            for dx, value, tid in ((shifts[0], row[1], sides[0]), (shifts[1], row[2], sides[1])):
                 ax.annotate(
                     f"{value:.{row[6]}f}",
-                    (angle, 1.17),
-                    xytext=(dx, -(7 + 6 * (row[0].count(chr(10)) + 1)) * (1.2 if big else 1.0)),
+                    (angle, radius),
+                    xytext=(dx, outward * (7 + 6 * lines) * (1.2 if big else 1.0)),
                     textcoords="offset points",
-                    ha="center",
+                    ha=ha,
                     va="center",
                     color=self.colors[tid],
                     size=9 if big else 7.5,
@@ -956,37 +986,23 @@ class Poster:
                     float(flags(own, "is_goal").sum()),
                 ]
             )
-        ceiling = max(max(values) for values in series)
-        # Outside the pair, not by team: alternating above/below only separates
-        # the two figures where the markers are level, and pushed them together
-        # everywhere else.
-        offsets = slope_label_offsets(series, ceiling * 1.30, above=11.0, below=-18.0)
-        for tid, values, label_dy in zip(self.names, series, offsets):
-            ax.plot(
-                range(4),
-                values,
-                color=self.colors[tid],
-                lw=3.0,
-                marker="o",
-                markersize=10,
-                markeredgecolor=BG_DARK,
-                markeredgewidth=1.2,
-                zorder=4,
-            )
-            for index, value in enumerate(values):
-                ax.annotate(
-                    f"{value:.2f}" if index < 3 else f"{value:.0f}",
-                    (index, value),
-                    xytext=(0, label_dy[index]),
-                    textcoords="offset points",
-                    color=self.colors[tid],
-                    size=11 if big else 9,
-                    weight="bold",
-                    ha="center",
-                )
+        ceiling = max(max(values) for values in series) or 1.0
+        # Paired bars, not a line: the four stages are separate measurements,
+        # and a line joining them drew a trend between "on frame" and "struck"
+        # that does not exist, with both sides' labels colliding where the
+        # lines crossed.
+        width = 0.36
+        for k, (tid, values) in enumerate(zip(self.names, series)):
+            xs = np.arange(4) + (k - 0.5) * width
+            for index, (x, value) in enumerate(zip(xs, values)):
+                ax.bar(x, value, width=width * 0.92, color=self.colors[tid],
+                       alpha=0.95 if index in (0, 3) else 0.7, edgecolor=BG_DARK, zorder=3)
+                ax.text(x, value + ceiling * 0.025, f"{value:.2f}" if index < 3 else f"{value:.0f}",
+                        color=self.colors[tid], size=11 if big else 9, weight="bold",
+                        ha="center", va="bottom", zorder=4)
         ax.set_xticks(range(4), ["Created", "On frame", "Struck", "Scored"], size=12 if big else 9)
-        ax.set_xlim(-0.4, 3.4)
-        ax.set_ylim(0, ceiling * 1.30)
+        ax.set_xlim(-0.6, 3.6)
+        ax.set_ylim(0, ceiling * 1.22)
         ax.set_ylabel("Expected goals / goals", size=12 if big else 9)
         ax.tick_params(labelsize=11 if big else 9)
 
@@ -1174,41 +1190,68 @@ def build_match_posters(
                 linewidth=1.6,
                 zorder=5,
             )
+            # Minute and scorer, kept inside the plot: a goal in the last few
+            # minutes used to print its minute over the team's closing total.
             ax.annotate(
-                f"{int(goal['minute'])}′",
+                f"{int(goal['minute'])}′ {_short_name(goal.get('player'))}",
                 (at, height),
                 xytext=(0, 9),
                 textcoords="offset points",
-                ha="center",
+                ha="right" if at > 0.82 * end_minute else "left" if at < 8 else "center",
                 color=TEXT_MAIN,
-                size=11,
+                size=10,
                 weight="bold",
+                bbox=dict(facecolor=BG_DARK, edgecolor="none", alpha=0.85, pad=1.0),
+                zorder=6,
             )
-        if len(total):
-            ax.annotate(
-                f"{b.names[tid]}  {total.iloc[-1]:.2f}",
-                (end_minute, total.iloc[-1]),
-                xytext=(-6, 7),
-                textcoords="offset points",
-                ha="right",
-                color=b.colors[tid],
-                size=11,
-                weight="bold",
-            )
+        missed = g[flags(g, "is_penalty") & ~flags(g, "is_goal")]
+        for _, pen in missed.iterrows():
+            at = float(pen["minute"]) + float(pen.get("second", 0) or 0) / 60
+            height = float(total[g["minute"].le(pen["minute"])].iloc[-1])
+            ax.scatter([at], [height], marker="X", s=110, color=b.colors[tid],
+                       edgecolor="white", linewidth=1.0, zorder=5)
+            ax.annotate(f"{int(pen['minute'])}′ pen missed", (at, height), xytext=(0, -15),
+                        textcoords="offset points", ha="center", color=b.muted, size=9,
+                        bbox=dict(facecolor=BG_DARK, edgecolor="none", alpha=0.85, pad=1.0),
+                        zorder=6)
+    # The closing totals sit in a key at the top left, where the curves have
+    # not yet climbed, instead of at the right edge where the late goals are.
+    for row, tid in enumerate(tids):
+        g = shots[shots.team_id.eq(tid)]
+        ax.text(0.02, 0.96 - row * 0.11, f"{b.names[tid]}  {numeric(g, 'xG').sum():.2f}",
+                transform=ax.transAxes, color=b.colors[tid], size=11, weight="bold", va="top")
+    cards = events[events.get("type", pd.Series("", index=events.index)).astype(str).eq("Card")]
+    q = cards.get("qualifier_names", pd.Series("", index=cards.index)).astype(str)
+    reds = cards[q.str.contains("SecondYellow") | q.str.contains(r"['\"]Red['\"]", regex=True)]
+    for _, red in reds.iterrows():
+        at = float(red["minute"]) + float(red.get("second", 0) or 0) / 60
+        ax.axvline(at, color="#EF4444", lw=1.4, ls=(0, (4, 3)), alpha=0.9, zorder=2)
+        ax.text(at, 0.98, f" {_short_name(red.get('player'))} sent off", color="#EF4444",
+                transform=ax.get_xaxis_transform(), size=9, weight="bold", va="top",
+                ha="left" if at < 0.7 * end_minute else "right")
     ax.set_xlim(0, max(end_minute, 1))
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(0, max(float(numeric(shots, "xG").groupby(shots.team_id).sum().max() or 0.5), 0.5) * 1.32)
     ax.set_xlabel("Elapsed minute", size=11)
     ax.set_ylabel("Cumulative xG", size=11)
+    def inside_box_share(tid):
+        own = shots[shots.team_id.eq(tid)]
+        if own.empty:
+            return "—"
+        inside = (numeric(own, "x") >= 83.0) & numeric(own, "y").between(21.1, 78.9)
+        return f"{100 * inside.mean():.0f}%"
+
+    # Goals are already the scoreline above this panel; possession and where
+    # the shots were taken from were on no board at all.
     b.comparisons(
         1,
         "Chance balance",
         [
-            kpi("Goals", "goals"),
+            kpi("Possession", "possession_share", 1, "%"),
+            ("Shots from inside the box", *[inside_box_share(t) for t in tids]),
             kpi("xG per shot", "xG_per_shot", 3),
             kpi("Big chances", "big_chances"),
             kpi("Box entries", "box_entries"),
             kpi("Field tilt", "field_tilt", 1, "%"),
-            kpi("Deep completions", "deep_completions"),
         ],
     )
     for i, tid in enumerate(tids):
@@ -1491,23 +1534,47 @@ def build_match_posters(
         players=True,
         qualifier="at least one shot",
     )
-    keeper_rows = [("Recorded saves", "saves"), ("Claims", "claims"), ("Sweeper actions", "sweeps")]
-    rows = []
-    for label, key in keeper_rows:
-        pair = []
-        for tid in tids:
-            keeper = people[
-                people.team_id.eq(tid)
-                & people.role.astype(str).str.upper().isin(["GK", "GOALKEEPER"])
-            ]
-            pair.append(float(keeper[key].sum()) if not keeper.empty and key in keeper else 0.0)
-        rows.append((label, *pair))
-    b.bars(
+    keeper_names = []
+    for tid in tids:
+        keeper = people[
+            people.team_id.eq(tid) & people.role.astype(str).str.upper().isin(["GK", "GOALKEEPER"])
+        ]
+        top_keeper = (
+            keeper.sort_values("minutes", ascending=False).iloc[0].get("player")
+            if not keeper.empty and "minutes" in keeper
+            else None
+        )
+        keeper_names.append(_short_name(top_keeper) or b.names[tid])
+    def keeper_total(tid, key, digits=0):
+        keeper = people[
+            people.team_id.eq(tid) & people.role.astype(str).str.upper().isin(["GK", "GOALKEEPER"])
+        ]
+        if keeper.empty or key not in keeper:
+            return "—"
+        value = float(pd.to_numeric(keeper[key], errors="coerce").fillna(0).sum())
+        return f"{value:+.2f}" if digits else f"{value:.0f}"
+
+    kinds = events.get("type", pd.Series("", index=events.index)).astype(str)
+    quals = events.get("qualifier_names", pd.Series("", index=events.index)).astype(str)
+
+    def errors(tid, token):
+        return str(int((kinds.eq("Error") & events.team_id.eq(tid) & quals.str.contains(token)).sum()))
+
+    # Goals prevented and errors were in the article and the event log but on
+    # no board: Verbruggen's +1.70 at City and the Alisson-Jacquet error at
+    # Anfield were the stories of those matches. The keepers are named in the
+    # note, because the bars are coloured by side.
+    b.comparisons(
         4,
-        "Goalkeeper actions",
-        [r[0] for r in rows],
-        *[[r[j] for r in rows] for j in [1, 2]],
-        "Recorded action counts | both keepers share the same count axis",
+        "Goalkeeping and errors",
+        [
+            ("Goals prevented", *[keeper_total(t, "goals_prevented", 2) for t in tids]),
+            ("Saves", *[keeper_total(t, "saves") for t in tids]),
+            ("Claims", *[keeper_total(t, "claims") for t in tids]),
+            ("Errors leading to a shot", *[errors(t, "LeadingToAttempt") for t in tids]),
+            ("Errors leading to a goal", *[errors(t, "LeadingToGoal") for t in tids]),
+        ],
+        f"Keepers: {keeper_names[0]} / {keeper_names[1]} | goals prevented = post-shot xG faced − goals conceded",
     )
     b.comparisons(
         5,

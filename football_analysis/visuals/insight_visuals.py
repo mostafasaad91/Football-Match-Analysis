@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.lines import Line2D
 from football_analysis.metrics.match_insights import build_insights, stage_counts, flags, numeric
+from football_analysis.metrics.frame_values import short_name as _short_name
 from football_analysis.visuals.visualization_components import (
     C_HOME,
     C_AWAY,
@@ -46,6 +47,331 @@ def share_limits(axes, axis="x"):
     low, high = min(lows), max(highs)
     for a in axes:
         (a.set_xlim if axis == "x" else a.set_ylim)(low, high)
+
+
+RED_CARD = "#EF4444"
+
+
+def bench_contributions(a, names):
+    """One row per substitute: when he came on, for whom, and what he produced.
+
+    Juventus beat Napoli with a goal and two assists from players who started
+    on the bench, and the substitution board showed one window at 82' with a
+    negative xG axis -- half-time changes have no "before" inside the period,
+    so every one of them was skipped.
+    """
+    cols = ["team_id", "player", "replaced", "minute", "minutes", "shots", "xG",
+            "goals", "assists", "xA", "key_passes"]
+    if a is None or a.empty or "type" not in a:
+        return pd.DataFrame(columns=cols)
+    on = a[a.type.eq("SubstitutionOn")].sort_values("_clock_seconds")
+    off = a[a.type.eq("SubstitutionOff")].sort_values("_clock_seconds")
+    end = max(90.0, float(numeric(a, "minute").max() or 90))
+    shots = a[flags(a, "is_shot") & ~flags(a, "is_own_goal")]
+    goals = shots[flags(shots, "is_goal")]
+    assist = shots.get("assist_player", pd.Series("", index=shots.index)).astype(str)
+    rows = []
+    used_off = set()
+    for idx, sub in on.iterrows():
+        tid, name = sub.team_id, str(sub.player)
+        same = off[off.team_id.eq(tid) & (off._clock_seconds - sub._clock_seconds).abs().le(5)]
+        same = same[~same.index.isin(used_off)]
+        replaced = ""
+        if len(same):
+            used_off.add(same.index[0])
+            replaced = str(same.iloc[0].player)
+        later_off = off[off.team_id.eq(tid) & off.player.astype(str).eq(name)
+                        & off._clock_seconds.gt(sub._clock_seconds)]
+        left = float(later_off.minute.iloc[0]) if len(later_off) else end
+        mine = shots[shots.team_id.eq(tid) & shots.player.astype(str).eq(name)]
+        fed = shots[shots.team_id.eq(tid) & assist.eq(name)]
+        rows.append(dict(
+            team_id=tid, player=name, replaced=replaced, minute=float(sub.minute),
+            minutes=max(left - float(sub.minute), 0.0), shots=len(mine),
+            xG=float(numeric(mine, "xG").sum()), goals=int(flags(mine, "is_goal").sum()),
+            assists=int(goals.team_id.eq(tid).mul(assist.reindex(goals.index).eq(name)).sum()),
+            xA=float(numeric(fed, "xG").sum()),
+            key_passes=int(flags(a[a.team_id.eq(tid) & a.player.astype(str).eq(name)],
+                                 "is_key_pass").sum()),
+            surname=_short_name(name), out_surname=_short_name(replaced),
+        ))
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=cols)
+
+
+def _bench_impact_board(charts, a, bench):
+    """Substitutions on a match timeline, with what each substitute produced."""
+
+    if bench is None or bench.empty:
+        return False
+    end = max(90.0, float(numeric(a, "minute").max() or 90))
+    fig, axes = charts.figure(
+        "Substitutions and bench impact",
+        "Every change on the match clock, with goals and sendings-off · what each substitute produced",
+        columns=1,
+        height=8.6,
+    )
+    axes[0].remove()
+    shots = a[flags(a, "is_shot")]
+    goals = shots[flags(shots, "is_goal")]
+    cards = a[a.type.eq("Card")]
+    q = cards.get("qualifier_names", pd.Series("", index=cards.index)).astype(str)
+    reds = cards[q.str.contains("SecondYellow") | q.str.contains(r"['\"]Red['\"]", regex=True)]
+    summaries = []
+    for row, (tid, name) in enumerate(charts.names.items()):
+        top = 0.745 - row * 0.315
+        color = charts.colors[tid]
+        line = fig.add_axes([0.06, top - 0.255, 0.56, 0.255], facecolor=BG)
+        line.set_xlim(-2, end + 3)
+        line.set_ylim(-1.75, 1.75)
+        line.axis("off")
+        line.text(-2, 1.72, name.upper(), color=color, size=12, weight="bold", va="top")
+        line.plot([0, end], [0, 0], color=MUTED, lw=1.4, alpha=0.6, zorder=1)
+        line.axvline(45, color=MUTED, lw=0.8, ls=(0, (3, 3)), alpha=0.5, zorder=0)
+        for m in (0, 15, 30, 45, 60, 75, 90):
+            line.text(m, -1.72, f"{m}'", color=MUTED, size=8, ha="center", va="bottom")
+        mine = bench[bench.team_id.eq(tid)].sort_values("minute")
+        # Changes made together share one tick and one label block, stacked;
+        # neighbours alternate above and below the line so they cannot collide.
+        clusters = []
+        for _, sub in mine.iterrows():
+            if clusters and sub.minute - clusters[-1][0] <= 1:
+                clusters[-1][1].append(sub)
+            else:
+                clusters.append((sub.minute, [sub]))
+        # Each label claims a horizontal span (about a minute of clock per
+        # character at this size); a change goes to the first slot -- above or
+        # below the line, near or far -- where its span collides with nothing.
+        slots = {(1, 0): [], (-1, 0): [], (1, 1): [], (-1, 1): []}
+        lo, hi = -2, end + 3
+        for minute, group in clusters:
+            rows_ = [f"↑ {s.surname}   ↓ {s.out_surname}" for s in group]
+            rows_[0] = f"{minute:.0f}'  " + rows_[0]
+            half = 0.47 * max(len(r) for r in rows_)
+            x = min(max(minute, lo + half), hi - half)
+            span = (x - half - 1, x + half + 1)
+            slot = next(
+                (k for k in [(1, 0), (-1, 0), (1, 1), (-1, 1)]
+                 if all(span[1] < a or span[0] > b for a, b in slots[k])),
+                (1, 1),
+            )
+            slots[slot].append(span)
+            sign, level = slot
+            y = sign * (0.42 + 0.42 * level)
+            line.plot([minute, minute], [0, y - sign * 0.06], color=color, lw=1.1, zorder=2)
+            line.scatter([minute], [0], s=46, color=color, edgecolor=BG, zorder=4)
+            line.text(x, y, "\n".join(rows_), color=FG, size=8.2, ha="center",
+                      va="bottom" if sign > 0 else "top", linespacing=1.25, zorder=5)
+        # Goals and sendings-off sit on the line itself, named just under it, so
+        # they never contend with the substitution labels for the same space.
+        for _, g in goals[goals.team_id.eq(tid)].iterrows():
+            line.scatter([g.minute], [0], marker="*", s=260, color="#FACC15",
+                         edgecolor=BG, linewidth=0.8, zorder=6)
+            line.text(g.minute, 0.12, _short_name(g.player), color="#FACC15", size=7.5,
+                      ha="center", va="bottom", weight="bold", zorder=6,
+                      bbox=dict(facecolor=BG, edgecolor="none", pad=0.6))
+        for _, r in reds[reds.team_id.eq(tid)].iterrows():
+            line.scatter([r.minute], [0], marker="s", s=70, color=RED_CARD, zorder=6)
+            line.text(r.minute, -0.13, f"{_short_name(r.player)} sent off {r.minute:.0f}'",
+                      color=RED_CARD, size=7.5, ha="center", va="top", weight="bold", zorder=6,
+                      bbox=dict(facecolor=BG, edgecolor="none", pad=0.6))
+
+        table = fig.add_axes([0.655, top - 0.255, 0.30, 0.255], facecolor=BG)
+        table.axis("off")
+        table.text(0, 1.0, "BENCH OUTPUT", color=MUTED, size=8.5, weight="bold", va="top")
+        if mine.empty:
+            table.text(0, 0.78, "No substitutions", color=MUTED, size=9, va="top")
+        for j, (_, s) in enumerate(mine.iterrows()):
+            y = 0.80 - j * (0.78 / max(len(mine), 5))
+            decisive = s.goals or s.assists
+            table.text(0, y, f"{s.surname}", color=color if decisive else FG, size=9,
+                       weight="bold" if decisive else "normal", va="top")
+            table.text(0.36, y, f"{s.minutes:.0f} min", color=MUTED, size=8.5, va="top")
+            stat = f"{s.goals}G {s.assists}A · {s.xG:.2f} xG · {s.xA:.2f} xA"
+            table.text(1.0, y, stat, color=FG if decisive else MUTED, size=8.5, ha="right",
+                       va="top")
+        tot = mine[["goals", "assists", "xG", "xA"]].sum() if len(mine) else None
+        if tot is not None:
+            summaries.append(
+                f"{name} made {len(mine)} changes; the substitutes produced "
+                f"{int(tot.goals)} goals, {int(tot.assists)} assists, {tot.xG:.2f} xG "
+                f"and {tot.xA:.2f} xA."
+            )
+    charts.save(
+        fig,
+        "61_substitution_windows.png",
+        "Substitutions and bench impact",
+        " ".join(summaries),
+        "Changes on the match clock; stars are goals, red squares sendings-off. Substitute output "
+        "counts only what the player did after coming on; xA is the xG of shots he set up.",
+        len(bench),
+    )
+    return True
+
+
+def _butterfly_frame(charts, title, subtitle, height=8.0):
+    """A header page with one bare axis spanning it, for side-against-side boards."""
+    fig, axes = charts.figure(title, subtitle, columns=1, height=height)
+    axes[0].remove()
+    ax = fig.add_axes([0.06, 0.17, 0.88, 0.60])
+    ax.axis("off")
+    return fig, ax
+
+
+def _team_heads(ax, charts, y, xs=(-0.32, 0.32)):
+    for x, (tid, name) in zip(xs, charts.names.items()):
+        ax.text(x, y, name.upper(), color=charts.colors[tid], ha="center", size=13, weight="bold")
+
+
+def _funnel_board(charts, p):
+    """Possession to shot on target as one butterfly, with the rate at each step.
+
+    The two line charts plotted stages as a continuous curve in two panels;
+    the conversion at each step -- where attacks died -- had to be worked out.
+    """
+    stages = ["Possessions", "Reached final third", "Then box", "Then shot", "On target"]
+    counts = {tid: stage_counts(p, tid) for tid in charts.names}
+    fig, ax = _butterfly_frame(
+        charts,
+        "From possession to a shot on target",
+        "Each bar is what survived the stage above it · the % between bars is the conversion at that step",
+    )
+    top = max(max(c) for c in counts.values()) or 1
+    for i, label in enumerate(stages):
+        y = len(stages) - i
+        ax.text(0, y, label, ha="center", va="center", color=FG, size=11, weight="bold")
+        for (tid, _), sign in zip(charts.names.items(), (-1, 1)):
+            n = counts[tid][i]
+            w = 0.40 * n / top
+            ax.barh(y, sign * w, left=sign * 0.11, height=0.56, color=charts.colors[tid], alpha=0.92)
+            ax.text(sign * (0.11 + w + 0.012), y, str(n), va="center",
+                    ha="left" if sign > 0 else "right", color=FG, size=12, weight="bold")
+            if i:
+                prev = counts[tid][i - 1]
+                rate = 100 * n / prev if prev else 0
+                ax.text(sign * 0.31, y + 0.5, f"↓ {rate:.0f}%", ha="center", va="center",
+                        color=charts.colors[tid], size=10)
+    ax.set_xlim(-0.64, 0.64)
+    ax.set_ylim(0.4, len(stages) + 0.9)
+    _team_heads(ax, charts, len(stages) + 0.65)
+    readings = [
+        f"{name}: possessions at successive stages: " + ", ".join(map(str, counts[tid])) + "."
+        for tid, name in charts.names.items()
+    ]
+    charts.save(
+        fig,
+        "55_possession_funnel.png",
+        "Which possessions reached the box and a shot",
+        "This identifies where attacks stop: the largest drop between two stages is the access "
+        "problem to review, rather than possession volume alone. " + " ".join(readings),
+        "Same possession at every stage; the arrows give the share that survived each step.",
+        len(p),
+    )
+
+
+def _regain_speed_board(charts, regains):
+    """Every regain split by how quickly the ball reached the final third, one bar a side."""
+    bands = ["0–5 s", "6–12 s", "Over 12 s", "Never reached"]
+    shades = [1.0, 0.72, 0.45, 0.18]
+    fig, ax = _butterfly_frame(
+        charts,
+        "Regains and time to reach the final third",
+        "Every regain, split by how quickly the ball then reached the final third",
+        height=6.4,
+    )
+    ax.set_position([0.17, 0.22, 0.68, 0.48])
+    for row, (tid, name) in enumerate(charts.names.items()):
+        times = regains.loc[regains.team_id.eq(tid), "seconds_to_third"]
+        parts = [int(times.le(5).sum()), int((times.gt(5) & times.le(12)).sum()),
+                 int(times.gt(12).sum()), int(times.isna().sum())]
+        total = max(sum(parts), 1)
+        y, left = 1 - row, 0.0
+        for n, alpha in zip(parts, shades):
+            w = n / total
+            ax.barh(y, w, left=left, height=0.5, color=charts.colors[tid], alpha=alpha,
+                    edgecolor=BG, lw=2)
+            if w > 0.06:
+                ax.text(left + w / 2, y, f"{n}\n{100 * w:.0f}%", ha="center", va="center",
+                        color=BG if alpha > 0.6 else FG, size=10, weight="bold")
+            left += w
+        ax.text(-0.012, y, f"{name}\n{counted(sum(parts), 'regain')}", ha="right", va="center",
+                color=charts.colors[tid], size=11, weight="bold")
+        ax.text(1.012, y, f"{100 * (parts[0] + parts[1]) / total:.0f}%\nwithin 12 s",
+                ha="left", va="center", color=FG, size=10)
+    for k, (label, alpha) in enumerate(zip(bands, shades)):
+        ax.barh(1.48, 0.03, left=(k + 0.5) / 4 - 0.075, height=0.08, color=FG, alpha=alpha)
+        ax.text((k + 0.5) / 4 - 0.035, 1.48, label, va="center", color=MUTED, size=10)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.5, 1.7)
+    charts.save(
+        fig,
+        "54_regain_speed.png",
+        "Regain progression time",
+        "Counts include regains that never reached the final third.",
+        "One bar per side out of 100%; zero seconds means regained inside the final third.",
+        len(regains),
+    )
+
+
+def _loss_cost_board(charts, loss):
+    """Every loss faint; the ones the opponent punished large, with totals by third."""
+    fig, axes = charts.figure(
+        "Where possession was lost and what it cost",
+        "Every loss is a faint dot; the ones the opponent punished within 12 seconds are drawn large",
+        columns=2,
+        height=7.4,
+    )
+    summaries = []
+    for ax, (tid, name) in zip(axes, charts.names.items()):
+        colour = charts.colors[tid]
+        g = loss[loss.team_id.eq(tid)]
+        ax.set_xlim(-2, 107)
+        ax.set_ylim(-16, 72)
+        ax.set_aspect("equal")
+        ax.axis("off")
+        ax.add_patch(Rectangle((0, 0), 105, 68, fill=False, ec=MUTED, lw=0.8))
+        for x in (35, 70):
+            ax.plot([x, x], [0, 68], color=MUTED, lw=0.8, ls=(0, (4, 4)), alpha=0.6)
+        calm = g[~(g.third_within_12 | g.box_within_12 | g.shot_within_12)]
+        ax.scatter(calm.x * 1.05, calm.y * 0.68, s=12, color=MUTED, alpha=0.35, lw=0)
+        tiers = [
+            (g.third_within_12 & ~g.box_within_12 & ~g.shot_within_12, 55, "o"),
+            (g.box_within_12 & ~g.shot_within_12, 95, "s"),
+            (g.shot_within_12, 260, "*"),
+        ]
+        for mask, size, marker in tiers:
+            h = g[mask]
+            ax.scatter(h.x * 1.05, h.y * 0.68, s=size, marker=marker, color=colour,
+                       edgecolor=FG, lw=0.6, zorder=3)
+        for lo, hi, zone in ((0, 33.3, "Own third"), (33.3, 66.7, "Middle"), (66.7, 101, "Final third")):
+            part = g[(g.x >= lo) & (g.x < hi)]
+            punished = int(part.shot_within_12.sum())
+            centre = (lo + min(hi, 100)) / 2 * 1.05
+            ax.text(centre, -4.5, f"{zone}: {len(part)} lost", ha="center", color=FG, size=9.5)
+            ax.text(centre, -10, f"{punished} led to a shot", ha="center", size=9,
+                    color=colour if punished else MUTED, weight="bold" if punished else "normal")
+        ax.set_title(
+            f"{name} · {len(g)} losses · {int(g.shot_within_12.sum())} punished with a shot",
+            color=colour, size=11.5, weight="bold", loc="left",
+        )
+        summaries.append(
+            f"{name}: {len(g)} open-play losses; {int(g.third_within_12.sum())} followed by final-third "
+            f"presence, {int(g.box_within_12.sum())} by box presence and {int(g.shot_within_12.sum())} "
+            f"by a shot within 12 seconds, totaling {g.xG_conceded.sum():.2f} xG."
+        )
+    fig.text(
+        0.5, 0.15,
+        "● opponent reached the final third     ■ the box     ★ a shot     grey: nothing followed",
+        ha="center", color=MUTED, size=9.5,
+    )
+    charts.save(
+        fig,
+        "60_loss_consequences.png",
+        "Loss locations and immediate opponent output",
+        " ".join(summaries),
+        "Attacking direction →. Each loss is plotted once at its most advanced outcome within 12 "
+        "seconds; coordinates are event-inferred.",
+        len(loss),
+    )
 
 
 _SMALL_WORDS = {"a", "an", "and", "the", "to", "of", "in", "on", "by", "per", "v", "vs", "at"}
@@ -486,70 +812,8 @@ def build_insight_visuals(events, players, info, out):
         len(p),
     )
     regains = p[p.is_regain]
-    fig, axes = charts.figure(
-        "Regains and time to reach the final third",
-        "All regains included; time starts at the recorded regain, including immediate final-third access.",
-        columns=2,
-    )
-    # Room for the category names: at the shared left margin "Over 12 seconds"
-    # began off the canvas and the second panel's labels ran into the first.
-    fig.subplots_adjust(left=0.14, wspace=0.42)
-    for ax, (tid, name) in zip(axes, charts.names.items()):
-        times = regains.loc[regains.team_id.eq(tid), "seconds_to_third"]
-        counts = [
-            int(times.le(5).sum()),
-            int((times.gt(5) & times.le(12)).sum()),
-            int(times.gt(12).sum()),
-            int(times.isna().sum()),
-        ]
-        ax.barh(np.arange(4), counts, color=charts.colors[tid], height=0.48)
-        ax.set_yticks(
-            np.arange(4),
-            ["0–5 seconds", "6–12 seconds", "Over 12 seconds", "Did not reach"],
-            color=FG,
-        )
-        ax.set_ylim(3.6, -0.6)
-        ax.set_xlim(0, max(counts + [1]) * 1.4)
-        ax.set_title(f"{name} · {counted(len(times), 'regain')}", color=FG)
-        ax.set_xlabel("Regains")
-        for i, n in enumerate(counts):
-            ax.text(n + 0.2, i, f"{n} / {len(times)}", va="center", color=FG, size=10)
-    share_limits(axes, "x")
-    charts.save(
-        fig,
-        "54_regain_speed.png",
-        "Regain progression time",
-        "Counts include regains that never reached the final third.",
-        "No arrival is retained as a separate category; zero seconds means regained inside the final third.",
-        len(regains),
-    )
-    fig, axes = charts.figure(
-        "From possession to a shot on target",
-        "Nested stages: every later stage belongs to the same possession and occurs after the preceding stage",
-        columns=2,
-    )
-    fig.subplots_adjust(left=0.17, right=0.96, wspace=0.65)
-    readings = []
-    for ax, (tid, name) in zip(axes, charts.names.items()):
-        counts = stage_counts(p, tid)
-        stage_flow(ax, counts, charts.colors[tid], FG, MUTED)
-        ax.set_xlim(-4, max(p.groupby("team_id").size().max(), 1) * 1.5)
-        ax.set_title(name, color=FG, size=14)
-        # The noun leads the list. Written the other way round the sentence
-        # ended "8, 1 possessions" whenever a funnel narrowed to one, which
-        # agrees with the list but reads as a plural on the number beside it.
-        readings.append(
-            f"{name}: possessions at successive stages: " + ", ".join(map(str, counts)) + "."
-        )
-    charts.save(
-        fig,
-        "55_possession_funnel.png",
-        "Which possessions reached the box and a shot",
-        "This identifies where attacks stop: the largest drop between two stages is the access problem to review, rather than possession volume alone. "
-        + " ".join(readings),
-        "Rates use all possessions; one possession is counted once at each stage.",
-        len(p),
-    )
+    _regain_speed_board(charts, regains)
+    _funnel_board(charts, p)
     routes = data["routes"]
     fig, axes = charts.figure(
         "Box-entry routes and their next outcome",
@@ -651,112 +915,7 @@ def build_insight_visuals(events, players, info, out):
     # text could be read, and the same three possessions are described in prose
     # in the article.
     loss = data["losses"]
-    fig, axes = charts.figure(
-        "Where possession was lost and what followed",
-        "Each point is a team loss. Colour shows the most advanced opponent outcome recorded within 12 seconds.",
-        columns=2,
-        height=7,
-    )
-    summaries = []
-    loss_legend = []
-    for ax, (tid, name) in zip(axes, charts.names.items()):
-        g = loss[loss.team_id.eq(tid)]
-        values = [
-            len(g),
-            int(g.third_within_12.sum()),
-            int(g.box_within_12.sum()),
-            int(g.shot_within_12.sum()),
-        ]
-        ax.set_xlim(0, 105)
-        ax.set_ylim(0, 68)
-        ax.set_aspect("equal")
-        ax.set_title(f"{name} · {len(g)} losses", color=FG)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.add_patch(Rectangle((0, 0), 105, 68, fill=False, ec=MUTED, lw=0.8))
-        ax.axvline(52.5, color=MUTED, lw=0.6, alpha=0.7)
-        ax.add_patch(Rectangle((88.5, 13.84), 16.5, 40.32, fill=False, ec=MUTED, lw=0.7))
-        ax.add_patch(Rectangle((0, 13.84), 16.5, 40.32, fill=False, ec=MUTED, lw=0.7))
-        # Highest consequence wins the colour, so each loss is plotted once.
-        # The outcome is the opponent's, so no category may wear either team's
-        # colour: "Final third" in the losing side's kit made one legend wrong
-        # for the other panel and read as that side's own attack. The shot is
-        # the foreground colour rather than coral, which sat beside crimson.
-        categories = [
-            (
-                "No listed outcome",
-                ~(g.third_within_12 | g.box_within_12 | g.shot_within_12),
-                MUTED,
-                "o",
-            ),
-            (
-                "Final third",
-                g.third_within_12 & ~g.box_within_12 & ~g.shot_within_12,
-                "#9B8AE0",
-                "o",
-            ),
-            ("Box", g.box_within_12 & ~g.shot_within_12, "#F2B84B", "s"),
-            ("Shot", g.shot_within_12, FG, "*"),
-        ]
-        for label_text, mask, color, marker in categories:
-            h = g[mask]
-            if len(h):
-                ax.scatter(
-                    h.x * 1.05,
-                    h.y * 0.68,
-                    s=38 if marker == "o" else 105,
-                    color=color,
-                    marker=marker,
-                    edgecolor=FG if marker == "o" else None,
-                    linewidth=0.25,
-                    alpha=0.9,
-                )
-            if len(loss_legend) < len(categories):
-                loss_legend.append(
-                    Line2D(
-                        [0],
-                        [0],
-                        marker=marker,
-                        color="none",
-                        markerfacecolor=color,
-                        markeredgecolor=FG if marker == "o" else "none",
-                        markersize=7 if marker == "o" else 10,
-                        label=label_text,
-                    )
-                )
-        # Under the pitch: inside it the caption sat on the losses along the
-        # touchline.
-        ax.text(
-            0.0,
-            -0.05,
-            "Loss location · attacking direction →",
-            transform=ax.transAxes,
-            color=MUTED,
-            size=8,
-            va="top",
-        )
-        summaries.append(
-            f"{name}: {values[0]} open-play losses; {values[1]} followed by final-third presence, {values[2]} by box presence and {values[3]} by a shot within 12 seconds, totaling {g.xG_conceded.sum():.2f} xG."
-        )
-    fig.legend(
-        handles=loss_legend,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.78),
-        ncol=4,
-        facecolor=BG,
-        labelcolor=FG,
-        edgecolor="none",
-        fontsize=8,
-        framealpha=0.95,
-    )
-    charts.save(
-        fig,
-        "60_loss_consequences.png",
-        "Loss locations and immediate opponent output",
-        " ".join(summaries),
-        "Each loss is plotted once using the most advanced outcome observed within 12 seconds; coordinates are event-inferred and do not establish pressure.",
-        len(loss),
-    )
+    _loss_cost_board(charts, loss)
     # Equal, within-period windows, ending before another substitution cluster.
     a = data["actions"]
     subs = a[a.type.isin(["SubstitutionOn", "SubstitutionOff"])]
@@ -794,7 +953,11 @@ def build_insight_visuals(events, players, info, out):
                 )
     window_frame = pd.DataFrame(windows)
     data["substitution_windows"] = window_frame
-    if len(windows):
+    bench = bench_contributions(a, charts.names)
+    data["bench_contributions"] = bench
+    if _bench_impact_board(charts, a, bench):
+        pass
+    elif len(windows):
         fig, axes = charts.figure(
             "Output around substitution windows",
             "Equal windows before and after each change \u00b7 a description of output, not a substitution effect",

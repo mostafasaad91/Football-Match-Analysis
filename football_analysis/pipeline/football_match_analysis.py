@@ -4720,10 +4720,10 @@ def parse_all(md: dict):
             sub_in.add(pid)
         if etype == "SubstitutionOff" and pid:
             sub_out.add(pid)
-        if etype == "Card" and pid:
-            for q in quals:
-                if q.get("type", {}).get("displayName") == "Red":
-                    red_cards.add(pid)
+        # A second yellow is a sending-off too; the feed tags it SecondYellow,
+        # never Red, so Martínez at Chelsea was drawn as if he finished the game.
+        if etype == "Card" and pid and {"Red", "SecondYellow"} & set(qual_names):
+            red_cards.add(pid)
 
         is_own_goal = (etype == "OwnGoal") or ("OwnGoal" in qual_names)
         is_goal_flag = (e.get("isGoal", False) or is_own_goal) and not is_penalty_shootout

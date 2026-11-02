@@ -1237,12 +1237,24 @@ def _finding_set_pieces(m: _Match) -> Finding | None:
     if not total or dead < max(1, total // 2):
         return None
 
-    share = "every one of" if dead == total else f"{_spell(dead)} of"
+    if total == 1:
+        lead_in = f"{m.winner}'s only goal came"
+    elif dead == total:
+        lead_in = f"All {_spell(total)} of {m.winner}'s goals came"
+    else:
+        lead_in = f"{_spell(dead).capitalize()} of {m.winner}'s {_spell(total)} goals came"
     first = (
-        f"{share} {m.winner}'s {_spell(total)} {_plural(total, 'goal')} came "
-        f"from a dead ball. That is the half of a match a side rehearses on a "
+        f"{lead_in} from a dead ball. That is the half of a match a side rehearses on a "
         f"Thursday, and it arrives whether or not the ninety minutes around it "
         f"went their way."
+    )
+    # "Nothing else on the page produced a goal" is only true when every goal
+    # was a restart; Pulisic's open-play header at Milan made it false.
+    verdict = (
+        "the honest answer is that nothing else on the page produced a goal"
+        if dead == total
+        else "the honest answer is that open play produced "
+        + ("only one of them" if total - dead == 1 else f"only {_spell(total - dead)}")
     )
     second = (
         "A restart removes almost everything an opponent spends the match "
@@ -1257,8 +1269,7 @@ def _finding_set_pieces(m: _Match) -> Finding | None:
         f"territory, the regains and the passing below describe a match whose "
         f"goals were settled outside them, so the question they answer is not "
         f"how {m.winner} scored but whether they would have without the "
-        f"restarts — and on this evidence, the honest answer is that nothing "
-        f"else on the page produced a goal."
+        f"restarts — and on this evidence, {verdict}."
     )
     return Finding(
         "set_pieces",

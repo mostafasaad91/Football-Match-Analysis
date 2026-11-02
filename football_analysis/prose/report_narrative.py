@@ -159,7 +159,7 @@ TITLES = {
     "possession_funnel": "Possession funnel",
     "entry_routes": "Entry routes",
     "loss_consequences": "Loss locations and consequences",
-    "substitution_windows": "Substitution windows",
+    "substitution_windows": "Substitutions and bench impact",
     "history_territory_chances": "Territory and chances in context",
     "history_pressing_risk": "Pressing and risk in context",
 }
@@ -263,9 +263,7 @@ def _xg_flow(v: Visual, f: MatchFacts) -> list[str]:
     out = [
         f"Start here and the rest of the report follows. {lead.name} finished on "
         f"{n2(lead.xg)} expected goals from {lead.shots} shots, {trail.name} on "
-        f"{n2(trail.xg)} from {trail.shots}. That gap is not a gap in volume: it is "
-        f"{n2(lead.xg_per_shot)} expected goals per shot against {n2(trail.xg_per_shot)}, "
-        f"which is a difference in the quality of the look rather than the number of them."
+        f"{n2(trail.xg)} from {trail.shots}. " + _where_the_xg_gap_came_from(lead, trail)
     ]
     if opener:
         scorer_side = f.side(opener["side"])
@@ -292,6 +290,80 @@ def _xg_flow(v: Visual, f: MatchFacts) -> list[str]:
             f"Goals in order: {line}. It finished {f.home.name} "
             f"{home_goals.strip()}, {f.away.name} {away_goals.strip()}."
         )
+    out.extend(_sendings_off(f))
+    return out
+
+
+def _where_the_xg_gap_came_from(lead, trail) -> str:
+    """Say whether the xG gap was volume, quality or both -- from the numbers.
+
+    The sentence used to call every gap "not a gap in volume", including Inter's
+    19 shots to Milan's 7 at 0.11 a shot against 0.10.
+    """
+    more_shots = lead.shots >= 1.4 * max(trail.shots, 1)
+    better_shots = lead.xg_per_shot >= 1.25 * max(trail.xg_per_shot, 0.001)
+    if more_shots and better_shots:
+        return (
+            f"{lead.name} won on both counts: more attempts, and better ones "
+            f"({n2(lead.xg_per_shot)} expected goals a shot against {n2(trail.xg_per_shot)})."
+        )
+    if more_shots:
+        return (
+            f"The gap is volume: at {n2(lead.xg_per_shot)} expected goals a shot against "
+            f"{n2(trail.xg_per_shot)}, the looks were of similar quality, and "
+            f"{lead.name} simply had more of them."
+        )
+    if better_shots:
+        return (
+            f"That gap is not a gap in volume: it is {n2(lead.xg_per_shot)} expected goals "
+            f"per shot against {n2(trail.xg_per_shot)}, a difference in the quality of the "
+            f"look rather than the number of them."
+        )
+    return (
+        f"Neither volume nor quality separates them much "
+        f"({n2(lead.xg_per_shot)} a shot against {n2(trail.xg_per_shot)}); the gap is "
+        f"the sum of small margins."
+    )
+
+
+def _sendings_off(f: MatchFacts) -> list[str]:
+    """Name every dismissal and how long the side played a man down.
+
+    A second yellow is a red; until the facts read it that way, Martínez's
+    dismissal at Chelsea went unmentioned in an article about the game it decided.
+    """
+    reds = [c for c in f.cards if c.get("colour") == "Red"]
+    if not reds:
+        return []
+    full_time = max([90] + [int(s.get("minute") or 0) for s in f.shots])
+    parts = []
+    for card in reds:
+        how = "a second yellow" if card.get("second_yellow") else "a straight red"
+        left = max(full_time - int(card["minute"]), 0)
+        parts.append(
+            f"{card['player']} ({card['team']}) was sent off on {minute(card['minute'])} "
+            f"for {how}, leaving {card['team']} with ten for roughly the last {left} minutes"
+        )
+    out = [
+        listed(parts) + ". Every total after that moment describes a match played "
+        "eleven against ten, and the score-state splits should be read with it."
+    ]
+    # What the extra man was worth: xG a side produced per 30 minutes after the
+    # first dismissal, against the same rate before it.
+    first = min(int(c["minute"]) for c in reds)
+    after_minutes, before_minutes = max(full_time - first, 1), max(first, 1)
+    rates = []
+    for side in f.sides:
+        own = [s for s in f.shots if s["side"] == side.key]
+        before = sum((s["xG"] or 0) for s in own if int(s["minute"]) < first) * 30 / before_minutes
+        after = sum((s["xG"] or 0) for s in own if int(s["minute"]) >= first) * 30 / after_minutes
+        rates.append(f"{side.name} {n2(before)} before, {n2(after)} after")
+    if after_minutes >= 10:
+        out.append(
+            "Expected goals per 30 minutes either side of the dismissal: "
+            + "; ".join(rates)
+            + "."
+        )
     return out
 
 
@@ -304,20 +376,39 @@ def _shot_map(v: Visual, f: MatchFacts) -> list[str]:
     shots = [x for x in f.shots if x["side"] == s.key]
     big = [x for x in shots if x["big_chance"]]
     scored_big = [x for x in big if x in f.goals]
+    # The verdict used to be fixed text: any number of off-target shots "says the
+    # side was shooting from positions it had worked into", and every side "won
+    # in spite of its best moments" -- including sides that lost.
+    off_share = s.off_target / s.shots if s.shots else 0.0
+    if off_share <= 0.3:
+        verdict = (
+            "Few missed the frame altogether, which says the side was shooting from "
+            "positions it had worked into rather than from hope."
+        )
+    elif off_share >= 0.5:
+        verdict = (
+            "Half or more missed the frame altogether, the profile of a side shooting "
+            "from where it could rather than where it wanted to."
+        )
+    else:
+        verdict = "The split between on target, blocked and off is unremarkable."
     out = [
         f"{s.name} took {s.shots} shots: {s.on_target} on target, {s.blocked} blocked and "
-        f"{s.off_target} off. {'Only ' if s.off_target <= 2 else ''}{s.off_target} wild attempt"
-        f"{'' if s.off_target == 1 else 's'} says the side was shooting from positions it had "
-        f"worked into rather than from hope, and the map bears that out."
+        f"{s.off_target} off. {verdict}"
     ]
     if big:
         detail = listed([f"{x['player']} {minute(x['minute'])} ({n2(x['xG'])})" for x in big])
+        taken = len(scored_big)
         out.append(
             f"{len(big)} clear chance{'' if len(big) == 1 else 's'}: {detail}. "
-            f"{len(scored_big)} of them {'was' if len(scored_big) == 1 else 'were'} taken. "
-            f"A side that scores {s.goals} while converting {len(scored_big)} of {len(big)} "
-            f"clear openings won in spite of its best moments, not because of them."
+            f"{'None' if not taken else taken} of them {'was' if taken == 1 else 'were'} taken."
         )
+        missed = len(big) - taken
+        if missed >= 2:
+            out.append(
+                f"{missed} clear openings went begging; the scoreline would read "
+                f"differently with even one of them."
+            )
     else:
         out.append(
             f"No chance on the map was flagged as clear-cut. {n2(s.xg_per_shot)} expected goals "
@@ -1163,13 +1254,29 @@ def _entry_routes(v: Visual, f: MatchFacts) -> list[str]:
             f"{s.name}: {s.route_entries} recorded entries, {s.route_entries_with_shot} followed "
             f"by a shot in the same possession ({ratio(s.route_entries_with_shot, s.route_entries)})."
         )
-    low = min(f.sides, key=lambda s: s.route_entries)
-    out.append(
-        f"{possessive(low.name)} problem is visible in the first number rather than the second. "
-        f"The side was not entering and failing; it was not entering. When it did, the entry "
-        f"arrived in a shape that could not be converted — {low.completed_crosses} of "
-        f"{low.crosses} crosses found a teammate."
+    low, high = sorted(f.sides, key=lambda s: s.route_entries)
+    # Only a real gap in entries is a "problem", and the crossing clause has to
+    # follow the crossing: Milan found a teammate with 6 of 11 and were still
+    # told their entries "could not be converted".
+    if high.route_entries < 1.5 * max(low.route_entries, 1):
+        return out
+    sentence = (
+        f"{possessive(low.name)} gap is in the first number rather than the second: "
+        f"the side was not entering and failing, it was not entering."
     )
+    if low.crosses >= 5:
+        rate = low.completed_crosses / low.crosses
+        if rate < 0.3:
+            sentence += (
+                f" When it did go wide, the delivery rarely arrived — {low.completed_crosses} "
+                f"of {low.crosses} crosses found a teammate."
+            )
+        elif rate >= 0.45:
+            sentence += (
+                f" The delivery itself was not the issue — {low.completed_crosses} of "
+                f"{low.crosses} crosses found a teammate."
+            )
+    out.append(sentence)
     return out
 
 
@@ -1198,30 +1305,54 @@ def _loss_consequences(v: Visual, f: MatchFacts) -> list[str]:
 
 @writes("substitution_windows", "That closes the chart set; the players who decided it come next.")
 def _substitution_windows(v: Visual, f: MatchFacts) -> list[str]:
-    frame = f.sub_windows
+    # The board used to compare equal windows either side of each change, and
+    # skipped every half-time change for want of a "before" in the period --
+    # Juventus's whole winning bench went undescribed. It now reads what each
+    # substitute produced after coming on.
+    bench = f.bench
     out = []
-    if frame is not None and len(frame):
-        for _, row in frame.iterrows():
-            side = f.by_slug("") or None
-            team = next((s for s in f.sides if s.team_id == int(float(row["team_id"]))), None)
-            out.append(
-                f"{team.name if team else 'Team'} — {row['phase'].lower()} the change at "
-                f"{float(row['minute']):.0f}': {float(row['xG']):.2f} expected goals across a "
-                f"{float(row['window_minutes']):.1f}-minute window."
+    if bench is not None and len(bench):
+        for team in f.sides:
+            mine = bench[bench["team_id"].astype(float).astype(int) == team.team_id]
+            if mine.empty:
+                continue
+            goals, assists = int(mine["goals"].sum()), int(mine["assists"].sum())
+            made = listed(
+                [f"{r['player']} for {r['replaced']} on {minute(int(float(r['minute'])))}"
+                 if str(r.get("replaced") or "") not in ("", "nan")
+                 else f"{r['player']} on {minute(int(float(r['minute'])))}"
+                 for _, r in mine.iterrows()]
             )
+            line = f"{team.name} made {len(mine)} change{'' if len(mine) == 1 else 's'}: {made}."
+            decisive = mine[(mine["goals"] > 0) | (mine["assists"] > 0)]
+            if len(decisive):
+                line += " " + listed(
+                    [f"{r['player']} came on and " + listed(
+                        ([f"scored {int(r['goals'])}"] if r["goals"] else [])
+                        + ([f"set up {int(r['assists'])}"] if r["assists"] else []))
+                     for _, r in decisive.iterrows()]
+                ) + (f", so the bench accounted for {goals + assists} of the side's goal involvements."
+                     if goals + assists > 1 else ".")
+            else:
+                line += (
+                    f" Together the substitutes produced {float(mine['xG'].sum()):.2f} expected goals "
+                    f"and set up {float(mine['xA'].sum()):.2f} more, without a goal or an assist."
+                )
+            out.append(line)
     else:
-        out.append("No substitution cluster had a comparable window either side of it.")
-    changes = [s for s in f.substitutions if s["direction"] == "on"]
-    if changes:
-        out.append(
-            "Changes made: "
-            + listed([f"{c['player']} {minute(c['minute'])} ({c['team']})" for c in changes])
-            + "."
-        )
+        changes = [s for s in f.substitutions if s["direction"] == "on"]
+        if changes:
+            out.append(
+                "Changes made: "
+                + listed([f"{c['player']} {minute(c['minute'])} ({c['team']})" for c in changes])
+                + "."
+            )
+        else:
+            out.append("Neither side made a substitution.")
     out.append(
-        "A change in output either side of a substitution is not a measured substitution effect. "
-        "Score state moves at the same time, and in a match settled early the changes are usually "
-        "made to hold a result rather than to alter one."
+        "What a substitute produces is not a measured substitution effect. Score state moves at "
+        "the same time, and in a match settled early the changes are usually made to hold a "
+        "result rather than to alter one."
     )
     return out
 

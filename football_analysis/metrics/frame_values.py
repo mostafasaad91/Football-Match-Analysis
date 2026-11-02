@@ -79,6 +79,15 @@ def surname(value: Any, default: str = "") -> str:
     return parts[-1] if parts else default
 
 
+def short_name(value: Any) -> str:
+    """Everything after the first name: "Di Lorenzo", "De Bruyne", "Kolo Muani".
+
+    The last word alone printed "Lorenzo", "Bruyne" and "Muani".
+    """
+    parts = text(value).split()
+    return " ".join(parts[1:]) if len(parts) > 1 else (parts[0] if parts else "")
+
+
 def ratio(numerator: Any, denominator: Any, default: float = 0.0) -> float:
     """numerator / denominator, or ``default`` when that is not a number."""
     bottom = number(denominator, 0.0)

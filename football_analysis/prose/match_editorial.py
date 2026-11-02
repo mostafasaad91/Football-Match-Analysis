@@ -60,9 +60,16 @@ def result_read(c):
     h, a = c["home_xG"], c["away_xG"]
     first = f"{c['home']} and {c['away']} finished {hg}–{ag}, with {h:.2f} and {a:.2f} expected goals respectively."
     # Evaluate each side independently: opposite finishing deviations can cancel.
+    # "Man City scored -2.07 relative to its xG" read as a negative goal count.
+    def against(team, goals, xg):
+        diff = goals - xg
+        if abs(diff) < 0.05:
+            return f"{team} scored about what its chances were worth"
+        return f"{team} scored {abs(diff):.2f} {'more' if diff > 0 else 'fewer'} than its xG"
+
     second = (
-        f"{c['home']} scored {hg - h:+.2f} relative to its xG; "
-        f"{c['away']} scored {ag - a:+.2f}. These single-match differences describe execution and variation, not stable finishing ability."
+        f"{against(c['home'], hg, h)}; {against(c['away'], ag, a)}. "
+        "These single-match differences describe execution and variation, not stable finishing ability."
     )
     return first + " " + second
 

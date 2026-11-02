@@ -5480,6 +5480,54 @@ def momentum(events):
             zorder=9,
         )
 
+    # Sendings-off and substitutions on the same clock: a surge after a red
+    # card or a double change is the first thing a reader asks about, and the
+    # curve gave no way to see either.
+    kinds = events.get("type", pd.Series("", index=events.index)).astype(str)
+    q = events.get("qualifier_names", pd.Series("", index=events.index)).astype(str)
+    reds = events[kinds.eq("Card") & (q.str.contains("SecondYellow") | q.str.contains(r"['\"]Red['\"]", regex=True))]
+    for row in reds.itertuples():
+        minute = float(row.minute)
+        home_side = row.team_id == HOME_ID
+        ax.axvline(minute, color="#EF4444", lw=1.3, ls=(0, (4, 3)), alpha=0.9, zorder=6)
+        ax.text(
+            minute + 0.6,
+            top * (0.80 if home_side else -0.80),
+            f"{_surname(str(row.player))} sent off",
+            color="#EF4444",
+            fontsize=8,
+            fontweight="bold",
+            va="center",
+            zorder=9,
+        )
+    subs = events[kinds.eq("SubstitutionOn")]
+    for minute, cluster in subs.groupby(subs["minute"].astype(float)):
+        for tid, part in cluster.groupby("team_id"):
+            home_side = tid == HOME_ID
+            ax.scatter(
+                [minute],
+                [top * (0.97 if home_side else -0.97)],
+                marker="v" if home_side else "^",
+                s=34,
+                color=home_colour if home_side else away_colour,
+                edgecolor=BG,
+                lw=0.6,
+                zorder=8,
+            )
+            if len(part) > 1:
+                ax.text(minute + 0.7, top * (0.97 if home_side else -0.97), f"×{len(part)}",
+                        color=MUTED, fontsize=7, va="center", zorder=8)
+    ax.text(
+        0.996,
+        0.03,
+        "▼▲ substitutions   ┆ red card",
+        transform=ax.transAxes,
+        ha="right",
+        color=MUTED,
+        fontsize=7.5,
+        va="bottom",
+    )
+
     band.set_ylim(0, 1)
     band.set_yticks([])
     narrow_side = 1
@@ -5633,71 +5681,45 @@ def finishing_quality(events):
         "Pre-shot xG, post-shot xG once the placement is known, and the goals that followed",
     )
 
-    # -- the three stages, as a slope -----------------------------------------
-    ax = fig.add_axes([0.075, 0.335, 0.40, 0.43])
+    # -- the four stages, as paired bars --------------------------------------
+    # Bars, not a slope. The stages are separate measurements, and a line
+    # joining them drew a trend from "reached the frame" to "struck" that does
+    # not exist, with both sides' figures colliding where the lines crossed.
+    ax = fig.add_axes([0.105, 0.335, 0.37, 0.43])
     base.clean_ax(ax)
-    # Four stages, not three. A three-stage version set the xG of every attempt
-    # beside the post-shot xG of only those that reached the frame and then
-    # compared them, which is two different denominators: the second figure is
-    # smaller because eleven attempts are missing from it, not because the
-    # striking was poor. Splitting out the on-target subset makes every step a
-    # like-for-like comparison -- what reached the frame, how it was struck,
-    # and what the goalkeeper did with it.
-    stages = [
-        "Created\n(all attempts)",
-        "Reached the\nframe (xG)",
-        "Struck\n(post-shot xG)",
-        "Scored",
-    ]
+    # Four stages, not three: the on-target subset makes every step like for
+    # like -- what reached the frame, how it was struck, what went in.
+    stages = ["Chances\ncreated", "Reached\nthe frame", "Value once\nstruck", "Goals"]
     sides = [(HOME_ID, HOME), (AWAY_ID, AWAY)]
-    series = []
-    for team_id, _colour in sides:
+    ceiling = 0.0
+    for row, (team_id, colour) in enumerate(sides):
         own = shots[shots["team_id"].eq(team_id)]
         framed_rows = own.loc[on_target.reindex(own.index, fill_value=False)]
-        series.append(
-            [
-                float(own["xG"].sum()),
-                float(framed_rows["xG"].sum()),
-                float(framed_rows["_psxg"].sum()),
-                float(as_bool(own.get("is_goal", pd.Series(False, index=own.index))).sum()),
-            ]
-        )
-    ceiling = max(max(values) for values in series)
-    # The label goes on the outside of the pair rather than by team, so the
-    # upper line's figure is never pushed down onto the lower line's.
-    offsets = slope_label_offsets(series, ceiling * 1.28)
-    for (team_id, colour), values, label_dy in zip(sides, series, offsets):
-        ax.plot(
-            range(4),
-            values,
-            color=colour,
-            lw=2.8,
-            marker="o",
-            markersize=11,
-            markeredgecolor=BG,
-            markeredgewidth=1.4,
-            zorder=4,
-            label=TEAM_NAME[team_id],
-        )
-        for index, value in enumerate(values):
-            ax.annotate(
-                f"{value:.2f}" if index < 3 else f"{value:.0f}",
-                (index, value),
-                xytext=(0, label_dy[index]),
-                textcoords="offset points",
-                color=colour,
+        values = [
+            float(own["xG"].sum()),
+            float(framed_rows["xG"].sum()),
+            float(framed_rows["_psxg"].sum()),
+            float(as_bool(own.get("is_goal", pd.Series(False, index=own.index))).sum()),
+        ]
+        ceiling = max(ceiling, max(values))
+        ys = np.arange(4) + (-0.2 if row == 0 else 0.2)
+        ax.barh(ys, values, height=0.36, color=colour, alpha=0.92, label=TEAM_NAME[team_id])
+        for y, value, index in zip(ys, values, range(4)):
+            ax.text(
+                value,
+                y,
+                f"  {value:.2f}" if index < 3 else f"  {value:.0f}",
+                va="center",
+                color=TEXT,
                 fontsize=10,
                 fontweight="bold",
-                ha="center",
             )
-    ax.set_xticks(range(4), stages, color=TEXT, fontsize=8.5)
-    ax.set_xlim(-0.4, 3.4)
-    ax.set_ylim(0, ceiling * 1.28)
-    ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.7)
+    ax.set_yticks(np.arange(4), stages, color=TEXT, fontsize=9.5)
+    ax.set_ylim(3.6, -0.6)
+    ax.set_xlim(0, max(ceiling, 0.5) * 1.22)
+    ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
     ax.tick_params(labelsize=8.5)
-    # Above the plot, not in it. Inside, the top-right corner is exactly where
-    # the higher side's goal count is written: Brighton 3-0 Arsenal printed the
-    # "3" through the Arsenal key.
+    ax.set_xlabel("Expected goals / goals", fontsize=9, color=MUTED)
     ax.legend(
         loc="lower right",
         bbox_to_anchor=(1.0, 1.01),
@@ -5709,88 +5731,59 @@ def finishing_quality(events):
     )
     fig.text(0.075, 0.795, "From chance to goal", color=TEXT, fontsize=13, fontweight="bold")
 
-    # -- every shot that reached the frame ------------------------------------
-    ax2 = fig.add_axes([0.565, 0.335, 0.37, 0.43])
+    # -- every shot that reached the frame, one row each ------------------------
+    # The scatter coloured every attempt in nearly the same blue and named no
+    # one, so Verbruggen's seven saves at City were seven anonymous dots. Each
+    # attempt is now a row: who, when, the chance (open ring) and the strike
+    # (filled), joined; a goal ends in a star.
+    from football_analysis.metrics.frame_values import short_name
+
+    ax2 = fig.add_axes([0.655, 0.335, 0.30, 0.43])
     base.clean_ax(ax2)
-    framed = shots[on_target.reindex(shots.index, fill_value=False)]
-    limit = (
-        max(
-            float(framed["xG"].max() if not framed.empty else 0),
-            float(framed["_psxg"].max() if not framed.empty else 0),
-            0.4,
-        )
-        * 1.15
-    )
-    ax2.plot([0, limit], [0, limit], color=NEUTRAL, lw=0.9, ls=(0, (3, 3)), zorder=2)
-    # The note labels the dashed line, and it sat on the line's top end --
-    # which is exactly where a big chance struck well lands. Crystal Palace
-    # 2-3 Ipswich printed it through the goal star at 0.42/0.47. Put it in
-    # whichever corner the shots left empty: the top-left needs a small chance
-    # placed perfectly and the bottom-right a big one placed badly, and one of
-    # the two is free in every match seen so far. The boxes are generous, so a
-    # near miss moves the note rather than shaving past a marker.
-    placements = (
-        (0.02, 0.98, "left", "top", (0.00, 0.34, 0.82, 1.00)),
-        (0.98, 0.02, "right", "bottom", (0.64, 1.00, 0.00, 0.18)),
-    )
-    marks = list(
-        zip(
-            pd.to_numeric(framed["xG"], errors="coerce").fillna(0.0),
-            pd.to_numeric(framed["_psxg"], errors="coerce").fillna(0.0),
-        )
-    )
-    for note_x, note_y, note_ha, note_va, (x0, x1, y0, y1) in placements:
-        if not any(
-            x0 * limit <= mx <= x1 * limit and y0 * limit <= my <= y1 * limit for mx, my in marks
-        ):
-            break
-    ax2.text(
-        limit * note_x,
-        limit * note_y,
-        NOTE_STRUCK_AS_DESERVED,
-        color=NEUTRAL,
-        fontsize=7.5,
-        ha=note_ha,
-        va=note_va,
-    )
-    for team_id, colour in [(HOME_ID, HOME), (AWAY_ID, AWAY)]:
-        own = framed[framed["team_id"].eq(team_id)]
-        if own.empty:
-            continue
-        scored = as_bool(own.get("is_goal", pd.Series(False, index=own.index)))
+    framed = shots[on_target.reindex(shots.index, fill_value=False)].sort_values("_psxg")
+    rows_n = max(len(framed), 1)
+    label_size = 9 if rows_n <= 12 else 7.5 if rows_n <= 20 else 6.5
+    for j, (_, attempt) in enumerate(framed.iterrows()):
+        colour = HOME if attempt["team_id"] == HOME_ID else AWAY
+        pre, post = float(attempt["xG"]), float(attempt["_psxg"])
+        scored = str(attempt.get("is_goal")).lower() == "true"
+        ax2.plot([pre, post], [j, j], color=colour, lw=2.2, alpha=0.85, zorder=3)
+        ax2.scatter([pre], [j], s=42, facecolor=BG, edgecolor=colour, lw=1.4, zorder=4)
         ax2.scatter(
-            own.loc[~scored, "xG"],
-            own.loc[~scored, "_psxg"],
-            s=70,
-            color=colour,
-            alpha=0.55,
-            edgecolors=TEXT,
-            linewidths=0.5,
-            zorder=4,
-        )
-        ax2.scatter(
-            own.loc[scored, "xG"],
-            own.loc[scored, "_psxg"],
-            s=190,
-            color=colour,
-            marker="*",
-            edgecolors=TEXT,
-            linewidths=0.6,
+            [post],
+            [j],
+            s=190 if scored else 46,
+            marker="*" if scored else "o",
+            color=EVENT_HIGHLIGHT if scored else colour,
+            edgecolor=BG,
+            lw=0.6,
             zorder=5,
         )
-    # A little room below zero: a goal Opta prices near nothing after the strike
-    # (Groß at Brighton, 0.01) otherwise sits on the axis with half its star cut.
-    pad = limit * 0.03
-    ax2.set_xlim(-pad, limit)
-    ax2.set_ylim(-pad, limit)
-    ax2.set_xlabel("Pre-shot xG", fontsize=9, color=MUTED)
-    ax2.set_ylabel("Post-shot xG", fontsize=9, color=MUTED)
-    ax2.grid(color=GRID, lw=0.7, alpha=0.6)
+        ax2.text(
+            -0.03,
+            j,
+            f"{short_name(attempt.get('player'))} {int(attempt['minute'])}'",
+            transform=ax2.get_yaxis_transform(),
+            ha="right",
+            va="center",
+            color=colour,
+            fontsize=label_size,
+        )
+    limit = max(
+        float(framed["xG"].max() if not framed.empty else 0),
+        float(framed["_psxg"].max() if not framed.empty else 0),
+        0.4,
+    ) * 1.12
+    ax2.set_xlim(0, limit)
+    ax2.set_ylim(-0.7, rows_n - 0.3)
+    ax2.set_yticks([])
+    ax2.set_xlabel("Chance (○) → value once struck (●)", fontsize=9, color=MUTED)
+    ax2.grid(axis="x", color=GRID, lw=0.7, alpha=0.6)
     ax2.tick_params(labelsize=8.5)
     fig.text(
         0.565,
         0.795,
-        "Each attempt that reached the frame",
+        "Every attempt that reached the frame",
         color=TEXT,
         fontsize=13,
         fontweight="bold",
@@ -5798,7 +5791,7 @@ def finishing_quality(events):
     fig.text(
         0.565,
         0.775,
-        "Above the line the ball was struck better than the chance deserved · star = goal",
+        "A long line to the right is a well-struck ball · star = goal · the rest were saved",
         color=MUTED,
         fontsize=8.5,
     )
@@ -6843,49 +6836,50 @@ def sequence_types(events):
         )
     ] or order[:1]
 
-    for column, (team_id, team_name, color) in enumerate(
-        [(HOME_ID, HOME_NAME, HOME), (AWAY_ID, AWAY_NAME, AWAY)]
-    ):
-        typology = both[team_id]
-        left = 0.075 + column * 0.475
-        fig.text(left, 0.795, team_name.upper(), color=color, fontsize=13, fontweight="bold")
-
-        ax = fig.add_axes([left, 0.20, 0.39, 0.52])
-        base.clean_ax(ax)
-        values = [float(typology["xG"].get(key, 0.0)) for key in order]
-        positions = np.arange(len(order))
-        ax.barh(positions, values, height=0.62, color=color, alpha=0.9)
-        ax.set_yticks(positions)
-        ax.set_yticklabels([labels[key] for key in order], fontsize=9, color=TEXT)
-        ax.invert_yaxis()
-        ax.set_xlim(0, scale_max)
-        ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
-        ax.set_xlabel("xG", fontsize=8.5, color=MUTED)
-        ax.tick_params(labelsize=8)
-
-        for index, key in enumerate(order):
-            if key not in typology.index:
-                continue
-            row = typology.loc[key]
-            ax.text(
-                float(row["xG"]) + scale_max * 0.02,
-                index,
-                f"{int(row['sequences'])} seq  \u00b7  {int(row['goals'])}G  \u00b7  {float(row['share_of_xG']):.0f}% of xG",
-                color=TEXT,
-                fontsize=7.6,
-                va="center",
-                fontweight="bold",
-            )
-
-        if not typology.empty:
-            best = typology["xG"].idxmax()
-            fig.text(
-                left,
-                0.768,
-                f"Most dangerous route: {labels[best].lower()} ({typology.loc[best, 'share_of_xG']:.0f}% of xG)",
-                color=MUTED,
-                fontsize=8.5,
-            )
+    # One butterfly, not two panels: the route in the middle, each side's xG
+    # out to its own edge on one scale, so the comparison the page exists for
+    # -- which way each side was dangerous -- is a glance across one row.
+    labels["other"] = "Short attack"
+    ax = fig.add_axes([0.06, 0.12, 0.88, 0.62])
+    ax.axis("off")
+    peak = scale_max / 1.45 or 0.1
+    gap = 0.11
+    for i, key in enumerate(order):
+        y = len(order) - i
+        ax.text(0, y, labels[key], ha="center", va="center", color=TEXT, fontsize=11.5,
+                fontweight="bold")
+        for team_id, sign in ((HOME_ID, -1), (AWAY_ID, 1)):
+            frame = both[team_id]
+            row = frame.loc[key] if key in frame.index else None
+            value = float(row["xG"]) if row is not None else 0.0
+            count = int(row["sequences"]) if row is not None else 0
+            goals_n = int(row.get("goals", 0) or 0) if row is not None else 0
+            width = 0.40 * value / peak
+            colour = HOME if team_id == HOME_ID else AWAY
+            ax.barh(y, sign * width, left=sign * gap, height=0.56, color=colour, alpha=0.92)
+            edge = sign * (gap + width + 0.012)
+            ha = "left" if sign > 0 else "right"
+            ax.text(edge, y + 0.10, f"{value:.2f} xG" + ("  ★" * goals_n), ha=ha,
+                    va="center", color=TEXT, fontsize=11, fontweight="bold")
+            ax.text(edge, y - 0.22, f"{count} possession{'' if count == 1 else 's'}", ha=ha,
+                    va="center", color=MUTED, fontsize=8.5)
+    ax.set_xlim(-0.68, 0.68)
+    ax.set_ylim(0.35, len(order) + 1.0)
+    for team_id, x in ((HOME_ID, -0.32), (AWAY_ID, 0.32)):
+        frame = both[team_id]
+        colour = HOME if team_id == HOME_ID else AWAY
+        ax.text(x, len(order) + 0.85, TEAM_NAME[team_id].upper(), color=colour, ha="center",
+                fontsize=13, fontweight="bold")
+        if not frame.empty and float(frame["xG"].sum()) > 0:
+            best = frame["xG"].idxmax()
+            ax.text(x, len(order) + 0.55,
+                    f"Most dangerous: {labels.get(best, best).lower()} "
+                    f"({frame.loc[best, 'share_of_xG']:.0f}% of xG)",
+                    color=MUTED, ha="center", fontsize=9)
+    fig.text(0.06, 0.07,
+             "★ = a goal from that route · one scale for both sides, so the longest bar is "
+             "the most dangerous route on the pitch",
+             color=MUTED, fontsize=8.5)
 
     fig.text(
         0.945,
@@ -7072,10 +7066,22 @@ def goal_origins(events):
             if "directfreekick" in tokens
             else ""
         )
+        # "OTHER" told the reader nothing about Alajbegović's goal at Juventus;
+        # the residual class is named for what it is, a short move.
+        route = {
+            "build_up": "build-up from the back",
+            "sustained": "sustained attack",
+            "direct": "direct attack",
+            "counter": "counter-attack",
+            "set_piece": "set piece",
+            "other": "quick attack after a regain"
+            if "recover" in str(row.started_from)
+            else "short attack",
+        }.get(str(row.sequence_type), str(row.sequence_type).replace("_", " "))
         fig.text(
             text_x + 0.062,
             caption_top - 0.034,
-            (direct or str(row.sequence_type).replace("_", " ")).upper(),
+            (direct or route).upper(),
             color=MUTED,
             fontsize=7.5,
             fontweight="bold",
@@ -7097,6 +7103,24 @@ def goal_origins(events):
             fontsize=8,
             va="top",
         )
+        # Who made it, with what, and how good the chance was: the three facts
+        # every write-up of a goal needs and the board left to the event log.
+        assist = str(getattr(goal, "assist_player", "") or "")
+        body = str(getattr(goal, "body_part", "") or "")
+        body = {"RightFoot": "right foot", "LeftFoot": "left foot", "Head": "header"}.get(
+            body, body.lower() if body and body.lower() != "nan" else ""
+        )
+        xg_value = pd.to_numeric(getattr(goal, "xG", None), errors="coerce")
+        detail = "  ·  ".join(
+            part
+            for part in (
+                f"Assist: {_surname(assist)}" if assist and assist.lower() != "nan" else "",
+                body,
+                f"{float(xg_value):.2f} xG" if pd.notna(xg_value) else "",
+            )
+            if part
+        )
+        fig.text(text_x, caption_top - 0.110, detail, color=TEXT, fontsize=8, va="top")
 
     fig.text(
         0.06,

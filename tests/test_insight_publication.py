@@ -117,7 +117,8 @@ def test_title_and_reading_handle_draw_and_opposing_finishing_deviations():
         "date": "2026-08-31",
     }
     assert "Monaco won despite PSG" in headline(c)
-    assert "-1.72" in result_read(c) and "+1.41" in result_read(c)
+    assert "PSG scored 1.72 fewer than its xG" in result_read(c)
+    assert "Monaco scored 1.41 more than its xG" in result_read(c)
     c.update(home_goals=1, away_goals=1)
     assert "Drawn on goals" in headline(c)
     assert "winner" not in result_read(c)

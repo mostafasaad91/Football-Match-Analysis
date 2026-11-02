@@ -242,6 +242,7 @@ class MatchFacts:
     chart_readings: dict[str, dict[str, Any]] = field(default_factory=dict)
     skipped_charts: list[dict[str, str]] = field(default_factory=list)
     sub_windows: pd.DataFrame | None = None
+    bench: pd.DataFrame | None = None
 
     def side(self, key: str) -> Side:
         return self.home if key == "home" else self.away
@@ -337,6 +338,7 @@ def load_match(directory: str | Path) -> MatchFacts:
     routes = _read_csv(tables / "routes.csv")
     spells = _read_csv(tables / "spells.csv")
     sub_windows = _read_csv(tables / "substitution_windows.csv")
+    bench = _read_csv(tables / "bench_contributions.csv")
 
     sides = {}
     for key in ("home", "away"):
@@ -373,6 +375,7 @@ def load_match(directory: str | Path) -> MatchFacts:
         season=str(info.get("season") or ""),
         round_name=str(info.get("round_name") or ""),
         sub_windows=sub_windows if not sub_windows.empty else None,
+        bench=bench if not bench.empty else None,
     )
     _fill_timeline(facts, events, sides)
     _fill_manifest(facts, out)
@@ -799,6 +802,12 @@ def next_best(side: Side, count: int = 3) -> dict | None:
 # ----------------------------------------------------------------------
 # Timeline and manifest
 # ----------------------------------------------------------------------
+def _is_sending_off(qualifiers: Any) -> bool:
+    """A straight red or a second yellow; the feed never tags the latter Red."""
+    text = str(qualifiers or "")
+    return "SecondYellow" in text or bool(re.search(r"['\"]Red['\"]", text))
+
+
 def _fill_timeline(facts: MatchFacts, events: pd.DataFrame, sides: dict[str, Side]) -> None:
     if events.empty:
         return
@@ -840,7 +849,9 @@ def _fill_timeline(facts: MatchFacts, events: pd.DataFrame, sides: dict[str, Sid
                 "minute": _int(row.get("minute")),
                 "player": str(row.get("player")),
                 "team": side.name if side else "",
-                "colour": "Red" if "Red" in str(row.get("qualifier_names")) else "Yellow",
+                "side": side.key if side else "",
+                "colour": "Red" if _is_sending_off(row.get("qualifier_names")) else "Yellow",
+                "second_yellow": "SecondYellow" in str(row.get("qualifier_names")),
             }
         )
 

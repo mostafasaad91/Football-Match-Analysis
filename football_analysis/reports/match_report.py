@@ -344,15 +344,28 @@ def compute_ppda_both(info: dict, events: pd.DataFrame) -> dict:
     }
 
 
+def _press_leader(home_name: str, away_name: str, h: float, a: float) -> str | None:
+    """The side that pressed harder, or None when the PPDAs are too close to call.
+
+    Juventus 10.65 against Napoli 10.54 was published as "Napoli pressed more
+    aggressively" -- a verdict on a 1% gap that the poster, on slightly later
+    data, read the other way round.
+    """
+    if abs(h - a) < 0.1 * max(h, a):
+        return None
+    return home_name if h < a else away_name
+
+
 def _ppda_intensity_label(ppda: float | None) -> tuple[str, str]:
     """Classify PPDA as Elite, High, Medium, or Low and return its color."""
     if ppda is None:
         return "N/A", TEXT_FADED
     if ppda < 8.0:
         return "ELITE PRESS", "#22c55e"
-    if ppda < 11.0:
+    # Top-flight averages sit around 10-11, so "high" has to start below that.
+    if ppda < 10.0:
         return "HIGH PRESS", "#84cc16"
-    if ppda < 14.0:
+    if ppda < 13.0:
         return "MEDIUM BLOCK", "#facc15"
     return "LOW BLOCK", "#f97316"
 
@@ -583,18 +596,14 @@ def draw_ppda_gauge(ppda_data: dict, info: dict, save_path: str | None = None):
     _draw_dial([0.55, 0.42, 0.40, 0.45], away_name, a, a_passes, a_def, _team_away_col)
 
     if h is not None and a is not None:
-        if h < a:
-            verdict = f"{home_name} pressed more aggressively"
-            v_color = _team_home_col
-            diff = a - h
-        elif a < h:
-            verdict = f"{away_name} pressed more aggressively"
-            v_color = _team_away_col
-            diff = h - a
-        else:
-            verdict = "Both teams pressed equally"
+        leader = _press_leader(home_name, away_name, h, a)
+        diff = abs(h - a)
+        if leader is None:
+            verdict = "Both teams pressed with similar intensity"
             v_color = TEXT_BRIGHT
-            diff = 0
+        else:
+            verdict = f"{leader} pressed more aggressively"
+            v_color = _team_home_col if leader == home_name else _team_away_col
         fig.text(
             0.5,
             0.34,
@@ -1797,8 +1806,15 @@ def _draw_verdict_page(pdf, info, events, ppda, goals_df, page_no=None):
         )
 
     # ── Pressing battle ──
-    if pph is not None and ppa is not None:
-        press_leader = hn if pph < ppa else an
+    press_leader = (
+        _press_leader(hn, an, pph, ppa) if pph is not None and ppa is not None else None
+    )
+    if pph is not None and ppa is not None and press_leader is None:
+        press = (
+            f"Out of possession, neither side out-pressed the other "
+            f"(PPDA {min(pph, ppa):.1f} vs {max(pph, ppa):.1f})."
+        )
+    elif press_leader is not None:
         press = (
             f"Out of possession, {press_leader} pressed more aggressively "
             f"(PPDA {min(pph, ppa):.1f} vs {max(pph, ppa):.1f}), engaging earlier and "
@@ -4572,18 +4588,14 @@ def _draw_team_stats_compare_page(pdf, info, events, ppda):
 
     # PPDA verdict line
     if h_ppda is not None and a_ppda is not None:
-        if h_ppda < a_ppda:
-            verdict = f"{hn} pressed more aggressively"
-            vcol = home_text_col
-            diff = a_ppda - h_ppda
-        elif a_ppda < h_ppda:
-            verdict = f"{an} pressed more aggressively"
-            vcol = away_text_col
-            diff = h_ppda - a_ppda
-        else:
-            verdict = "Both teams pressed equally"
+        leader = _press_leader(hn, an, h_ppda, a_ppda)
+        diff = abs(h_ppda - a_ppda)
+        if leader is None:
+            verdict = "Both teams pressed with similar intensity"
             vcol = TEXT_BRIGHT
-            diff = 0.0
+        else:
+            verdict = f"{leader} pressed more aggressively"
+            vcol = home_text_col if leader == hn else away_text_col
         fig.text(
             0.717,
             0.585,
