@@ -1155,114 +1155,67 @@ def touches(team_metrics: pd.DataFrame) -> Path:
 
 
 def xt_per_minute(events: pd.DataFrame) -> Path:
-    work = events.copy()
-    work["minute"] = pd.to_numeric(work["minute"], errors="coerce").fillna(0).astype(int)
-    work["xT"] = pd.to_numeric(work["xT"], errors="coerce").fillna(0).clip(lower=0)
-    work = work[~_bool(work.get("is_penalty_shootout", pd.Series(False, index=work.index)))]
-    max_min = max(90, int(work["minute"].max()) + 1)
-    minutes = np.arange(0, max_min + 1)
-    home = (
-        work[work["team_id"].eq(HOME_ID)]
-        .groupby("minute")["xT"]
-        .sum()
-        .reindex(minutes, fill_value=0)
+    """Threat built through the match, drawn the way the xG flow is.
+
+    Ninety-eight bars a side and two rolling lines on top of them asked the
+    reader to average a bar chart by eye. A cumulative step reads like the xG
+    flow beside it: a steep climb is a spell of pressure, a flat run is a side
+    with nothing on the ball, and the end of each line is the total.
+    """
+    from football_analysis.metrics.frame_values import short_name
+
+    work = events[~_bool(events.get("is_penalty_shootout", pd.Series(False, index=events.index)))]
+    clock = pd.to_numeric(work["minute"], errors="coerce").fillna(0) + pd.to_numeric(
+        work.get("second", 0), errors="coerce"
+    ).fillna(0) / 60
+    threat = pd.to_numeric(work["xT"], errors="coerce").fillna(0).clip(lower=0)
+    end = float(max(clock.max(), 90))
+    fig = plt.figure(figsize=(14, 8.4), facecolor=BG)
+    amoled_header(
+        fig,
+        "Threat Built Through the Match",
+        "Cumulative xT from successful passes and carries · a steep climb is a spell of pressure "
+        "· stars are goals",
     )
-    away = (
-        work[work["team_id"].eq(AWAY_ID)]
-        .groupby("minute")["xT"]
-        .sum()
-        .reindex(minutes, fill_value=0)
-    )
-    home_roll = home.rolling(5, min_periods=1).mean()
-    away_roll = away.rolling(5, min_periods=1).mean()
-    fig, ax = page(
-        "xT per Minute",
-        f"{HOME_NAME} above zero; {AWAY_NAME} mirrored below zero for comparison—not negative xT",
-    )
+    fig.text(0.94, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA", ha="right", fontsize=8,
+             color=MUTED)
+    ax = fig.add_axes([0.07, 0.14, 0.74, 0.62])
     clean_ax(ax)
-    ax.axhline(0, color=GRID, lw=1.4)
-    ax.bar(minutes, home.values, width=0.82, color=HOME, alpha=0.38)
-    ax.bar(minutes, -away.values, width=0.82, color=AWAY, alpha=0.38)
-    ax.plot(minutes, home_roll, color=HOME, lw=2.8)
-    ax.plot(minutes, -away_roll, color=AWAY, lw=2.8, ls=(0, (7, 4)))
-    max_abs = max(float(home.max()), float(away.max()), 0.02)
-    ax.set_ylim(-max_abs * 1.72, max_abs * 1.72)
-    # Room on the right for the two curve labels, but no ticks past the final
-    # whistle: the axis printed 100 and ran to 112 over a 96-minute match.
-    ax.set_xlim(0, max_min + 16)
-    ax.set_xticks([t for t in range(0, int(max_min) + 1, 15)])
-    ax.set_xlabel("Match minute")
-    # A scale, and the match's own landmarks: both sides read from the same
-    # zero line, so the axis prints magnitudes, and the half-time line and the
-    # goals say when the threat turned into something.
-    step = 0.5 if max_abs < 2.5 else 1.0
-    top = float(np.floor(max_abs / step) * step)
-    ticks = [t for t in np.arange(-top, top + step / 2, step)]
-    ax.set_yticks(ticks)
-    ax.yaxis.set_major_formatter(lambda value, _pos: f"{abs(value):.1f}")
-    ax.tick_params(axis="y", labelsize=8.5, colors=MUTED)
-    ax.set_ylabel("xT per minute", color=MUTED, fontsize=9)
-    ax.axvline(45, color=GRID, lw=1.1, ls=(0, (4, 4)), zorder=1)
-    ax.text(45.6, -max_abs * 1.5, "HT", color=MUTED, fontsize=8.5, fontweight="bold", va="bottom")
-    goals = work[
-        _bool(work.get("is_goal", pd.Series(False, index=work.index)))
-        & ~_bool(work.get("is_own_goal", pd.Series(False, index=work.index)))
-    ]
-    # Goals close together on one side take turns at two heights: 80' Vitinha
-    # and 85' Ruiz printed as one run of text, "80' Vitinh85' Ruiz".
-    last_label = {True: -99.0, False: -99.0}
-    raised = {True: False, False: False}
-    for _, goal in goals.sort_values(["minute", "second"]).iterrows():
-        mine = goal["team_id"] == HOME_ID
-        colour = HOME if mine else AWAY
-        minute = float(goal["minute"])
-        raised[mine] = (minute - last_label[mine] < 9) and not raised[mine]
-        last_label[mine] = minute
-        lift = 1.32 + (0.14 if raised[mine] else 0.0)
-        height = max_abs * (lift if mine else -lift)
-        ax.vlines(minute, 0, height, color=colour, lw=1.0, alpha=0.5, zorder=1)
-        ax.scatter(
-            [minute],
-            [height],
-            s=170,
-            marker="*",
-            color=colour,
-            edgecolor=BG,
-            linewidth=0.8,
-            zorder=5,
-        )
-        surname = str(goal.get("player") or "").split()[-1] if goal.get("player") else ""
-        ax.text(
-            minute,
-            height + (max_abs * 0.14 if mine else -max_abs * 0.14),
-            f"{int(minute)}′ {surname}".strip(),
-            color=TEXT,
-            fontsize=8.5,
-            fontweight="bold",
-            ha="center",
-            va="bottom" if mine else "top",
-            zorder=6,
-        )
-    ax.text(
-        max_min + 1,
-        float(home_roll.iloc[-1]),
-        f"{HOME_NAME} · 5-min avg",
-        color=HOME,
-        va="center",
-        fontweight="bold",
-        fontsize=9,
-    )
-    ax.text(
-        max_min + 1,
-        -float(away_roll.iloc[-1]),
-        f"{AWAY_NAME} · 5-min avg",
-        color=AWAY,
-        va="center",
-        fontweight="bold",
-        fontsize=9,
-    )
-    ax.grid(axis="x", color=GRID, alpha=0.5, lw=0.7)
-    return save(fig, "05_xt_per_minute_redesign.png")
+    ax.grid(color=GRID, lw=0.7)
+    ax.set_axisbelow(True)
+    goals = work[_bool(work.get("is_goal", pd.Series(False, index=work.index)))]
+    credited = credited_team(goals) if len(goals) else pd.Series(dtype=float)
+    totals = {}
+    for team_id, colour in ((HOME_ID, HOME), (AWAY_ID, AWAY)):
+        mask = work["team_id"].eq(team_id) & threat.gt(0)
+        times = clock[mask].sort_values()
+        running = threat[times.index].cumsum()
+        xs = np.r_[0, times.to_numpy(), end]
+        ys = np.r_[0, running.to_numpy(), running.iloc[-1] if len(running) else 0]
+        ax.step(xs, ys, where="post", color=colour, lw=2.8)
+        ax.fill_between(xs, ys, step="post", color=colour, alpha=0.10)
+        totals[team_id] = float(ys[-1])
+        for idx, goal in goals[credited.eq(team_id)].iterrows():
+            at = float(clock.get(idx, goal["minute"]))
+            height = float(np.interp(at, xs, ys))
+            ax.scatter([at], [height], marker="*", s=320, color=EVENT_HIGHLIGHT, edgecolor=BG,
+                       zorder=5)
+            ax.annotate(f"{int(goal['minute'])}′ {short_name(goal.get('player'))}", (at, height),
+                        xytext=(0, 12), textcoords="offset points", ha="center", color=TEXT,
+                        fontsize=10, fontweight="bold")
+    ax.axvline(45, color=MUTED, lw=0.9, ls=(0, (3, 3)))
+    ax.text(45.6, 0.97, "HT", color=MUTED, fontsize=9, va="top", transform=ax.get_xaxis_transform())
+    ax.set_xlim(0, end)
+    ax.set_ylim(bottom=0)
+    ticks = list(range(0, int(end) + 1, 15))
+    ax.set_xticks(ticks, [f"{m}′" for m in ticks], color=MUTED)
+    ax.tick_params(colors=MUTED, labelsize=10)
+    ax.set_xlabel("Match minute", color=MUTED)
+    ax.set_ylabel("Cumulative xT", color=MUTED)
+    for row, (team_id, colour, name) in enumerate(((HOME_ID, HOME, HOME_NAME), (AWAY_ID, AWAY, AWAY_NAME))):
+        fig.text(0.84, 0.66 - row * 0.2, f"{totals[team_id]:.1f}", color=colour, **display(44))
+        fig.text(0.84, 0.62 - row * 0.2, f"{name} · xT built", color=MUTED, fontsize=10)
+    return save(fig, "15_xt_per_minute.png")
 
 
 def xt_map(events: pd.DataFrame, team_id=HOME_ID) -> Path:

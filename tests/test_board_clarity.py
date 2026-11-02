@@ -86,17 +86,15 @@ def test_zone_14_lanes_each_have_their_own_colour(v):
 
 
 # ── cropping to the attacking end ───────────────────────────────────────────
-def test_crop_to_attack_shortens_the_figure_to_the_pitch():
+def test_crop_to_attack_shows_the_whole_pitch_and_fits_the_figure_to_it():
+    """Every pitch board draws the full pitch, so each move is seen from where it began."""
     from football_analysis.visuals import visual_redesign_full as full
 
     fig, pitch, side = full.pitch_axes("Shot Map · Test", "x")
     full.draw_long_pitch(pitch)
-    tall = fig.get_size_inches()[1]
     full.crop_to_attack(pitch, side, 55.0)
-    short = fig.get_size_inches()[1]
     low, high = pitch.get_ylim()
-    assert short < tall
-    assert low == 55.0 and high > full.PITCH_LENGTH
+    assert low < 0 and high > full.PITCH_LENGTH
     box = pitch.get_position()
     assert 0 < box.y0 < box.y1 <= 1
     plt.close(fig)
@@ -159,9 +157,10 @@ def test_the_xt_scale_is_shared_by_both_teams(board):
 def test_the_pass_map_draws_the_passes_as_arrows(board):
     v, info, events, _xg, figures = board
     v.pass_map(events, info["home_id"], 9)
+    # One pitch per third, and every pass drawn on exactly one of them.
     pitches = [ax for ax in figures[0].axes if ax.get_aspect() == 1.0]
-    assert len(pitches) == 1
-    arrows = [t for t in pitches[0].texts if getattr(t, "arrow_patch", None) is not None]
+    assert len(pitches) == 3
+    arrows = [t for p in pitches for t in p.texts if getattr(t, "arrow_patch", None) is not None]
     passes = events[
         events["team_id"].eq(info["home_id"])
         & events["type"].astype(str).eq("Pass")

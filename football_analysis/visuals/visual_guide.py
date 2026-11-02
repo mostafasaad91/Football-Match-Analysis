@@ -42,7 +42,7 @@ GUIDES = [
     ),
     (
         "pass_map",
-        "Arrows trace recorded pass origins and destinations: completed in the team colour, incomplete dashed, key passes highlighted. Compare route, length and outcome to understand how the ball was moved.",
+        "Each pitch holds the passes played from one third: completed in the team colour, incomplete in grey, key passes in white. Read the build-up, the progression and the final third separately, and the line under each title for how often the ball went on to the next stage.",
     ),
     (
         "goalkeeper",
@@ -54,7 +54,7 @@ GUIDES = [
     ),
     (
         "xt_per_minute",
-        "Positive movement xT is grouped by event minute. Peaks locate valuable ball progression, including possessions that did not produce a shot.",
+        "Cumulative positive xT from successful passes and carries. A steep climb is a spell of pressure, including possessions that produced no shot; the end of each line is the side's total.",
     ),
     (
         "progressive",
@@ -66,7 +66,7 @@ GUIDES = [
     ),
     (
         "defens",
-        "Recorded tackles, interceptions, blocks and recoveries locate defensive actions. Event frequency does not measure the positioning of players away from the ball.",
+        "Ball-winning actions (tackles won, interceptions, recoveries) on the left, actions that only stopped the attack (clearances, fouls, blocks) on the right. Event locations do not measure positioning away from the ball.",
     ),
     (
         "dominat",
@@ -78,11 +78,11 @@ GUIDES = [
     ),
     (
         "box_entries",
-        "Successful movements from outside into the penalty area measure access. Repeated entries in one possession count separately; they are not distinct attacks.",
+        "Successful movements from outside into the penalty area; highlighted entries were followed by a shot in the same possession. Repeated entries in one possession count separately.",
     ),
     (
         "high_regain",
-        "A high regain is an inferred possession recovery in the advanced zone. Review the next actions to see whether that recovery created box access or a shot.",
+        "A high regain is an open-play recovery in the attacking 40%. Each is marked by what the possession went on to do: nothing, a box entry, or a shot.",
     ),
     (
         "pass_target",

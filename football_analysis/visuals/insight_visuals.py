@@ -222,6 +222,62 @@ def _team_heads(ax, charts, y, xs=(-0.32, 0.32)):
         ax.text(x, y, name.upper(), color=charts.colors[tid], ha="center", size=13, weight="bold")
 
 
+def _duration_board(charts, p):
+    """Where each side's threat came from, by how long the possession lasted.
+
+    Two box plots of positive xT per band asked the reader to compare medians,
+    quartiles and whiskers across eight boxes; nobody reads a match that way.
+    The question is simpler: was a side dangerous quickly, or only when it kept
+    the ball? Each band is now a share of the side's own threat, with the count
+    and shots beside it.
+    """
+    bands = [
+        ("Quick \u00b7 under 10 s", 0, 10),
+        ("Short \u00b7 10\u201320 s", 10, 20),
+        ("Built \u00b7 20\u201340 s", 20, 40),
+        ("Long \u00b7 over 40 s", 40, 1e9),
+    ]
+    fig, ax = _butterfly_frame(
+        charts,
+        "Possession value by duration",
+        "Share of each side's threat (xT) produced by possessions of each length \u00b7 "
+        "with how many there were and the shots they ended in",
+    )
+    rows = {}
+    for tid in charts.names:
+        own = p[p.team_id.eq(tid)]
+        total = float(own.positive_xT.fillna(0).sum()) or 1.0
+        rows[tid] = []
+        for _, lo, hi in bands:
+            g = own[own.duration.gt(lo) & own.duration.le(hi)] if lo else own[own.duration.le(hi)]
+            rows[tid].append((len(g), float(g.positive_xT.fillna(0).sum()) / total,
+                              int(g.shots.fillna(0).sum())))
+    for i, (label, _, _) in enumerate(bands):
+        y = len(bands) - i
+        ax.text(0, y, label, ha="center", va="center", color=FG, size=11, weight="bold")
+        for (tid, _), sign in zip(charts.names.items(), (-1, 1)):
+            n, share, shots = rows[tid][i]
+            w = 0.40 * share
+            ax.barh(y, sign * w, left=sign * 0.13, height=0.56, color=charts.colors[tid], alpha=0.92)
+            edge = sign * (0.13 + w + 0.012)
+            ha = "left" if sign > 0 else "right"
+            ax.text(edge, y + 0.10, f"{100 * share:.0f}% of threat", ha=ha, va="center", color=FG,
+                    size=11, weight="bold")
+            ax.text(edge, y - 0.22, f"{counted(n, 'possession')} \u00b7 {counted(shots, 'shot')}",
+                    ha=ha, va="center", color=MUTED, size=8.5)
+    ax.set_xlim(-0.68, 0.68)
+    ax.set_ylim(0.35, len(bands) + 0.9)
+    _team_heads(ax, charts, len(bands) + 0.65)
+    charts.save(
+        fig,
+        "53_possession_speed_value.png",
+        "Possession value by duration",
+        "Compare where each side's threat came from: quick possessions or long spells on the ball.",
+        "Bars are each side's own threat split by possession length, so both sides sum to 100%.",
+        len(p),
+    )
+
+
 def _funnel_board(charts, p):
     """Possession to shot on target as one butterfly, with the rate at each step.
 
@@ -269,45 +325,60 @@ def _funnel_board(charts, p):
 
 
 def _regain_speed_board(charts, regains):
-    """Every regain split by how quickly the ball reached the final third, one bar a side."""
-    bands = ["0–5 s", "6–12 s", "Over 12 s", "Never reached"]
-    shades = [1.0, 0.72, 0.45, 0.18]
-    fig, ax = _butterfly_frame(
-        charts,
-        "Regains and time to reach the final third",
-        "Every regain, split by how quickly the ball then reached the final third",
-        height=6.4,
+    """Of every ball won, the share that had reached the final third by each second.
+
+    A 100% bar split into four shades of one colour was not read as a speed:
+    the eye had to add two segments to answer "how many went forward quickly".
+    A rising line answers it at any second, and the gap between the two lines
+    is the difference in how each side attacked after winning the ball.
+    """
+    from football_analysis.visuals.typography import display
+
+    fig, axes = charts.figure(
+        "How fast regains went forward",
+        "Of every ball won, the share already in the final third after each second "
+        "· a higher line is a faster side",
+        columns=1,
+        height=7.6,
     )
-    ax.set_position([0.17, 0.22, 0.68, 0.48])
+    ax = axes[0]
+    ax.set_position([0.08, 0.15, 0.62, 0.60])
+    seconds = np.arange(0, 31)
+    for tid, name in charts.names.items():
+        times = regains.loc[regains.team_id.eq(tid), "seconds_to_third"]
+        total = max(len(times), 1)
+        curve = [100 * float(times.le(t).sum()) / total for t in seconds]
+        colour = charts.colors[tid]
+        ax.plot(seconds, curve, color=colour, lw=3)
+        ax.fill_between(seconds, curve, color=colour, alpha=0.08)
+        for t in (5, 12):
+            ax.scatter([t], [curve[t]], color=colour, s=60, zorder=4, edgecolor=BG)
+            ax.annotate(f"{curve[t]:.0f}%", (t, curve[t]), xytext=(8, 4), textcoords="offset points",
+                        color=colour, size=10, weight="bold")
+    for t in (5, 12):
+        ax.axvline(t, color=MUTED, lw=0.9, ls=(0, (3, 3)))
+        ax.text(t, 1.0, f"{t} s", transform=ax.get_xaxis_transform(), color=MUTED, ha="center",
+                va="bottom", size=9)
+    ax.set_xlim(0, 30)
+    ax.set_ylim(0, max(50, ax.get_ylim()[1]))
+    ax.set_xlabel("Seconds after winning the ball")
+    ax.set_ylabel("Regains already in the final third (%)")
     for row, (tid, name) in enumerate(charts.names.items()):
         times = regains.loc[regains.team_id.eq(tid), "seconds_to_third"]
-        parts = [int(times.le(5).sum()), int((times.gt(5) & times.le(12)).sum()),
-                 int(times.gt(12).sum()), int(times.isna().sum())]
-        total = max(sum(parts), 1)
-        y, left = 1 - row, 0.0
-        for n, alpha in zip(parts, shades):
-            w = n / total
-            ax.barh(y, w, left=left, height=0.5, color=charts.colors[tid], alpha=alpha,
-                    edgecolor=BG, lw=2)
-            if w > 0.06:
-                ax.text(left + w / 2, y, f"{n}\n{100 * w:.0f}%", ha="center", va="center",
-                        color=BG if alpha > 0.6 else FG, size=10, weight="bold")
-            left += w
-        ax.text(-0.012, y, f"{name}\n{counted(sum(parts), 'regain')}", ha="right", va="center",
-                color=charts.colors[tid], size=11, weight="bold")
-        ax.text(1.012, y, f"{100 * (parts[0] + parts[1]) / total:.0f}%\nwithin 12 s",
-                ha="left", va="center", color=FG, size=10)
-    for k, (label, alpha) in enumerate(zip(bands, shades)):
-        ax.barh(1.48, 0.03, left=(k + 0.5) / 4 - 0.075, height=0.08, color=FG, alpha=alpha)
-        ax.text((k + 0.5) / 4 - 0.035, 1.48, label, va="center", color=MUTED, size=10)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(-0.5, 1.7)
+        y = 0.70 - row * 0.30
+        fig.text(0.75, y, name.upper(), color=charts.colors[tid], size=13, weight="bold")
+        fig.text(0.75, y - 0.04, f"{counted(len(times), 'ball')} won", color=MUTED, size=10)
+        fig.text(0.75, y - 0.112, str(int(times.le(12).sum())), color=FG, va="center", **display(30))
+        fig.text(0.795, y - 0.112, "reached the final third\nwithin 12 seconds", color=MUTED,
+                 size=9.5, va="center")
+        fig.text(0.75, y - 0.17, f"{int(times.isna().sum())} never got there", color=MUTED, size=10)
     charts.save(
         fig,
         "54_regain_speed.png",
         "Regain progression time",
         "Counts include regains that never reached the final third.",
-        "One bar per side out of 100%; zero seconds means regained inside the final third.",
+        "Zero seconds means the ball was won inside the final third; a line that flattens early "
+        "is a side that stopped going forward once it had the ball.",
         len(regains),
     )
 
@@ -757,60 +828,7 @@ def build_insight_visuals(events, players, info, out):
         "xG per shot",
         player=True,
     )
-    fig, axes = charts.figure(
-        "Possession value by duration",
-        "Each box shows the distribution of positive xT; counts retain the number of possessions in each duration band.",
-        columns=2,
-    )
-    for ax, (tid, name) in zip(axes, charts.names.items()):
-        own = p[p.team_id.eq(tid)]
-        bands = [
-            own.duration.le(10),
-            own.duration.gt(10) & own.duration.le(20),
-            own.duration.gt(20) & own.duration.le(40),
-            own.duration.gt(40),
-        ]
-        groups = [own.loc[mask, "positive_xT"].dropna().to_numpy() for mask in bands]
-        for i, values in enumerate(groups):
-            if len(values) >= 4:
-                ax.boxplot(
-                    [values],
-                    positions=[i],
-                    widths=0.45,
-                    patch_artist=True,
-                    boxprops={"facecolor": charts.colors[tid], "alpha": 0.5},
-                    medianprops={"color": FG},
-                    whiskerprops={"color": MUTED},
-                    capprops={"color": MUTED},
-                    flierprops={"marker": ".", "markeredgecolor": charts.colors[tid]},
-                )
-            elif len(values):
-                ax.scatter([i] * len(values), values, color=charts.colors[tid])
-        ax.set_xticks(
-            range(4),
-            [
-                f"{label}\nn={len(v)}"
-                for label, v in zip(["0–10s", "10–20s", "20–40s", "40s+"], groups)
-            ],
-        )
-        # Say which possessions the bands hold: only those with a pass or carry
-        # carry an xT figure, so the counts summed to 88 beside the funnel's 123.
-        valued = sum(len(v) for v in groups)
-        ax.set_title(
-            f"{name} · {valued} of {len(own)} possessions had a pass or carry",
-            color=FG,
-        )
-        ax.set_ylabel("Positive xT")
-        ax.set_xlim(-0.6, 3.6)
-    share_limits(axes, "y")
-    charts.save(
-        fig,
-        "53_possession_speed_value.png",
-        "Possession value by duration",
-        "Compare typical value and its spread within each duration group.",
-        "Box = middle 50%; line = median. Groups below four observations show individual points.",
-        len(p),
-    )
+    _duration_board(charts, p)
     regains = p[p.is_regain]
     _regain_speed_board(charts, regains)
     _funnel_board(charts, p)

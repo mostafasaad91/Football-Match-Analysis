@@ -183,6 +183,10 @@ class Section:
     # tight, and identifying them by position broke the moment the profiles
     # stopped being last.
     gallery: bool = False
+    # Whether each figure carries its board reading under it. The argued
+    # sections write about their figures in the paragraphs themselves, so a
+    # second reading under each one broke the flow; the gallery keeps them.
+    notes: bool = True
 
     def words(self) -> int:
         return sum(len(p.split()) for p in self.paragraphs)
@@ -2350,7 +2354,7 @@ def render_docx(article: Article, path: Path | str, home: str = "", away: str = 
             # In the appendix a caption alone is a label. Each board gets the
             # reading the report writes under it, from the same source, so the
             # two documents cannot say different things about the same picture.
-            note = _analysis(visual, article.context)
+            note = _analysis(visual, article.context) if section.notes else None
             if note:
                 body = document.add_paragraph()
                 body_run = body.add_run(_clean(note))
@@ -2545,7 +2549,7 @@ def render_pdf(article: Article, path: Path | str) -> Path:
             )
             title = escape(clean(commentary_title(visual, article.context or {})))
             block = [picture(Path(visual), 6.2), Paragraph(mark + title, style["caption"])]
-            note = _analysis(visual, article.context)
+            note = _analysis(visual, article.context) if section.notes else None
             if note:
                 block.append(para(note, "note"))
             story.append(KeepTogether(block[:2]))

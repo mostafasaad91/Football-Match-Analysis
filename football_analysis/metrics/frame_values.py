@@ -69,14 +69,27 @@ def whole(value: Any, default: int = 0) -> int:
     return int(number(value, default))
 
 
-def surname(value: Any, default: str = "") -> str:
-    """The last word of a name, safely.
+_SURNAME_PARTICLES = {
+    "van", "von", "de", "der", "den", "di", "da", "dos", "das", "du", "la", "le",
+    "mac", "mc", "ter", "ten", "el", "al", "del", "della", "st", "st.",
+}
 
-    ``"".split()[-1]`` raises IndexError, and a chart that cannot label a goal
-    should still draw the goal.
+
+def surname(value: Any, default: str = "") -> str:
+    """The surname of a name, particles included, safely.
+
+    The last word alone printed "Dijk" for van Dijk and "Allister" for Mac
+    Allister on every board that names players. A particle before the last
+    word is kept with it. ``"".split()[-1]`` raises IndexError, and a chart that
+    cannot label a goal should still draw the goal.
     """
     parts = text(value).split()
-    return parts[-1] if parts else default
+    if not parts:
+        return default
+    start = len(parts) - 1
+    while start > 1 and parts[start - 1].lower() in _SURNAME_PARTICLES:
+        start -= 1
+    return " ".join(parts[start:])
 
 
 def short_name(value: Any) -> str:

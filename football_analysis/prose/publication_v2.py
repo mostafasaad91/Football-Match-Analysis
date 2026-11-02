@@ -195,6 +195,17 @@ def build_article(
 
     c = build_context(events, xg, team_metrics, player_metrics, match_info)
     out = Path(out_dir)
+    # The tactical article: one section per phase of play for each side,
+    # figures inside them as evidence. The figure-by-figure assembly below is
+    # kept as the fallback for a package that lacks the tables it reads.
+    try:
+        from football_analysis.prose.tactical_article import build_tactical_article
+
+        tactical = build_tactical_article(out, match_info, c)
+        if tactical is not None:
+            return tactical
+    except Exception as error:
+        print(f"  ! tactical article fell back to the figure article: {type(error).__name__}: {error}")
     paths = sorted(out.glob("[0-9]*.png"))
     # Each figure has to earn a place in the argument. The PDF remains the reference.
     preferred = [
@@ -392,9 +403,9 @@ def write_markdown(article, out):
     for section in article.sections:
         lines.extend(["", f"## {section.heading}", *section.paragraphs])
         for p in section.visuals:
-            lines.extend(
-                [f"![{p.stem}]({p.relative_to(out).as_posix()})", reading(p, article.context)]
-            )
+            lines.append(f"![{p.stem}]({p.relative_to(out).as_posix()})")
+            if getattr(section, "notes", True):
+                lines.append(reading(p, article.context))
     (out / "match_article.md").write_text("\n\n".join(lines), encoding="utf-8")
 
 
