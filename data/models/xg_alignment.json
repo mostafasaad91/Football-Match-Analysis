@@ -1,30 +1,32 @@
 {
   "method": "opta_reference_fitted_v1",
   "reference": "Opta via FotMob shot maps",
-  "fitted_utc": "2026-10-31T12:28:47+00:00",
-  "shots": 13865,
-  "matches": 496,
+  "fitted_utc": "2026-11-03T00:58:53+00:00",
+  "shots": 15095,
+  "matches": 543,
   "terms": [
     "const",
     "logit",
     "big_chance",
     "log_angle",
     "from_corner",
-    "header",
-    "bc_dist",
+    "bc_header",
     "first_touch",
-    "block_known"
+    "bc_dist",
+    "block_known",
+    "header"
   ],
-  "rmse_vs_reference": 0.07485728212759224,
+  "rmse_vs_reference": 0.07469068049846002,
   "weights": {
-    "const": -0.28803942820312606,
-    "logit": 0.29753907080851544,
-    "big_chance": 0.36716336868940386,
-    "log_angle": 1.426675358048129,
-    "from_corner": -0.5084351090595356,
-    "header": -0.4751402800188136,
-    "bc_dist": 1.5384652013034028,
-    "first_touch": -0.22761592982449366,
-    "block_known": -0.2447599579688821
+    "const": -0.2959927040651834,
+    "logit": 0.32159259520384237,
+    "big_chance": 0.41098625256003307,
+    "log_angle": 1.3802608091961028,
+    "from_corner": -0.5046309849067393,
+    "bc_header": -0.17686669720498724,
+    "first_touch": -0.22638193101458406,
+    "bc_dist": 1.4883015849954175,
+    "block_known": -0.23280082848396177,
+    "header": -0.363921701361628
   }
 }
