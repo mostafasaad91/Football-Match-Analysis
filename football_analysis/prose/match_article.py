@@ -68,7 +68,13 @@ from football_analysis.metrics.frame_values import (
 # or found nothing to argue -- and it is set with room under the spread the
 # corpus actually has. Re-fitting it to the lowest fixture on disk is what put
 # it here; do not do that again.
-TARGET_WORDS = (1050, None)
+#
+# The phase-of-play article (tactical_article) writes a sentence only when the
+# match gives it something to say, so a quiet fixture is meant to read short.
+# Over this week's 48 matches it ran 876 to about 1200 words, median 986, and
+# a lower-league cup tie with thin event data came in at 784. One team section
+# is 110-150 words; 600 still catches an article that lost two of them.
+TARGET_WORDS = (600, None)
 
 # Player radars carried per side, matching the report's own appendix.
 RADARS_PER_TEAM = 5
