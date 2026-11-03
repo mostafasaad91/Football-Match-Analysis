@@ -1422,10 +1422,8 @@ def paragraphs_for(visual: Visual, facts: MatchFacts, next_visual: Visual | None
     body = [one_reads_singular(text) for text in body if text and not _carries_nothing(str(text))]
     if next_visual is not None:
         template = HANDOFFS.get(visual.slug, DEFAULT_HANDOFF)
-        label = (
-            f"figure {next_visual.number}, {next_visual.title.lower()}"
-            if next_visual.number
-            else next_visual.title.lower()
-        )
+        # Named, not numbered: the article reorders the boards, so "figure 05"
+        # pointed at a number the reader never saw in sequence.
+        label = f"the {next_visual.title.lower()}"
         body.append(template.format(next=label))
     return body

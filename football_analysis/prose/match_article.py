@@ -2341,12 +2341,6 @@ def render_docx(article: Article, path: Path | str, home: str = "", away: str = 
             caption.paragraph_format.keep_with_next = True
             from football_analysis.prose.match_editorial import commentary_title
 
-            number = re.match(r"(\d+)", Path(visual).stem)
-            if number:
-                mark = caption.add_run(f"FIGURE {int(number.group(1)):02d}   ")
-                mark.bold = True
-                mark.font.size = Pt(8)
-                mark.font.color.rgb = RGBColor(0x13, 0x7F, 0x82)
             caption_run = caption.add_run(_clean(commentary_title(visual, article.context or {})))
             caption_run.bold = True
             caption_run.font.size = Pt(11.5)
@@ -2541,14 +2535,11 @@ def render_pdf(article: Article, path: Path | str) -> Path:
         if section.pull_quote:
             story.append(para(section.pull_quote, "quote"))
         for visual in section.visuals:
-            number = re.match(r"(\d+)", Path(visual).stem)
-            mark = (
-                f'<font name="{bold}" size="8" color="#{teal.hexval()[2:]}">FIGURE {int(number.group(1)):02d}</font>&nbsp;&nbsp;&nbsp;'
-                if number
-                else ""
-            )
+            # The caption is the board's title alone. A "FIGURE 44" mark in
+            # front of it numbered the article by file order, so the reader met
+            # figure 01, then 44, then 11 and went looking for the ones between.
             title = escape(clean(commentary_title(visual, article.context or {})))
-            block = [picture(Path(visual), 6.2), Paragraph(mark + title, style["caption"])]
+            block = [picture(Path(visual), 6.2), Paragraph(title, style["caption"])]
             note = _analysis(visual, article.context) if section.notes else None
             if note:
                 block.append(para(note, "note"))
