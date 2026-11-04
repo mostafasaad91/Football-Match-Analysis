@@ -344,17 +344,29 @@ def _regain_speed_board(charts, regains):
     ax = axes[0]
     ax.set_position([0.08, 0.15, 0.62, 0.60])
     seconds = np.arange(0, 31)
+    curves = {}
     for tid, name in charts.names.items():
         times = regains.loc[regains.team_id.eq(tid), "seconds_to_third"]
         total = max(len(times), 1)
         curve = [100 * float(times.le(t).sum()) / total for t in seconds]
+        curves[tid] = curve
         colour = charts.colors[tid]
         ax.plot(seconds, curve, color=colour, lw=3)
         ax.fill_between(seconds, curve, color=colour, alpha=0.08)
-        for t in (5, 12):
-            ax.scatter([t], [curve[t]], color=colour, s=60, zorder=4, edgecolor=BG)
-            ax.annotate(f"{curve[t]:.0f}%", (t, curve[t]), xytext=(8, 4), textcoords="offset points",
-                        color=colour, size=10, weight="bold")
+    # The two sides usually sit a few points apart at 5 and 12 seconds, and
+    # both labels at the same offset printed one on top of the other. The
+    # higher value goes above its marker and the lower one below, each on a
+    # backing so the line running through it does not cut the digits.
+    for t in (5, 12):
+        ranked = sorted(curves, key=lambda tid: curves[tid][t], reverse=True)
+        for rank, tid in enumerate(ranked):
+            value, colour = curves[tid][t], charts.colors[tid]
+            ax.scatter([t], [value], color=colour, s=60, zorder=5, edgecolor=BG)
+            above = rank == 0
+            ax.annotate(f"{value:.0f}%", (t, value), xytext=(8, 9 if above else -9),
+                        textcoords="offset points", va="bottom" if above else "top",
+                        color=colour, size=10, weight="bold", zorder=6,
+                        bbox=dict(boxstyle="round,pad=0.15", fc=BG, ec="none", alpha=0.9))
     for t in (5, 12):
         ax.axvline(t, color=MUTED, lw=0.9, ls=(0, (3, 3)))
         ax.text(t, 1.0, f"{t} s", transform=ax.get_xaxis_transform(), color=MUTED, ha="center",

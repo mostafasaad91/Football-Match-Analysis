@@ -2742,10 +2742,25 @@ def build_match_article(
         write_markdown(article, Path(out_dir))
         docx = render_docx(article, target, article.home, article.away)
         # The package PDF is the same article, so the two cannot differ.
-        try:
-            render_pdf(article, Path(out_dir) / "full_visual_redesign_real_data.pdf")
-        except Exception as error:
-            print(f"  ! article PDF not written — {type(error).__name__}: {error}")
+        #
+        # build_pdf has already written the old board-by-board report at this
+        # path, and a failure here left it in place: the article and the Word
+        # copy were new and the PDF beside them was the previous design. The
+        # failure was memory -- every board embedded at full size on a machine
+        # with two gigabytes free -- so it gets a second try after a collect.
+        import gc
+
+        for attempt in (1, 2):
+            try:
+                render_pdf(article, Path(out_dir) / "full_visual_redesign_real_data.pdf")
+                break
+            except Exception as error:
+                gc.collect()
+                if attempt == 2:
+                    print(
+                        f"  ! article PDF not written, the old report PDF is still in place — "
+                        f"{type(error).__name__}: {error}"
+                    )
         return docx
     except Exception as error:
         # The article is optional — a failure here must not take the package

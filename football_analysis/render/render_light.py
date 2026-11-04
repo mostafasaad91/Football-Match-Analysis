@@ -20,6 +20,7 @@ Run directly on any finished match folder:
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import subprocess
@@ -81,19 +82,36 @@ def render_light_package(match_dir: Path | str, *, timeout: int = 1800) -> Path 
     environment["PYTHONPATH"] = os.pathsep.join(
         filter(None, [str(PROJECT_ROOT), environment.get("PYTHONPATH")])
     )
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-m", "football_analysis.render.render_light", str(base), "--child"],
-            env=environment,
-            timeout=timeout,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        print(f"  ! light copy failed: {type(error).__name__}: {error}")
-        return None
+    # The child starts while the dark run still holds its frames, and OpenBLAS
+    # reserves a buffer per core at import. With little RAM left that died as
+    # "OpenBLAS error: Memory allocation still failed after 10 retries" before
+    # a single board was drawn. The renders are not BLAS-bound, so one thread
+    # costs nothing.
+    for name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+        environment.setdefault(name, "1")
+    gc.collect()
+    for attempt in (1, 2):
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-m", "football_analysis.render.render_light", str(base), "--child"],
+                env=environment,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"  ! light copy failed: {type(error).__name__}: {error}")
+            return None
+        output = (completed.stderr or "") + (completed.stdout or "")
+        out_of_memory = "Memory allocation" in output or "MemoryError" in output
+        if completed.returncode == 0 or not out_of_memory or attempt == 2:
+            break
+        # Memory is the one failure a second try can fix: the first child's
+        # pages are back with the system by now.
+        print("  ! light copy ran out of memory; retrying once")
+        gc.collect()
     if completed.returncode != 0:
         tail = (completed.stderr or completed.stdout or "").strip().splitlines()[-4:]
         print(f"  ! light copy failed (exit {completed.returncode})")
