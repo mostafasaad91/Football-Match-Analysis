@@ -417,7 +417,9 @@ _TEAM_METRIC_FIELDS = {
     "crosses": "crosses",
     "completed_crosses": "completed_crosses",
     "sequence_xt": "sequence_xT",
-    "xt_per_possession": "xt_per_possession",
+    # The table spells it with a capital T. A lowercase key here never matched,
+    # so every article printed "0.00 per possession against 0.00".
+    "xt_per_possession": "sequence_xT_per_possession",
     "directness": "directness",
     "build_up_attempts": "build_up_attempts",
     "build_up_successes": "build_up_successes",
@@ -701,6 +703,28 @@ def _fill_from_spells(side: Side, frame: pd.DataFrame) -> None:
         )
 
 
+def _receptions_by_player(events: pd.DataFrame, team_id: int) -> dict[str, int]:
+    """Completed passes each player received: the next event, if it is a teammate's.
+
+    Touches are not receptions. A goalkeeper takes every back-pass, goal kick
+    and catch, so ranking "targets" by touches named the keeper as the side's
+    most-found player and the article drew a tactical conclusion from it.
+    """
+    needed = {"team_id", "player", "is_pass", "outcome", "minute"}
+    if events.empty or not needed.issubset(events.columns):
+        return {}
+    order = [c for c in ("period_order", "minute", "second") if c in events.columns]
+    ordered = events.sort_values(order, kind="stable").reset_index(drop=True)
+    team = ordered["team_id"].apply(_int)
+    successful = ordered["outcome"].astype(str).str.lower().eq("successful")
+    is_pass = _truthy(ordered["is_pass"])
+    next_team = team.shift(-1)
+    next_player = ordered["player"].shift(-1)
+    received = (is_pass & successful & team.eq(team_id) & next_team.eq(team_id)
+                & next_player.notna() & next_player.ne(ordered["player"]))
+    return next_player[received].astype(str).value_counts().to_dict()
+
+
 def _fill_players(
     side: Side, players: pd.DataFrame, sequences: pd.DataFrame, events: pd.DataFrame
 ) -> None:
@@ -724,6 +748,7 @@ def _fill_players(
             & events["team_id"].apply(lambda v: _int(v) == side.team_id)
         ]
         key_passes = marked["player"].astype(str).value_counts().to_dict()
+    received = _receptions_by_player(events, side.team_id)
 
     records = []
     for _, row in own.iterrows():
@@ -734,6 +759,7 @@ def _fill_players(
             "role": str(row.get("role") or ""),
             "minutes": _num(row.get("minutes")),
             "touches": _int(row.get("touches")),
+            "receptions": _int(received.get(name, 0)),
             "passes": _int(row.get("passes")),
             "completed_passes": _int(row.get("completed_passes")),
             "pass_pct": _num(row.get("pass_pct")),

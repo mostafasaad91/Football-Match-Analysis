@@ -40,6 +40,12 @@ def pct(value: float, places: int = 1) -> str:
     return f"{value:.{places}f}%"
 
 
+def count(value: float, one: str, many: str | None = None) -> str:
+    """'1 box entry', '3 box entries' -- the number and a noun that agrees with it."""
+    n = int(round(value))
+    return f"{n:,} {one if n == 1 else (many or one + 's')}"
+
+
 def ratio(part: float, whole: float, places: int = 1) -> str:
     return f"{(100.0 * part / whole):.{places}f}%" if whole else "n/a"
 
@@ -538,8 +544,9 @@ def _goalkeeper_saves(v: Visual, f: MatchFacts) -> list[str]:
         out.append(
             f"Saves are a volume statistic before they are a quality one. The other half of the "
             f"resistance was in front of the goalkeeper: {blocker.name} outfield players blocked "
-            f"{blocker.outfield_blocks} attempts, and {f.other(blocker).blocked} "
-            f"{possessive(f.other(blocker).name)} shots were blocked in total."
+            f"{count(blocker.outfield_blocks, 'attempt')}, and "
+            f"{count(f.other(blocker).blocked, 'shot')} by {f.other(blocker).name} "
+            f"{'was' if f.other(blocker).blocked == 1 else 'were'} blocked in total."
         )
     return out
 
@@ -669,7 +676,8 @@ def _dominating_zones(v: Visual, f: MatchFacts) -> list[str]:
     tilt_lead, tilt_trail = _sides_by(f, "field_tilt")
     poss_lead, _ = _sides_by(f, "possession_share")
     out = [
-        f"Field tilt — the share of final-third touches — was {pct(tilt_lead.field_tilt, 0)} to "
+        f"Field tilt — each side's share of the completed passes into the final third — was "
+        f"{pct(tilt_lead.field_tilt, 0)} to "
         f"{tilt_lead.name} against {pct(tilt_trail.field_tilt, 0)}. Possession was "
         f"{pct(f.home.possession_share)} to {f.home.name} and "
         f"{pct(f.away.possession_share)} to {f.away.name}."
@@ -746,28 +754,41 @@ def _high_regains(v: Visual, f: MatchFacts) -> list[str]:
 @writes("pass_targets", "Where the ball actually went from there is the subject of {next}.")
 def _pass_targets(v: Visual, f: MatchFacts) -> list[str]:
     s = v.side
-    receivers = sorted(s.players, key=lambda p: p["touches"], reverse=True)[:3]
+    # Ranked by passes received, not touches: by touches the goalkeeper came
+    # out as the side's most-found player in every possession-light match.
+    receivers = [p for p in sorted(s.players, key=lambda p: p.get("receptions", 0), reverse=True)
+                 if p.get("receptions", 0) > 0][:3]
     # A side with no player above the touch floor left "Most-used targets:."
     # on the page -- a label, a colon and nothing between it and the full stop.
-    named = listed([f"{p['name']} ({p['touches']} touches)" for p in receivers])
+    named = listed([f"{p['name']} ({p['receptions']} passes received)" for p in receivers])
     lead = f"Most-used targets: {named}. " if named else ""
     out = [
         lead + f"{s.name} attempted {s.crosses} crosses and completed {s.completed_crosses} "
         f"({ratio(s.completed_crosses, s.crosses)})."
     ]
-    if receivers and receivers[0]["role"] in ("DC", "DR", "DL", "GK", "DMC", "MC"):
+    if not receivers:
+        return out
+    top = receivers[0]
+    role = _ROLE_WORDS.get(top["role"], "")
+    if top["role"] in ("GK", "DC", "DR", "DL", "DMC"):
         out.append(
-            f"The most-found player being {receivers[0]['name']} — a "
-            f"{receivers[0]['role']} — puts the centre of the passing map behind the line where "
-            f"chances are made. A cross from that distance is a hopeful ball, and the completion "
-            f"rate reflects it."
+            f"The ball found {top['name']}{f', a {role},' if role else ''} more than anyone: "
+            f"the circulation ran behind the opponent's first line rather than through it."
         )
-    else:
+    elif top["role"] in ("FW", "AMC", "AML", "AMR", "FWL", "FWR"):
         out.append(
-            "The reception map sits high and wide, which is what allows a cross to be a delivery "
-            "rather than a clearance in the other direction."
+            f"{top['name']}{f', a {role},' if role else ''} was the player the side looked for "
+            f"most, so the passing reached the front line rather than circulating behind it."
         )
     return out
+
+
+_ROLE_WORDS = {
+    "GK": "goalkeeper", "DC": "centre-back", "DR": "right-back", "DL": "left-back",
+    "DMC": "holding midfielder", "MC": "central midfielder", "AMC": "attacking midfielder",
+    "AML": "left winger", "AMR": "right winger", "FW": "centre-forward",
+    "FWL": "left forward", "FWR": "right forward",
+}
 
 
 @writes("ppda_pressing", "What happened in the seconds after a turnover is the point of {next}.")
@@ -797,8 +818,10 @@ def _transitions(v: Visual, f: MatchFacts) -> list[str]:
     out = []
     for s in f.sides:
         out.append(
-            f"{s.name}: {s.transitions} transitions producing {s.transition_shots} shots, "
-            f"{s.transition_box_entries} box entries and {n2(s.transition_xg)} expected goals, at "
+            f"{s.name}: {count(s.transitions, 'transition')} producing "
+            f"{count(s.transition_shots, 'shot')}, "
+            f"{count(s.transition_box_entries, 'box entry', 'box entries')} and "
+            f"{n2(s.transition_xg)} expected goals, at "
             f"an average of {n1(s.avg_transition_duration)} seconds."
         )
     exposed = max(f.sides, key=lambda s: s.rest_defence_vulnerability)
@@ -1071,17 +1094,24 @@ def _sequence_types(v: Visual, f: MatchFacts) -> list[str]:
     for s in f.sides:
         out.append(
             f"{s.name}: {s.possessions} possessions — {s.long_sequences} of six passes or more, "
-            f"{s.short_sequences} of two or fewer, {s.fastbreaks} recorded fast breaks."
+            # "Fast break" is the provider's own flag, much stricter than the
+            # transitions counted elsewhere; unnamed, "0 fast breaks" beside
+            # "43 transitions" read as a contradiction.
+            f"{s.short_sequences} of two or fewer, and {s.fastbreaks} the data provider "
+            f"flagged as fast breaks."
         )
     breaker = max(f.sides, key=lambda s: s.fastbreaks)
     other = f.other(breaker)
     if breaker.fastbreaks > other.fastbreaks:
-        out.append(
-            f"{breaker.name} produced {breaker.fastbreaks} fast breaks to {other.fastbreaks}. "
-            f"Directness of {n1(f.home.directness)} against {n1(f.away.directness)} says which "
-            f"side was travelling in straighter lines — and being more direct while creating less "
-            f"is usually a symptom rather than a plan."
-        )
+        out.append(f"{breaker.name} produced {breaker.fastbreaks} fast breaks to {other.fastbreaks}.")
+    direct, patient = sorted(f.sides, key=lambda s: s.directness, reverse=True)
+    if direct.directness - patient.directness >= 8:
+        line = (f"{direct.name} travelled in straighter lines (directness {n1(direct.directness)} "
+                f"against {n1(patient.directness)})")
+        # Only call directness a symptom when it came with fewer chances.
+        if direct.xg < patient.xg:
+            line += ", and being the more direct side while creating less is usually a symptom rather than a plan"
+        out.append(line + ".")
     return out
 
 

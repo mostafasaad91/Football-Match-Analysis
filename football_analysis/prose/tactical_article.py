@@ -566,7 +566,16 @@ def _with_ball(facts, x: _Extras, side) -> list[str]:
                      f"{side.completed_crosses} reaching a teammate. That is usually a sign the way through the "
                      f"middle has been closed and the ball keeps arriving at the touchline with nowhere else to go.")
         elif rate >= 35:
-            text += f" Their crossing was a real weapon: {side.completed_crosses} of {side.crosses} found a teammate."
+            # A completion rate is not a weapon on its own: Hull found a
+            # teammate with 6 of 15 and finished with 0.35 xG in all. Judge
+            # the crossing by what the attack produced.
+            if side.xg >= 1.0:
+                text += (f" Their crossing was a real weapon: {side.completed_crosses} of "
+                         f"{side.crosses} found a teammate.")
+            else:
+                text += (f" Their crosses found a teammate often enough, {side.completed_crosses} "
+                         f"of {side.crosses}, but the whole attack added up to "
+                         f"{side.xg:.2f} expected goals.")
     out.append(text)
 
     # 5. Chance quality and finishing

@@ -103,3 +103,6 @@ assets/crests/
 # A roster is the user's own opinion about who plays for whom, not project data.
 squads.json
 .runtime_packages/
+
+# graphify knowledge-graph output
+graphify-out/

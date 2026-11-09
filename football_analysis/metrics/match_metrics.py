@@ -1133,14 +1133,6 @@ def team_advanced_metrics(events: pd.DataFrame, info: dict[str, Any]) -> dict[st
                 if not team_possessions.empty
                 else 0.0
             ),
-            "xT_per_possession": (
-                round(
-                    float(team_possessions["xT"].sum()) / max(len(team_possessions), 1),
-                    3,
-                )
-                if not team_possessions.empty
-                else 0.0
-            ),
             "directness": (
                 round(
                     min(
