@@ -930,6 +930,9 @@ def xg_flow(events: pd.DataFrame) -> Path:
     ymax = max(0.5, max(home_total, away_total) * 1.18)
     ax.set_xlim(0, max_minute + 2)
     ax.set_ylim(0, ymax)
+    # The top tick label sat on the panel's "CUMULATIVE xG" heading in
+    # high-scoring matches; keep tick labels below 88% of the axis.
+    ax.set_yticks([t for t in ax.get_yticks() if 0 <= t <= ymax * 0.88])
     ax.grid(axis="y", color=GRID, lw=0.9, alpha=0.9)
     ax.set_axisbelow(True)
     ticks = [m for m in (0, 15, 30, 45, 60, 75, 90) if m <= max_minute]

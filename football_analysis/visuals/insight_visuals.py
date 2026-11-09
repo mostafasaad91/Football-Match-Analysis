@@ -648,6 +648,9 @@ class Charts:
             from football_analysis.visuals.scatter_labels import label_players
 
             label_players(ax, data, x, y, color=FG, background=BG, fontsize=9.5, short=True)
+            from football_analysis.visuals.visualization_components import resolve_label_overlaps
+
+            resolve_label_overlaps(ax)
         ax.legend(
             facecolor=BG,
             labelcolor=FG,

@@ -40,6 +40,37 @@ COVER_NAME = "cover_art.png"
 INK = "#1B1B1F" if IS_LIGHT_THEME else "#FFFFFF"
 
 
+def _luminance(colour) -> float:
+    vals = []
+    for c in to_rgb(colour):
+        vals.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * vals[0] + 0.7152 * vals[1] + 0.0722 * vals[2]
+
+
+def _contrast(a, b) -> float:
+    la, lb = _luminance(a), _luminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def _text_on(fill) -> str:
+    """Dark ink on a light fill, white on a dark one."""
+    return "#111111" if _contrast("#111111", fill) > _contrast("#FFFFFF", fill) else "#FFFFFF"
+
+
+def _readable(colour, page=None, floor: float = 3.2) -> str:
+    """A club colour lifted toward white until it reads on the page (Fiorentina's violet did not)."""
+    from matplotlib.colors import to_hex
+
+    page = page or BG_DARK
+    rgb = np.array(to_rgb(colour))
+    target = np.array([0.0, 0.0, 0.0]) if IS_LIGHT_THEME else np.array([1.0, 1.0, 1.0])
+    for k in np.linspace(0, 0.8, 17):
+        mixed = rgb * (1 - k) + target * k
+        if _contrast(to_hex(mixed), page) >= floor:
+            return to_hex(mixed)
+    return to_hex(rgb * 0.2 + target * 0.8)
+
+
 def _truthy(s: pd.Series) -> pd.Series:
     return s.fillna(False) if s.dtype == bool else s.astype(str).str.lower().isin({"true", "1", "yes"})
 
@@ -180,7 +211,8 @@ class Cover:
         for y, x, col, v, goal, r in sorted(rows, key=lambda t: -t[0]):  # far to near
             bx, by = P(x, y)
             d = depth(y)
-            h = (0.02 + 0.30 * np.sqrt(max(v, 0.0))) * d
+            # Capped so even a penalty stays clear of the label lane above.
+            h = min(0.02 + 0.30 * np.sqrt(max(v, 0.0)), 0.17) * d
             ax.add_patch(Ellipse((bx, by), 0.026 * d, 0.008 * d, color=col, alpha=0.6, lw=0, zorder=5))
             steps = 14
             core = INK if goal else col
@@ -193,16 +225,27 @@ class Cover:
             if goal:
                 ax.scatter([bx], [by + h], s=180 * d, color="white", edgecolor=col, lw=2, zorder=8)
                 name = str(r.get("player") or "").split()[-1].upper() if str(r.get("player") or "").strip() else ""
-                labels.append((bx, by + h, f"{name}  {int(r['minute'])}'", col))
-        placed: list[tuple[float, float]] = []
-        for bx, top, text, col in labels:
-            ty = top + 0.02
-            while any(abs(bx - px) < 0.22 and abs(ty - py) < 0.025 for px, py in placed):
-                ty += 0.03
-            placed.append((bx, ty))
-            fig.text(min(max(bx, 0.16), 0.84), ty, f"  GOAL  ·  {text}  ", color="white", ha="center", va="center",
-                     fontsize=10, fontweight="bold", zorder=9,
-                     bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.9", fc=col, ec="white", lw=1.0, alpha=0.95))
+                labels.append((bx, by + h, f"{name}  {int(r['minute'])}'", col, int(r["minute"])))
+        # Goal labels sit in a lane between the score and the pitch, never on
+        # the names or the crests: each half of the lane holds the goals scored
+        # at that end, in minute order, one row per goal pair, with a thin
+        # leader down to its column.
+        lane_top, row_h = 0.683, 0.030
+        for side_goals, x_lo, x_hi in (([l for l in labels if l[0] < 0.5], 0.06, 0.48),
+                                       ([l for l in labels if l[0] >= 0.5], 0.52, 0.94)):
+            side_goals = sorted(side_goals, key=lambda l: l[4])
+            per_row = 2 if len(side_goals) > 2 else 1
+            for i, (bx, top, text, col, _) in enumerate(side_goals):
+                row, slot = divmod(i, per_row)
+                width = (x_hi - x_lo) / per_row
+                lx = x_lo + width * (slot + 0.5)
+                ly = lane_top - row * row_h
+                ax.plot([bx, lx], [top, ly - 0.011], color=col, lw=0.9, alpha=0.7, zorder=8)
+                ink = _text_on(col)
+                fig.text(lx, ly, f" GOAL · {text} ", color=ink, ha="center", va="center",
+                         fontsize=8.5 if per_row > 1 else 9.5, fontweight="bold", zorder=9,
+                         bbox=dict(boxstyle="round,pad=0.4,rounding_size=0.9", fc=col, ec="white", lw=0.9,
+                                   alpha=0.96))
         fig.text(0.5, 0.29, "EVERY SHOT AS A COLUMN OF LIGHT  ·  TALLER = BETTER CHANCE  ·  "
                  f"{self.hname.upper()} ATTACK →   ← {self.aname.upper()} ATTACK", color=TEXT_DIM, fontsize=6.8,
                  ha="center", fontweight="bold")
@@ -226,8 +269,8 @@ class Cover:
             ax.plot([mid, x + w - 0.02], [y + hgt, y + hgt], color=self.ac, lw=2.2, zorder=6, solid_capstyle="round")
             fig.text(mid, y + hgt - 0.02, lab, color=TEXT_DIM, fontsize=7, fontweight="bold", ha="center", zorder=7)
             ax.plot([mid, mid], [y + 0.012, y + 0.042], color=edge, lw=0.8, zorder=6)
-            fig.text(mid - 0.065, y + 0.013, hv, color=self.hc, ha="center", zorder=7, **display(24))
-            fig.text(mid + 0.065, y + 0.013, av, color=self.ac, ha="center", zorder=7, **display(24))
+            fig.text(mid - 0.065, y + 0.013, hv, color=_readable(self.hc), ha="center", zorder=7, **display(24))
+            fig.text(mid + 0.065, y + 0.013, av, color=_readable(self.ac), ha="center", zorder=7, **display(24))
 
     # ── the page ───────────────────────────────────────────────────────
     def render(self, path: Path) -> Path:
@@ -279,14 +322,23 @@ class Cover:
         fig.text(0.5, 0.232, title, color=INK, va="top", ha="center", zorder=10, linespacing=1.0,
                  **display(31 if "\n" not in title else 26))
         if self.standfirst:
-            lines = textwrap.wrap(self.standfirst, 92)[:2]
+            # One line under a two-line headline, two under a one-line one:
+            # cut at a sentence end, never mid-sentence.
+            budget = 92 if "\n" in title else 184
+            text, sentences = "", [t.strip() for t in self.standfirst.replace("…", ".").split(". ") if t.strip()]
+            for sentence in sentences:
+                candidate = (text + " " if text else "") + sentence.rstrip(".") + "."
+                if len(candidate) > budget:
+                    break
+                text = candidate
+            lines = textwrap.wrap(text or self.standfirst[:budget], 92)[:2]
             top = (0.172 if "\n" not in title else 0.150) + (0.006 if len(lines) > 1 else 0)
             fig.text(0.5, top, "\n".join(lines), color=TEXT_DIM, fontsize=10 if len(lines) == 1 else 9.5,
                      style="italic", va="top", ha="center", zorder=10, linespacing=1.25)
-        self.cards(fig, ax, 0.058)
-        crests.place_logo(fig, 0.095, 0.035, width=0.045, background=BG_DARK)
-        fig.text(0.13, 0.035, "MOSTAFA SAAD  ·  TACTICAL", color=TEXT_MAIN, fontsize=8, fontweight="bold", va="center")
-        fig.text(0.93, 0.035, "MATCH STUDY  ·  REAL EVENT DATA", color=TEXT_DIM, fontsize=7, ha="right", va="center")
+        self.cards(fig, ax, 0.050)
+        crests.place_logo(fig, 0.095, 0.026, width=0.038, background=BG_DARK)
+        fig.text(0.125, 0.026, "MOSTAFA SAAD  ·  TACTICAL", color=TEXT_MAIN, fontsize=8, fontweight="bold", va="center")
+        fig.text(0.93, 0.026, "MATCH STUDY  ·  REAL EVENT DATA", color=TEXT_DIM, fontsize=7, ha="right", va="center")
         fig.savefig(path, dpi=DPI, facecolor=BG_DARK)
         plt.close(fig)
         return path

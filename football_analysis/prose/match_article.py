@@ -2463,7 +2463,7 @@ def render_pdf(article: Article, path: Path | str) -> Path:
     if dark:
         # Midnight pages take the gradient's navy end so the boards sit on the
         # page they were drawn for; the black theme keeps true black.
-        page_hex = "#000000" if theme in {"black", "amoled"} else "#010209"
+        page_hex = "#000000" if theme in {"black", "amoled"} else "#030616"
         page, ink, body_ink, text_ink, grey, teal = (
             HexColor(page_hex),
             HexColor("#FFFFFF"),

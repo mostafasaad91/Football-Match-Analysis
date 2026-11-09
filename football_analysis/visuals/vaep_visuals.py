@@ -88,6 +88,11 @@ def draw_value_map(ax, values: pd.DataFrame, team_id, colour: str, *, label_top:
                     xytext=chosen[0], textcoords="offset points", ha=chosen[1], va=chosen[2],
                     color=TEXT_MAIN, fontsize=fontsize, fontweight="bold", zorder=6,
                     path_effects=label_outline(BG_DARK))
+    # The greedy placement only knows label anchors; the drawn boxes of the two
+    # sides' labels could still touch (Pote over Bremer). Settle them on screen.
+    from football_analysis.visuals.visualization_components import resolve_label_overlaps
+
+    resolve_label_overlaps(ax)
     return spots
 
 

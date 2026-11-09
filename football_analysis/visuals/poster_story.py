@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
 import numpy as np
 import pandas as pd
 
@@ -121,9 +122,13 @@ class Story:
             for _, g in goals.iterrows():
                 y = float(pd.to_numeric(own.loc[:g.name, "xG"], errors="coerce").fillna(0).sum())
                 ax.scatter([g["minute"]], [y], s=260, color=colour, edgecolor="white", lw=2, zorder=5)
+                early = float(g["minute"]) < 12  # centred, it sat on the y-axis labels
                 ax.annotate(f"{surname(str(g['player']))} {int(g['minute'])}'", (g["minute"], y),
-                            xytext=(0, 14), textcoords="offset points", ha="center", color=TEXT_MAIN,
-                            fontsize=13, fontweight="bold")
+                            xytext=(12 if early else 0, 14), textcoords="offset points",
+                            ha="left" if early else "center", color=TEXT_MAIN, fontsize=13, fontweight="bold")
+        from football_analysis.visuals.visualization_components import resolve_label_overlaps
+
+        resolve_label_overlaps(ax)
         ax.set_xlim(0, end)
         ax.set_xlabel("Minute", color=TEXT_DIM, fontsize=13)
         ax.set_ylabel("Cumulative xG", color=TEXT_DIM, fontsize=13)
@@ -136,45 +141,126 @@ class Story:
         self.stat(fig, MARGIN + 0.62, 0.19, "Time as likelier winner", ctl.get("home", 0), ctl.get("away", 0), "{:.0f}%")
         return self.save(fig, "story_01_cover.png")
 
-    def attack(self) -> Path:
-        from football_analysis.metrics.match_metrics import box_entry_mask
+    # -- shared drawing helpers ------------------------------------------
+    def clean(self, ax):
+        ax.set_facecolor((0, 0, 0, 0))
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(GRID_COL)
+        ax.tick_params(colors=TEXT_DIM, labelsize=12)
+
+    def section(self, fig, x, y, text):
+        fig.text(x, y, text.upper(), color=TEXT_DIM, fontsize=13, fontweight="bold")
+
+    def mirror_bars(self, fig, rect, rows, fmt="{:g}"):
+        """Comparison rows: label in the middle, home bar growing left, away bar growing right."""
+        x0, y0, w, h = rect
+        step = h / max(len(rows), 1)
+        for i, (label, hv, av) in enumerate(rows):
+            y = y0 + h - (i + 0.5) * step
+            top = max(hv, av, 1e-9)
+            half = w / 2 - 0.12
+            fig.text(x0 + w / 2, y + step * 0.24, label.upper(), ha="center", va="center", color=TEXT_DIM,
+                     fontsize=11, fontweight="bold")
+            for value, colour, sign in ((hv, self.hc, -1), (av, self.ac, 1)):
+                length = half * value / top
+                start = x0 + w / 2 + sign * 0.012
+                left = start - length if sign < 0 else start
+                fig.add_artist(plt.Rectangle((left, y - step * 0.20), length, step * 0.28,
+                                             transform=fig.transFigure, color=colour, alpha=0.9))
+                fig.text(start + sign * (length + 0.012), y - step * 0.06, fmt.format(value), color=colour,
+                         ha="right" if sign < 0 else "left", va="center", **display(22))
+
+    def half_pitch(self, fig, rect, x_from=60):
+        ax = fig.add_axes(rect)
+        themed_pitch(ax)
+        ax.set_xlim(x_from, 102)
+        ax.set_ylim(-2, 102)
+        ax.set_aspect(68 / 105)
+        return ax
+
+    # -- slide 2: the attack ---------------------------------------------
+    def attack(self, extras: dict) -> Path:
+        from football_analysis.metrics.match_metrics import box_entry_mask, build_possessions, team_advanced_metrics
 
         mask = box_entry_mask(self.e)
+        annotated, possessions = build_possessions(self.e)
+        shot_ids = set(possessions.loc[possessions["shots"].fillna(0) > 0, "possession_id"])
         counts, lanes = {}, {}
         for tid in (self.hid, self.aid):
             own = self.e[mask & (self.e["team_id"] == tid)]
             counts[tid] = len(own)
             y = pd.to_numeric(own["y"], errors="coerce")
-            lane = np.where(y < 33.3, "right", np.where(y > 66.7, "left", "centre"))
-            lanes[tid] = pd.Series(lane).value_counts()
+            lanes[tid] = pd.Series(np.where(y < 33.3, "right", np.where(y > 66.7, "left", "centre"))).value_counts()
         leader = self.hid if counts[self.hid] >= counts[self.aid] else self.aid
         lname = self.hname if leader == self.hid else self.aname
         top_lane = lanes[leader].idxmax() if len(lanes[leader]) else "centre"
         share = lanes[leader].max() / max(counts[leader], 1)
-        headline = (f"{lname} got into the box {counts[leader]} times, "
-                    f"{share:.0%} of them down the {top_lane}")
-        fig = self.page(2, "How they attacked", headline)
+        fig = self.page(2, "How they attacked",
+                        f"{lname} got into the box {counts[leader]} times, {share:.0%} of them down the {top_lane}")
+        # Row 1: box entries on the attacking third; the ones that led to a shot lit up.
         for i, (tid, name, colour) in enumerate(((self.hid, self.hname, self.hc), (self.aid, self.aname, self.ac))):
-            ax = fig.add_axes([MARGIN + i * 0.46, 0.18, 0.42, 0.58])
-            themed_pitch(ax)
-            ax.set_xlim(50, 102)  # attacking half only: the action is all there
-            ax.set_ylim(-2, 102)
+            x0 = MARGIN + i * 0.46
+            ax = self.half_pitch(fig, [x0, 0.54, 0.42, 0.25])
             own = self.e[mask & (self.e["team_id"] == tid)]
-            for _, r in own.iterrows():
+            led = (annotated.loc[own.index, "possession_id"].isin(shot_ids) if len(own)
+                   else pd.Series(dtype=bool))
+            for (_, r), hit in zip(own.iterrows(), led):
                 ax.annotate("", xy=(r["end_x"], r["end_y"]), xytext=(r["x"], r["y"]),
-                            arrowprops=dict(arrowstyle="-|>", color=colour, lw=2.2, alpha=0.9))
-            fig.text(MARGIN + i * 0.46, 0.79, name.upper(), color=colour, fontsize=18, fontweight="bold")
-            lane = lanes[tid]
-            fig.text(MARGIN + i * 0.46, 0.15,
-                     f"{counts[tid]} box entries  ·  L {int(lane.get('left', 0))} · "
-                     f"C {int(lane.get('centre', 0))} · R {int(lane.get('right', 0))}",
-                     color=TEXT_MAIN, fontsize=15)
-        fig.text(MARGIN, 0.11, "Arrows: every completed pass or carry into the penalty area. Attacking left to right.",
-                 color=TEXT_DIM, fontsize=12)
+                            arrowprops=dict(arrowstyle="-|>", color="white" if hit else colour,
+                                            lw=2.4 if hit else 1.6, alpha=0.95 if hit else 0.65))
+            fig.text(x0, 0.80, f"{name.upper()}  ·  {counts[tid]} ENTRIES  ·  {int(led.sum())} → SHOT",
+                     color=colour, fontsize=12, fontweight="bold")
+        fig.text(MARGIN, 0.515, "Box entries · white arrows: a shot followed in the same possession",
+                 color=TEXT_DIM, fontsize=11)
+        # Row 2 left: the attacking funnel.
+        self.section(fig, MARGIN, 0.47, "From possession to shot")
+        rows = []
+        tests = (("Possessions", lambda q: q["team_id"] == q["team_id"]),
+                 ("Reached final third", lambda q: q["final_third_entries"].fillna(0) > 0),
+                 ("Got into the box", lambda q: q["box_entries"].fillna(0) > 0),
+                 ("Box visit ended in a shot", lambda q: (q["box_entries"].fillna(0) > 0) & (q["shots"].fillna(0) > 0)))
+        for stage, test in tests:
+            hv = int(test(possessions[possessions["team_id"] == self.hid]).sum())
+            av = int(test(possessions[possessions["team_id"] == self.aid]).sum())
+            rows.append((stage, hv, av))
+        self.mirror_bars(fig, (MARGIN, 0.265, 0.43, 0.195), rows)
+        # Row 2 right: where the chances came from.
+        self.section(fig, 0.53, 0.47, "Where the xG came from")
+        ax = fig.add_axes([0.62, 0.30, 0.32, 0.15])
+        self.clean(ax)
+        shades = {"Open play": 1.0, "Counter": 0.78, "Corner": 0.58, "Free kick": 0.45, "Throw-in": 0.34,
+                  "Penalty": 0.25}
+        for j, (key, colour) in enumerate((("home", self.hc), ("away", self.ac))):
+            left = 0.0
+            sit = extras[key]["xg_by_situation"]
+            for label, alpha in shades.items():
+                v = sit[label]["xG"]
+                if v <= 0:
+                    continue
+                ax.barh(1 - j, v, left=left, color=colour, alpha=alpha, height=0.6, edgecolor=BG_DARK, lw=1.5)
+                if v >= 0.4:  # narrow segments stay unlabelled rather than crowd each other
+                    ax.text(left + v / 2, 1 - j, label.split()[0], ha="center", va="center", fontsize=9.5,
+                            color="#111111" if _light(colour) else "white", fontweight="bold")
+                left += v
+            ax.text(left + 0.04, 1 - j, f"{left:.2f}", va="center", color=colour, **display(20))
+        ax.set_yticks([1, 0])
+        ax.set_yticklabels([self.hname, self.aname], color=TEXT_MAIN, fontsize=12)
+        ax.set_xlabel("expected goals by situation", color=TEXT_DIM, fontsize=10.5)
+        ax.set_xlim(0, ax.get_xlim()[1] * 1.18)
+        # Row 3: the numbers behind it.
+        tm = team_advanced_metrics(self.e, {"home_id": self.hid, "away_id": self.aid})
+        self.section(fig, MARGIN, 0.225, "The numbers behind it")
+        self.mirror_bars(fig, (MARGIN, 0.09, 1 - 2 * MARGIN, 0.13), [
+            ("Progressive passes", tm["home"]["progressive_passes"], tm["away"]["progressive_passes"]),
+            ("Deep completions", tm["home"]["deep_completions"], tm["away"]["deep_completions"]),
+        ])
         return self.save(fig, "story_02_attack.png")
 
+    # -- slide 3: the press ----------------------------------------------
     def press(self, extras: dict) -> Path:
-        from football_analysis.metrics.match_metrics import high_regain_events
+        from football_analysis.metrics.match_metrics import build_possessions, high_regain_events, team_advanced_metrics
 
         def overall(rows):
             p, a = sum(r["passes"] for r in rows), sum(r["actions"] for r in rows)
@@ -182,35 +268,56 @@ class Story:
 
         h, a = extras["home"]["ppda_timeline"], extras["away"]["ppda_timeline"]
         harder = self.hname if overall(h) <= overall(a) else self.aname
-        headline = (f"{harder} pressed harder: {min(overall(h), overall(a)):.1f} opponent passes "
-                    f"per defensive action against {max(overall(h), overall(a)):.1f}")
-        fig = self.page(3, "Without the ball", headline)
-        ax = fig.add_axes([MARGIN + 0.04, 0.55, 1 - 2 * MARGIN - 0.06, 0.25])
-        ax.set_facecolor((0, 0, 0, 0))
-        for s in ("top", "right"):
-            ax.spines[s].set_visible(False)
-        for s in ("left", "bottom"):
-            ax.spines[s].set_color(GRID_COL)
-        ax.tick_params(colors=TEXT_DIM, labelsize=13)
+        fig = self.page(3, "Without the ball",
+                        f"{harder} pressed harder: PPDA {min(overall(h), overall(a)):.1f} "
+                        f"against {max(overall(h), overall(a)):.1f}")
+        # Row 1: pressing through the match.
+        self.section(fig, MARGIN, 0.80, "Pressing through the match  ·  higher = more pressing")
+        ax = fig.add_axes([MARGIN + 0.05, 0.605, 1 - 2 * MARGIN - 0.07, 0.175])
+        self.clean(ax)
         xs = np.arange(len(h))
         for rows, colour in ((h, self.hc), (a, self.ac)):
-            ax.plot(xs, [min(r["ppda"], 30) if r["ppda"] is not None else np.nan for r in rows],
-                    color=colour, lw=4, marker="o", ms=10)
+            vals = [min(r["ppda"], 30) if r["ppda"] is not None else np.nan for r in rows]
+            ax.plot(xs, vals, color=colour, lw=4, marker="o", ms=9)
         ax.set_xticks(xs)
         ax.set_xticklabels([f"{r['start']}–{r['end']}'" for r in h])
-        ax.invert_yaxis()
-        ax.set_ylabel("PPDA  (higher on the chart = more pressing)", color=TEXT_DIM, fontsize=12)
+        ax.set_ylim(32, 0)
+        ax.set_ylabel("PPDA", color=TEXT_DIM, fontsize=11)
         ax.grid(axis="y", color=GRID_COL, lw=0.8)
+        # Row 2: where each side won the ball high, by what followed.
+        annotated, possessions = build_possessions(self.e)
+        by_id = possessions.set_index("possession_id")
         for i, (tid, name, colour) in enumerate(((self.hid, self.hname, self.hc), (self.aid, self.aname, self.ac))):
-            pitch = fig.add_axes([MARGIN + i * 0.46, 0.12, 0.42, 0.36])
-            themed_pitch(pitch)
-            pitch.set_xlim(48, 102)
-            regains = high_regain_events(self.e, tid)
-            pitch.scatter(pd.to_numeric(regains.get("x"), errors="coerce"),
-                          pd.to_numeric(regains.get("y"), errors="coerce"),
-                          s=180, color=colour, edgecolor="white", lw=1.2, zorder=4)
-            fig.text(MARGIN + i * 0.46, 0.49, f"{name.upper()}  ·  {len(regains)} HIGH REGAINS",
-                     color=colour, fontsize=15, fontweight="bold")
+            x0 = MARGIN + i * 0.46
+            pitch = self.half_pitch(fig, [x0, 0.30, 0.42, 0.235], x_from=55)
+            regains = high_regain_events(self.e, tid).dropna(subset=["x", "y"])
+            if len(regains):
+                pid = annotated.loc[regains.index, "possession_id"]
+                shots = pid.map(by_id["shots"]).fillna(0).to_numpy()
+                box = pid.map(by_id["box_entries"]).fillna(0).to_numpy()
+            else:
+                shots = box = np.array([])
+            xs_, ys_ = pd.to_numeric(regains["x"]).to_numpy(), pd.to_numeric(regains["y"]).to_numpy()
+            groups = ((shots > 0, "*", 520, "white", colour, 1.0),
+                      ((shots == 0) & (box > 0), "s", 170, colour, "white", 0.95),
+                      ((shots == 0) & (box == 0), "o", 120, colour, "white", 0.55))
+            for sel, marker, size, face, edge, alpha in groups:
+                if len(sel) and sel.any():
+                    pitch.scatter(xs_[sel], ys_[sel], s=size, marker=marker, color=face, edgecolor=edge,
+                                  lw=1.4, alpha=alpha, zorder=4)
+            fig.text(x0, 0.548, f"{name.upper()}  ·  {len(regains)} HIGH REGAINS  ·  {int((shots > 0).sum())} → SHOT",
+                     color=colour, fontsize=12, fontweight="bold")
+        fig.text(MARGIN, 0.278, "Star: a shot followed  ·  square: reached the box  ·  dot: nothing came of it",
+                 color=TEXT_DIM, fontsize=11)
+        # Row 3: winning it back, and paying for losing it.
+        tm = team_advanced_metrics(self.e, {"home_id": self.hid, "away_id": self.aid})
+        self.section(fig, MARGIN, 0.24, "Winning it back, and paying for losing it")
+        self.mirror_bars(fig, (MARGIN, 0.085, 1 - 2 * MARGIN, 0.15), [
+            ("Counter-press regains", tm["home"]["counterpress_regains"], tm["away"]["counterpress_regains"]),
+            ("Dangerous counters conceded", tm["home"]["rest_defence_dangerous_counters"],
+             tm["away"]["rest_defence_dangerous_counters"]),
+            ("Tactical fouls", extras["home"]["tactical_fouls"], extras["away"]["tactical_fouls"]),
+        ])
         return self.save(fig, "story_03_press.png")
 
     def players(self, players: pd.DataFrame | None) -> Path:
@@ -247,17 +354,79 @@ class Story:
                  color=TEXT_DIM, fontsize=11, va="top")
         return self.save(fig, "story_04_players.png")
 
-    def takeaways(self, lines: list[str]) -> Path:
+    def takeaways(self, lines: list[str], extras: dict, table: pd.DataFrame) -> Path:
         fig = self.page(5, "Takeaways", "What the match told us")
+        xp, ctl = extras.get("expected_points", {}), extras.get("game_control", {})
+        grey = "#7A7488"
+        minis = [
+            ("Chances replayed", [(f"{self.hname} win", xp.get("home_win", 0), self.hc),
+                                  ("Draw", xp.get("draw", 0), grey),
+                                  (f"{self.aname} win", xp.get("away_win", 0), self.ac)]),
+            ("Likelier winner, share of the match", [(self.hname, ctl.get("home", 0) / 100, self.hc),
+                                                     ("Level", ctl.get("level", 0) / 100, grey),
+                                                     (self.aname, ctl.get("away", 0) / 100, self.ac)]),
+        ]
+        sp = (extras["home"]["set_pieces"], extras["away"]["set_pieces"])
         for i, line in enumerate(lines[:3]):
-            y = 0.76 - i * 0.18
-            fig.text(MARGIN, y, f"{i + 1}", color=self.hc if i % 2 == 0 else self.ac, va="top", **display(64))
-            fig.text(MARGIN + 0.09, y - 0.01, line, color=TEXT_MAIN, va="top", fontsize=21, wrap=True)
-        for x, tid, name, colour in ((0.40, self.hid, self.hname, self.hc), (0.60, self.aid, self.aname, self.ac)):
-            crests.place_crest(fig, x, 0.19, int(tid), monogram=name[:3].upper(), colour=colour,
-                               width=0.10, background=BG_DARK, zorder=10)
-        fig.text(0.5, 0.19, self.score, color=TEXT_MAIN, ha="center", va="center", **display(54))
+            if "dead balls" in line and i < len(minis):
+                # The chart follows the point it sits under.
+                total = max(sp[0]["set_piece_xg"] + sp[1]["set_piece_xg"], 0.01)
+                minis[i] = ("Set-piece xG", [(self.hname, sp[0]["set_piece_xg"] / total, self.hc),
+                                             (self.aname, sp[1]["set_piece_xg"] / total, self.ac)])
+            y = 0.80 - i * 0.205
+            fig.add_artist(FancyBboxPatch((MARGIN, y - 0.18), 1 - 2 * MARGIN, 0.19,
+                                          boxstyle="round,pad=0,rounding_size=0.015", transform=fig.transFigure,
+                                          facecolor=(1, 1, 1, 0.045), edgecolor=(1, 1, 1, 0.12), lw=1))
+            fig.text(MARGIN + 0.025, y - 0.012, f"{i + 1}", color=self.hc if i % 2 == 0 else self.ac, va="top",
+                     **display(58))
+            fig.text(MARGIN + 0.10, y - 0.016, line, color=TEXT_MAIN, va="top", fontsize=16.5)
+            mx, mw, my = MARGIN + 0.10, 1 - 2 * MARGIN - 0.13, y - 0.148
+            if i < len(minis):
+                title, parts = minis[i]
+                fig.text(mx, my + 0.036, title.upper(), color=TEXT_DIM, fontsize=10, fontweight="bold")
+                left = mx
+                for label, share, colour in parts:
+                    width = mw * max(share, 0)
+                    fig.add_artist(plt.Rectangle((left, my), width, 0.026, transform=fig.transFigure,
+                                                 color=colour, alpha=0.95))
+                    if share >= 0.14:
+                        fig.text(left + width / 2, my + 0.013, f"{label} {share:.0%}", ha="center", va="center",
+                                 fontsize=10, fontweight="bold", color="#111111" if _light(colour) else "white")
+                    left += width
+            elif len(table):
+                top = table.head(3)
+                fig.text(mx, my + 0.068, "MOST VALUE ADDED (VAEP)", color=TEXT_DIM, fontsize=10, fontweight="bold")
+                peak = max(float(top["vaep"].max()), 0.1)
+                slot = mw / 3
+                for j, r in enumerate(top.itertuples()):
+                    colour = self.hc if r.team_id == self.hid else self.ac
+                    bx = mx + j * slot
+                    width = (slot - 0.15) * max(r.vaep, 0) / peak
+                    # Name above its own bar, so long surnames never run into the bar.
+                    fig.text(bx, my + 0.04, surname(str(r.player)), color=TEXT_MAIN, va="center", fontsize=11,
+                             fontweight="bold")
+                    fig.add_artist(plt.Rectangle((bx, my), width, 0.026, transform=fig.transFigure,
+                                                 color=colour, alpha=0.95))
+                    fig.text(bx + width + 0.008, my + 0.013, f"{r.vaep:+.2f}", color=_readable_on_dark(colour),
+                             va="center", fontsize=11, fontweight="bold")
+        for x, tid, name, colour in ((0.36, self.hid, self.hname, self.hc), (0.64, self.aid, self.aname, self.ac)):
+            crests.place_crest(fig, x, 0.13, int(tid), monogram=name[:3].upper(), colour=colour,
+                               width=0.085, background=BG_DARK, zorder=10)
+        fig.text(0.5, 0.13, self.score, color=TEXT_MAIN, ha="center", va="center", **display(46))
         return self.save(fig, "story_05_takeaways.png")
+
+
+def _readable_on_dark(colour) -> str:
+    from football_analysis.visuals.cover_art import _readable
+
+    return _readable(colour)
+
+
+def _light(colour) -> bool:
+    from matplotlib.colors import to_rgb
+
+    r, g, b = to_rgb(colour)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55
 
 
 def _wrap(text: str, width: int) -> str:
@@ -297,7 +466,7 @@ def _takeaway_lines(story: Story, extras: dict, table: pd.DataFrame) -> list[str
     if len(lines) < 3 and ctl:
         side = story.hname if ctl.get("home", 0) >= ctl.get("away", 0) else story.aname
         lines.append(f"{side} were the likelier winner for {max(ctl['home'], ctl['away']):.0f}% of the match.")
-    return [_wrap(t, 46) for t in lines]
+    return [_wrap(t, 58) for t in lines]
 
 
 def build_story_posters(events, xg, players, info, out_dir, *, home_color, away_color, score,
@@ -310,9 +479,9 @@ def build_story_posters(events, xg, players, info, out_dir, *, home_color, away_
     table = player_vaep(events, players) if load_model() is not None else pd.DataFrame()
     paths = [
         story.cover(_wrap(headline, 34), extras),
-        story.attack(),
+        story.attack(extras),
         story.press(extras),
         story.players(players),
-        story.takeaways(_takeaway_lines(story, extras, table)),
+        story.takeaways(_takeaway_lines(story, extras, table), extras, table),
     ]
     return paths

@@ -127,13 +127,13 @@ elif not IS_BLACK_THEME:
     # a diagonal gradient from deep navy (top left) to deep wine (bottom
     # right), painted by _install_page_gradient() below. Panels and hairlines
     # carry a faint violet so they sit in the same family as the page.
-    BG_DARK = "#010209"  # page base colour (gradient start)
-    BG_MID = "#06050C"
-    BG_PANEL = "#06050C"
-    BG_HEADER = "#0A0812"
-    BG_PITCH = "#010209"  # page-coloured: the gradient shows through the pitch
-    GRID_COL = "#1A1628"
-    GRID_SOFT = "#120F1E"
+    BG_DARK = "#030616"  # page base colour (gradient start)
+    BG_MID = "#0A081A"
+    BG_PANEL = "#0A081A"
+    BG_HEADER = "#0E0B21"
+    BG_PITCH = "#030616"  # page-coloured: the gradient shows through the pitch
+    GRID_COL = "#1F1A33"
+    GRID_SOFT = "#151127"
 
     TEXT_BR = "#FFFFFF"
     TEXT_MAIN = "#F2F0F7"
@@ -186,7 +186,7 @@ else:
 # Page gradient: (start, end) along the top-left to bottom-right diagonal, or
 # None for a flat page. Only the Midnight theme has one.
 PAGE_GRADIENT: tuple[str, str] | None = (
-    None if (IS_LIGHT_THEME or IS_BLACK_THEME) else ("#010209", "#070206")
+    None if (IS_LIGHT_THEME or IS_BLACK_THEME) else ("#030616", "#14060F")
 )
 
 # Alpha applied to pitch markings so white lines frame the pitch without
@@ -421,7 +421,22 @@ def _install_page_gradient() -> None:
     def savefig(self, *args, **kwargs):
         clear_page_fills(self)
         if not getattr(self, "_has_page_gradient", False):
-            ax = self.add_axes((0, 0, 1, 1), zorder=-1000)
+            rect = (0, 0, 1, 1)
+            # With bbox_inches="tight" the saved image is the tight box plus
+            # padding, and that can reach past the figure (notes printed
+            # below it). The gradient then stopped at the figure edge and the
+            # margin came out flat near-black. Cover the box that will be saved.
+            if kwargs.get("bbox_inches") == "tight":
+                try:
+                    bb = self.get_tightbbox(self.canvas.get_renderer())
+                    pad = float(kwargs.get("pad_inches", 0.1) or 0.0) + 0.05
+                    fw, fh = self.get_figwidth(), self.get_figheight()
+                    x0, y0 = (bb.x0 - pad) / fw, (bb.y0 - pad) / fh
+                    rect = (x0, y0, (bb.x1 + pad) / fw - x0, (bb.y1 + pad) / fh - y0)
+                except Exception:
+                    rect = (0, 0, 1, 1)
+            ax = self.add_axes(rect, zorder=-1000)
+            ax.set_in_layout(False)
             ax.imshow(ramp, cmap=cmap, aspect="auto", extent=(0, 1, 0, 1),
                       origin="upper", interpolation="bicubic")
             ax.set_axis_off()
@@ -434,6 +449,109 @@ def _install_page_gradient() -> None:
 
 
 _install_page_gradient()
+
+
+def text_overlaps(fig, *, min_share: float = 0.25) -> list[tuple[str, str]]:
+    """Pairs of visible texts on ``fig`` whose boxes overlap.
+
+    A pair counts when the shared area is at least ``min_share`` of the
+    smaller box. Used by the overlap check below and by the tests.
+    """
+    try:
+        renderer = fig.canvas.get_renderer()
+    except Exception:
+        return []
+    from matplotlib.text import Text
+
+    items = []
+    for artist in fig.findobj(Text):
+        try:
+            label = artist.get_text().strip()
+            if not label or not artist.get_visible() or artist.get_alpha() == 0:
+                continue
+            box = artist.get_window_extent(renderer)
+            if box.width < 2 or box.height < 2:
+                continue
+            items.append((label.replace("\n", " ")[:40], box))
+        except Exception:
+            continue
+    found = []
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            (la, a), (lb, b) = items[i], items[j]
+            w = min(a.x1, b.x1) - max(a.x0, b.x0)
+            h = min(a.y1, b.y1) - max(a.y0, b.y0)
+            if w <= 0 or h <= 0:
+                continue
+            if w * h >= min_share * min(a.width * a.height, b.width * b.height) and la != lb:
+                found.append((la, lb))
+    return found
+
+
+def resolve_label_overlaps(ax, *, step: float = 7.0, tries: int = 10) -> None:
+    """Nudge annotation labels on ``ax`` until no two of them overlap.
+
+    Each annotation placed in offset points is moved up (then down) in
+    ``step``-point increments, keeping the first-placed labels where they
+    are. Labels that are plain texts are left alone.
+    """
+    from matplotlib.text import Annotation
+
+    fig = ax.figure
+    try:
+        renderer = fig.canvas.get_renderer()
+    except Exception:
+        return
+    labels = [t for t in ax.texts if isinstance(t, Annotation) and t.get_visible() and t.get_text().strip()
+              and t.anncoords in ("offset points", "axes fraction")]
+    placed = []
+
+    def clash(box):
+        return any(min(box.x1, b.x1) > max(box.x0, b.x0) + 1 and min(box.y1, b.y1) > max(box.y0, b.y0) + 1
+                   for b in placed)
+
+    for label in labels:
+        box = label.get_window_extent(renderer)
+        if clash(box):
+            x0, y0 = label.xyann
+            unit = step if label.anncoords == "offset points" else 0.022
+            for k in range(1, tries + 1):
+                for sign in (1, -1):
+                    label.xyann = (x0, y0 + sign * unit * k)
+                    box = label.get_window_extent(renderer)
+                    if not clash(box):
+                        break
+                else:
+                    continue
+                break
+        placed.append(label.get_window_extent(renderer))
+
+
+def _install_overlap_check() -> None:
+    """With MATCH_ANALYSIS_OVERLAP_CHECK=<file>, log every overlapping text pair per saved figure."""
+    target = os.environ.get("MATCH_ANALYSIS_OVERLAP_CHECK", "").strip()
+    if not target:
+        return
+    import matplotlib.figure as _mfig
+
+    previous = _mfig.Figure.savefig
+
+    def savefig(self, fname, *args, **kwargs):
+        try:
+            self.canvas.draw()
+            pairs = text_overlaps(self)
+            if pairs:
+                with open(target, "a", encoding="utf-8") as handle:
+                    for a, b in pairs:
+                        handle.write(f"{os.path.basename(str(fname))}\t{a}\t{b}\n")
+        except Exception:
+            pass
+        return previous(self, fname, *args, **kwargs)
+
+    _mfig.Figure.savefig = savefig
+
+
+_install_overlap_check()
 
 
 def _neon_backdrop(fig):

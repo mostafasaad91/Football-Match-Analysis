@@ -3240,11 +3240,11 @@ def defensive_activity(events, team_id, number):
     )
     colour = _team_mark_color(team_id)
     fig = plt.figure(figsize=(14, 10), facecolor=BG)
+    won_height = float(np.mean(attack_xy(won["x"], won["y"])[1])) if len(won) else 0.0
     base.amoled_header(
         fig,
-        f"Defensive Activity · {TEAM_NAME[team_id]}",
-        "Left: where the ball was won · right: where the attack was only stopped · "
-        "shading = where each happened most",
+        f"{TEAM_NAME[team_id]} won the ball {len(won)} times, on average {won_height:.0f} m from their goal",
+        "Defensive activity · left: ball won · right: attack only stopped · shading = where most happened",
         active_team=TEAM_NAME[team_id],
     )
     fig.text(0.945, 0.03, "FULL VISUAL REDESIGN · REAL MATCH DATA", ha="right", fontsize=8,
@@ -3252,6 +3252,13 @@ def defensive_activity(events, team_id, number):
     names = {"Tackle": "tackles won", "Interception": "interceptions", "BallRecovery": "recoveries",
              "Clearance": "clearances", "Foul": "fouls", "BlockedPass": "blocked passes",
              "Save": "blocked shots", "BlockedShot": "blocked shots"}
+    # One mark per kind of action, in colours chosen to read over the team's
+    # shading (the review asked for the actions to be told apart, not all dots).
+    marks = {
+        "Tackle": ("^", "#FFD166"), "Interception": ("D", "#4CC9F0"), "BallRecovery": ("o", "#FFFFFF"),
+        "Clearance": ("X", "#F72585"), "Foul": ("s", "#FB8500"), "BlockedPass": ("p", "#B8F2E6"),
+        "Save": ("h", "#B8F2E6"), "BlockedShot": ("h", "#B8F2E6"),
+    }
     for title, frame, left in (("WON THE BALL", won, 0.04), ("STOPPED, NOT WON", stopped, 0.52)):
         ax = fig.add_axes([left, 0.07, 0.42, 0.66])
         ax.set_facecolor(BG)
@@ -3270,18 +3277,31 @@ def defensive_activity(events, team_id, number):
                       origin="lower", aspect="equal", interpolation="bilinear", zorder=0)
         draw_long_pitch(ax)
         ax.axis("off")
-        ax.scatter(px, py, s=16, color=TEXT, alpha=0.75, lw=0, zorder=3)
+        kinds = frame["type"].astype(str).to_numpy()
+        for kind in pd.unique(kinds):
+            marker, mark_colour = marks.get(kind, ("o", TEXT))
+            sel = kinds == kind
+            ax.scatter(px[sel], py[sel], s=46 if marker != "X" else 52, marker=marker, color=mark_colour,
+                       edgecolor=BG, linewidth=0.6, alpha=0.95, zorder=3)
         if len(py):
             height = float(np.mean(py))
             ax.plot([-PITCH_WIDTH / 2, PITCH_WIDTH / 2], [height, height], color=TEXT, lw=1,
                     ls=(0, (4, 3)), zorder=2)
             ax.text(PITCH_WIDTH / 2 + 1, height, f"avg\n{height:.0f} m", color=TEXT, fontsize=8,
                     va="center")
-        counts = frame["type"].astype(str).value_counts()
-        detail = " · ".join(f"{int(n)} {names.get(kind, kind.lower())}" for kind, n in counts.items())
+        counts = frame["type"].astype(str).replace({"Save": "BlockedShot"}).value_counts()
         fig.text(left + 0.01, 0.80, f"{title} · {len(frame)}", color=colour, fontsize=13,
                  fontweight="bold")
-        fig.text(left + 0.01, 0.775, detail, color=MUTED, fontsize=9)
+        # Legend as the count line: each count beside its own mark.
+        cursor = left + 0.012
+        for kind, n in counts.items():
+            marker, mark_colour = marks.get(kind, ("o", TEXT))
+            fig.add_artist(plt.Line2D([cursor + 0.005], [0.781], marker=marker, color=mark_colour,
+                                        markersize=7, markeredgecolor=BG, transform=fig.transFigure,
+                                        linestyle="none"))
+            label = f"{int(n)} {names.get(kind, kind.lower())}"
+            fig.text(cursor + 0.014, 0.776, label, color=TEXT, fontsize=9)
+            cursor += 0.026 + 0.0068 * len(label)
     return save(fig, f"{number:02d}_defensive_activity_{_team_slug(team_id)}.png")
 
 
@@ -3940,6 +3960,9 @@ def high_regains(events, team_id, number):
         rx, ry = attack_xy([row["x"]], [row["y"]])
         near = [d for (qx, qy, d) in labelled if abs(rx[0] - qx) < 8 and abs(ry[0] - qy) < 5]
         dy = -16 if near and near[-1] > 0 else 10
+        # Near the goal line a label above the mark ran into the "ATTACK" tag.
+        if ry[0] > PITCH_LENGTH - 6:
+            dy = -16
         labelled.append((rx[0], ry[0], dy))
         pitch.annotate(f"{int(float(row['minute']))}′", (rx[0], ry[0]),
                        xytext=(0, dy), textcoords="offset points",
@@ -5306,8 +5329,10 @@ def momentum(events):
     ax.set_xticks([])
     ax.tick_params(labelsize=8)
     ax.set_ylabel("xT built in the window", fontsize=8.5, color=MUTED)
+    # Team names in the right-hand corners: on the left they sat on the
+    # labels of early goals.
     ax.text(
-        0.004,
+        0.996,
         0.97,
         HOME_NAME.upper(),
         transform=ax.transAxes,
@@ -5315,9 +5340,10 @@ def momentum(events):
         fontsize=9.5,
         fontweight="bold",
         va="top",
+        ha="right",
     )
     ax.text(
-        0.004,
+        0.996,
         0.03,
         AWAY_NAME.upper(),
         transform=ax.transAxes,
@@ -5325,6 +5351,7 @@ def momentum(events):
         fontsize=9.5,
         fontweight="bold",
         va="bottom",
+        ha="right",
     )
 
     for row in goals.itertuples():
@@ -5333,12 +5360,15 @@ def momentum(events):
         ax.scatter(
             [row.minute], [y], s=95, marker="o", color=colour, edgecolor=BG, lw=1.8, zorder=7
         )
+        # An early goal's label, centred on its dot, sat on the team names
+        # printed in the corners: push those to the right of the dot.
+        early = row.minute < 12
         ax.annotate(
             f"{_surname(str(row.player))} {int(row.minute)}'",
             (row.minute, y),
             textcoords="offset points",
-            xytext=(0, 15 if y >= 0 else -21),
-            ha="center",
+            xytext=(10 if early else 0, 15 if y >= 0 else -21),
+            ha="left" if early else "center",
             color=TEXT,
             fontsize=8.5,
             fontweight="bold",
