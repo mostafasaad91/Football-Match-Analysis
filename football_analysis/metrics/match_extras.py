@@ -113,11 +113,16 @@ _DEF_ACTIONS = {"Tackle", "Interception", "Challenge", "Foul", "BlockedPass"}
 
 
 def ppda_timeline(events: pd.DataFrame, team_id: Any, opponent_id: Any, step: int = 15) -> list[dict]:
-    """PPDA per ``step`` minutes: opponent passes in their own 60% per defensive action there."""
+    """PPDA per ``step`` minutes, by the same definition as the match figure.
+
+    Each window is counted with ``calculate_ppda`` -- the function the article
+    and the match facts use -- so the bins add up to the full-match PPDA the
+    reader sees elsewhere. A separate definition here (other action types,
+    other zone edges) put 6.9 on the poster beside 5.0 in the article.
+    """
+    from football_analysis.reports.match_report import calculate_ppda
+
     minute = pd.to_numeric(events["minute"], errors="coerce").fillna(0)
-    x = pd.to_numeric(events.get("x"), errors="coerce")
-    opp_pass = (events["team_id"] == opponent_id) & _truthy(events.get("is_pass"), events.index) & (x < 60)
-    defend = (events["team_id"] == team_id) & events["type"].isin(_DEF_ACTIONS) & (x >= 40)
     end = int(max(90, minute.max()))
     starts = list(range(0, end, step))
     # Stoppage time shorter than half a bin is folded into the last full bin:
@@ -128,7 +133,8 @@ def ppda_timeline(events: pd.DataFrame, team_id: Any, opponent_id: Any, step: in
     for i, start in enumerate(starts):
         stop = starts[i + 1] if i + 1 < len(starts) else end + 1
         window = (minute >= start) & (minute < stop)
-        passes, actions = int((opp_pass & window).sum()), int((defend & window).sum())
+        counted = calculate_ppda(events[window], team_id, opponent_id)
+        passes, actions = int(counted["passes_allowed"]), int(counted["defensive_actions"])
         rows.append({"start": start, "end": min(stop, end), "passes": passes,
                      "actions": actions, "ppda": round(passes / actions, 1) if actions else None})
     return rows

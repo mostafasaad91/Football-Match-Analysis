@@ -684,9 +684,13 @@ def _without_ball(facts, x: _Extras, side) -> list[str]:
         ]))
     for goal in x.goals:
         if goal["errors"] and goal["side"] is other:
+            # "The goal they conceded" read wrong when they conceded two, and
+            # "lost the ball" did not fit a keeper's error at a corner: the
+            # data records an error that led to the goal, so say that.
+            which = "The goal they conceded" if other.goals == 1 else "One of the goals they conceded"
             out.append(
-                f"The goal they conceded came from their own mistake: {_listed([surname(p) for p in goal['errors']])} "
-                f"lost the ball on {_minute(goal['minute'])} and {other.name} needed only seconds to punish it."
+                f"{which} came from their own mistake: {_listed([surname(p) for p in goal['errors']])} "
+                f"made the error that led to {other.name}'s goal on {_minute(goal['minute'])}."
             )
             break
     return out
@@ -879,7 +883,9 @@ def _deserved(facts, extras: dict) -> list[str]:
     lines = []
     for side, key in ((home, "home"), (away, "away")):
         sit = extras[key]["xg_by_situation"]
-        total = sum(v["xG"] for v in sit.values()) or 0.0
+        # The side's own xG total, not a sum of rounded parts: that printed
+        # 2.23 here beside 2.22 everywhere else.
+        total = side.xg or sum(v["xG"] for v in sit.values()) or 0.0
         dead = sum(sit[s]["xG"] for s in ("Corner", "Free kick", "Throw-in"))
         if total >= 0.3 and dead / total >= 0.4:
             lines.append(f"{dead:.2f} of {side.name}'s {total:.2f} expected goals came from "
