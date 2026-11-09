@@ -508,7 +508,10 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
     ]
     side.forward_passes = len(forward)
 
-    side.corners = int((own["type"].astype(str) == "CornerAwarded").sum())
+    # CornerAwarded is logged for both sides of every corner; the winner's row
+    # is the Successful one.
+    side.corners = int(((own["type"].astype(str) == "CornerAwarded")
+                        & own["outcome"].astype(str).str.lower().eq("successful")).sum())
     side.fouls = int(
         ((own["type"].astype(str) == "Foul") & (own["outcome"].astype(str) == "Unsuccessful")).sum()
     )

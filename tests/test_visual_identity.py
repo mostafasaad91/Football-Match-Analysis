@@ -129,12 +129,13 @@ def test_single_team_pages_never_share_a_colour():
         assert (home, away) == (C_HOME, C_AWAY)
 
 
-def test_pitch_reads_as_white_markings_on_true_black():
-    from football_analysis.visuals.visualization_components import IS_LIGHT_THEME
+def test_pitch_reads_as_white_markings_on_a_near_black_page():
+    from football_analysis.visuals.visualization_components import IS_BLACK_THEME, IS_LIGHT_THEME
 
     if IS_LIGHT_THEME:
         return
-    assert BG_PITCH == "#000000"
+    # Black theme: true black. Midnight: the gradient's navy end, near black.
+    assert BG_PITCH == ("#000000" if IS_BLACK_THEME else "#010209")
     assert PITCH_LINE == "#FFFFFF"
     # Markings must clear the page without competing with the data layer.
     assert contrast_ratio(PITCH_LINE, BG_PITCH) >= 15.0

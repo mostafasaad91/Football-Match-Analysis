@@ -58,7 +58,21 @@ def _draw(fig, image: np.ndarray, x: float, y: float, width: float, zorder: floa
     """
     height = width * fig.get_figwidth() / fig.get_figheight()
     ax = fig.add_axes([x - width / 2, y - height / 2, width, height], zorder=zorder)
-    ax.imshow(image, interpolation="lanczos", aspect="auto")
+    # The cached crests are 70 px. Lanczos on straight (not premultiplied)
+    # alpha rings at every transparent edge, which drew a dotted halo round
+    # each crest once it was shown large. Pillow resamples RGBA premultiplied,
+    # so the crest is enlarged there first and only smoothed here.
+    target_px = width * fig.get_figwidth() * fig.dpi
+    if image.shape[1] < target_px * 0.8:
+        try:
+            from PIL import Image as _Image
+
+            scale = max(2, int(np.ceil(target_px / image.shape[1])))
+            image = np.asarray(_Image.fromarray(image).resize(
+                (image.shape[1] * scale, image.shape[0] * scale), _Image.LANCZOS))
+        except Exception:
+            pass
+    ax.imshow(image, interpolation="antialiased", aspect="auto")
     ax.set_axis_off()
     ax.patch.set_alpha(0.0)
 
@@ -277,7 +291,18 @@ _LOGO_MEMO: list = []
 def logo_image() -> np.ndarray | None:
     """The publisher's badge, or None on a clone that does not carry it."""
     if not _LOGO_MEMO:
-        _LOGO_MEMO.append(_load(LOGO_PATH) if LOGO_PATH.exists() else None)
+        image = _load(LOGO_PATH) if LOGO_PATH.exists() else None
+        if image is not None:
+            # The JPEG carries its own black ground. On a pure-black page that
+            # was invisible; on the Midnight gradient it is a black square.
+            # Fade the near-black pixels out so only the mark itself lands.
+            # (On a light page place_logo() still lays a dark plate under it.)
+            rgb = image[..., :3].astype(np.float32)
+            luminance = rgb.max(axis=2)
+            alpha = np.clip((luminance - 24.0) / 40.0, 0.0, 1.0) * 255.0
+            image = image.copy()
+            image[..., 3] = np.minimum(image[..., 3], alpha.astype(np.uint8))
+        _LOGO_MEMO.append(image)
     return _LOGO_MEMO[0]
 
 

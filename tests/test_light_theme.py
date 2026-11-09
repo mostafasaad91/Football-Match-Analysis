@@ -104,9 +104,17 @@ def test_a_dark_kit_is_left_alone_on_paper():
 
 def test_the_dark_page_still_lifts_upward():
     """The fix must not change what the black package already publishes."""
-    result = _in_theme("dark", _LIFT_PROBE % DARK_KITS)
+    result = _in_theme("black", _LIFT_PROBE % DARK_KITS)
     assert result["PSG navy"]["lifted"] == "#0069b4"
     assert result["Aston Villa claret"]["lifted"] == "#c70062"
+
+
+def test_the_midnight_page_lifts_dark_kits_upward_too():
+    """The Midnight page is near black, so dark kits are still lifted, not left dark."""
+    result = _in_theme("dark", _LIFT_PROBE % DARK_KITS)
+    for name, row in result.items():
+        assert row["contrast"] >= row["floor"], name
+        assert row["lifted"].lower() not in {"#004170", "#7a003c"}, f"{name} was left unreadable"
 
 
 _POSTER_PROBE = """

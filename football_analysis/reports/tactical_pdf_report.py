@@ -2705,6 +2705,47 @@ def build_tactical_pdf(
     return output
 
 
+COVER_PAGE_NAME = ".cover_page.pdf"
+
+
+def build_cover_page(
+    output_dir: Path,
+    events: pd.DataFrame,
+    xg: pd.DataFrame,
+    team_metrics: pd.DataFrame,
+    player_metrics: pd.DataFrame,
+    match_info: dict,
+) -> Path:
+    """Write the report's cover card alone, for the article to open on.
+
+    The article's cover image used to be page one of the full board-by-board
+    report, which meant building that whole report in every package just to
+    take its first page. Same card, one page.
+    """
+    global HOME, AWAY
+    if USE_REAL_TEAM_KIT_COLORS:
+        home_hex = str((match_info or {}).get("home_color") or "").strip() or C_HOME
+        away_hex = str((match_info or {}).get("away_color") or "").strip() or C_AWAY
+    else:
+        home_hex, away_hex = C_HOME, C_AWAY
+    HOME = _as_pdf_color(home_hex, _DEFAULT_HOME)
+    AWAY = _as_pdf_color(away_hex, _DEFAULT_AWAY)
+    output = Path(output_dir) / COVER_PAGE_NAME
+    context = build_context(events, xg, team_metrics, player_metrics, match_info)
+    context["home_color"] = home_hex
+    context["away_color"] = away_hex
+    try:
+        from football_analysis.prose.match_article import cover_headline
+
+        context["headline"] = cover_headline(events, xg, team_metrics, player_metrics, match_info)
+    except Exception:
+        context["headline"] = ""
+    report = TacticalPDF(output, context)
+    report.cover()
+    report.save()
+    return output
+
+
 # Legacy templates remain private for archived-report compatibility. Production
 # uses one evidence-led contract shared with the article.
 from football_analysis.prose.match_editorial import (

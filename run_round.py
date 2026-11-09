@@ -405,6 +405,23 @@ def main() -> int:
         if not ok:
             failures.append((url, detail))
 
+    # One more try for each fixture that failed. Most failures are the browser
+    # behind the scraper crashing (a Windows stack trace and nothing else) or
+    # the machine running short of memory mid-round; both pass on a second run
+    # once the round's other builds have finished. A fixture that fails twice
+    # is reported as before.
+    if failures:
+        print(f"\nRetrying {len(failures)} failed fixture(s) once ...")
+        still_failed = []
+        for url, first_detail in failures:
+            label = url.rsplit("/", 1)[-1]
+            print(f"[retry] {label} ... ", end="", flush=True)
+            ok, detail = run_one(url, round_name, args.dark_only)
+            print("ok " + detail if ok else "FAILED " + detail)
+            if not ok:
+                still_failed.append((url, f"{detail} (first try: {first_detail})"))
+        failures = still_failed
+
     print(f"\n{len(urls) - len(failures)}/{len(urls)} finished.")
     if failures:
         print("Re-run these:")

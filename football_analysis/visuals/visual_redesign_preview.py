@@ -20,6 +20,7 @@ import pandas as pd
 from football_analysis.visuals import crests
 from football_analysis.visuals.typography import display
 from football_analysis.metrics.frame_values import surname as _surname
+from football_analysis.visuals import visualization_components as _vc
 from football_analysis.visuals.visualization_components import (
     C_AWAY,
     C_HOME,
@@ -59,6 +60,18 @@ if IS_LIGHT_THEME:
     VALUE = "#333333"
     FOCUS = EVENT_HIGHLIGHT
     NEUTRAL = "#888888"
+elif not _vc.IS_BLACK_THEME:
+    # Midnight: the page chrome comes from the one palette module, so this
+    # file never drifts from it again.
+    BG = _vc.BG_DARK
+    PANEL = _vc.BG_PANEL
+    PANEL_2 = "#07060E"
+    TEXT = _vc.TEXT_MAIN
+    MUTED = _vc.TEXT_DIM
+    GRID = _vc.GRID_COL
+    VALUE = "#FFFFFF"
+    FOCUS = "#FFFFFF"
+    NEUTRAL = "#666666"
 else:
     BG = "#000000"
     PANEL = "#050505"

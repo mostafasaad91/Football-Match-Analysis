@@ -124,6 +124,24 @@ def configure_theme(theme: str | None = None) -> None:
             "rating",
             ["#E8D5C4", "#D9A87C", "#C99A3C", "#7FB07F", "#5C93AE", "#14505C"],
         )
+    elif theme not in {"black", "amoled"}:
+        # Midnight (the default dark page): read from the one palette module.
+        from football_analysis.visuals import visualization_components as _vc
+
+        BG_DARK = _vc.BG_DARK
+        BG_MID = _vc.BG_MID
+        BG_PANEL = _vc.BG_PANEL
+        BG_HEADER = _vc.BG_HEADER
+        GRID_COL = _vc.GRID_COL
+        TEXT_MAIN = "#FFFFFF"
+        TEXT_BRIGHT = "#FFFFFF"
+        TEXT_DIM = _vc.TEXT_DIM
+        TEXT_FADED = _vc.TEXT_FAD
+        C_GOLD = "#FFC23C"
+        RATING_CMAP = LinearSegmentedColormap.from_list(
+            "rating",
+            ["#3a0f10", "#7a1d1f", "#f97316", "#22c55e", "#7dd3fc", "#38BDF8"],
+        )
     else:
         BG_DARK = "#000000"
         BG_MID = "#0a0a0a"

@@ -82,8 +82,15 @@ _register_fonts()
 
 
 # ── Palette ─────────────────────────────────────────────────────────────
+# Three page themes, chosen once per process by MATCH_ANALYSIS_THEME:
+#   "dark"  (default) — "Midnight": a navy-to-wine page gradient, near black
+#   "black"           — the original AMOLED pure-black identity
+#   "light"           — the print identity on paper white
+# "dark" and "black" share every data colour; only the page chrome differs.
 _THEME = os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower()
 IS_LIGHT_THEME = _THEME == "light"
+IS_BLACK_THEME = _THEME in {"black", "amoled"}
+THEME_NAME = "light" if IS_LIGHT_THEME else ("black" if IS_BLACK_THEME else "midnight")
 
 # Team colour mode.
 #   "kit"   (default) — each side is drawn in its real home-kit colour, taken
@@ -115,6 +122,24 @@ if IS_LIGHT_THEME:
     TEXT_DIM = "#666666"
     TEXT_FAD = "#999999"
     TEXT_FAINT = "#BBBBBB"
+elif not IS_BLACK_THEME:
+    # "Midnight" identity — the default dark page. Near black, but the page is
+    # a diagonal gradient from deep navy (top left) to deep wine (bottom
+    # right), painted by _install_page_gradient() below. Panels and hairlines
+    # carry a faint violet so they sit in the same family as the page.
+    BG_DARK = "#010209"  # page base colour (gradient start)
+    BG_MID = "#06050C"
+    BG_PANEL = "#06050C"
+    BG_HEADER = "#0A0812"
+    BG_PITCH = "#010209"  # page-coloured: the gradient shows through the pitch
+    GRID_COL = "#1A1628"
+    GRID_SOFT = "#120F1E"
+
+    TEXT_BR = "#FFFFFF"
+    TEXT_MAIN = "#F2F0F7"
+    TEXT_DIM = "#A39DB0"
+    TEXT_FAD = "#605A6C"
+    TEXT_FAINT = "#38324A"
 else:
     # "Pure Black" identity — matches the reference HTML dashboards exactly.
     BG_DARK = "#000000"  # true black page background
@@ -156,7 +181,13 @@ else:
     # made every map look washed out; white lines at a controlled alpha give
     # the outline without competing with the data layer on top of it.
     PITCH_LINE = "#FFFFFF"
-    DASHED_LINE = "#3A3A3A"
+    DASHED_LINE = "#3A3A3A" if IS_BLACK_THEME else "#38324A"
+
+# Page gradient: (start, end) along the top-left to bottom-right diagonal, or
+# None for a flat page. Only the Midnight theme has one.
+PAGE_GRADIENT: tuple[str, str] | None = (
+    None if (IS_LIGHT_THEME or IS_BLACK_THEME) else ("#010209", "#070206")
+)
 
 # Alpha applied to pitch markings so white lines frame the pitch without
 # out-shouting the marks plotted on them.
@@ -342,6 +373,67 @@ def apply_amoled_defaults() -> None:
 
 
 apply_amoled_defaults()
+
+
+def _install_page_gradient() -> None:
+    """Paint PAGE_GRADIENT behind every figure this process saves.
+
+    Every renderer calls ``Figure.savefig`` (directly or through pyplot), so
+    the gradient is added there rather than in a hundred figure constructors:
+    an axes filling the figure at the bottom of the z-order. Anything filled
+    in the flat page colour -- the pitch surface, page-coloured axes -- is
+    made see-through first, so the gradient also runs under the pitch.
+    Panels keep their own opaque colour and sit on top of it.
+    """
+    if PAGE_GRADIENT is None:
+        return
+    import numpy as _np
+    import matplotlib.figure as _mfig
+    from matplotlib.colors import LinearSegmentedColormap, to_rgba
+    from matplotlib.patches import Patch
+
+    if getattr(_mfig.Figure.savefig, "_page_gradient", False):
+        return  # already installed (module reloaded)
+    cmap = LinearSegmentedColormap.from_list("page_gradient", list(PAGE_GRADIENT))
+    ramp = _np.add.outer(_np.linspace(0, 1, 256), _np.linspace(0, 1, 256)) / 2
+    page_rgb = to_rgba(BG_DARK)[:3]
+    clear = (0, 0, 0, 0)
+
+    def is_page(face) -> bool:
+        return (face is not None and len(face) == 4 and face[3] > 0
+                and all(abs(a - b) < 0.004 for a, b in zip(face[:3], page_rgb)))
+
+    def clear_page_fills(fig) -> None:
+        for ax in fig.axes:
+            if getattr(ax, "_is_page_gradient", False):
+                continue
+            if is_page(to_rgba(ax.get_facecolor())):
+                ax.set_facecolor(clear)
+            for artist in ax.patches:
+                if isinstance(artist, Patch) and is_page(artist.get_facecolor()):
+                    artist.set_facecolor(clear)
+        for artist in fig.patches:
+            if isinstance(artist, Patch) and is_page(artist.get_facecolor()):
+                artist.set_facecolor(clear)
+
+    original = _mfig.Figure.savefig
+
+    def savefig(self, *args, **kwargs):
+        clear_page_fills(self)
+        if not getattr(self, "_has_page_gradient", False):
+            ax = self.add_axes((0, 0, 1, 1), zorder=-1000)
+            ax.imshow(ramp, cmap=cmap, aspect="auto", extent=(0, 1, 0, 1),
+                      origin="upper", interpolation="bicubic")
+            ax.set_axis_off()
+            ax._is_page_gradient = True
+            self._has_page_gradient = True
+        return original(self, *args, **kwargs)
+
+    savefig._page_gradient = True
+    _mfig.Figure.savefig = savefig
+
+
+_install_page_gradient()
 
 
 def _neon_backdrop(fig):

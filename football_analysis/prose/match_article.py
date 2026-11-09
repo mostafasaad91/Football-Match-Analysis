@@ -2065,7 +2065,10 @@ def _cover_image(out_dir: Path) -> Path | None:
     the article on a picture that appears nowhere in the document it fronts.
     No image is the honest answer when page one cannot be rendered.
     """
-    pdf = out_dir / "full_visual_redesign_real_data.pdf"
+    # The cover card on its own page (build_cover_page) when the package wrote
+    # one; the report PDF's first page for packages built before that.
+    cover_only = out_dir / ".cover_page.pdf"
+    pdf = cover_only if cover_only.exists() else out_dir / "full_visual_redesign_real_data.pdf"
     target = out_dir / "article_cover.png"
     if pdf.exists():
         try:
@@ -2455,10 +2458,14 @@ def render_pdf(article: Article, path: Path | str) -> Path:
     # keeps paper.
     import os
 
-    dark = os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower() != "light"
+    theme = os.environ.get("MATCH_ANALYSIS_THEME", "dark").strip().lower()
+    dark = theme != "light"
     if dark:
+        # Midnight pages take the gradient's navy end so the boards sit on the
+        # page they were drawn for; the black theme keeps true black.
+        page_hex = "#000000" if theme in {"black", "amoled"} else "#010209"
         page, ink, body_ink, text_ink, grey, teal = (
-            HexColor("#000000"),
+            HexColor(page_hex),
             HexColor("#FFFFFF"),
             HexColor("#D4D4D4"),
             HexColor("#E8E8E8"),

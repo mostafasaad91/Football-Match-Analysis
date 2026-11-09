@@ -139,7 +139,11 @@ def team_extra(events: pd.DataFrame, info: dict) -> pd.DataFrame:
             "fouls_won": int((fouls & events["team_id"].eq(opponent_id)).sum()),
             "yellow_cards": int((cards["yellow"] & mine).sum()),
             "red_cards": int((cards["red"] & mine).sum()),
-            "corners": int((types.eq("CornerAwarded") & mine).sum()),
+            # CornerAwarded is logged twice per corner: Successful on the side
+            # that won it, Unsuccessful on the side that conceded it. Counting
+            # both gave every match equal corners (11 each instead of 7 and 4).
+            "corners": int((types.eq("CornerAwarded") & mine
+                            & events["outcome"].astype(str).str.lower().eq("successful")).sum()),
             "aerials": int(aerial_rows.sum()),
             "aerials_won": int((aerial_rows & won_row).sum()),
             "ground_duels": int(own_take_ons.sum() + their_take_ons.sum()),

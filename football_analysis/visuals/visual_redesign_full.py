@@ -965,9 +965,12 @@ def shot_map(events, xg, team_id, number):
         .dropna(subset=["x", "y"])
     )
     shots["xG"] = pd.to_numeric(shots["xG"], errors="coerce").fillna(0).clip(lower=0)
+    _n, _xg = len(shots), float(shots["xG"].sum())
+    _goals = int(as_bool(shots.get("is_goal", pd.Series(False, index=shots.index))).sum())
     fig, pitch, side = pitch_axes(
-        f"Shot Map · {TEAM_NAME[team_id]}",
-        "Shot location, outcome and chance quality · marker size = xG",
+        f"{TEAM_NAME[team_id]}: {_n} {'shot' if _n == 1 else 'shots'} worth {_xg:.2f} xG, "
+        f"{_goals} {'goal' if _goals == 1 else 'goals'}",
+        "Shot map: location, outcome and chance quality · marker size = xG",
     )
     draw_long_pitch(pitch)
     # Colour carries the outcome (shared shot palette, one key across the whole
@@ -1863,7 +1866,6 @@ def smooth_heat(px, py, weights=None, sigma=3.4):
     stopped; the blur shows where the play was, which is what a heat map is for.
     ``px, py`` are pitch metres, as ``attack_xy`` returns them.
     """
-    from scipy.ndimage import gaussian_filter
 
     grid, _, _ = np.histogram2d(
         np.asarray(py, dtype=float),
@@ -3222,7 +3224,6 @@ def defensive_activity(events, team_id, number):
     to clear, foul or block instead. Each gets its own pitch, its own density,
     and the average height of the actions on it.
     """
-    from scipy.ndimage import gaussian_filter
     from matplotlib.colors import to_rgb
 
     own = events[events["team_id"].eq(team_id)].dropna(subset=["x", "y"])
@@ -3785,9 +3786,19 @@ def box_entries(events, team_id, number):
         .copy()
         .dropna(subset=["x", "y", "end_x", "end_y"])
     )
+    # Which entries became a shot in the same possession. Twenty-three arrows
+    # in one colour said where the side got in, never whether getting in there
+    # was worth anything.
+    annotated, possessions = build_possessions(events)
+    shot_ids = set(possessions.loc[possessions["shots"].fillna(0) > 0, "possession_id"])
+    led_to_shot = annotated.loc[frame.index, "possession_id"].isin(shot_ids)
+    # The title states the finding; the description moved to the subtitle.
+    n_entries, n_shot = len(frame), int(led_to_shot.sum())
     fig, pitch, side = pitch_axes(
-        f"Box Entries · {TEAM_NAME[team_id]}",
-        "Completed actions entering the penalty area · highlighted = a shot followed in that possession",
+        f"{TEAM_NAME[team_id]} got into the box {n_entries} "
+        f"{'time' if n_entries == 1 else 'times'} · {n_shot} led to a shot",
+        "Box entries: completed actions entering the penalty area · highlighted = a shot "
+        "followed in that possession",
     )
     draw_long_pitch(pitch)
     reach = (
@@ -3795,12 +3806,6 @@ def box_entries(events, team_id, number):
     )
     crop_to_attack(pitch, side, min(60.0, reach - 6.0))
     team_mark = _team_mark_color(team_id)
-    # Which entries became a shot in the same possession. Twenty-three arrows
-    # in one colour said where the side got in, never whether getting in there
-    # was worth anything.
-    annotated, possessions = build_possessions(events)
-    shot_ids = set(possessions.loc[possessions["shots"].fillna(0) > 0, "possession_id"])
-    led_to_shot = annotated.loc[frame.index, "possession_id"].isin(shot_ids)
     for index, row in frame.iterrows():
         sx, sy = attack_xy([row["x"]], [row["y"]])
         ex, ey = attack_xy([row["end_x"]], [row["end_y"]])
@@ -3873,9 +3878,15 @@ def _with_others(rows, total):
 
 def high_regains(events, team_id, number):
     frame = high_regain_events(events, team_id).dropna(subset=["x", "y"]).copy()
+    _ann, _pos = build_possessions(events)
+    _shots = _ann.loc[frame.index, "possession_id"].map(
+        _pos.set_index("possession_id")["shots"]).fillna(0)
+    n_regains, n_shot = len(frame), int((_shots > 0).sum())
     fig, pitch, side = pitch_axes(
-        f"High Regains · {TEAM_NAME[team_id]}",
-        "Open-play regains in the attacking 40% · coloured by what the possession went on to do",
+        f"{TEAM_NAME[team_id]} won the ball back high {n_regains} "
+        f"{'time' if n_regains == 1 else 'times'} · {n_shot} led to a shot",
+        "High regains: open-play regains in the attacking 40% · coloured by what the possession "
+        "went on to do",
     )
     draw_long_pitch(pitch)
     threshold_y = 60 * PITCH_LENGTH / 100
@@ -5513,7 +5524,6 @@ def finishing_quality(events):
     panel, not a gap in it: a side that misses the target has already spent
     the chance.
     """
-    from football_analysis.metrics.match_metrics import post_shot_xg
 
     shots = events[as_bool(events.get("is_shot"))].copy()
     shots = shots[~as_bool(shots.get("is_penalty_shootout", pd.Series(False, index=shots.index)))]
@@ -6409,8 +6419,23 @@ def playing_through(events, team_id, opponent_id, number):
 
 
 def action_value_leaders(events):
-    """One value ranking every position can appear in."""
-    ranked = player_action_value(events)
+    """One value ranking every position can appear in.
+
+    VAEP when the fitted model is present (scripts/fit_vaep.py): every on-ball
+    action priced by how much it changed the chance of scoring and of
+    conceding in the next ten actions. The explicit zone-value surface is the
+    fallback for a clone without the model.
+    """
+    from football_analysis.metrics.vaep import load_model, player_vaep
+
+    fitted = load_model() is not None
+    if fitted:
+        table = player_vaep(events)
+        ranked = table.rename(columns={"offensive": "offensive_value",
+                                       "defensive": "defensive_value",
+                                       "vaep": "total_value"})
+    else:
+        ranked = player_action_value(events)
     # An event with no player attached is not a player: it printed as a nameless
     # row with a value of +0.000 at the foot of the ranking.
     if not ranked.empty:
@@ -6419,13 +6444,55 @@ def action_value_leaders(events):
         )
         ranked = ranked[named]
     fig = plt.figure(figsize=(14, 9), facecolor=BG)
+    leader = ranked.iloc[0] if not ranked.empty else None
     base.amoled_header(
         fig,
-        "Action Value",
-        "Every action priced on one scale in goals · on-ball gains and losses plus the threat denied by defensive work",
+        (f"{_surname(leader['player'])} added the most to their side's chances"
+         if fitted and leader is not None else "Action Value"),
+        ("VAEP · every action valued by how much it raised the chance of scoring, and lowered "
+         "the chance of conceding, in the next ten actions" if fitted else
+         "Every action priced on one scale in goals · on-ball gains and losses plus the threat "
+         "denied by defensive work"),
     )
     if ranked.empty:
         fig.text(0.5, 0.5, "No valued actions", color=MUTED, ha="center")
+        return save(fig, "43_action_value.png")
+
+    if fitted:
+        # VAEP on the pitch: where each player added value, how much, and the
+        # single actions that moved the match most. A ranking table said who;
+        # this says where and how.
+        from football_analysis.metrics.vaep import action_values
+        from football_analysis.visuals.vaep_visuals import (
+            action_label, draw_split_bars, draw_value_map, top_actions,
+        )
+
+        values = action_values(events)
+        spots = []
+        # Both sides on one pitch: home attacking right, away attacking left.
+        pax = fig.add_axes([0.03, 0.29, 0.66, 0.52])
+        placed: list = []
+        for i, (tid, colour, name) in enumerate(((HOME_ID, HOME, HOME_NAME), (AWAY_ID, AWAY, AWAY_NAME))):
+            spots.append((draw_value_map(pax, values, tid, colour, label_top=4, size_scale=1500,
+                                         fontsize=7.5, flip=bool(i), draw_pitch=(i == 0),
+                                         placed=placed), colour))
+            total = values[values['team_id'] == tid]['vaep'].sum()
+            fig.text(0.04 if i == 0 else 0.68, 0.815,
+                     f"{name.upper()}  {total:+.2f}  →" if i == 0 else f"←  {name.upper()}  {total:+.2f}",
+                     color=colour, fontsize=10, fontweight="bold", ha="left" if i == 0 else "right")
+        fig.text(0.04, 0.27, "Disc = a player at the average spot of their actions, sized by value added · "
+                 "ring = gave value away", color=MUTED, fontsize=7.5)
+        bars = fig.add_axes([0.11, 0.06, 0.55, 0.18])
+        draw_split_bars(bars, spots, n=6, fontsize=8)
+        fig.text(0.72, 0.80, "ACTIONS THAT MOVED THE MATCH MOST", color=MUTED, fontsize=8.5, fontweight="bold")
+        for j, (_, r) in enumerate(top_actions(values, 8).iterrows()):
+            colour = HOME if r["team_id"] == HOME_ID else AWAY
+            y = 0.75 - j * 0.058
+            fig.text(0.72, y, action_label(r), color=TEXT, fontsize=9)
+            fig.text(0.955, y, f"{r['vaep']:+.2f}", color=colour, fontsize=10, fontweight="bold", ha="right")
+        fig.text(0.72, 0.27, "SOLID = ATTACK  ·  FADED = DEFENCE (bars, bottom left)", color=MUTED, fontsize=7.5)
+        fig.text(0.945, 0.025, "VAEP fitted on every stored match · goalkeepers' saves count as defence",
+                 ha="right", fontsize=7, color=NEUTRAL)
         return save(fig, "43_action_value.png")
 
     top = ranked.head(14).iloc[::-1]
@@ -6446,7 +6513,7 @@ def action_value_leaders(events):
     ax.set_yticklabels([_surname(name) for name in top["player"]], fontsize=8.5, color=TEXT)
     ax.axvline(0, color=PITCH_LINE, lw=1.0, alpha=0.6)
     ax.grid(axis="x", color=GRID, lw=0.7, alpha=0.7)
-    ax.set_xlabel("Action value (goals)", fontsize=9, color=MUTED)
+    ax.set_xlabel("VAEP (goals added)" if fitted else "Action value (goals)", fontsize=9, color=MUTED)
     ax.tick_params(labelsize=8)
     # Room on the right for those labels. Without it the widest bar reaches
     # the axis edge and its number is drawn past it, over whatever sits beside
@@ -6475,7 +6542,8 @@ def action_value_leaders(events):
     fig.text(
         0.20,
         0.80,
-        "SOLID = ON-BALL   ·   FADED = DEFENSIVE",
+        "SOLID = RAISING OWN CHANCES   ·   FADED = LOWERING THE OPPONENT'S"
+        if fitted else "SOLID = ON-BALL   ·   FADED = DEFENSIVE",
         color=MUTED,
         fontsize=7.5,
         fontweight="bold",
@@ -6498,7 +6566,10 @@ def action_value_leaders(events):
     fig.text(
         0.20,
         0.075,
-        "Zone-value model, not a fitted VAEP: no labelled training data, so the value surface is explicit rather than learned.",
+        ("VAEP (Decroos et al.) fitted on every stored match: two gradient-boosted models of "
+         "scoring and conceding within ten actions." if fitted else
+         "Zone-value model, not a fitted VAEP: no labelled training data, so the value surface "
+         "is explicit rather than learned."),
         color=NEUTRAL,
         fontsize=7,
     )
@@ -6511,6 +6582,111 @@ def action_value_leaders(events):
         color=NEUTRAL,
     )
     return save(fig, "43_action_value.png")
+
+
+def pressing_timeline(events):
+    """PPDA in 15-minute bins for both sides: when each side pressed, and when it stopped."""
+    from football_analysis.metrics.match_extras import ppda_timeline
+
+    home = ppda_timeline(events, HOME_ID, AWAY_ID)
+    away = ppda_timeline(events, AWAY_ID, HOME_ID)
+    fig = plt.figure(figsize=(14, 9), facecolor=BG)
+
+    def mean_ppda(rows):
+        p = sum(r["passes"] for r in rows)
+        a = sum(r["actions"] for r in rows)
+        return p / a if a else float("nan")
+
+    # The headline names the side that pressed harder and the spell it did it in.
+    harder = HOME_NAME if mean_ppda(home) <= mean_ppda(away) else AWAY_NAME
+    rows = home if harder == HOME_NAME else away
+    best = min((r for r in rows if r["ppda"] is not None), key=lambda r: r["ppda"], default=None)
+    title = (f"{harder} pressed hardest between {best['start']}' and {best['end']}'"
+             if best else "Pressing through the match")
+    base.amoled_header(
+        fig, title,
+        "PPDA per 15 minutes · opponent passes in their own 60% per defensive action there · "
+        "lower = more pressing",
+    )
+    ax = fig.add_axes([0.08, 0.14, 0.86, 0.62])
+    base.clean_ax(ax)
+    labels = [f"{r['start']}–{r['end']}'" for r in home]
+    xs = np.arange(len(labels))
+    for rows_, colour, name, offset in ((home, HOME, HOME_NAME, -0.18), (away, AWAY, AWAY_NAME, 0.18)):
+        values = [r["ppda"] if r["ppda"] is not None else np.nan for r in rows_]
+        capped = [min(v, 30) if v == v else np.nan for v in values]
+        ax.plot(xs, capped, color=colour, lw=3, marker="o", ms=8, label=name, zorder=4)
+        for x, v, c in zip(xs, values, capped):
+            if v == v:
+                # Offset in points, above the marker on the page (the axis is
+                # inverted, so a data-space offset landed on the line).
+                ax.annotate(f"{v:.1f}", (x, c), xytext=(0, 11 if offset < 0 else -17),
+                            textcoords="offset points", color=colour, ha="center", fontsize=9,
+                            fontweight="bold")
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, fontsize=10, color=TEXT)
+    ax.invert_yaxis()  # pressing harder reads as higher on the page
+    ax.set_ylabel("PPDA (inverted: higher = more pressing)", fontsize=9, color=MUTED)
+    ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.7)
+    ax.legend(loc="lower right", frameon=False, fontsize=10, labelcolor=TEXT)
+    fig.text(0.08, 0.075, "Bins with no defensive actions are left out; values above 30 are drawn at 30.",
+             color=NEUTRAL, fontsize=7.5)
+    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA", ha="right", fontsize=8, color=NEUTRAL)
+    return save(fig, "70_pressing_timeline.png")
+
+
+def control_and_points(events):
+    """Who deserved what: expected points from the shots, and minutes as the likelier winner."""
+    from football_analysis.metrics.match_extras import expected_points, game_control
+    from football_analysis.metrics.match_metrics import win_probability
+
+    xp = expected_points(events, HOME_ID, AWAY_ID)
+    control = game_control(events, HOME_ID, AWAY_ID)
+    curve = win_probability(events, HOME_ID, AWAY_ID)
+    fig = plt.figure(figsize=(14, 9), facecolor=BG)
+    favoured = HOME_NAME if xp["home_xpts"] >= xp["away_xpts"] else AWAY_NAME
+    base.amoled_header(
+        fig,
+        f"The chances were worth {xp['home_xpts']:.1f} points to {HOME_NAME} and "
+        f"{xp['away_xpts']:.1f} to {AWAY_NAME}",
+        "Expected points: every shot replayed at its xG · the curve is each side's chance of "
+        "winning as the match went on",
+    )
+    # Left: the three outcomes as one stacked bar.
+    bar = fig.add_axes([0.08, 0.60, 0.84, 0.12])
+    bar.set_axis_off()
+    left = 0.0
+    for share, colour, label in ((xp["home_win"], HOME, f"{HOME_NAME} win"),
+                                 (xp["draw"], NEUTRAL, "Draw"),
+                                 (xp["away_win"], AWAY, f"{AWAY_NAME} win")):
+        bar.barh(0, share, left=left, color=colour, height=0.8)
+        if share >= 0.07:
+            bar.text(left + share / 2, 0, f"{label}\n{share:.0%}", ha="center", va="center",
+                     fontsize=10, fontweight="bold", color=text_on_fill(colour))
+        left += share
+    bar.set_xlim(0, 1)
+    # Below: the win-probability curve with the control shares.
+    ax = fig.add_axes([0.08, 0.14, 0.84, 0.38])
+    base.clean_ax(ax)
+    if not curve.empty:
+        ax.fill_between(curve["minute"], 0, curve["home_win"], color=HOME, alpha=0.35, lw=0)
+        ax.plot(curve["minute"], curve["home_win"], color=HOME, lw=2.4, label=f"{HOME_NAME} win")
+        ax.plot(curve["minute"], curve["away_win"], color=AWAY, lw=2.4, label=f"{AWAY_NAME} win")
+        ax.plot(curve["minute"], curve["draw"], color=NEUTRAL, lw=1.4, ls="--", label="Draw")
+    ax.set_ylim(0, 1)
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(1.0))
+    ax.set_xlabel("Minute", fontsize=9, color=MUTED)
+    ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.7)
+    ax.legend(loc="upper left", frameon=False, fontsize=9, labelcolor=TEXT, ncol=3)
+    fig.text(0.08, 0.80,
+             f"LIKELIER WINNER FOR   {HOME_NAME.upper()} {control['home']:.0f}% OF THE MATCH   ·   "
+             f"{AWAY_NAME.upper()} {control['away']:.0f}%   ·   LEVEL {control['level']:.0f}%",
+             color=TEXT, fontsize=9, fontweight="bold")
+    fig.text(0.08, 0.075,
+             f"On these chances {favoured} wins the replay most often. The curve is a transparent "
+             "heuristic on score, time and xG, not a betting model.", color=NEUTRAL, fontsize=7.5)
+    fig.text(0.945, 0.035, "FULL VISUAL REDESIGN · REAL MATCH DATA", ha="right", fontsize=8, color=NEUTRAL)
+    return save(fig, "71_control_and_points.png")
 
 
 def control_surface(events, players=None):
@@ -7377,6 +7553,21 @@ def generate_match_package(
     """Generate the production AMOLED package for any parsed fixture."""
     configure_match(match_info, output_dir)
     OUT.mkdir(parents=True, exist_ok=True)
+    # Expected threat from the surface fitted on every stored match, not the
+    # hand-written grid the scrape stamps on each event. The team and player
+    # frames are recomputed from the rescored events so every board, the
+    # article and the posters read one xT.
+    from football_analysis.metrics.expected_threat import rescore
+
+    events = rescore(events)
+    if events.attrs.get("xt_model") == "learned":
+        team_metrics, player_metrics = advanced_metrics_frames(events, match_info)
+        if "xT" in xg.columns and "team" in xg.columns:
+            by_id = events.groupby("team_id")["xT"].sum()
+            names = {str(match_info.get("home_name")): match_info.get("home_id"),
+                     str(match_info.get("away_name")): match_info.get("away_id")}
+            xg = xg.copy()
+            xg["xT"] = [round(float(by_id.get(names.get(str(t)), 0.0)), 3) for t in xg["team"]]
     if clean:
         for pattern in ("*.png", "*.pdf"):
             for old in OUT.glob(pattern):
@@ -7405,7 +7596,31 @@ def generate_match_package(
         json.dumps(match_info, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
+    # A fingerprint of the raw events. WhoScored revises events after a match,
+    # so a rebuild can publish different numbers from the same fixture (a PPDA
+    # of 5.40 became 5.68 between two builds of Arsenal v Hull). The staging
+    # folder starts as a copy of the previous package, so the old fingerprint
+    # is still here to compare against before it is replaced.
+    _key = [c for c in ("event_id", "minute", "second", "team_id", "type", "outcome", "x", "y")
+            if c in events.columns]
+    _digest = hashlib.sha1(
+        pd.util.hash_pandas_object(events[_key].astype(str), index=False).values.tobytes()
+    ).hexdigest()
+    _fp_path = OUT / "events_fingerprint.json"
+    try:
+        _old = json.loads(_fp_path.read_text(encoding="utf-8"))
+        if _old.get("sha1") != _digest:
+            print(f"  ! the events changed since the last build ({_old.get('rows')} rows then, "
+                  f"{len(events)} now): published numbers may move")
+    except Exception:
+        pass
+    _fp_path.write_text(json.dumps({"rows": int(len(events)), "sha1": _digest}), encoding="utf-8")
     generated = non_pitch_pages(events, xg, team_metrics)
+    # xT per minute is drawn by non_pitch_pages but no longer published.
+    for _dropped in ("15_xt_per_minute.png",):
+        _p = generated.get(_dropped)
+        if _p is not None:
+            Path(_p).unlink(missing_ok=True)
     plt.close("all")
     gc.collect()
     paths = [
@@ -7422,39 +7637,33 @@ def generate_match_package(
         pass_map(events, HOME_ID, 9),
         pass_map(events, AWAY_ID, 10),
         gk_saves(events, xg, players),
-        zone14(events, HOME_ID, 12),
-        zone14(events, AWAY_ID, 13),
-        generated["15_xt_per_minute.png"],
-        progressive(events, HOME_ID, 16),
-        progressive(events, AWAY_ID, 17),
-        # Crosses were dropped from the package. Nine deliveries drew two
-        # arrows on an otherwise empty pitch, and the crossing totals that
-        # carried the finding already sit on the poster's delivery panel.
+        # November 2026 review: 56 boards became about 33. Dropped because
+        # another board already carries the finding, or because a lay reader
+        # could not read it: zone 14 (box entries and entry routes carry it),
+        # xT per minute and progressive passes (the xT maps), attacking zones
+        # (dominating zones), pass targets (pass maps and networks), the PPDA
+        # bars and press radar (pressing timeline), player sequence leaders and
+        # playing through the lines (VAEP), pass sonar (hard to read), pitch
+        # control (its shading followed the goalkeepers, not the space held)
+        # and sequence types (the possession funnel).
+        # Crosses were dropped earlier: nine deliveries drew two arrows on an
+        # otherwise empty pitch, and the crossing totals sit on the posters.
         defensive_activity(events, HOME_ID, 20),
         defensive_activity(events, AWAY_ID, 21),
         dominating_zones(events),
-        attacking_zones(events),
         box_entries(events, HOME_ID, 25),
         box_entries(events, AWAY_ID, 26),
         high_regains(events, HOME_ID, 27),
         high_regains(events, AWAY_ID, 28),
-        pass_targets(events, HOME_ID, 29),
-        pass_targets(events, AWAY_ID, 30),
-        ppda(events),
-        press_profile(events, xg, team_metrics),
+        pressing_timeline(events),
         transition_outcomes(events),
         game_state(events, team_metrics),
-        player_sequence(player_metrics),
         momentum(events),
+        control_and_points(events),
         set_pieces(events),
-        pass_sonar(events),
         finishing_quality(events),
         shape_over_time(events),
-        playing_through(events, HOME_ID, AWAY_ID, 41),
-        playing_through(events, AWAY_ID, HOME_ID, 42),
         action_value_leaders(events),
-        control_surface(events, players),
-        sequence_types(events),
         goal_origins(events),
         press_and_rest(events),
     ]
@@ -7462,6 +7671,19 @@ def generate_match_package(
     from football_analysis.visuals.insight_visuals import build_insight_visuals
 
     new_paths, _insights = build_insight_visuals(events, players, match_info, OUT)
+    # The insight boards the review folded into others: involvement value and
+    # shot quality (VAEP and the finishing board), possession speed and regain
+    # speed (transition outcomes), loss consequences (transition outcomes) and
+    # substitution windows (the momentum board marks the changes).
+    dropped = {
+        "51_player_involvement_value.png", "52_player_shot_quality.png",
+        "53_possession_speed_value.png", "54_regain_speed.png",
+        "60_loss_consequences.png", "61_substitution_windows.png",
+    }
+    for path in list(new_paths):
+        if Path(path).name in dropped:
+            Path(path).unlink(missing_ok=True)
+            new_paths.remove(path)
     paths.extend(new_paths)
     events.attrs["match_date"] = match_info.get("date", "")
     paths = sorted({path.resolve() for path in paths}, key=lambda path: path.name)
@@ -7469,26 +7691,58 @@ def generate_match_package(
 
     paths = number_visuals(paths, OUT, events.attrs.get("chart_contracts", {}))
     catalog = build_catalog(paths)
-    pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
-    from football_analysis.visuals.poster_dashboard import build_match_posters
+    # The article PDF is the publication. The board-by-board report used to be
+    # rendered here first and then overwritten by the article: a full PDF built
+    # in every package only to be thrown away, and left standing as if it were
+    # the article whenever anything before render_pdf failed. It is now built
+    # only when the article PDF is missing at the end.
+    pdf = OUT / "full_visual_redesign_real_data.pdf"
+    if pdf.exists():
+        pdf.unlink()
+    try:
+        from football_analysis.reports.tactical_pdf_report import build_cover_page
 
-    posters = build_match_posters(
-        events,
-        xg,
-        team_metrics,
-        player_metrics,
-        players,
-        out_dir=OUT,
-        home_id=HOME_ID,
-        away_id=AWAY_ID,
-        home_name=HOME_NAME,
-        away_name=AWAY_NAME,
-        home_color=HOME,
-        away_color=AWAY,
-        score=MATCH_SCORE.replace("-", "—"),
-        competition=str(match_info.get("competition") or "MATCH ANALYSIS"),
-        match_date=str(match_info.get("date") or ""),
-    )
+        build_cover_page(OUT, events, xg, team_metrics, player_metrics, match_info)
+    except Exception as error:
+        print(f"  ! cover page not written — {type(error).__name__}: {error}")
+    # The five-slide story carousel replaced the four dashboard posters in the
+    # November 2026 review. The dashboards stay as the fallback, so a package
+    # never ships without posters.
+    try:
+        from football_analysis.prose.publication_v2 import cover_headline
+        from football_analysis.visuals.poster_story import build_story_posters
+
+        try:
+            headline = cover_headline(events, xg, team_metrics, player_metrics, match_info)
+        except Exception:
+            headline = f"{HOME_NAME} {MATCH_SCORE} {AWAY_NAME}"
+        posters = build_story_posters(
+            events, xg, players, match_info, OUT,
+            home_color=HOME, away_color=AWAY, score=MATCH_SCORE.replace("-", "—"),
+            competition=str(match_info.get("competition") or "MATCH ANALYSIS"),
+            date=str(match_info.get("date") or ""), headline=headline,
+        )
+    except Exception as error:
+        print(f"  ! story posters not written ({type(error).__name__}: {error}); using the dashboards")
+        from football_analysis.visuals.poster_dashboard import build_match_posters
+
+        posters = build_match_posters(
+            events,
+            xg,
+            team_metrics,
+            player_metrics,
+            players,
+            out_dir=OUT,
+            home_id=HOME_ID,
+            away_id=AWAY_ID,
+            home_name=HOME_NAME,
+            away_name=AWAY_NAME,
+            home_color=HOME,
+            away_color=AWAY,
+            score=MATCH_SCORE.replace("-", "—"),
+            competition=str(match_info.get("competition") or "MATCH ANALYSIS"),
+            match_date=str(match_info.get("date") or ""),
+        )
     # The same match on one 1:1 page, for timelines that crop to a square.
     from football_analysis.visuals.poster_square import build_square_poster
 
@@ -7501,6 +7755,9 @@ def generate_match_package(
     article = build_match_article(
         events, xg, team_metrics, player_metrics, match_info, OUT, players
     )
+    if not pdf.exists():
+        print("  ! article PDF missing — writing the board-by-board report in its place")
+        pdf = build_pdf(paths, events, xg, team_metrics, player_metrics)
 
     print(f"Generated {len(paths)} full redesigned visuals")
     print(f"Pitch visuals: {int(catalog['has_pitch'].sum())}")

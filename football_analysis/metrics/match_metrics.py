@@ -666,7 +666,9 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
                 "goals": int(goal_mask.sum()),
                 "xG": float(xg.sum()),
                 "npxG": float(xg[~team_events["_is_penalty"]].sum()),
-                "xT": float(xt[xt > 0].sum()),
+                # Net threat: a backward pass gives threat away, so a possession
+                # is worth the sum of all its steps, not only the forward ones.
+                "xT": float(xt.sum()),
                 "box_entries": int(team_events["_box_entry"].sum()),
                 "final_third_entries": int(team_events["_final_third_entry"].sum()),
                 "provider_fastbreak": bool(provider_fastbreak.any()),
@@ -675,7 +677,7 @@ def build_possessions(events: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
                 "transition_shots": int(window_shots.sum()),
                 "transition_goals": int(window_goals.sum()),
                 "transition_xG": float(window["_xG"].sum()),
-                "transition_xT": float(window.loc[window["_xT"] > 0, "_xT"].sum()),
+                "transition_xT": float(window["_xT"].sum()),
                 "transition_box_entries": int(window["_box_entry"].sum()),
                 "transition_duration": min(duration, TRANSITION_WINDOW_SECONDS),
                 "is_high_regain": bool(transition_candidate and float(start_x) >= HIGH_REGAIN_X),

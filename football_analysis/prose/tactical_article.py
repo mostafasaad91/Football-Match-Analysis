@@ -849,6 +849,97 @@ def _verdict(facts, x: _Extras) -> list[str]:
 
 
 # ----------------------------------------------------------------------------
+# Measures added in the November 2026 review
+# ----------------------------------------------------------------------------
+
+
+def _extras(facts, events) -> dict:
+    from football_analysis.metrics.match_extras import match_extras
+
+    info = {"home_id": facts.home.team_id, "away_id": facts.away.team_id}
+    try:
+        return match_extras(events, info)
+    except Exception:
+        return {}
+
+
+def _deserved(facts, extras: dict) -> list[str]:
+    """Expected points, control, and where the chances came from."""
+    if not extras:
+        return []
+    home, away = facts.home, facts.away
+    xp, control = extras["expected_points"], extras["game_control"]
+    out = [
+        f"Replay every shot at its expected-goals value and {home.name} win "
+        f"{xp['home_win']:.0%} of the time, {away.name} {xp['away_win']:.0%}, with "
+        f"{xp['draw']:.0%} draws: {xp['home_xpts']:.1f} expected points to {xp['away_xpts']:.1f}. "
+        f"{home.name} were the likelier winner for {control['home']:.0f}% of the match, "
+        f"{away.name} for {control['away']:.0f}%."
+    ]
+    lines = []
+    for side, key in ((home, "home"), (away, "away")):
+        sit = extras[key]["xg_by_situation"]
+        total = sum(v["xG"] for v in sit.values()) or 0.0
+        dead = sum(sit[s]["xG"] for s in ("Corner", "Free kick", "Throw-in"))
+        if total >= 0.3 and dead / total >= 0.4:
+            lines.append(f"{dead:.2f} of {side.name}'s {total:.2f} expected goals came from "
+                         f"dead balls, so the set pieces were a real part of their threat")
+        counter = sit["Counter"]
+        if counter["shots"] >= 2:
+            lines.append(f"{side.name} had {counter['shots']} shots on the counter worth {counter['xG']:.2f}")
+    if lines:
+        out.append("; ".join(lines) + ".")
+    sp = [(side, extras[key]["set_pieces"]) for side, key in ((home, "home"), (away, "away"))]
+    out.append(" ".join(
+        f"{side.name} took {s['corners']} corners and {s['corners_to_shot']} of them brought a shot within ten seconds."
+        for side, s in sp))
+    return out
+
+
+def _pressing_over_time(facts, extras: dict) -> list[str]:
+    if not extras:
+        return []
+    out = []
+    for side, key in ((facts.home, "home"), (facts.away, "away")):
+        rows = [r for r in extras[key]["ppda_timeline"] if r["ppda"] is not None]
+        if len(rows) < 3:
+            continue
+        first = sum(r["passes"] for r in rows if r["start"] < 45) / max(1, sum(r["actions"] for r in rows if r["start"] < 45))
+        second = sum(r["passes"] for r in rows if r["start"] >= 45) / max(1, sum(r["actions"] for r in rows if r["start"] >= 45))
+        hardest = min(rows, key=lambda r: r["ppda"])
+        trend = ("pressed harder after the break" if second < first * 0.85 else
+                 "stopped pressing after the break" if second > first * 1.15 else
+                 "pressed at much the same intensity in both halves")
+        out.append(f"{side.name} {trend} (PPDA {first:.1f} before, {second:.1f} after), "
+                   f"and were at their most aggressive between {hardest['start']}' and {hardest['end']}' "
+                   f"({hardest['ppda']:.1f}).")
+    return out
+
+
+def _vaep_lines(events, facts) -> list[str]:
+    from football_analysis.metrics.vaep import load_model, player_vaep
+
+    if load_model() is None:
+        return []
+    table = player_vaep(events)
+    if table.empty:
+        return []
+    top = table.head(3)
+    names = [f"{_surname_of(r.player)} ({r.vaep:+.2f})" for r in top.itertuples()]
+    defender = table.sort_values("defensive", ascending=False).iloc[0]
+    out = [f"On VAEP, which values every action by how much it changed the chance of scoring and of "
+           f"conceding, the biggest contributions came from {', '.join(names[:-1])} and {names[-1]}."]
+    if defender.player not in set(top.player) and defender.defensive >= 0.15:
+        out.append(f"Without the ball, {_surname_of(defender.player)} did the most to lower the opponent's "
+                   f"chances ({defender.defensive:+.2f}).")
+    return out
+
+
+def _surname_of(name: str) -> str:
+    return surname(str(name))
+
+
+# ----------------------------------------------------------------------------
 # Assembly
 # ----------------------------------------------------------------------------
 
@@ -874,20 +965,29 @@ def build_tactical_article(out_dir, match_info, context=None):
     title, standfirst = headline(facts, x)
     home, away = facts.home, facts.away
 
+    extras = _extras(facts, events)
     sections = [
         Section("How the match was decided", _story(facts, x),
                 _visual(out, "xg_flow") + _visual(out, "goal_origins")),
     ]
+    deserved = _deserved(facts, extras)
+    if deserved:
+        sections.append(Section("What the chances were worth", deserved,
+                                _visual(out, "control_and_points") + _visual(out, "set_pieces")))
     for side in facts.sides:
         sections.append(Section(f"{side.name} with the ball", _with_ball(facts, x, side),
                                 _visual(out, "pass_map", side.slug) + _visual(out, "box_entries", side.slug)))
         sections.append(Section(f"{side.name} without the ball", _without_ball(facts, x, side),
                                 _visual(out, "defensive_activity", side.slug) + _visual(out, "high_regains", side.slug)))
+    pressing = _pressing_over_time(facts, extras)
+    if pressing:
+        sections.append(Section("Pressing through the match", pressing, _visual(out, "pressing_timeline")))
     changes = _changes(facts)
     if changes:
         sections.append(Section("Changes, game state and the last half-hour", changes,
-                                _visual(out, "match_momentum") + _visual(out, "substitution_windows")))
-    sections.append(Section("The players who shaped it", _players(facts, x), []))
+                                _visual(out, "match_momentum") + _visual(out, "game_state")))
+    players_text = _players(facts, x) + _vaep_lines(events, facts)
+    sections.append(Section("The players who shaped it", players_text, _visual(out, "action_value")))
     sections.append(Section("What decided it", _verdict(facts, x), []))
 
     for section in sections:
@@ -905,6 +1005,26 @@ def build_tactical_article(out_dir, match_info, context=None):
         gallery=True,
     ))
     strap = " · ".join(str(v) for v in [match_info.get("competition", ""), match_info.get("date", ""), "MATCH STUDY"] if v)
-    return Article(clean(title), clean(standfirst), strap, sections, _cover_image(out), home.name, away.name, context)
+    # The cover approved in the November 2026 review: floodlights in both
+    # clubs' colours, the gradient score and every shot standing on a
+    # broadcast pitch. The report's comparison card is the fallback.
+    from football_analysis.visuals.cover_art import build_cover_art
+
+    try:
+        xg_frame = pd.read_csv(out / "xg.csv", encoding="utf-8-sig")
+    except Exception:
+        xg_frame = pd.DataFrame()
+    cover = build_cover_art(events, xg_frame, {**match_info, "home_id": home.team_id, "away_id": away.team_id,
+                                               "home_name": home.name, "away_name": away.name},
+                            out, home_color=home.colour, away_color=away.colour,
+                            headline=clean(title), standfirst=clean(standfirst))
+    if cover is not None:
+        import shutil
+
+        shutil.copyfile(cover, out / "article_cover.png")
+        cover = out / "article_cover.png"
+    else:
+        cover = _cover_image(out)
+    return Article(clean(title), clean(standfirst), strap, sections, cover, home.name, away.name, context)
 
 
