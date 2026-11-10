@@ -125,7 +125,7 @@ def verify(folder: Path) -> Report:
     for side, tid, oid in (("home", HID, AID), ("away", AID, HID)):
         name = name_of[tid]
         pos = round(float(tm[side]["possession_share"]))
-        if "% of the ball" in body or "% of possession" in body:
+        if re.search(r"\d% of the ball|\d% of possession(?! regains)", body):
             rep.check(f"possession {name}", f"{pos}%" in body, f"{pos}%")
         ppda = calculate_ppda(events, tid, oid)["ppda"]
         if ppda:
@@ -244,7 +244,7 @@ def verify(folder: Path) -> Report:
 
     # ---- Writing hygiene ------------------------------------------------------
     for pattern, label in ((r"\b0\.00 per possession", "0.00 per possession"), (r"\bnan\b", "nan"),
-                           (r"\bNone\b", "None"), (r"\b1 (shots|entries|goals|chances|corners|saves|regains)\b", "plural after 1"),
+                           (r"\bNone\b", "None"), (r"(?<![\d.])1 (shots|entries|goals|chances|corners|saves|regains)\b", "plural after 1"),
                            (r"\b(\w{3,}) \1\b", "repeated word")):
         hits = re.findall(pattern, body)
         rep.check(f"no '{label}'", not hits, str(hits[:3]))
