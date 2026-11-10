@@ -1044,6 +1044,18 @@ def team_advanced_metrics(events: pd.DataFrame, info: dict[str, Any]) -> dict[st
             "provider_recoveries": provider_recoveries,
             "possession_regains": len(regains),
             "high_regains": len(high_regains),
+            # What the high regains themselves led to, counted the way the
+            # high-regains board counts them: possessions with a shot, and the
+            # xG of those possessions. The article used to pair the regain
+            # count with every transition's shots, which is a different set.
+            "high_regain_shots": (
+                int((high_regains["shots"].fillna(0) > 0).sum()) if not high_regains.empty else 0
+            ),
+            "high_regain_xG": (
+                round(float(high_regains.loc[high_regains["shots"].fillna(0) > 0, "xG"].sum()), 2)
+                if not high_regains.empty
+                else 0.0
+            ),
             "regain_to_shot_rate": round(
                 100 * int((regains["transition_shots"] > 0).sum()) / max(len(regains), 1),
                 1,

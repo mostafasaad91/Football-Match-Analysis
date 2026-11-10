@@ -554,6 +554,48 @@ def _install_overlap_check() -> None:
 _install_overlap_check()
 
 
+def _install_board_text_record() -> None:
+    """Record the words on every saved board in ``board_text.json`` beside it.
+
+    The boards are images, so nothing could check that the number in a board's
+    title is the number the article quotes. Every saved PNG now leaves its
+    visible text in a sidecar, keyed by file name, and
+    scripts/verify_package.py compares it with the article.
+    """
+    import json as _json
+    import matplotlib.figure as _mfig
+    from matplotlib.text import Text
+
+    previous = _mfig.Figure.savefig
+
+    def savefig(self, fname, *args, **kwargs):
+        result = previous(self, fname, *args, **kwargs)
+        try:
+            path = str(fname)
+            if path.lower().endswith(".png"):
+                texts = []
+                for artist in self.findobj(Text):
+                    label = artist.get_text().strip()
+                    if label and artist.get_visible():
+                        texts.append(label)
+                record = os.path.join(os.path.dirname(os.path.abspath(path)), "board_text.json")
+                data = {}
+                if os.path.exists(record):
+                    with open(record, encoding="utf-8") as handle:
+                        data = _json.load(handle)
+                data[os.path.basename(path)] = texts
+                with open(record, "w", encoding="utf-8") as handle:
+                    _json.dump(data, handle, ensure_ascii=False, indent=0)
+        except Exception:
+            pass
+        return result
+
+    _mfig.Figure.savefig = savefig
+
+
+_install_board_text_record()
+
+
 def _neon_backdrop(fig):
     """No-op: the reference identity is a flat true-black background with
     no gradient/glow texture. Kept as a function (rather than removed) so

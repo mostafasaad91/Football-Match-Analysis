@@ -213,8 +213,14 @@ def headline(facts, x: _Extras) -> tuple[str, str]:
         label = "The equaliser came on" if win is None else "The decisive moment came on"
         sentences.append(f"{label} {_minute(first['minute'])}: {how}.")
     top = max(facts.sides, key=lambda s: s.field_tilt)
-    if win is top:
+    if win is top and top.xg >= facts.other(top).xg:
         tail = "and turned that territory into the better chances."
+    elif win is top:
+        # Atletico 1-2 Barcelona: Barcelona had the territory and the win, but
+        # Atletico had the better chances. Saying otherwise contradicts the xG
+        # two paragraphs later.
+        tail = (f"but {facts.other(top).name} created the better chances "
+                f"({_n(facts.other(top).xg, 2)} expected goals to {_n(top.xg, 2)}).")
     elif win is None:
         tail = "but could not turn that territory into a win."
     else:
@@ -376,17 +382,33 @@ def _story(facts, x: _Extras) -> list[str]:
         return out
     lose = facts.other(win)
     first_minute = x.goals[0]["minute"] if x.goals else 90
-    if first_minute <= 30:
+    # The frame is about whoever scored first, not the eventual winner, and it
+    # only holds if that side kept the lead and actually had less of the ball.
+    # Atletico scored on 9' and lost 2-1 while Barcelona had 64% of the ball;
+    # the old sentence said Atletico had the ball and Barcelona protected a lead.
+    opener = x.goals[0]["side"] if x.goals else win
+    chaser = facts.other(opener)
+    led_for = float(opener.states.get("leading", {}).get("minutes") or 0)
+    if first_minute <= 30 and opener is win and led_for >= 60 and chaser.possession_share > opener.possession_share:
         out.append(
-            f"Because it came so early, the match became {lose.name} with the ball and {win.name} without "
-            f"it for well over an hour. That frame matters for everything below: {lose.name}'s territory "
+            f"Because it came so early, the match became {chaser.name} with the ball and {opener.name} without "
+            f"it for well over an hour. That frame matters for everything below: {chaser.name}'s territory "
             f"was partly the territory a side is given when its opponent has something to protect."
+        )
+    elif first_minute <= 30 and opener is not win:
+        out.append(
+            f"{opener.name} scored first and still lost: {win.name} had to come from behind, so most of "
+            f"what follows describes a side chasing the game and one trying to protect a lead."
         )
     elif first_minute >= 70:
         out.append("The game was level for most of its length, so the numbers describe a genuine contest "
                    "rather than one side sitting on a lead.")
-    else:
+    elif opener is win and led_for >= 0.5 * max(90 - first_minute, 1):
         out.append(f"From then on {win.name} had something to protect, and the balance of the game shifted with it.")
+    elif opener is win:
+        out.append(f"{win.name} scored first, but the lead did not hold, and the game had to be won again.")
+    else:
+        out.append(f"{opener.name} led first, so {win.name} won the game from behind.")
     turning = []
     reds = [c for c in facts.cards if c.get("colour") == "Red"]
     for c in reds:
@@ -650,14 +672,17 @@ def _without_ball(facts, x: _Extras, side) -> list[str]:
     out.append(text)
 
     if side.high_regains:
+        # The same set and the same count as the high-regains board beside
+        # this paragraph: regains in the attacking 40% and the possessions that
+        # went on to a shot. It used to quote every transition's shots here.
         text = _vary(k + "regain", [
-            f"They won the ball back {side.high_regains} times in {other.name}'s half",
-            f"They took the ball off {other.name} {side.high_regains} times in the opposition half",
+            f"They won the ball back high {side.high_regains} times",
+            f"They took the ball off {other.name} high up the pitch {side.high_regains} times",
         ])
-        if side.transition_shots:
-            text += (f", and their attacks after winning it produced {side.transition_shots} "
-                     f"{_plural(side.transition_shots, 'shot')} worth {_n(side.transition_xg, 2)} expected goals.")
-            if side.transition_xg >= 0.5:
+        if side.high_regain_shots:
+            text += (f", and {side.high_regain_shots} of those regains "
+                     f"led to a shot, worth {_n(side.high_regain_xg, 2)} expected goals.")
+            if side.high_regain_xg >= 0.5:
                 text += " Winning the ball and going straight at goal was one of their main routes to a chance."
         else:
             text += ", but none of those regains turned into a shot."
@@ -696,8 +721,22 @@ def _without_ball(facts, x: _Extras, side) -> list[str]:
     return out
 
 
-def _changes(facts) -> list[str]:
+def _scored_while_trailing(facts, goals: list) -> set:
+    """Keys of the sides that scored at least once while behind."""
+    score = {facts.home.key: 0, facts.away.key: 0}
+    found = set()
+    for goal in goals:
+        key = goal["side"].key
+        other = facts.away.key if key == facts.home.key else facts.home.key
+        if score[key] < score[other]:
+            found.add(key)
+        score[key] += 1
+    return found
+
+
+def _changes(facts, goals: list | None = None) -> list[str]:
     out = []
+    came_back = _scored_while_trailing(facts, goals or [])
     bench = facts.bench
     if bench is not None and len(bench):
         for side in facts.sides:
@@ -725,10 +764,17 @@ def _changes(facts) -> list[str]:
         minutes = float(trailing.get("minutes") or 0)
         if minutes >= 20:
             rate = 30 * float(trailing.get("xG") or 0) / minutes
+            # Barcelona trailed for 35 minutes and equalised on 44'; "never
+            # enough to force an equaliser" said the opposite of the scoreline.
+            if side.key in came_back:
+                ending = ", and they did score while behind."
+            elif rate >= 0.45:
+                ending = ", a sustained push that deserved more."
+            else:
+                ending = ", which was never enough to force an equaliser."
             out.append(
                 f"Chasing the game for {minutes:.0f} minutes, {side.name} produced {rate:.2f} expected goals every "
-                f"half-hour" + (", a sustained push that deserved more." if rate >= 0.45 else
-                                ", which was never enough to force an equaliser.")
+                f"half-hour" + ending
             )
     return out
 
@@ -838,6 +884,29 @@ def _verdict(facts, x: _Extras) -> list[str]:
             f"For {lose.name} the problem was not getting the ball forward; it was what happened once it arrived. "
             f"The territory and the entries were there, the clear chances were not, and the shots that came "
             + ("never tested the goalkeeper." if lose.on_target == 0 else "were dealt with.")
+        )
+    elif lose.xg > win.xg:
+        # Barcelona won with the territory but Atletico had the better chances:
+        # "better chances" in the verdict contradicted the xG in the article.
+        out.append(
+            f"{win.name} won it with the territory rather than with the better chances: "
+            f"{lose.name} created {_n(lose.xg, 2)} expected goals to {_n(win.xg, 2)}, and the margin came "
+            f"from finishing and goalkeeping."
+        )
+        out.append(
+            f"{lose.name} lost the game in front of goal"
+            + (f": {_words(lose.big_chances)} clear {_plural(lose.big_chances, 'chance')} and "
+               f"{lose.goals} {_plural(lose.goals, 'goal')}." if lose.big_chances > lose.goals else ".")
+        )
+    elif lose.field_tilt > win.field_tilt:
+        out.append(
+            f"{win.name} had less of the ball where it mattered but made the better chances, "
+            f"{_n(win.xg, 2)} expected goals to {_n(lose.xg, 2)}, and took them."
+        )
+        out.append(
+            f"{lose.name} lost the game in "
+            + ("their build-up, where they could not get out under pressure."
+               if lose.build_up_success_rate < 40 else "the final third, where they could not create clear chances.")
         )
     else:
         out.append(
@@ -988,7 +1057,7 @@ def build_tactical_article(out_dir, match_info, context=None):
     pressing = _pressing_over_time(facts, extras)
     if pressing:
         sections.append(Section("Pressing through the match", pressing, _visual(out, "pressing_timeline")))
-    changes = _changes(facts)
+    changes = _changes(facts, x.goals)
     if changes:
         sections.append(Section("Changes, game state and the last half-hour", changes,
                                 _visual(out, "match_momentum") + _visual(out, "game_state")))

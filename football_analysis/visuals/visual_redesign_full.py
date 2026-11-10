@@ -7565,6 +7565,54 @@ def _corrected_xgot(events: pd.DataFrame, xg: pd.DataFrame, match_info: dict) ->
     return corrected
 
 
+def shot_counts_from_events(events: pd.DataFrame, xg: pd.DataFrame, match_info: dict) -> pd.DataFrame:
+    """Shot, on-target, blocked and off-target counts taken from the events.
+
+    The scrape overwrote these with the match-centre header, which WhoScored
+    computes differently from its own events: Roma 3-0 Sassuolo read 9 on
+    target and 9 blocked in the header, 6 and 12 in the events. The shot maps
+    and the article are drawn from the events, so the statistics board, the
+    PDF and the article quoted different numbers for the same shots. One
+    source now: the events, the same set every board draws.
+    """
+    if events is None or events.empty or xg is None or xg.empty:
+        return xg
+    if "shot_whoscored_type" not in events.columns:
+        return xg
+    flags = lambda col: (  # noqa: E731
+        events[col].fillna(False).astype(str).str.lower().isin({"true", "1"})
+        if col in events.columns
+        else pd.Series(False, index=events.index)
+    )
+    shots = events[flags("is_shot") & ~flags("is_own_goal") & ~flags("is_penalty_shootout")]
+    out = xg.copy()
+    for side in ("home", "away"):
+        try:
+            team_id = int(match_info[f"{side}_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = str(match_info.get(f"{side}_name") or "")
+        rows = out.index[out["team"].astype(str).str.lower().eq(name.lower())]
+        if not len(rows):
+            continue
+        raw = shots.loc[shots["team_id"].eq(team_id), "shot_whoscored_type"].astype(str)
+        goals, saved = int(raw.eq("Goal").sum()), int(raw.eq("SavedShot").sum())
+        post, missed = int(raw.eq("ShotOnPost").sum()), int(raw.eq("MissedShots").sum())
+        counts = {
+            "shots": len(raw), "on_target": goals + saved, "saved": saved,
+            "missed": missed + post, "off_target": missed + post,
+            "blocked": int(raw.eq("BlockedShot").sum()), "post": post,
+        }
+        for column, value in counts.items():
+            if column in out.columns:
+                out.loc[rows, column] = value
+        if "xG_per_shot" in out.columns and "xG" in out.columns:
+            out.loc[rows, "xG_per_shot"] = round(
+                float(pd.to_numeric(out.loc[rows, "xG"]).iloc[0]) / max(len(raw), 1), 3
+            )
+    return out
+
+
 from football_analysis.pipeline.package_io import transactional_package
 
 
@@ -7599,7 +7647,7 @@ def generate_match_package(
             xg = xg.copy()
             xg["xT"] = [round(float(by_id.get(names.get(str(t)), 0.0)), 3) for t in xg["team"]]
     if clean:
-        for pattern in ("*.png", "*.pdf"):
+        for pattern in ("*.png", "*.pdf", "board_text.json"):
             for old in OUT.glob(pattern):
                 old.unlink(missing_ok=True)
         for generated_dir in (OUT / "player_radars", OUT / "comparisons"):
@@ -7607,6 +7655,7 @@ def generate_match_package(
                 shutil.rmtree(generated_dir)
     base.theme()
     xg = _corrected_xgot(events, xg, match_info)
+    xg = shot_counts_from_events(events, xg, match_info)
     # Persist it beside the other frames. The documents were built from the
     # corrected value while xg.csv kept the old one, so anything re-reading the
     # folder — the tests, a second render, the article — disagreed with the PDF

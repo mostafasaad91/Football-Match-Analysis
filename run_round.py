@@ -356,6 +356,38 @@ def run_one(url: str, round_name: str, dark_only: bool) -> tuple[bool, str]:
     return False, f"{took} :: " + " | ".join(line.strip() for line in tail)
 
 
+def verify_round(shelf_dir: Path, since: float) -> None:
+    """Cross-check every package this round wrote: article, PDF and boards.
+
+    The same check as scripts/verify_package.py. A package that fails is
+    reported by name with what disagrees, so a wrong number is caught the day
+    it is built rather than after it has been posted.
+    """
+    built = [
+        p.parent
+        for p in shelf_dir.glob("*/match_info.json")
+        if p.stat().st_mtime >= since - 1
+    ]
+    if not built:
+        return
+    print(f"\nVerifying {len(built)} package(s) ...", flush=True)
+    for package in sorted(built):
+        for folder in (package, package / "light"):
+            if not (folder / "match_info.json").exists():
+                continue
+            done = subprocess.run(
+                [sys.executable, "scripts/verify_package.py", str(folder)],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            lines = [ln for ln in done.stdout.splitlines() if ln.startswith(("OK", "FAIL", "       ✗"))]
+            print("  " + "\n  ".join(lines or [f"verifier did not run: {done.stderr.strip()[-200:]}"]))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -396,6 +428,7 @@ def main() -> int:
         return 0
 
     print()
+    round_started = time.time()
     failures = []
     for index, url in enumerate(urls, start=1):
         label = url.rsplit("/", 1)[-1]
@@ -423,6 +456,7 @@ def main() -> int:
         failures = still_failed
 
     print(f"\n{len(urls) - len(failures)}/{len(urls)} finished.")
+    verify_round(ROOT / "output" / Path(*where), round_started)
     if failures:
         print("Re-run these:")
         for url, detail in failures:

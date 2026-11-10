@@ -1249,16 +1249,29 @@ def _funnel(v: Visual, f: MatchFacts) -> list[str]:
             out.append(
                 f"{s.name}: "
                 + " → ".join(n0(x) for x in s.funnel)
-                + " (possessions, final third, box, shot, on target)."
+                + " (possessions; reached the final third; touched the ball in the box; "
+                "shot from there; on target)."
             )
+    # The funnel's box stage counts possessions with any touch in the box,
+    # dribbles and loose balls included, so it is larger than the box-entry
+    # count (completed passes into the box). Say so, or 23 here beside 6 on the
+    # box-entry board reads as a contradiction.
+    if any(len(s.funnel) >= 3 and s.funnel[2] != s.box_entries for s in f.sides):
+        out.append(
+            "The box stage counts possessions with any touch in the penalty area, so it runs higher "
+            "than the box-entry figures, which count only completed passes into the box."
+        )
     drops = []
     for s in f.sides:
-        if len(s.funnel) >= 3 and s.funnel[1]:
-            drops.append((s, 1.0 - s.funnel[2] / s.funnel[1]))
-    if drops:
+        if len(s.funnel) >= 5 and s.funnel[1]:
+            stages = [1.0 - s.funnel[i + 1] / s.funnel[i] if s.funnel[i] else 0.0 for i in range(4)]
+            drops.append((s, stages))
+    # Only claim a shared bottleneck when final third -> box really is the
+    # largest fall for both sides; it used to be asserted for every match.
+    if drops and all(max(range(4), key=lambda i: st[i]) == 1 for _, st in drops):
         out.append(
             "The largest fall for both sides is the same one — final third to box ("
-            + listed([f"{s.name} {pct(100 * d, 0)}" for s, d in drops])
+            + listed([f"{s.name} {pct(100 * st[1], 0)}" for s, st in drops])
             + "). A shared bottleneck means the difference between them is not where attacks "
             "stop but how many arrived at the bottleneck in the first place."
         )

@@ -132,6 +132,8 @@ class Side:
     ppda: float = 0.0
     regains: int = 0
     high_regains: int = 0
+    high_regain_shots: int = 0
+    high_regain_xg: float = 0.0
     counterpress_regains: int = 0
     counterpress_attempts: int = 0
     counterpress_success_rate: float = 0.0
@@ -426,6 +428,8 @@ _TEAM_METRIC_FIELDS = {
     "build_up_success_rate": "build_up_success_rate",
     "regains": "possession_regains",
     "high_regains": "high_regains",
+    "high_regain_shots": "high_regain_shots",
+    "high_regain_xg": "high_regain_xG",
     "counterpress_regains": "counterpress_regains",
     "counterpress_attempts": "counterpress_attempts",
     "counterpress_success_rate": "counterpress_success_rate",
@@ -453,6 +457,7 @@ _INTEGER_FIELDS = {
     "build_up_successes",
     "regains",
     "high_regains",
+    "high_regain_shots",
     "counterpress_regains",
     "counterpress_attempts",
     "transitions",
@@ -617,17 +622,17 @@ def _fill_from_events(side: Side, events: pd.DataFrame, sides: dict[str, Side]) 
 
 
 def _box_entries(frame: pd.DataFrame) -> int:
-    """Successful actions that finish inside the box having started outside."""
+    """Box entries as the box-entries board and the match total count them.
+
+    This used to be its own rule (any successful action, set pieces included),
+    so the two halves added up to more than the match figure: 11 + 2 beside
+    a board reading 12.
+    """
     if frame.empty or "end_x" not in frame.columns:
         return 0
-    end_x = pd.to_numeric(frame["end_x"], errors="coerce")
-    end_y = pd.to_numeric(frame["end_y"], errors="coerce")
-    x = pd.to_numeric(frame["x"], errors="coerce")
-    y = pd.to_numeric(frame["y"], errors="coerce")
-    inside = (end_x >= BOX_X) & (end_y >= BOX_Y[0]) & (end_y <= BOX_Y[1])
-    outside = (x < BOX_X) | (y < BOX_Y[0]) | (y > BOX_Y[1])
-    ok = frame["outcome"].astype(str) == "Successful"
-    return int((inside & outside & ok).sum())
+    from football_analysis.metrics.match_metrics import box_entry_mask
+
+    return int(box_entry_mask(frame).sum())
 
 
 def _keeper_name(side: Side, events: pd.DataFrame) -> str:
@@ -873,6 +878,10 @@ def _fill_timeline(facts: MatchFacts, events: pd.DataFrame, sides: dict[str, Sid
     cards = events[events["type"].astype(str) == "Card"]
     for _, row in cards.sort_values("minute").iterrows():
         side = side_of(row)
+        # A card with no player is one shown to the bench or the coach: it does
+        # not leave a side a man down, and it printed as "nan was sent off".
+        if pd.isna(row.get("player")) or not str(row.get("player")).strip():
+            continue
         facts.cards.append(
             {
                 "minute": _int(row.get("minute")),
